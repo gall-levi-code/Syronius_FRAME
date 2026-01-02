@@ -56,10 +56,6 @@ Re-running `install` is the supported way to:
 ### After install
 Once running, open the Portal:
 - `http://<frame-host>/dashboard`
-
-## Contributing / Changing the spec
-
-- Spec changes should be made via PRs with clear diffs.
 - If a change modifies a contract (file format / endpoint), update or add a schema in `docs/schemas/`.
 - Record non-trivial decisions in `docs/adr/` (one decision per file).
 
