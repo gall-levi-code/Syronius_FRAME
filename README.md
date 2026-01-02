@@ -2,7 +2,7 @@
 
 **Source of Truth:** [`docs/spec/v1.1.md`](docs/spec/v1.1.md)
 
-Syronius’ Frame (F.R.A.M.E.) is a modular, containerized IRL streamer appliance stack. This repository is scaffolded to treat the spec as the canonical contract, with schemas and design decisions tracked alongside it.
+Syronius’ Frame (F.R.A.M.E.) is a modular, containerized IRL streamer appliance stack. This repo is organized so the spec is the canonical contract, with schemas and decisions tracked alongside it.
 
 ## What’s in this repo
 
@@ -10,21 +10,52 @@ Syronius’ Frame (F.R.A.M.E.) is a modular, containerized IRL streamer applianc
 - `docs/schemas/` — JSON Schemas for on-disk and API contracts (validation at startup / install-time).
 - `docs/adr/` — Architecture Decision Records (why we chose a behavior/contract).
 
-## How to run (implementation in progress)
+## How to run (per V1/V1.1 spec)
 
-This scaffold currently focuses on documentation and contracts. As implementation lands, the “How to run” section will be updated with exact commands.
+V1 defines a single installer entrypoint that owns configuration, data layout, and compose generation:
 
-**Planned local run (Docker/Compose):**
-1. Install Docker Engine + Docker Compose plugin.
-2. Create a data directory on the host (example):
-   - Linux/macOS: `/opt/frame-data`
-   - Windows: `D:\FRAME_DATA`
-3. Start the stack (example placeholder):
-   ```bash
-   docker compose up -d
-   ```
-4. Open the Portal in your browser (example placeholder):
-   - `http://<frame-host>/dashboard`
+- **Linux/macOS:** `stack.sh`
+- **Windows:** `stack.cmd`
+
+The installer is responsible for:
+- creating/updating `.env`
+- creating/updating the repo-local `./data/` directory (bind-mounted into containers as `/data`)
+- generating/updating `docker-compose.yml` and `/data/state/stack-config.json`
+- validating prerequisites (Docker + Compose) and port conflicts
+- deploying the stack via `docker compose up -d`
+
+### Planned commands (V1)
+> This repository scaffold focuses on documentation/contracts. The installer scripts + compose will be added during implementation, but the intended UX/behavior is defined below.
+
+**Install / reconfigure**
+- Windows:
+  ```bat
+  stack.cmd install
+  ```
+- Linux/macOS:
+  ```bash
+  chmod +x stack.sh
+  ./stack.sh install
+  ```
+
+Re-running `install` is the supported way to:
+- enable/disable capabilities
+- switch **LAN** ↔ **HYBRID**
+- regenerate compose + tunnel ingress rules
+
+**Lifecycle**
+- Start:
+  - `stack.* start` → `docker compose up -d`
+- Stop:
+  - `stack.* stop` → `docker compose down`
+- Status:
+  - `stack.* status` → prints service status + enabled capabilities (with secrets redacted)
+- Reset (destructive):
+  - `stack.* reset` → removes containers/volumes as applicable, deletes `./data/`, then re-runs `install` (requires confirmation)
+
+### After install
+Once running, open the Portal:
+- `http://<frame-host>/dashboard`
 
 ## Contributing / Changing the spec
 
