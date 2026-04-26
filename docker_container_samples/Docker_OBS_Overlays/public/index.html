@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>OBS Connectivity Overlay</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root{
+    --text: #e8f0ff;
+    --muted: #a7b1c2;
+
+    --good: #4caf50;
+    --warn: #ffb300;
+    --bad:  #f44336;
+
+    --accent: #3aa0ff;   /* cobalt-ish */
+    --accent-2: #a7ff3f; /* lime */
+
+    --radius: 14px;
+
+    /* Dynamic background targets (we swap classes on .wrap) */
+    --bg-good: rgba(0,0,0,0.3);
+    --bg-bad:  rgba(0,0,0,0.7);
+  }
+
+  html, body {
+    margin: 0; padding: 0;
+    background: transparent;
+    font-family: ui-sans-serif, system-ui, Segoe UI, Roboto, Helvetica, Arial;
+    color: var(--text);
+    font-size: 16px;
+  }
+
+  /* Position the overlay in the bottom-right via a container div */
+  .overlay-container {
+    position: fixed;
+    bottom: 20px;   /* distance from bottom edge */
+    right: 20px;    /* distance from right edge */
+    width: auto;
+    height: auto;
+    pointer-events: none; /* clicks pass through by default */
+  }
+
+  .wrap {
+    pointer-events: auto; /* re-enable overlay interaction if needed */
+    display: inline-block;
+    padding: 12px 14px;
+    background: var(--bg-good); /* default; class will update this */
+    border-radius: var(--radius);
+    backdrop-filter: blur(2px);
+    box-shadow: 0 6px 24px rgba(0,0,0,0.25);
+    min-width: 280px;
+    transition: background 250ms ease;
+  }
+
+  /* Background opacity by quality (JS adds good/warn/bad class) */
+  .wrap.good { background: var(--bg-good); }
+  .wrap.warn,
+  .wrap.bad  { background: var(--bg-bad);  }
+
+  .row { display:flex; align-items:center; gap:10px; margin: 4px 0; }
+  .title { font-size: 0.95rem; color: var(--muted); }
+  .value { font-weight: 700; }
+  .status { font-weight: 800; letter-spacing: 0.02em; }
+
+  .good { color: var(--good); }
+  .warn { color: var(--warn); }
+  .bad  { color: var(--bad);  }
+
+  .dot {
+    width: 10px; height: 10px; border-radius: 999px;
+    background: var(--bad); /* default */
+    box-shadow: 0 0 10px rgba(0,0,0,0.35) inset;
+  }
+  .dot.good { background: var(--good); }
+  .dot.warn { background: var(--warn); }
+  .dot.bad  { background: var(--bad);  }
+
+  .pulse { animation: pulse 1.8s ease-in-out infinite; }
+  @keyframes pulse {
+    0% { transform: scale(1); opacity: 0.9; }
+    50%{ transform: scale(1.12); opacity: 1; }
+    100%{ transform: scale(1); opacity: 0.9; }
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    column-gap: 10px;
+    row-gap: 4px;
+  }
+  .meter {
+    height: 12px; width: 100%;
+    background: rgba(255,255,255,0.12);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .bar {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2));
+    transition: width 250ms linear;
+  }
+  #error { color: var(--bad); font-weight: 700; display:none; }
+
+  .chart-wrap { margin-top: 10px; }
+  canvas { display:block; }
+
+  /* Compact mode: hide when Good */
+  .compact-good .hide-when-good { display: none !important; }
+
+  /* Latency row is hidden by default (Belabox latency fixed) */
+  .hide-latency { display: none; }
+</style>
+</head>
+<body>
+  <div class="overlay-container">
+    <div class="wrap good" id="wrap">
+      <div class="row">
+        <div id="status-dot" class="dot good"></div>
+        <div class="status good" id="status-text">Connecting…</div>
+      </div>
+
+      <div class="row hide-when-good">
+        <div class="title">Server</div>
+        <div class="value" id="server">—</div>
+      </div>
+
+      <div class="grid hide-when-good" style="margin-top:6px;">
+        <div class="title">Bitrate</div>
+        <div>
+          <span class="value" id="bitrate">—</span> <span class="title">kbps</span>
+          <div class="meter"><div id="bitrate-bar" class="bar"></div></div>
+        </div>
+
+        <!-- Latency (optional, hidden by default; enable with ?show_latency=1) -->
+        <div class="title latency-row hide-latency">Latency</div>
+        <div class="latency-row hide-latency"><span class="value" id="latency">—</span> <span class="title">ms</span></div>
+
+        <div class="title">RTT</div>
+        <div><span class="value" id="rtt">—</span> <span class="title">ms</span></div>
+
+        <div class="title">Dropped</div>
+        <div><span class="value" id="dropped">—</span> <span class="title">pkts</span></div>
+      </div>
+
+      <div id="error" class="hide-when-good">Error: unable to fetch data</div>
+
+      <div class="chart-wrap hide-when-good">
+        <div class="title">Last <span id="histN">—</span> polls</div>
+        <canvas id="miniChart" width="320" height="80"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
