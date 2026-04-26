@@ -1,0 +1,180 @@
+{
+  "schema_version": "1.0",
+  "presets": [
+    {
+      "id": "main-connectivity",
+      "name": "Main Stream — Connectivity",
+      "description": "Full-detail connectivity overlay. Compact when signal is good, expands on warn/bad.",
+      "tags": ["connectivity", "full-stats"],
+      "enabled": true,
+      "window_title": "FRAME: Main Connectivity",
+      "type": "connectivity",
+      "layout": {
+        "dock": "br",
+        "pad": 20,
+        "scale": 1.0
+      },
+      "theme": {
+        "text_color": "#e8f0ff",
+        "muted_color": "#a7b1c2",
+        "good_color": "#4caf50",
+        "warn_color": "#ffb300",
+        "bad_color": "#f44336",
+        "plot_primary": "rgba(58, 160, 255, 0.9)",
+        "plot_secondary": "#a7ff3f",
+        "bg_opacity_good": 0.3,
+        "bg_opacity_bad": 0.7,
+        "border_radius_px": 14,
+        "backdrop_blur_px": 2,
+        "font_size_base_px": 16
+      },
+      "config": {
+        "poll_ms": 1000,
+        "bitrate_good_min": 5000,
+        "bitrate_warn_min": 2500,
+        "rtt_warn_max": 1500,
+        "rtt_bad_max": 3500,
+        "bitrate_meter_max": 12000,
+        "chart_bitrate_max": 12000,
+        "chart_rtt_max": 6000,
+        "history_len": 10,
+        "bitrate_streak_warn": 2,
+        "bitrate_streak_bad": 2,
+        "rtt_streak_warn": 2,
+        "rtt_streak_bad": 2,
+        "use_rtt_in_good": true,
+        "compact_when_good": true,
+        "show_latency": false,
+        "show_chart": true,
+        "show_meter": true,
+        "show_server": true,
+        "show_dropped": true,
+        "no_signal_behavior": "show_offline",
+        "no_signal_label": "NO SIGNAL",
+        "label_style": "emoji",
+        "transition_ms": 250
+      },
+      "created_at": "2025-12-29T03:14:07Z",
+      "updated_at": "2025-12-29T03:14:07Z"
+    },
+    {
+      "id": "minimal-connectivity",
+      "name": "Main Stream — Minimal",
+      "description": "Status dot only when good. No chart, no meter. For tight corner placement.",
+      "tags": ["connectivity", "minimal"],
+      "enabled": true,
+      "window_title": "FRAME: Minimal Connectivity",
+      "type": "connectivity",
+      "layout": {
+        "dock": "tr",
+        "pad": 16,
+        "scale": 0.85
+      },
+      "theme": {
+        "bg_opacity_good": 0.0,
+        "bg_opacity_bad": 0.6,
+        "border_radius_px": 8,
+        "backdrop_blur_px": 0
+      },
+      "config": {
+        "poll_ms": 1000,
+        "bitrate_good_min": 5000,
+        "bitrate_warn_min": 2500,
+        "rtt_warn_max": 1500,
+        "rtt_bad_max": 3500,
+        "bitrate_meter_max": 12000,
+        "chart_bitrate_max": 12000,
+        "chart_rtt_max": 6000,
+        "history_len": 10,
+        "bitrate_streak_warn": 2,
+        "bitrate_streak_bad": 2,
+        "rtt_streak_warn": 2,
+        "rtt_streak_bad": 2,
+        "use_rtt_in_good": true,
+        "compact_when_good": true,
+        "show_latency": false,
+        "show_chart": false,
+        "show_meter": false,
+        "show_server": false,
+        "show_dropped": false,
+        "no_signal_behavior": "show_offline",
+        "no_signal_label": "NO SIGNAL",
+        "label_style": "svg",
+        "transition_ms": 150
+      },
+      "created_at": "2025-12-29T03:14:07Z",
+      "updated_at": "2025-12-29T03:14:07Z"
+    },
+    {
+      "id": "photo-upload",
+      "name": "Photo Upload Progress",
+      "description": "Shows FTP/manual upload progress. Hides when idle, auto-dismisses 2s after complete.",
+      "tags": ["upload"],
+      "enabled": true,
+      "window_title": "FRAME: Upload Progress",
+      "type": "upload_progress",
+      "layout": {
+        "dock": "br",
+        "pad": 20,
+        "scale": 1.0
+      },
+      "theme": {
+        "text_color": "#e8f0ff",
+        "muted_color": "#a7b1c2",
+        "good_color": "#4caf50",
+        "bg_opacity_good": 0.58,
+        "bg_opacity_bad": 0.58,
+        "border_radius_px": 14,
+        "backdrop_blur_px": 0,
+        "font_size_base_px": 14
+      },
+      "config": {
+        "active_poll_ms": 400,
+        "idle_poll_ms": 1500,
+        "complete_poll_ms": 1000,
+        "complete_hide_ms": 2000,
+        "fetch_timeout_ms": 1200,
+        "show_speed": true,
+        "show_elapsed": true,
+        "show_sent": true,
+        "width_px": 360
+      },
+      "created_at": "2025-12-29T03:14:07Z",
+      "updated_at": "2025-12-29T03:14:07Z"
+    },
+    {
+      "id": "latest-photo-info",
+      "name": "Latest Photo",
+      "description": "Shows count and filename of the most recently published photo. Hides until first photo of the day.",
+      "tags": ["photo"],
+      "enabled": true,
+      "window_title": "FRAME: Latest Photo",
+      "type": "latest_photo",
+      "layout": {
+        "dock": "bl",
+        "pad": 20,
+        "scale": 1.0
+      },
+      "theme": {
+        "text_color": "#e8f0ff",
+        "muted_color": "#a7b1c2",
+        "bg_opacity_good": 0.45,
+        "bg_opacity_bad": 0.45,
+        "border_radius_px": 14,
+        "backdrop_blur_px": 2,
+        "font_size_base_px": 15
+      },
+      "config": {
+        "poll_ms": 1000,
+        "show_count": true,
+        "show_filename": true,
+        "show_thumbnail": false,
+        "thumbnail_size_px": 80,
+        "no_photos_behavior": "hide",
+        "no_photos_label": "No photos yet"
+      },
+      "created_at": "2025-12-29T03:14:07Z",
+      "updated_at": "2025-12-29T03:14:07Z"
+    }
+  ]
+}

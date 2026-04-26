@@ -1,0 +1,485 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Syronius FRAME overlay-presets.json (V1)",
+  "description": "Stored overlay presets. Each preset maps to a stable OBS Browser Source URL at /overlays/view/<id>. The server injects the full preset config at render time — no query params required in OBS.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "presets"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "presets": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/preset" }
+    }
+  },
+
+  "$defs": {
+
+    "css_color": {
+      "type": "string",
+      "description": "Any valid CSS color string: hex (#e8f0ff), rgba(0,0,0,0.3), hsl(220,80%,60%), named. Wizard must supply valid CSS; schema accepts any string."
+    },
+
+    "dock_position": {
+      "type": "string",
+      "enum": ["tl", "t", "tr", "l", "c", "r", "bl", "b", "br"],
+      "description": "Anchor point on the OBS canvas. tl=top-left, t=top-center, tr=top-right, l=mid-left, c=center, r=mid-right, bl=bottom-left, b=bottom-center, br=bottom-right. The server translates this into CSS position properties."
+    },
+
+    "layout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dock", "pad"],
+      "description": "Placement of the overlay widget on the OBS canvas.",
+      "properties": {
+        "dock": { "$ref": "#/$defs/dock_position" },
+        "pad": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 200,
+          "description": "Pixel offset from the edges implied by dock. e.g. dock=br + pad=20 → bottom:20px; right:20px. Edge-centered positions (t, b, l, r) apply pad to one axis; c ignores pad."
+        },
+        "scale": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 3.0,
+          "default": 1.0,
+          "description": "CSS scale() transform applied to the widget root. Does not affect the OBS source canvas size."
+        }
+      }
+    },
+
+    "theme": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Visual style for the overlay. All fields are optional; the server applies per-type defaults for any omitted value. Colors are injected as CSS custom properties on :root.",
+      "properties": {
+        "text_color": {
+          "$ref": "#/$defs/css_color",
+          "description": "Primary readable text. Maps to --text."
+        },
+        "muted_color": {
+          "$ref": "#/$defs/css_color",
+          "description": "Labels and secondary text (e.g. 'Bitrate', 'RTT'). Maps to --muted."
+        },
+        "good_color": {
+          "$ref": "#/$defs/css_color",
+          "description": "Good / connected signal state. Maps to --good."
+        },
+        "warn_color": {
+          "$ref": "#/$defs/css_color",
+          "description": "Degraded / warning signal state. Maps to --warn."
+        },
+        "bad_color": {
+          "$ref": "#/$defs/css_color",
+          "description": "Poor / offline signal state. Maps to --bad."
+        },
+        "plot_primary": {
+          "$ref": "#/$defs/css_color",
+          "description": "Primary chart line and meter bar color. Use rgba() to control opacity independently of the widget background. Maps to --plot-primary (was --accent)."
+        },
+        "plot_secondary": {
+          "$ref": "#/$defs/css_color",
+          "description": "Secondary chart line or gradient endpoint. Maps to --plot-secondary (was --accent-2)."
+        },
+        "bg_opacity_good": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.3,
+          "description": "Widget background panel opacity when signal is good. Applied as rgba(0,0,0,<value>)."
+        },
+        "bg_opacity_bad": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.7,
+          "description": "Widget background panel opacity when signal is degraded or offline."
+        },
+        "border_radius_px": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 50,
+          "default": 14,
+          "description": "Corner rounding of the widget panel in px. Maps to --radius."
+        },
+        "backdrop_blur_px": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 40,
+          "default": 2,
+          "description": "CSS backdrop-filter blur in px. 0 disables frosted-glass effect."
+        },
+        "font_size_base_px": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 32,
+          "default": 16,
+          "description": "Root font size in px. All widget text scales from this."
+        }
+      }
+    },
+
+    "connectivity_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Type-specific config for the connectivity/telemetry overlay. Displays live bitrate, RTT, dropped packets, and a mini history chart sourced from the SLS stats API.",
+      "properties": {
+
+        "poll_ms": {
+          "type": "integer",
+          "minimum": 200,
+          "maximum": 10000,
+          "default": 1000,
+          "description": "Stats endpoint polling interval in ms."
+        },
+
+        "bitrate_good_min": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000,
+          "default": 5000,
+          "description": "Bitrate in kbps at or above which signal is GOOD."
+        },
+        "bitrate_warn_min": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000,
+          "default": 2500,
+          "description": "Bitrate in kbps at or above which signal is WARN (below = BAD). Must be ≤ bitrate_good_min — enforced by wizard, not schema."
+        },
+        "rtt_warn_max": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 30000,
+          "default": 1500,
+          "description": "RTT in ms at or below which RTT is GOOD. Must be ≤ rtt_bad_max — enforced by wizard, not schema."
+        },
+        "rtt_bad_max": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 30000,
+          "default": 3500,
+          "description": "RTT in ms above which RTT is BAD."
+        },
+
+        "bitrate_meter_max": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 100000,
+          "default": 12000,
+          "description": "Bitrate in kbps that fills the meter bar to 100%. Set to your target bitrate ceiling."
+        },
+        "chart_bitrate_max": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 100000,
+          "default": 12000,
+          "description": "Bitrate Y-axis ceiling for the history chart. Independent from the meter max."
+        },
+        "chart_rtt_max": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 60000,
+          "default": 6000,
+          "description": "RTT Y-axis ceiling for the history chart."
+        },
+        "history_len": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 60,
+          "default": 10,
+          "description": "Number of poll samples kept in the history chart buffers."
+        },
+
+        "bitrate_streak_warn": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 2,
+          "description": "Consecutive polls below bitrate_warn_min required to enter WARN state (hysteresis)."
+        },
+        "bitrate_streak_bad": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 2,
+          "description": "Consecutive polls below bitrate_warn_min required to enter BAD state (hysteresis)."
+        },
+        "rtt_streak_warn": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 2,
+          "description": "Consecutive polls above rtt_warn_max required to enter WARN state (hysteresis)."
+        },
+        "rtt_streak_bad": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20,
+          "default": 2,
+          "description": "Consecutive polls above rtt_bad_max required to enter BAD state (hysteresis)."
+        },
+
+        "use_rtt_in_good": {
+          "type": "boolean",
+          "default": true,
+          "description": "When true, both bitrate AND RTT must be good to show the GOOD state. When false, a healthy bitrate alone is enough."
+        },
+        "compact_when_good": {
+          "type": "boolean",
+          "default": true,
+          "description": "Collapse detail rows (bitrate, RTT, chart) when signal is GOOD. Only the status indicator remains visible."
+        },
+        "show_latency": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show the fixed-latency row. Intended for bonding setups (e.g. Belabox) that report a separate latency field."
+        },
+        "show_chart": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the bitrate/RTT history mini-chart."
+        },
+        "show_meter": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the bitrate progress bar beneath the bitrate value."
+        },
+        "show_server": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the server name row."
+        },
+        "show_dropped": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the dropped packets row."
+        },
+
+        "no_signal_behavior": {
+          "type": "string",
+          "enum": ["show_offline", "hide"],
+          "default": "show_offline",
+          "description": "What to do when the stats endpoint is unreachable. show_offline = display a clear NO SIGNAL state (per spec §2.0-D). hide = make the widget invisible until stats return."
+        },
+        "no_signal_label": {
+          "type": "string",
+          "maxLength": 40,
+          "default": "NO SIGNAL",
+          "description": "Text displayed in the show_offline state."
+        },
+
+        "label_style": {
+          "type": "string",
+          "enum": ["emoji", "svg", "text"],
+          "default": "emoji",
+          "description": "How the status label is rendered. emoji = Unicode glyphs. svg = inline SVG badges with color fill. text = plain words only (most compatible with OBS text capture)."
+        },
+        "transition_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 2000,
+          "default": 250,
+          "description": "CSS transition duration in ms for quality-state changes (background, color). 0 = instant."
+        }
+      }
+    },
+
+    "upload_progress_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Type-specific config for the upload progress overlay. Shows live FTP/manual upload progress sourced from the /api/uploads/progress endpoint.",
+      "properties": {
+        "active_poll_ms": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 5000,
+          "default": 400,
+          "description": "Polling interval in ms while an upload is actively in progress."
+        },
+        "idle_poll_ms": {
+          "type": "integer",
+          "minimum": 500,
+          "maximum": 30000,
+          "default": 1500,
+          "description": "Polling interval in ms when no upload is in progress. Widget is hidden."
+        },
+        "complete_poll_ms": {
+          "type": "integer",
+          "minimum": 200,
+          "maximum": 10000,
+          "default": 1000,
+          "description": "Polling interval in ms immediately after upload completes."
+        },
+        "complete_hide_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 30000,
+          "default": 2000,
+          "description": "How long in ms to show the completed state before hiding the widget."
+        },
+        "fetch_timeout_ms": {
+          "type": "integer",
+          "minimum": 200,
+          "maximum": 10000,
+          "default": 1200,
+          "description": "Abort the progress fetch if the endpoint doesn't respond within this window."
+        },
+        "show_speed": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the transfer speed row."
+        },
+        "show_elapsed": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the elapsed time row."
+        },
+        "show_sent": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the sent / total bytes row."
+        },
+        "width_px": {
+          "type": "integer",
+          "minimum": 200,
+          "maximum": 800,
+          "default": 360,
+          "description": "Widget card width in pixels."
+        }
+      }
+    },
+
+    "latest_photo_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Type-specific config for the latest-photo info overlay. Polls latest.json and displays info about the most recently published image. Requires frame-photo-todaytools capability.",
+      "properties": {
+        "poll_ms": {
+          "type": "integer",
+          "minimum": 500,
+          "maximum": 10000,
+          "default": 1000,
+          "description": "latest.json polling interval in ms."
+        },
+        "show_count": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show total photos published today."
+        },
+        "show_filename": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the base filename of the latest photo."
+        },
+        "show_thumbnail": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show a small thumbnail of the latest photo. Sourced from the SFPG-generated thumb for <base>.jpg. Best-effort: no thumbnail shown if the thumb does not yet exist."
+        },
+        "thumbnail_size_px": {
+          "type": "integer",
+          "minimum": 40,
+          "maximum": 320,
+          "default": 80,
+          "description": "Thumbnail display size in pixels (rendered square)."
+        },
+        "no_photos_behavior": {
+          "type": "string",
+          "enum": ["show_empty", "hide"],
+          "default": "hide",
+          "description": "What to show when no photos have been published today. hide = widget invisible until first photo. show_empty = widget visible with a waiting state."
+        },
+        "no_photos_label": {
+          "type": "string",
+          "maxLength": 40,
+          "default": "No photos yet",
+          "description": "Text shown in the show_empty state."
+        }
+      }
+    },
+
+    "preset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "type", "layout"],
+      "description": "A single named overlay configuration. The server resolves GET /overlays/view/<id> → serves the overlay HTML with window.OVERLAY_CONFIG injected from this preset. No query params needed in OBS.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*[a-z0-9]$",
+          "minLength": 2,
+          "maxLength": 64,
+          "description": "URL-safe stable identifier. Becomes the path segment in /overlays/view/<id>. Changing this breaks existing OBS browser sources — treat as permanent once set."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Human display name shown in the wizard and used as the default window_title."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 280,
+          "description": "Optional freetext note. Shown in the wizard preset list."
+        },
+        "tags": {
+          "type": "array",
+          "uniqueItems": true,
+          "maxItems": 10,
+          "items": {
+            "type": "string",
+            "maxLength": 32
+          },
+          "description": "Optional labels for organizing presets in the wizard (e.g. 'minimal', 'portrait', 'full-stats')."
+        },
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Disabled presets return 404 on /overlays/view/<id> and are hidden from the wizard nav. Useful for keeping a config around without surfacing it to OBS."
+        },
+        "window_title": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Custom <title> injected into the overlay page. Defaults to name. Appears in the OBS browser source list — make it distinct so sources are easy to identify."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["connectivity", "upload_progress", "latest_photo"],
+          "description": "Determines which overlay HTML is served and which config shape is expected."
+        },
+        "layout": { "$ref": "#/$defs/layout" },
+        "theme":  { "$ref": "#/$defs/theme"  },
+        "config": {
+          "type": "object",
+          "description": "Type-specific configuration. Shape is determined by 'type'. See connectivity_config, upload_progress_config, latest_photo_config."
+        },
+        "created_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC timestamp set by the wizard on first save."
+        },
+        "updated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "ISO 8601 UTC timestamp updated by the wizard on every save."
+        }
+      },
+      "if":   { "properties": { "type": { "const": "connectivity"    } }, "required": ["type"] },
+      "then": { "properties": { "config": { "$ref": "#/$defs/connectivity_config"    } } },
+      "else": {
+        "if":   { "properties": { "type": { "const": "upload_progress" } }, "required": ["type"] },
+        "then": { "properties": { "config": { "$ref": "#/$defs/upload_progress_config" } } },
+        "else": {
+          "if":   { "properties": { "type": { "const": "latest_photo"   } }, "required": ["type"] },
+          "then": { "properties": { "config": { "$ref": "#/$defs/latest_photo_config"   } } }
+        }
+      }
+    }
+  }
+}
