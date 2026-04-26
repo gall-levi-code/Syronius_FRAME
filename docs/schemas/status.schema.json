@@ -1,6 +1,85 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Syronius FRAME /status response",
+  "title": "Syronius FRAME /status/api response (V1)",
   "type": "object",
-  "description": "TODO: Define and enforce this contract (see docs/spec/v1.1.md)."
+  "additionalProperties": false,
+  "required": ["generated_at", "mode", "services", "disk"],
+  "properties": {
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp when this response was generated."
+    },
+    "mode": {
+      "type": "string",
+      "enum": ["LAN", "HYBRID"]
+    },
+    "services": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status"],
+        "properties": {
+          "name": { "type": "string" },
+          "status": { "type": "string", "enum": ["running", "stopped", "error", "unknown"] },
+          "health": { "type": "string", "enum": ["healthy", "unhealthy", "starting", "unknown"] },
+          "uptime_seconds": { "type": ["integer", "null"], "minimum": 0 }
+        }
+      }
+    },
+    "last_photo": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["at", "base"],
+      "properties": {
+        "at": { "type": "string", "format": "date-time" },
+        "base": { "type": "string" }
+      }
+    },
+    "last_ingest": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["at", "stream_id"],
+      "properties": {
+        "at": { "type": "string", "format": "date-time" },
+        "stream_id": { "type": "string" }
+      }
+    },
+    "audio_streams": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["stream_id", "status"],
+        "properties": {
+          "stream_id": { "type": "string" },
+          "status": { "type": "string", "enum": ["live", "idle", "offline"] },
+          "listener_count": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "disk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["used_bytes", "total_bytes", "percent_used"],
+      "properties": {
+        "used_bytes": { "type": "integer", "minimum": 0 },
+        "total_bytes": { "type": "integer", "minimum": 0 },
+        "percent_used": { "type": "number", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "alerts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["level", "message"],
+        "properties": {
+          "level": { "type": "string", "enum": ["warn", "error"] },
+          "message": { "type": "string" }
+        }
+      }
+    }
+  }
 }
