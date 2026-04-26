@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Upload Progress</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root{
+    --text:#e8f0ff;
+    --muted:#a7b1c2;
+    --ok:#4caf50;
+    --bg:rgba(0,0,0,.58);
+    --track:rgba(255,255,255,.14);
+  }
+
+  html, body{
+    margin:0;
+    background:transparent;
+    color:var(--text);
+    font-family:system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    overflow:hidden;
+  }
+
+  .wrap{
+    position:fixed;
+    right:20px;
+    bottom:20px;
+    width:360px;
+    box-sizing:border-box;
+    padding:14px 16px 12px;
+    border-radius:14px;
+    background:var(--bg);
+    opacity:0;
+    visibility:hidden;
+    transform:translateY(6px);
+    transition:opacity .18s ease, transform .18s ease, visibility 0s linear .18s;
+    pointer-events:none;
+  }
+
+  .wrap.visible{
+    opacity:1;
+    visibility:visible;
+    transform:translateY(0);
+    transition:opacity .18s ease, transform .18s ease, visibility 0s linear 0s;
+  }
+
+  h1{
+    margin:0 0 10px;
+    font-size:15px;
+    line-height:1.2;
+    font-weight:600;
+    color:var(--muted);
+  }
+
+  .row{
+    display:flex;
+    align-items:flex-start;
+    gap:10px;
+    margin:4px 0;
+    line-height:1.25;
+  }
+
+  .label{
+    width:78px;
+    flex:0 0 78px;
+    color:var(--muted);
+    font-size:13px;
+  }
+
+  .value{
+    flex:1 1 auto;
+    min-width:0;
+    font-weight:700;
+    font-size:14px;
+  }
+
+  #file{
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+
+  .bar{
+    margin-top:10px;
+    height:10px;
+    background:var(--track);
+    border-radius:999px;
+    overflow:hidden;
+  }
+
+  .fill{
+    height:100%;
+    width:0%;
+    background:var(--ok);
+    will-change:width;
+  }
+
+  .status-ok{
+    color:var(--ok);
+  }
+</style>
+</head>
+<body>
+  <div class="wrap" id="box" aria-hidden="true">
+    <h1>Current Upload</h1>
+
+    <div class="row">
+      <div class="label">File</div>
+      <div class="value" id="file">—</div>
+    </div>
+
+    <div class="row">
+      <div class="label">Progress</div>
+      <div class="value" id="pct">0.00%</div>
+    </div>
+
+    <div class="row">
+      <div class="label">Sent</div>
+      <div class="value" id="sent">0 B / 0 B</div>
+    </div>
+
+    <div class="row">
+      <div class="label">Speed</div>
+      <div class="value" id="rate">—</div>
+    </div>
+
+    <div class="row">
+      <div class="label">Elapsed</div>
+      <div class="value" id="elapsed">0.00s</div>
+    </div>
+
+    <div class="bar">
+      <div class="fill" id="bar"></div>
+    </div>
+
+    <div class="row" style="margin-top:8px">
+      <div class="label">Status</div>
+      <div class="value" id="status">Idle</div>
+    </div>
+  </div>
+
+  <script>
+    const ENDPOINT = '/api/uploads/progress';
+
+    const ACTIVE_POLL_MS = 400;
+    const IDLE_POLL_MS = 1500;
+    const COMPLETE_POLL_MS = 1000;
+    const COMPLETE_HIDE_MS = 2000;
+    const FETCH_TIMEOUT_MS = 1200;
+
+    const box = document.getElementById('box');
+    const el = {
+      file: document.getElementById('file'),
+      pct: document.getElementById('pct'),
+      sent: document.getElementById('sent'),
+      rate: document.getElementById('rate'),
+      elapsed: document.getElementById('elapsed'),
+      bar: document.getElementById('bar'),
+      status: document.getElementById('status')
+    };
+
+    let pollTimer = null;
+    let hideTimer = null;
+    let lastCompletedFile = '';
+    let lastRenderKey = '';
+
+    function showOverlay() {
+      if (!box.classList.contains('visible')) {
+        box.classList.add('visible');
+        box.setAttribute('aria-hidden', 'false');
+      }
+    }
+
+    function hideOverlay() {
+      if (box.classList.contains('visible')) {
+        box.classList.remove('visible');
+        box.setAttribute('aria-hidden', 'true');
+      }
+    }
+
+    function cancelHideTimer() {
+      if (hideTimer) {
+        clearTimeout(hideTimer);
+        hideTimer = null;
+      }
+    }
+
+    function scheduleHide() {
+      cancelHideTimer();
+      hideTimer = setTimeout(() => {
+        hideOverlay();
+        hideTimer = null;
+      }, COMPLETE_HIDE_MS);
+    }
+
+    function scheduleNext(ms) {
+      if (pollTimer) {
+        clearTimeout(pollTimer);
+      }
+      pollTimer = setTimeout(poll, ms);
+    }
+
+    function fmtSize(bytes) {
+      const b = Number.isFinite(bytes) ? bytes : 0;
+      if (b >= 1073741824) return (b / 1073741824).toFixed(2) + ' GB';
+      if (b >= 1048576) return (b / 1048576).toFixed(2) + ' MB';
+      if (b >= 1024) return (b / 1024).toFixed(2) + ' KB';
+      return Math.max(0, Math.round(b)) + ' B';
+    }
+
+    function fmtRate(bytesPerSec) {
+      const bps = Number.isFinite(bytesPerSec) ? bytesPerSec : 0;
+      if (bps <= 0) return '—';
+      if (bps >= 1073741824) return (bps / 1073741824).toFixed(2) + ' GB/s';
+      if (bps >= 1048576) return (bps / 1048576).toFixed(2) + ' MB/s';
+      if (bps >= 1024) return (bps / 1024).toFixed(2) + ' KB/s';
+      return Math.round(bps) + ' B/s';
+    }
+
+    function clampPercent(value) {
+      if (!Number.isFinite(value)) return 0;
+      if (value < 0) return 0;
+      if (value > 100) return 100;
+      return value;
+    }
+
+    function setText(node, value) {
+      if (node.textContent !== value) {
+        node.textContent = value;
+      }
+    }
+
+    function setBar(percent) {
+      const next = clampPercent(percent).toFixed(2) + '%';
+      if (el.bar.style.width !== next) {
+        el.bar.style.width = next;
+      }
+    }
+
+    function render(data) {
+      const file = data.file || '';
+      const percent = clampPercent(Number(data.percent || 0));
+      const sent = Number(data.sent_bytes || 0);
+      const size = Number(data.size_bytes || 0);
+      const rate = Number(data.rate_bps || 0);
+      const elapsed = Number(data.elapsed || 0);
+      const done = !!data.done;
+
+      const renderKey = [
+        file,
+        percent.toFixed(2),
+        sent,
+        size,
+        rate,
+        elapsed.toFixed(2),
+        done ? 1 : 0
+      ].join('|');
+
+      if (renderKey === lastRenderKey) {
+        return { file, percent, sent, size, rate, elapsed, done };
+      }
+
+      lastRenderKey = renderKey;
+
+      setText(el.file, file || '—');
+      setText(el.pct, percent.toFixed(2) + '%');
+      setText(el.sent, `${fmtSize(sent)} / ${fmtSize(size)}`);
+      setText(el.rate, fmtRate(rate));
+      setText(el.elapsed, elapsed.toFixed(2) + 's');
+      setBar(percent);
+
+      return { file, percent, sent, size, rate, elapsed, done };
+    }
+
+    async function fetchProgress() {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+      try {
+        const response = await fetch(ENDPOINT, {
+          cache: 'no-store',
+          signal: controller.signal
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        return await response.json();
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
+
+    async function poll() {
+	  let nextDelay = IDLE_POLL_MS;
+
+	  try {
+		const raw = await fetchProgress();
+		const state = render(raw);
+
+		const isIdle = !state.file && state.sent === 0 && state.percent === 0 && !state.done;
+		const isActive = !!state.file && !state.done && state.percent < 100;
+		const isComplete = !!state.file && (state.done || state.percent >= 100);
+
+		el.status.classList.remove('status-ok');
+
+		if (isIdle) {
+		  setText(el.status, 'Idle');
+		  hideOverlay();
+		  nextDelay = IDLE_POLL_MS;
+		  return;
+		}
+
+		if (isActive) {
+		  cancelHideTimer();
+		  lastCompletedFile = '';
+		  showOverlay();
+		  setText(el.status, state.sent > 0 ? 'Uploading…' : 'Preparing…');
+		  nextDelay = ACTIVE_POLL_MS;
+		  return;
+		}
+
+		if (isComplete) {
+		  if (state.file !== lastCompletedFile) {
+			lastCompletedFile = state.file;
+
+			showOverlay();
+			setText(el.status, 'Complete!');
+			el.status.classList.add('status-ok');
+			scheduleHide();
+		  } else {
+			hideOverlay();
+		  }
+
+		  nextDelay = COMPLETE_POLL_MS;
+		  return;
+		}
+
+		showOverlay();
+		setText(el.status, 'Working…');
+		nextDelay = ACTIVE_POLL_MS;
+	  } catch (err) {
+		hideOverlay();
+		nextDelay = IDLE_POLL_MS;
+	  } finally {
+		scheduleNext(nextDelay);
+	  }
+	}
+
+    poll();
+  </script>
+</body>
+</html>
