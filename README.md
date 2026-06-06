@@ -9,6 +9,27 @@ Syronius’ Frame (F.R.A.M.E.) is a modular, containerized IRL streamer applianc
 - `docs/spec/v1.1.md` — The V1 spec + V1.1 refinements (the canonical contract).
 - `docs/schemas/` — JSON Schemas for on-disk and API contracts (validation at startup / install-time).
 - `docs/adr/` — Architecture Decision Records (why we chose a behavior/contract).
+- `services/frame-audio-bridge/` — Implemented Discord voice-to-OBS bridge service, control page, overlays, and Docker deployment.
+- `docker_container_samples/` — Reference container examples that are not yet first-class FRAME services.
+
+## Implemented Services
+
+### FRAME Audio Bridge
+
+`services/frame-audio-bridge/` is a working optional FRAME service. It joins Discord voice channels,
+creates separate per-streamer mixes, and serves permanent OBS audio/overlay URLs plus a mobile-first
+control page.
+
+Run it standalone while the overall stack installer is still being implemented:
+
+```bash
+cd services/frame-audio-bridge
+cp .env.example .env
+docker compose up --build -d
+```
+
+See [`services/frame-audio-bridge/README.md`](services/frame-audio-bridge/README.md) for Discord,
+OBS, Cloudflare, security, and operating instructions.
 
 ## How to run (per V1/V1.1 spec)
 
@@ -25,7 +46,8 @@ The installer is responsible for:
 - deploying the stack via `docker compose up -d`
 
 ### Planned commands (V1)
-> This repository scaffold focuses on documentation/contracts. The installer scripts + compose will be added during implementation, but the intended UX/behavior is defined below.
+> The overall installer scripts + generated compose are still planned. Implemented services can be
+> run from their service directories until the unified installer owns them.
 
 **Install / reconfigure**
 - Windows:

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FRAME Audio Bridge Audio</title>
+    <link rel="icon" type="image/svg+xml" href="/assets/frame-logo-square.svg?v=__ASSET_VERSION__" />
+    <style>
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: transparent;
+      }
+    </style>
+  </head>
+  <body>
+    <script>
+      (() => {
+        const guildKey = location.pathname.split("/")[2];
+        const params = new URLSearchParams(location.search);
+        const obsToken = params.get("obsToken");
+        const scheme = location.protocol === "https:" ? "wss:" : "ws:";
+        let socket;
+        let reconnectTimer;
+        let reconnectDelay = 500;
+        let audioContext;
+        let nextPlayTime = 0;
+
+        function connect() {
+          const wsParams = new URLSearchParams({
+            client: "audio",
+            guildKey,
+          });
+
+          if (obsToken) {
+            wsParams.set("obsToken", obsToken);
+          }
+
+          socket = new WebSocket(`${scheme}//${location.host}/ws?${wsParams.toString()}`);
+          socket.binaryType = "arraybuffer";
+
+          socket.addEventListener("open", () => {
+            reconnectDelay = 500;
+          });
+
+          socket.addEventListener("message", (event) => {
+            if (typeof event.data === "string") {
+              return;
+            }
+
+            playPcmChunk(event.data);
+          });
+
+          socket.addEventListener("close", scheduleReconnect);
+          socket.addEventListener("error", () => socket.close());
+        }
+
+        function scheduleReconnect() {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = setTimeout(connect, reconnectDelay);
+          reconnectDelay = Math.min(reconnectDelay * 1.5, 5000);
+        }
+
+        function ensureAudioContext() {
+          if (!audioContext) {
+            audioContext = new AudioContext({ sampleRate: 48000 });
+            nextPlayTime = audioContext.currentTime;
+          }
+
+          if (audioContext.state === "suspended") {
+            void audioContext.resume();
+          }
+        }
+
+        function playPcmChunk(arrayBuffer) {
+          ensureAudioContext();
+          const pcm = new Int16Array(arrayBuffer);
+          if (pcm.length === 0) {
+            return;
+          }
+
+          const channelCount = 2;
+          const frameCount = Math.floor(pcm.length / channelCount);
+          const buffer = audioContext.createBuffer(channelCount, frameCount, 48000);
+
+          for (let channel = 0; channel < channelCount; channel += 1) {
+            const output = buffer.getChannelData(channel);
+            for (let index = 0; index < frameCount; index += 1) {
+              output[index] = pcm[index * channelCount + channel] / 32768;
+            }
+          }
+
+          const source = audioContext.createBufferSource();
+          source.buffer = buffer;
+          source.connect(audioContext.destination);
+          nextPlayTime = Math.max(nextPlayTime, audioContext.currentTime + 0.02);
+          source.start(nextPlayTime);
+          nextPlayTime += buffer.duration;
+        }
+
+        connect();
+      })();
+    </script>
+  </body>
+</html>

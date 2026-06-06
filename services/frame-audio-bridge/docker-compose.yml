@@ -1,0 +1,18 @@
+services:
+  frame-audio-bridge:
+    build: .
+    container_name: frame-audio-bridge
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      PORT: ${PORT:-3728}
+      DATA_DIR: /data
+    ports:
+      - "${PORT:-3728}:${PORT:-3728}"
+    volumes:
+      - frame-audio-bridge-data:/data
+
+volumes:
+  frame-audio-bridge-data:

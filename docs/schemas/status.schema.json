@@ -59,6 +59,21 @@
         }
       }
     },
+    "discord_audio_bridges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["guild_id", "status", "active_mix_count"],
+        "properties": {
+          "guild_id": { "type": "string" },
+          "status": { "type": "string", "enum": ["active", "idle", "offline", "error"] },
+          "channel_name": { "type": ["string", "null"] },
+          "active_mix_count": { "type": "integer", "minimum": 0 },
+          "engine_health": { "type": "string", "enum": ["ok", "warn", "bad", "idle", "unknown"] }
+        }
+      }
+    },
     "disk": {
       "type": "object",
       "additionalProperties": false,

@@ -23,6 +23,7 @@
       "required": [
         "frame-video-relay",
         "frame-audio-relay",
+        "frame-discord-audio-bridge",
         "frame-photo-gallery",
         "frame-photo-ftp",
         "frame-photo-webupload",
@@ -35,6 +36,9 @@
           "type": "boolean"
         },
         "frame-audio-relay": {
+          "type": "boolean"
+        },
+        "frame-discord-audio-bridge": {
           "type": "boolean"
         },
         "frame-photo-gallery": {
@@ -73,7 +77,8 @@
         "audio_admin",
         "audio_capture",
         "audio_listen",
-        "audio_hls"
+        "audio_hls",
+        "discord_audio_bridge_root"
       ],
       "properties": {
         "dashboard": {
@@ -125,6 +130,10 @@
           "pattern": "^/"
         },
         "audio_hls": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "discord_audio_bridge_root": {
           "type": "string",
           "pattern": "^/"
         }
