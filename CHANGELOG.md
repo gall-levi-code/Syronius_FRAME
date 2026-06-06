@@ -8,3 +8,5 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Initial documentation scaffold.
 - Added canonical V1.1 spec at `docs/spec/v1.1.md`.
 - Added schema placeholders in `docs/schemas/`.
+- Added the complete `frame-audio-bridge` Discord voice-to-OBS service.
+- Added FRAME Audio Bridge capability, route, Hybrid exposure, observability, and architecture contracts.

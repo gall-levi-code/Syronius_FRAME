@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FRAME Audio Bridge Control</title>
+    <link rel="icon" type="image/svg+xml" href="/assets/frame-logo-square.svg?v=__ASSET_VERSION__" />
+    <link rel="stylesheet" href="/assets/styles.css?v=__ASSET_VERSION__" />
+  </head>
+  <body class="control-page">
+    <main class="control-shell">
+      <header class="control-header">
+        <div class="control-brand">
+          <img
+            class="control-logo"
+            src="/assets/frame-logo-square.svg?v=__ASSET_VERSION__"
+            alt=""
+            aria-hidden="true"
+          />
+          <div class="control-brand-text">
+            <p class="eyebrow">FRAME Audio Bridge</p>
+            <h1 id="control-title" class="control-title">
+              <span id="control-title-name">FRAME</span>
+              <span id="control-title-suffix">Bridge Control</span>
+            </h1>
+          </div>
+        </div>
+        <div class="header-actions">
+          <span id="connection-pill" class="pill pill-warn">Connecting</span>
+          <button
+            id="engine-pill"
+            class="pill pill-muted engine-pill"
+            type="button"
+            aria-label="Engine idle. Tap for details."
+            aria-expanded="false"
+          >
+            Engine idle
+          </button>
+          <button
+            id="global-lock-toggle"
+            class="icon-toggle global-lock-toggle"
+            type="button"
+            aria-label="Lock all controls"
+            title="Lock all controls"
+            aria-pressed="false"
+          ></button>
+          <button
+            id="theme-toggle"
+            class="icon-toggle theme-toggle"
+            type="button"
+            aria-label="Switch to day mode"
+            title="Switch to day mode"
+          ></button>
+        </div>
+      </header>
+      <div id="engine-details" class="engine-details" hidden></div>
+
+      <section class="control-section collapsible-section" data-section="info">
+        <div class="collapsible-header">
+          <button
+            class="icon-toggle section-drag-handle"
+            type="button"
+            aria-label="Drag Info section"
+            title="Drag to reorder section"
+            data-drag-section="info"
+          ></button>
+          <div class="section-move-actions" aria-label="Move Info section">
+            <button
+              class="icon-toggle section-move-button"
+              type="button"
+              aria-label="Move Info section up"
+              title="Move section up"
+              data-move-section="info"
+              data-move-direction="-1"
+            ></button>
+            <button
+              class="icon-toggle section-move-button"
+              type="button"
+              aria-label="Move Info section down"
+              title="Move section down"
+              data-move-section="info"
+              data-move-direction="1"
+            ></button>
+          </div>
+          <button
+            class="section-toggle"
+            type="button"
+            aria-expanded="true"
+            aria-controls="info-section-content"
+            data-collapse-section="info"
+          >
+            <span class="section-title">Info</span>
+            <span class="section-summary">Session, speakers, and OBS links</span>
+            <span class="section-chevron" aria-hidden="true"></span>
+          </button>
+          <button
+            class="icon-toggle section-lock"
+            type="button"
+            aria-label="Lock Info controls"
+            title="Lock Info controls"
+            aria-pressed="false"
+            data-lock-section="info"
+          ></button>
+        </div>
+
+        <div id="info-section-content" class="section-content">
+          <div class="section-row">
+            <h2>Info</h2>
+            <button
+              id="info-help-toggle"
+              class="help-bubble"
+              type="button"
+              aria-label="Info section help"
+              aria-controls="info-help"
+              aria-expanded="false"
+              data-help-toggle="info-help"
+            >
+              ?
+            </button>
+          </div>
+          <div id="info-help" class="help-text" hidden>
+            <p>
+              Info is the quick health check for the bridge. Active Speakers shows who is currently
+              talking after the audio delay alignment, so it should match what the overlay is doing.
+            </p>
+            <p>
+              Session tells you whether your personal bridge profile is active. Audio source and
+              Overlay source show whether OBS browser sources are connected. Voice channel and
+              bitrate come from the Discord channel the bot is currently joined to.
+            </p>
+            <p>
+              OBS Links are permanent for this bridge profile. Add them once in OBS, then use the
+              Discord commands and Stream Control settings to run each session.
+            </p>
+          </div>
+
+          <div class="bridge-action-panel">
+            <button id="bridge-session-toggle" class="bridge-session-button" type="button">
+              Start Bridge
+            </button>
+            <p id="bridge-session-feedback" class="bridge-session-feedback">
+              Join a Discord voice channel, then start your bridge from here.
+            </p>
+          </div>
+
+          <div class="subsection active-speaker-panel">
+            <div class="section-row">
+              <h2>Active Speakers</h2>
+              <span id="active-speaker-count" class="count-badge">0</span>
+            </div>
+            <div id="active-speakers" class="active-speaker-list muted">None</div>
+          </div>
+
+          <div class="subsection active-mix-panel">
+            <div class="section-row">
+              <h2>Active Mixes</h2>
+              <span id="active-mix-count" class="count-badge">0</span>
+            </div>
+            <div id="active-mixes" class="active-mix-list muted">None</div>
+          </div>
+
+          <div class="status-panel">
+            <div>
+              <span class="label">Session</span>
+              <strong id="session-status">Unknown</strong>
+            </div>
+            <div>
+              <span class="label">Audio source</span>
+              <strong id="audio-source-status">Offline</strong>
+            </div>
+            <div>
+              <span class="label">Overlay source</span>
+              <strong id="overlay-source-status">Offline</strong>
+            </div>
+            <div>
+              <span class="label">Voice channel</span>
+              <strong id="channel-id">None</strong>
+            </div>
+            <div>
+              <span class="label">Bitrate</span>
+              <strong id="channel-bitrate">Unknown</strong>
+            </div>
+          </div>
+
+          <div class="subsection">
+            <h2>OBS Links</h2>
+            <div class="link-actions">
+              <button id="copy-audio" type="button">Copy OBS Audio URL</button>
+              <button id="copy-overlay" type="button">Copy OBS Overlay URL</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="control-section collapsible-section" data-section="overlay">
+        <div class="collapsible-header">
+          <button
+            class="icon-toggle section-drag-handle"
+            type="button"
+            aria-label="Drag Overlay section"
+            title="Drag to reorder section"
+            data-drag-section="overlay"
+          ></button>
+          <div class="section-move-actions" aria-label="Move Overlay section">
+            <button
+              class="icon-toggle section-move-button"
+              type="button"
+              aria-label="Move Overlay section up"
+              title="Move section up"
+              data-move-section="overlay"
+              data-move-direction="-1"
+            ></button>
+            <button
+              class="icon-toggle section-move-button"
+              type="button"
+              aria-label="Move Overlay section down"
+              title="Move section down"
+              data-move-section="overlay"
+              data-move-direction="1"
+            ></button>
+          </div>
+          <button
+            class="section-toggle"
+            type="button"
+            aria-expanded="true"
+            aria-controls="overlay-section-content"
+            data-collapse-section="overlay"
+          >
+            <span class="section-title">Overlay</span>
+            <span class="section-summary">Appearance, layout, and OBS placement</span>
+            <span class="section-chevron" aria-hidden="true"></span>
+          </button>
+          <button
+            class="icon-toggle section-lock"
+            type="button"
+            aria-label="Lock Overlay controls"
+            title="Lock Overlay controls"
+            aria-pressed="false"
+            data-lock-section="overlay"
+          ></button>
+        </div>
+
+        <div id="overlay-section-content" class="section-content">
+          <div class="section-row">
+            <h2>Overlay</h2>
+            <button
+              id="overlay-help-toggle"
+              class="help-bubble"
+              type="button"
+              aria-label="Overlay control help"
+              aria-controls="overlay-help"
+              aria-expanded="false"
+              data-help-toggle="overlay-help"
+            >
+              ?
+            </button>
+          </div>
+          <div id="overlay-help" class="help-text" hidden>
+            <p>
+              Overlay controls the transparent OBS speaker layer. Anchor chooses the screen point
+              the group starts from. Growth decides where new cards are added from that anchor, so a
+              bottom-right overlay can grow left or up instead of covering your scene.
+            </p>
+            <p>
+              Horizontal shows all currently visible speakers in a row. Vertical stacks speakers in
+              a column. Active only shows one active speaker at a time, which is best when screen
+              space is tight. Persistent keeps user cards visible even when silent, then uses
+              Inactive opacity to dim people who are not talking.
+            </p>
+            <p>
+              The avatar, name, and test overlay buttons let you preview the OBS look without
+              waiting for a real session. Font Settings tune names and readability. Card Settings
+              tune the bubble shape, color, glow, outlines, and spacing.
+            </p>
+            <p>
+              Fade milliseconds is visual only. It controls how long speaker cards take to fade,
+              scale, and glow between silent and speaking states. Use 0ms for instant changes, or a
+              higher value for smoother motion. It does not change the audio delay.
+            </p>
+          </div>
+
+          <div id="overlay-layout-settings" class="settings-group">
+            <h3>Layout</h3>
+            <div class="placement-grid">
+              <div>
+                <span class="control-label">Anchor</span>
+                <div id="anchor-grid" class="anchor-grid" role="group" aria-label="Overlay anchor"></div>
+              </div>
+              <div>
+                <span class="control-label">Growth</span>
+                <div id="growth-grid" class="growth-grid" role="group" aria-label="Overlay growth direction"></div>
+              </div>
+            </div>
+            <span class="control-label">Layout</span>
+            <div id="layout-grid" class="layout-toggle" role="group" aria-label="Overlay layout"></div>
+            <span class="control-label">Toggle Buttons</span>
+            <div class="toggle-row overlay-icon-row">
+              <button id="show-avatars-toggle" class="icon-toggle positive-toggle" type="button"></button>
+              <button id="show-names-toggle" class="icon-toggle positive-toggle" type="button"></button>
+              <button id="test-overlay-toggle" class="icon-toggle positive-toggle" type="button"></button>
+            </div>
+          </div>
+
+          <div id="overlay-font-settings" class="settings-group">
+            <h3>Font Settings</h3>
+            <div class="range-grid">
+              <label>
+                Font
+                <select id="font-select">
+                  <option value="system">System</option>
+                  <option value="rounded">Rounded</option>
+                  <option value="display">Display</option>
+                  <option value="condensed">Condensed</option>
+                  <option value="wide">Wide</option>
+                  <option value="serif">Serif</option>
+                  <option value="mono">Mono</option>
+                </select>
+              </label>
+              <label>
+                Avatar placement
+                <select id="avatar-position-select">
+                  <option value="left">Left of name</option>
+                  <option value="right">Right of name</option>
+                  <option value="top">Above name</option>
+                  <option value="bottom">Below name</option>
+                </select>
+              </label>
+              <label>
+                Name color
+                <input id="name-color" type="color" value="#ffffff" />
+              </label>
+            </div>
+            <label class="range-label fine-range">
+              <span>Name size <output id="name-size-output">18px</output></span>
+              <div class="range-stepper">
+                <button class="range-nudge" type="button" data-range-target="name-size" data-range-step="-1" aria-label="Decrease name size">-</button>
+                <input id="name-size" type="range" min="10" max="64" step="1" value="18" />
+                <button class="range-nudge" type="button" data-range-target="name-size" data-range-step="1" aria-label="Increase name size">+</button>
+              </div>
+            </label>
+            <div class="checkbox-row">
+              <label class="checkbox-control">
+                <input id="text-shadow-toggle" type="checkbox" />
+                <span>Text shadow</span>
+              </label>
+              <label class="checkbox-control">
+                <input id="text-stroke-toggle" type="checkbox" />
+                <span>Text outline</span>
+              </label>
+            </div>
+            <label class="range-label fine-range">
+              <span>Text outline width <output id="text-stroke-width-output">1px</output></span>
+              <div class="range-stepper">
+                <button class="range-nudge" type="button" data-range-target="text-stroke-width" data-range-step="-1" aria-label="Decrease text outline width">-</button>
+                <input id="text-stroke-width" type="range" min="0" max="4" step="1" value="1" />
+                <button class="range-nudge" type="button" data-range-target="text-stroke-width" data-range-step="1" aria-label="Increase text outline width">+</button>
+              </div>
+            </label>
+          </div>
+
+          <div id="overlay-card-settings" class="settings-group">
+            <h3>Card Settings</h3>
+            <div class="range-grid">
+              <label>
+                Bubble shape
+                <select id="bubble-shape-select">
+                  <option value="pill">Pill</option>
+                  <option value="rounded">Rounded</option>
+                  <option value="square">Square</option>
+                </select>
+              </label>
+              <label>
+                Accent / glow
+                <input id="accent-color" type="color" value="#2cb4fb" />
+              </label>
+              <label>
+                Card color
+                <input id="background-color" type="color" value="#07111b" />
+              </label>
+            </div>
+            <div class="range-grid card-slider-grid">
+              <label class="range-label fine-range">
+                <span>Avatar size <output id="avatar-size-output">42px</output></span>
+                <div class="range-stepper">
+                  <button class="range-nudge" type="button" data-range-target="avatar-size" data-range-step="-2" aria-label="Decrease avatar size">-</button>
+                  <input id="avatar-size" type="range" min="24" max="128" step="2" value="42" />
+                  <button class="range-nudge" type="button" data-range-target="avatar-size" data-range-step="2" aria-label="Increase avatar size">+</button>
+                </div>
+              </label>
+              <label class="range-label fine-range">
+                <span>Overlay padding <output id="overlay-padding-output">24px</output></span>
+                <div class="range-stepper">
+                  <button class="range-nudge" type="button" data-range-target="overlay-padding" data-range-step="-2" aria-label="Decrease overlay padding">-</button>
+                  <input id="overlay-padding" type="range" min="0" max="120" step="2" value="24" />
+                  <button class="range-nudge" type="button" data-range-target="overlay-padding" data-range-step="2" aria-label="Increase overlay padding">+</button>
+                </div>
+              </label>
+              <label class="range-label fine-range">
+                <span>Card alpha <output id="background-alpha-output">100%</output></span>
+                <div class="range-stepper">
+                  <button class="range-nudge" type="button" data-range-target="background-alpha" data-range-step="-10" aria-label="Decrease card alpha">-</button>
+                  <input id="background-alpha" type="range" min="0" max="100" step="5" value="100" />
+                  <button class="range-nudge" type="button" data-range-target="background-alpha" data-range-step="10" aria-label="Increase card alpha">+</button>
+                </div>
+              </label>
+              <label class="range-label fine-range">
+                <span>Inactive opacity <output id="inactive-opacity-output">56%</output></span>
+                <div class="range-stepper">
+                  <button class="range-nudge" type="button" data-range-target="inactive-opacity" data-range-step="-10" aria-label="Decrease inactive opacity">-</button>
+                  <input id="inactive-opacity" type="range" min="0" max="100" step="5" value="56" />
+                  <button class="range-nudge" type="button" data-range-target="inactive-opacity" data-range-step="10" aria-label="Increase inactive opacity">+</button>
+                </div>
+              </label>
+              <label class="range-label fine-range">
+                <span>Glow <output id="glow-output">42%</output></span>
+                <div class="range-stepper">
+                  <button class="range-nudge" type="button" data-range-target="glow-intensity" data-range-step="-10" aria-label="Decrease glow">-</button>
+                  <input id="glow-intensity" type="range" min="0" max="100" step="1" value="42" />
+                  <button class="range-nudge" type="button" data-range-target="glow-intensity" data-range-step="10" aria-label="Increase glow">+</button>
+                </div>
+              </label>
+              <label class="range-label fine-range">
+                <span>Bubble outline <output id="bubble-stroke-width-output">1px</output></span>
+                <div class="range-stepper">
+                  <button class="range-nudge" type="button" data-range-target="bubble-stroke-width" data-range-step="-1" aria-label="Decrease bubble outline">-</button>
+                  <input id="bubble-stroke-width" type="range" min="0" max="8" step="1" value="1" />
+                  <button class="range-nudge" type="button" data-range-target="bubble-stroke-width" data-range-step="1" aria-label="Increase bubble outline">+</button>
+                </div>
+              </label>
+            </div>
+            <label class="range-label fade-control">
+              <span>Fade milliseconds <output id="fade-ms-output">0ms</output></span>
+              <input id="fade-ms" type="range" min="0" max="5000" step="50" value="0" />
+              <div class="delay-adjust-row fade-adjust-row" aria-label="Fade quick adjustments">
+                <button class="delay-nudge" type="button" data-range-target="fade-ms" data-range-step="-100">-100ms</button>
+                <button class="delay-nudge" type="button" data-range-target="fade-ms" data-range-step="-50">-50ms</button>
+                <button
+                  id="reset-fade"
+                  class="icon-toggle reset-button"
+                  type="button"
+                  aria-label="Reset fade milliseconds"
+                  title="Reset fade milliseconds"
+                ></button>
+                <button class="delay-nudge" type="button" data-range-target="fade-ms" data-range-step="50">+50ms</button>
+                <button class="delay-nudge" type="button" data-range-target="fade-ms" data-range-step="100">+100ms</button>
+              </div>
+            </label>
+            <div class="toggle-row overlay-icon-row effects-row">
+              <button id="glow-toggle" class="icon-toggle positive-toggle" type="button"></button>
+              <button id="bubble-shadow-toggle" class="icon-toggle positive-toggle" type="button"></button>
+              <button id="bubble-stroke-toggle" class="icon-toggle positive-toggle" type="button"></button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="control-section collapsible-section" data-section="stream">
+        <div class="collapsible-header">
+          <button
+            class="icon-toggle section-drag-handle"
+            type="button"
+            aria-label="Drag Stream Control section"
+            title="Drag to reorder section"
+            data-drag-section="stream"
+          ></button>
+          <div class="section-move-actions" aria-label="Move Stream Control section">
+            <button
+              class="icon-toggle section-move-button"
+              type="button"
+              aria-label="Move Stream Control section up"
+              title="Move section up"
+              data-move-section="stream"
+              data-move-direction="-1"
+            ></button>
+            <button
+              class="icon-toggle section-move-button"
+              type="button"
+              aria-label="Move Stream Control section down"
+              title="Move section down"
+              data-move-section="stream"
+              data-move-direction="1"
+            ></button>
+          </div>
+          <button
+            class="section-toggle"
+            type="button"
+            aria-expanded="true"
+            aria-controls="stream-section-content"
+            data-collapse-section="stream"
+          >
+            <span class="section-title">Stream Control</span>
+            <span class="section-summary">Delay, mutes, hides, and user volumes</span>
+            <span class="section-chevron" aria-hidden="true"></span>
+          </button>
+          <button
+            class="icon-toggle section-lock"
+            type="button"
+            aria-label="Lock Stream Control controls"
+            title="Lock Stream Control controls"
+            aria-pressed="false"
+            data-lock-section="stream"
+          ></button>
+        </div>
+
+        <div id="stream-section-content" class="section-content">
+          <div class="section-row">
+            <h2>Stream Control</h2>
+            <button
+              id="stream-help-toggle"
+              class="help-bubble"
+              type="button"
+              aria-label="Stream Control section help"
+              aria-controls="stream-help"
+              aria-expanded="false"
+              data-help-toggle="stream-help"
+            >
+              ?
+            </button>
+          </div>
+          <div id="stream-help" class="help-text" hidden>
+            <p>
+              Stream Control is the live mix panel for your OBS audio source. Delay shifts the mixed
+              Discord audio so it can line up with camera or capture latency. Turn delay off for
+              non-IRL scenes while keeping the saved delay value ready for later. The small buttons
+              make exact 50ms and 100ms adjustments without fighting the slider on mobile.
+            </p>
+            <p>
+              User volume changes only your bridge mix. Mute removes a user from your audio mix.
+              Hide removes a user from your overlay. These controls are per bridge profile, so two
+              streamers in the same voice channel can keep different OBS mixes.
+            </p>
+            <p>
+              The lock buttons are meant for mobile use. Lock a section, or all controls, once the
+              settings are right so accidental taps do not move sliders or reorder sections.
+            </p>
+          </div>
+
+          <div class="subsection">
+            <div class="section-row">
+              <h2>Delay</h2>
+              <output id="delay-output">0ms</output>
+            </div>
+            <button
+              id="delay-toggle"
+              class="icon-toggle positive-toggle delay-toggle"
+              type="button"
+              aria-pressed="true"
+            >
+              Delay On
+            </button>
+            <input id="delay-slider" type="range" min="0" max="10000" step="50" value="0" />
+            <div class="delay-adjust-row" aria-label="Delay quick adjustments">
+              <button id="delay-minus-100" class="delay-nudge" type="button">-100ms</button>
+              <button id="delay-minus-50" class="delay-nudge" type="button">-50ms</button>
+              <button
+                id="reset-delay"
+                class="icon-toggle reset-button"
+                type="button"
+                aria-label="Reset delay"
+                title="Reset delay"
+              ></button>
+              <button id="delay-plus-50" class="delay-nudge" type="button">+50ms</button>
+              <button id="delay-plus-100" class="delay-nudge" type="button">+100ms</button>
+            </div>
+          </div>
+
+          <div class="subsection">
+            <h2>Users</h2>
+            <div class="bulk-actions">
+              <button id="mute-toggle-all" class="icon-toggle" type="button" aria-pressed="false"></button>
+              <button id="hide-toggle-all" class="icon-toggle" type="button" aria-pressed="false"></button>
+              <button
+                id="reset-all-volumes"
+                class="icon-toggle reset-button"
+                type="button"
+                aria-label="Reset all volumes"
+                title="Reset all volumes"
+              ></button>
+            </div>
+            <div id="user-list" class="user-list empty">No users tracked yet.</div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="/assets/control.js?v=__ASSET_VERSION__"></script>
+  </body>
+</html>
