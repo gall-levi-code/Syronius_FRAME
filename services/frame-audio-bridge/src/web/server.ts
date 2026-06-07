@@ -38,14 +38,21 @@ export function createWebServer(
     },
     express.static(publicDir),
   );
-  registerRoutes(app, sessionManager, appConfig, publicDir);
-
   const websocketServer = new BridgeWebSocketServer(
     server,
     sessionManager,
     appConfig,
     voiceManager,
     discordClient,
+  );
+  registerRoutes(
+    app,
+    sessionManager,
+    appConfig,
+    publicDir,
+    voiceManager,
+    discordClient,
+    websocketServer,
   );
 
   return {

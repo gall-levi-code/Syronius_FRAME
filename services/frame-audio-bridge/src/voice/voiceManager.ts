@@ -138,6 +138,10 @@ export class VoiceManager {
     }
   }
 
+  public getConnectionStatus(guildId: string): string {
+    return this.connectionsByGuildId.get(guildId)?.state.status ?? "disconnected";
+  }
+
   public async syncVoiceChannelMembers(guildId: string): Promise<void> {
     const guild = this.guildsByGuildId.get(guildId);
     const channelId = this.channelIdsByGuildId.get(guildId);

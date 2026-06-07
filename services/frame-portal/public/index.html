@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#07111b" />
+    <title>FRAME Control Center</title>
+    <link rel="icon" type="image/svg+xml" href="/assets/frame-logo-square.svg?v=2026-06-07-hardening" />
+    <link rel="stylesheet" href="/assets/styles.css?v=2026-06-07-hardening" />
+  </head>
+  <body>
+    <main class="portal-shell">
+      <header class="portal-header">
+        <div class="brand">
+          <img class="brand-logo" src="/assets/frame-logo-square.svg" alt="" aria-hidden="true" />
+          <div class="brand-copy">
+            <p class="eyebrow">Syronius FRAME</p>
+            <h1>Control Center</h1>
+          </div>
+        </div>
+        <div class="header-actions">
+          <span id="connection-pill" class="pill pill-warn">Connecting</span>
+          <button id="refresh-button" class="icon-button" type="button" aria-label="Refresh status" title="Refresh status">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/></svg>
+          </button>
+          <button id="theme-toggle" class="icon-button" type="button" aria-label="Switch to day mode" title="Switch to day mode">
+            <svg class="moon-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"/></svg>
+            <svg class="sun-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/></svg>
+          </button>
+        </div>
+      </header>
+
+      <section class="summary-grid" aria-label="FRAME summary">
+        <article class="metric">
+          <span class="metric-label">Overall</span>
+          <strong id="overall-value">Checking</strong>
+          <span id="overall-detail" class="metric-detail">Waiting for status</span>
+        </article>
+        <article class="metric">
+          <span class="metric-label">Services</span>
+          <strong id="services-value">0 / 0</strong>
+          <span class="metric-detail">Running</span>
+        </article>
+        <article class="metric">
+          <span class="metric-label">Data Disk</span>
+          <strong id="disk-value">0%</strong>
+          <div class="disk-meter" aria-hidden="true"><span id="disk-meter-fill"></span></div>
+          <span id="disk-detail" class="metric-detail">Free space unknown</span>
+        </article>
+        <article class="metric">
+          <span class="metric-label">Mode</span>
+          <strong id="mode-value">LAN</strong>
+          <span id="updated-value" class="metric-detail">Not updated</span>
+        </article>
+      </section>
+
+      <section id="alerts-section" class="portal-section" hidden>
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Needs attention</p>
+            <h2>Alerts</h2>
+          </div>
+          <span id="alert-count" class="count-badge">0</span>
+        </div>
+        <div id="alerts-list" class="alert-list"></div>
+      </section>
+
+      <section id="services" class="portal-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Capability aware</p>
+            <h2>FRAME Tools</h2>
+          </div>
+          <span id="mode-pill" class="pill pill-idle">LAN</span>
+        </div>
+        <div id="tools-grid" class="tool-grid">
+          <p class="empty-state">Loading FRAME tools...</p>
+        </div>
+      </section>
+
+      <section class="portal-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Container runtime</p>
+            <h2>Services</h2>
+          </div>
+          <span id="service-count" class="count-badge">0</span>
+        </div>
+        <div id="services-grid" class="service-grid">
+          <p class="empty-state">Checking service health...</p>
+        </div>
+      </section>
+
+      <section class="portal-section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Current signals</p>
+            <h2>Activity</h2>
+          </div>
+        </div>
+        <div class="activity-grid">
+          <div class="activity-item">
+            <span>Last ingest</span>
+            <strong id="last-ingest">No ingest reported</strong>
+          </div>
+          <div class="activity-item">
+            <span>Last photo</span>
+            <strong id="last-photo">No photo reported</strong>
+          </div>
+          <div class="activity-item">
+            <span>Audio streams</span>
+            <strong id="audio-streams">None active</strong>
+          </div>
+          <div class="activity-item">
+            <span>Discord bridges</span>
+            <strong id="discord-bridges">None reported</strong>
+          </div>
+        </div>
+      </section>
+
+      <footer class="portal-footer">
+        <span>FRAME Portal</span>
+        <span id="footer-state">Connecting to status API</span>
+      </footer>
+    </main>
+
+    <dialog id="logs-dialog" class="logs-dialog">
+      <div class="dialog-header">
+        <div>
+          <p class="eyebrow">Live container output</p>
+          <h2 id="logs-title">Service Logs</h2>
+        </div>
+        <button id="close-logs" class="icon-button" type="button" aria-label="Close logs" title="Close logs">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <pre id="logs-output" tabindex="0">Connecting...</pre>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <script src="/assets/portal.js?v=2026-06-07-hardening"></script>
+  </body>
+</html>

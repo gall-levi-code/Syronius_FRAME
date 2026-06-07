@@ -64,12 +64,42 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["guild_id", "status", "active_mix_count"],
+        "required": [
+          "guild_id",
+          "status",
+          "active_mix_count",
+          "active_streamers",
+          "speaking_users",
+          "bot_connected",
+          "voice_connection",
+          "clients",
+          "engine_health"
+        ],
         "properties": {
           "guild_id": { "type": "string" },
           "status": { "type": "string", "enum": ["active", "idle", "offline", "error"] },
           "channel_name": { "type": ["string", "null"] },
           "active_mix_count": { "type": "integer", "minimum": 0 },
+          "active_streamers": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "speaking_users": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "bot_connected": { "type": "boolean" },
+          "voice_connection": { "type": "string" },
+          "clients": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["audio", "overlay", "control"],
+            "properties": {
+              "audio": { "type": "integer", "minimum": 0 },
+              "overlay": { "type": "integer", "minimum": 0 },
+              "control": { "type": "integer", "minimum": 0 }
+            }
+          },
           "engine_health": { "type": "string", "enum": ["ok", "warn", "bad", "idle", "unknown"] }
         }
       }
@@ -77,9 +107,10 @@
     "disk": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["used_bytes", "total_bytes", "percent_used"],
+      "required": ["used_bytes", "free_bytes", "total_bytes", "percent_used"],
       "properties": {
         "used_bytes": { "type": "integer", "minimum": 0 },
+        "free_bytes": { "type": "integer", "minimum": 0 },
         "total_bytes": { "type": "integer", "minimum": 0 },
         "percent_used": { "type": "number", "minimum": 0, "maximum": 100 }
       }

@@ -88,6 +88,16 @@ READONLY_OBS_TOKEN=replace_with_random_readonly_token
 
 When `READONLY_OBS_TOKEN` is set, `/frame-admin setup` includes `?obsToken=...` on the permanent audio and overlay URLs. The control token is separate and only appears in the private control URL.
 
+Optional FRAME Portal telemetry:
+
+```bash
+PORTAL_SERVICE_TOKEN=replace_with_a_long_random_service_token
+```
+
+When configured, `GET /api/internal/portal-status` accepts that token as a Bearer token and reports
+bot state, active guild sessions, streamer names, engine health, and connected client counts. It
+does not expose bridge keys, control tokens, or private URLs.
+
 ## Run With Docker Compose
 
 ```bash
@@ -178,6 +188,7 @@ The current engine is intentionally simple and tick-based. It should be good eno
 - Audio and overlay pages are tokenless by default, but use an unguessable random bridge key.
 - Set `READONLY_OBS_TOKEN` if you want audio and overlay URLs to require a shared readonly query token.
 - Discord bot tokens and control tokens are never embedded in the static client files.
+- The private Portal telemetry endpoint is disabled unless `PORTAL_SERVICE_TOKEN` is configured.
 - JSON storage is an MVP implementation behind `GuildConfigStore`, so replacing it with SQLite or Postgres later should be straightforward.
 
 ## Project Layout

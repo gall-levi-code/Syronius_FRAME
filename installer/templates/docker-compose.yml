@@ -1,0 +1,83 @@
+name: syronius-frame
+
+services:
+  frame-portal:
+    build:
+      context: ./services/frame-portal
+    container_name: frame-portal
+    restart: unless-stopped
+    environment:
+      PORT: 3730
+      FRAME_MODE: ${FRAME_MODE:-LAN}
+      DATA_ROOT: /data
+      STACK_CONFIG_PATH: /data/state/stack-config.json
+      DOCKER_HOST: http://frame-docker-proxy:2375
+      ENABLE_CONTAINER_RESTARTS: ${ENABLE_CONTAINER_RESTARTS:-false}
+      STATUS_REFRESH_MS: ${STATUS_REFRESH_MS:-5000}
+      STATUS_CACHE_MS: ${STATUS_CACHE_MS:-4000}
+      REQUEST_TIMEOUT_MS: ${REQUEST_TIMEOUT_MS:-3000}
+      AUDIO_BRIDGE_STATUS_URL: http://frame-audio-bridge:3728/api/internal/portal-status
+      AUDIO_BRIDGE_STATUS_TOKEN: ${PORTAL_SERVICE_TOKEN}
+      PORTAL_USERNAME: ${PORTAL_USERNAME:-}
+      PORTAL_PASSWORD: ${PORTAL_PASSWORD:-}
+      PORTAL_REALM: ${PORTAL_REALM:-FRAME Portal}
+      DISK_WARN_PERCENT: ${DISK_WARN_PERCENT:-85}
+      DISK_ERROR_PERCENT: ${DISK_ERROR_PERCENT:-95}
+      DISK_MINIMUM_FREE_GB: ${DISK_MINIMUM_FREE_GB:-20}
+    ports:
+      - "${PORTAL_PORT:-3730}:3730"
+    volumes:
+      - ${FRAME_DATA_ROOT:-./data}:/data:ro
+    depends_on:
+      frame-docker-proxy:
+        condition: service_healthy
+    networks:
+      - frame-internal
+
+  frame-docker-proxy:
+    image: tecnativa/docker-socket-proxy@sha256:1f3a6f303320723d199d2316a3e82b2e2685d86c275d5e3deeaf182573b47476
+    container_name: frame-docker-proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1
+      INFO: 1
+      POST: ${DOCKER_PROXY_POST:-0}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2375/_ping"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - frame-internal
+
+  frame-audio-bridge:
+    profiles: ["audio-bridge"]
+    build:
+      context: ./services/frame-audio-bridge
+    container_name: frame-audio-bridge
+    restart: unless-stopped
+    environment:
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+      PORT: 3728
+      SESSION_SECRET: ${SESSION_SECRET}
+      DEFAULT_AUDIO_DELAY_MS: ${DEFAULT_AUDIO_DELAY_MS:-2000}
+      MAX_AUDIO_DELAY_MS: ${MAX_AUDIO_DELAY_MS:-10000}
+      SESSION_IDLE_TIMEOUT_MINUTES: ${SESSION_IDLE_TIMEOUT_MINUTES:-30}
+      READONLY_OBS_TOKEN: ${READONLY_OBS_TOKEN:-}
+      PORTAL_SERVICE_TOKEN: ${PORTAL_SERVICE_TOKEN}
+      DATA_DIR: /data
+    ports:
+      - "${AUDIO_BRIDGE_PORT:-3728}:3728"
+    volumes:
+      - ${FRAME_DATA_ROOT:-./data}/audio-bridge:/data
+    networks:
+      - frame-internal
+
+networks:
+  frame-internal:
+    name: frame-internal
