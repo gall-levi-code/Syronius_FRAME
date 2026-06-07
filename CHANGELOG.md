@@ -14,3 +14,5 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Made Portal container restarts opt-in and Docker access read-only by default.
 - Added authoritative Audio Bridge Portal telemetry, accurate container uptime/health, tool readiness states, fallback-config alerts, Portal authentication, status caching, request timeouts, and bounded live logs.
 - Pinned the restricted Docker proxy and documented explicit storage/retention thresholds.
+- Added the cross-platform FRAME installer, canonical config generation, shared secret management,
+  generated Compose deployment, lifecycle commands, and contained destructive reset flow.

@@ -35,7 +35,7 @@ details.
 creates separate per-streamer mixes, and serves permanent OBS audio/overlay URLs plus a mobile-first
 control page.
 
-Run it standalone while the overall stack installer is still being implemented:
+It can still run standalone, or be managed by the root FRAME installer:
 
 ```bash
 cd services/frame-audio-bridge
@@ -46,9 +46,10 @@ docker compose up --build -d
 See [`services/frame-audio-bridge/README.md`](services/frame-audio-bridge/README.md) for Discord,
 OBS, Cloudflare, security, and operating instructions.
 
-## How to run (per V1/V1.1 spec)
+## Unified installer
 
-V1 defines a single installer entrypoint that owns configuration, data layout, and compose generation:
+The implemented installer entrypoints own configuration, data layout, shared secrets, generated
+Compose, and lifecycle for deployable FRAME services:
 
 - **Linux/macOS:** `stack.sh`
 - **Windows:** `stack.cmd`
@@ -57,12 +58,12 @@ The installer is responsible for:
 - creating/updating `.env`
 - creating/updating the repo-local `./data/` directory (bind-mounted into containers as `/data`)
 - generating/updating `docker-compose.yml` and `/data/state/stack-config.json`
-- validating prerequisites (Docker + Compose) and port conflicts
+- validating prerequisites, canonical configuration, and startup requirements
 - deploying the stack via `docker compose up -d`
 
-### Planned commands (V1)
-> The overall installer scripts + generated compose are still planned. Implemented services can be
-> run from their service directories until the unified installer owns them.
+### Commands
+> Docker and Docker Compose v2 are the only host runtime prerequisites. Both entrypoints use the
+> same shared installer runtime, preventing Windows and Unix behavior from drifting.
 
 **Install / reconfigure**
 - Windows:
@@ -75,10 +76,19 @@ The installer is responsible for:
   ./stack.sh install
   ```
 
+Import an existing ignored Audio Bridge environment when moving to the unified stack:
+
+```bat
+stack.cmd install --import-env services/frame-audio-bridge/.env
+```
+
+Existing standalone service containers and Audio Bridge data require a one-time handoff before the
+unified first start. Follow the migration steps in [`installer/README.md`](installer/README.md).
+
 Re-running `install` is the supported way to:
 - enable/disable capabilities
-- switch **LAN** ↔ **HYBRID**
-- regenerate compose + tunnel ingress rules
+- change direct host ports or the repository-relative data root
+- import an existing Audio Bridge `.env`
 
 **Lifecycle**
 - Start:
@@ -89,6 +99,10 @@ Re-running `install` is the supported way to:
   - `stack.* status` → prints service status + enabled capabilities (with secrets redacted)
 - Reset (destructive):
   - `stack.* reset` → removes containers/volumes as applicable, deletes `./data/`, then re-runs `install` (requires confirmation)
+
+The initial installer fully supports LAN deployment of Portal and Discord Audio Bridge. It
+deliberately refuses HYBRID mode and capabilities without implemented services instead of producing
+a deployment that only appears complete. See [`installer/README.md`](installer/README.md).
 
 ### After install
 Once running, open the Portal:
