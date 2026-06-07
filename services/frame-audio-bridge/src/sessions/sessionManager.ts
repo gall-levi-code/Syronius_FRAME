@@ -81,6 +81,19 @@ export interface ProfileMixInput {
   users: SessionUser[];
 }
 
+export interface PortalGuildTelemetry {
+  guildId: string;
+  bridgeKeys: string[];
+  active: boolean;
+  channelName: string | null;
+  channelBitrate: number | null;
+  startedAt: string | null;
+  activeProfiles: ActiveProfileSummary[];
+  activeProfileCount: number;
+  speakingUsers: string[];
+  engineHealth: EngineHealth;
+}
+
 interface StartSessionInput {
   guildId: string;
   bridgeKey: string;
@@ -461,6 +474,40 @@ export class SessionManager extends EventEmitter {
   public getActiveBridgeKeys(guildId: string): string[] {
     const session = this.sessionsByGuildId.get(guildId);
     return session?.active ? [...session.activeBridgeKeys] : [];
+  }
+
+  public async getPortalGuildTelemetry(): Promise<PortalGuildTelemetry[]> {
+    const configs = await this.store.listGuildConfigs();
+    return configs.map((config) => {
+      const session = this.sessionsByGuildId.get(config.guildId);
+      const active = session?.active ?? false;
+      return {
+        guildId: config.guildId,
+        bridgeKeys: config.profiles.map((profile) => profile.bridgeKey),
+        active,
+        channelName: session?.channelName ?? null,
+        channelBitrate: session?.channelBitrate ?? null,
+        startedAt: session?.startedAt ?? null,
+        activeProfiles: this.getActiveProfileSummariesFromConfig(config, session),
+        activeProfileCount: active ? session?.activeBridgeKeys.length ?? 0 : 0,
+        speakingUsers: active
+          ? (session?.users ?? []).filter((user) => user.speaking).map((user) => user.displayName)
+          : [],
+        engineHealth: active
+          ? this.engineHealthByGuildId.get(config.guildId) ?? {
+              state: "idle",
+              label: "Engine waiting",
+              details: "No audio engine stats have been reported yet.",
+              updatedAt: nowIso(),
+            }
+          : {
+              state: "idle",
+              label: "Engine idle",
+              details: "No active streamer mixes.",
+              updatedAt: nowIso(),
+            },
+      };
+    });
   }
 
   public async getActiveProfileSummaries(guildId: string): Promise<ActiveProfileSummary[]> {

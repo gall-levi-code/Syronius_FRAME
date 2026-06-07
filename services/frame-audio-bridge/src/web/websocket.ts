@@ -15,7 +15,7 @@ import type { VoiceManager } from "../voice/voiceManager";
 type ClientKind = "audio" | "overlay" | "control";
 const CLIENT_STATS_INTERVAL_MS = 15_000;
 
-interface ClientCounts {
+export interface ClientCounts {
   audio: number;
   overlay: number;
   control: number;
@@ -109,6 +109,10 @@ export class BridgeWebSocketServer {
         }
       });
     });
+  }
+
+  public getClientCounts(guildKey: string): ClientCounts {
+    return this.countClients(guildKey);
   }
 
   private async handleConnection(ws: WebSocket, request: IncomingMessage): Promise<void> {

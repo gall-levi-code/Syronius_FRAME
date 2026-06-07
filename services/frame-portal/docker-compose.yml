@@ -1,0 +1,52 @@
+services:
+  frame-portal:
+    build: .
+    container_name: frame-portal
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      PORT: ${PORT:-3730}
+      FRAME_MODE: ${FRAME_MODE:-LAN}
+      DATA_ROOT: /data
+      STACK_CONFIG_PATH: /data/state/stack-config.json
+      DOCKER_HOST: http://frame-docker-proxy:2375
+      ENABLE_CONTAINER_RESTARTS: ${ENABLE_CONTAINER_RESTARTS:-false}
+      STATUS_REFRESH_MS: ${STATUS_REFRESH_MS:-5000}
+      STATUS_CACHE_MS: ${STATUS_CACHE_MS:-4000}
+      REQUEST_TIMEOUT_MS: ${REQUEST_TIMEOUT_MS:-3000}
+      AUDIO_BRIDGE_STATUS_URL: ${AUDIO_BRIDGE_STATUS_URL:-http://host.docker.internal:3728/api/internal/portal-status}
+      AUDIO_BRIDGE_STATUS_TOKEN: ${AUDIO_BRIDGE_STATUS_TOKEN:-}
+      PORTAL_USERNAME: ${PORTAL_USERNAME:-}
+      PORTAL_PASSWORD: ${PORTAL_PASSWORD:-}
+      PORTAL_REALM: ${PORTAL_REALM:-FRAME Portal}
+      DISK_WARN_PERCENT: ${DISK_WARN_PERCENT:-85}
+      DISK_ERROR_PERCENT: ${DISK_ERROR_PERCENT:-95}
+      DISK_MINIMUM_FREE_GB: ${DISK_MINIMUM_FREE_GB:-20}
+    ports:
+      - "${PORT:-3730}:${PORT:-3730}"
+    volumes:
+      - ${DATA_ROOT:-./data}:/data:ro
+    depends_on:
+      frame-docker-proxy:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  frame-docker-proxy:
+    image: tecnativa/docker-socket-proxy@sha256:1f3a6f303320723d199d2316a3e82b2e2685d86c275d5e3deeaf182573b47476
+    container_name: frame-docker-proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: 1
+      INFO: 1
+      POST: ${DOCKER_PROXY_POST:-0}
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2375/_ping"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro

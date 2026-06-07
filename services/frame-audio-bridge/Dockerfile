@@ -25,4 +25,6 @@ COPY --from=build /app/dist ./dist
 COPY public ./public
 
 EXPOSE 3728
+HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:3728/healthz >/dev/null || exit 1
 CMD ["node", "dist/index.js"]

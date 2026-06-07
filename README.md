@@ -9,10 +9,25 @@ Syronius’ Frame (F.R.A.M.E.) is a modular, containerized IRL streamer applianc
 - `docs/spec/v1.1.md` — The V1 spec + V1.1 refinements (the canonical contract).
 - `docs/schemas/` — JSON Schemas for on-disk and API contracts (validation at startup / install-time).
 - `docs/adr/` — Architecture Decision Records (why we chose a behavior/contract).
+- `services/frame-portal/` — Implemented FRAME dashboard, status API, container health, logs, and alerts.
 - `services/frame-audio-bridge/` — Implemented Discord voice-to-OBS bridge service, control page, overlays, and Docker deployment.
 - `docker_container_samples/` — Reference container examples that are not yet first-class FRAME services.
 
 ## Implemented Services
+
+### FRAME Portal
+
+`services/frame-portal/` is the shared FRAME dashboard and observability service. It builds navigation
+from `stack-config.json`, reports container and disk health, and streams container logs.
+
+```bash
+cd services/frame-portal
+docker compose up --build -d
+```
+
+Open `http://localhost:3730/dashboard`. See
+[`services/frame-portal/README.md`](services/frame-portal/README.md) for Docker access and security
+details.
 
 ### FRAME Audio Bridge
 

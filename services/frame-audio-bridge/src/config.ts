@@ -12,6 +12,7 @@ export interface AppConfig {
   sessionIdleTimeoutMinutes: number;
   dataDir: string;
   readonlyObsToken?: string;
+  portalServiceToken?: string;
   nodeEnv: string;
 }
 
@@ -65,6 +66,7 @@ export function loadConfig(): AppConfig {
     sessionIdleTimeoutMinutes: readInt("SESSION_IDLE_TIMEOUT_MINUTES", 30, 1),
     dataDir: path.resolve(process.env.DATA_DIR?.trim() || "./data"),
     readonlyObsToken: process.env.READONLY_OBS_TOKEN?.trim() || undefined,
+    portalServiceToken: process.env.PORTAL_SERVICE_TOKEN?.trim() || undefined,
     nodeEnv: process.env.NODE_ENV?.trim() || "development",
   };
 }
