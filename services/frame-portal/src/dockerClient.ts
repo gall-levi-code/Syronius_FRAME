@@ -22,10 +22,14 @@ export class DockerClient {
     private readonly serviceNamePrefix: string,
     private readonly dockerHost?: string,
     private readonly requestTimeoutMs = 3_000,
+    private readonly composeProject?: string,
   ) {}
 
   async listFrameServices(): Promise<ServiceSummary[]> {
-    const containers = await this.requestJson<DockerContainer[]>("GET", "/containers/json?all=1");
+    const filters = this.composeProject
+      ? `&filters=${encodeURIComponent(JSON.stringify({ label: [`com.docker.compose.project=${this.composeProject}`] }))}`
+      : "";
+    const containers = await this.requestJson<DockerContainer[]>("GET", `/containers/json?all=1${filters}`);
     const frameContainers = containers
       .map((container) => ({
         container,

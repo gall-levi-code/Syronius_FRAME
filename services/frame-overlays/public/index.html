@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FRAME Overlay Wizard</title>
+    <link rel="icon" href="/overlays/assets/frame-logo-square.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/overlays/assets/styles.css?v=20260611-preview">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <img src="/overlays/assets/frame-logo-square.svg" alt="FRAME">
+        <div><strong>Overlay Wizard</strong><span>Stable OBS browser sources</span></div>
+      </div>
+      <div class="top-actions">
+        <span id="receiver-status" class="status-pill">Checking telemetry</span>
+        <button id="theme-toggle" class="icon-button" title="Toggle day/night theme">Theme</button>
+      </div>
+    </header>
+
+    <main class="wizard-shell">
+      <section class="panel preset-panel">
+        <div class="section-head">
+          <div>
+            <h1>Presets</h1>
+            <p>Each preset has one stable OBS URL and binds to one stream. Duplicate a design to reuse it across streams.</p>
+          </div>
+          <button id="duplicate-button" class="secondary">Duplicate</button>
+        </div>
+        <div id="preset-list" class="preset-list"></div>
+      </section>
+
+      <section class="panel editor-panel">
+        <div class="section-head">
+          <div>
+            <h1 id="editor-title">Preset</h1>
+            <p id="editor-url" class="copyable"></p>
+          </div>
+          <div class="section-actions">
+            <button id="copy-url-button" class="secondary">Copy OBS URL</button>
+            <button id="restore-button" class="secondary">Restore stock</button>
+            <button id="delete-button" class="secondary danger">Delete</button>
+            <button id="save-button">Save</button>
+          </div>
+        </div>
+
+        <div id="notice" class="notice hidden"></div>
+
+        <div class="editor-workspace">
+          <aside class="preview-rail">
+            <div class="preview-label"><strong>Live Preview</strong><span>1:1 canvas</span></div>
+            <div class="preview-wrap">
+              <iframe id="preview-frame" title="Overlay preview" allowtransparency="true"></iframe>
+            </div>
+          </aside>
+
+          <div class="settings-column">
+            <div class="form-grid">
+              <label>Overlay preset name<input id="name-input" maxlength="80"><small>Editable, including on the default preset.</small></label>
+              <label>OBS URL slug<input id="slug-input" readonly><small>Permanent after creation so existing OBS sources keep working.</small></label>
+              <label class="wide">Preset notes<input id="description-input" maxlength="280"></label>
+              <label>Bound stream<select id="stream-select"></select></label>
+              <label>Enabled<select id="enabled-select"><option value="true">Enabled</option><option value="false">Disabled</option></select></label>
+            </div>
+
+            <h2>Layout</h2>
+            <div class="button-grid nine" id="dock-buttons"></div>
+            <div class="form-grid">
+              <label>Padding <span data-value="pad"></span><input id="pad-input" type="range" min="0" max="200" step="1"></label>
+              <label>Scale <span data-value="scale"></span><input id="scale-input" type="range" min="0.5" max="3" step="0.05"></label>
+              <label>Overlay width <span data-value="width_px"></span><input id="width-input" type="range" min="0" max="1200" step="10"><small>Set to Auto for content-sized width.</small></label>
+              <label>Overlay height <span data-value="height_px"></span><input id="height-input" type="range" min="0" max="1000" step="10"><small>Acts as a minimum height so content can still wrap safely.</small></label>
+            </div>
+
+            <h2>Telemetry</h2>
+            <p class="section-note">Drag blocks into order, or use the arrow buttons on mobile.</p>
+            <div id="telemetry-order" class="telemetry-order"></div>
+            <h3>Behavior</h3>
+            <div class="toggle-grid" id="field-toggles"></div>
+            <div class="form-grid">
+              <label>Block width <span data-value="telemetry_block_width_px"></span><input id="block-width-input" type="range" min="80" max="600" step="10"><small>Blocks wrap when the overlay runs out of horizontal space.</small></label>
+              <label>Block height <span data-value="telemetry_block_height_px"></span><input id="block-height-input" type="range" min="40" max="400" step="4"></label>
+              <label>Poll ms <span data-value="poll_ms"></span><input id="poll-input" type="range" min="200" max="10000" step="100"></label>
+              <label>Good bitrate <span data-value="bitrate_good_min"></span><input id="good-bitrate-input" type="range" min="0" max="50000" step="250"></label>
+              <label>Warn bitrate <span data-value="bitrate_warn_min"></span><input id="warn-bitrate-input" type="range" min="0" max="50000" step="250"></label>
+              <label>RTT good max <span data-value="rtt_warn_max"></span><input id="rtt-warn-input" type="range" min="0" max="10000" step="100"><small>At or below this value is good.</small></label>
+              <label>RTT bad over <span data-value="rtt_bad_max"></span><input id="rtt-bad-input" type="range" min="100" max="20000" step="100"><small>Above this value is bad; values between are warnings.</small></label>
+              <label>Meter max <span data-value="bitrate_meter_max"></span><input id="meter-max-input" type="range" min="1000" max="50000" step="250"></label>
+            </div>
+
+            <h2>Theme</h2>
+            <div class="form-grid color-grid">
+              <label>Text color<input id="text-color-input" type="color"></label>
+              <label>Muted color<input id="muted-color-input" type="color"></label>
+              <label>Good color<input id="good-color-input" type="color"></label>
+              <label>Warn color<input id="warn-color-input" type="color"></label>
+              <label>Bad color<input id="bad-color-input" type="color"></label>
+            </div>
+            <div class="form-grid">
+              <label>Good / compact overlay opacity <span data-value="bg_opacity_good"></span><input id="opacity-good-input" type="range" min="0" max="1" step="0.01"><small>Fades the entire overlay when the relay is healthy.</small></label>
+              <label>Warning overlay opacity <span data-value="bg_opacity_warn"></span><input id="opacity-warn-input" type="range" min="0" max="1" step="0.01"><small>Applies to the entire overlay while quality is degraded.</small></label>
+              <label>Bad / offline overlay opacity <span data-value="bg_opacity_bad"></span><input id="opacity-bad-input" type="range" min="0" max="1" step="0.01"><small>Applies to the entire overlay for bad quality or no signal.</small></label>
+              <label>Radius <span data-value="border_radius_px"></span><input id="radius-input" type="range" min="0" max="50" step="1"></label>
+              <label>Font size <span data-value="font_size_base_px"></span><input id="font-size-input" type="range" min="10" max="32" step="1"></label>
+              <label>Transition <span data-value="transition_ms"></span><input id="transition-input" type="range" min="0" max="2000" step="50"></label>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="duplicate-dialog">
+      <form id="duplicate-form" method="dialog">
+        <div class="dialog-head">
+          <div><strong>Duplicate preset</strong><span>Create a new stable URL from this design.</span></div>
+          <button type="button" class="icon-button close-dialog" title="Close">Close</button>
+        </div>
+        <label>Overlay preset name<input id="duplicate-name-input" maxlength="80" required></label>
+        <label>OBS URL slug<input id="duplicate-id-input" pattern="[a-z0-9][a-z0-9-]*[a-z0-9]" required><small>This becomes part of the permanent OBS URL and cannot be changed later.</small></label>
+        <div class="dialog-actions">
+          <button type="submit">Create duplicate</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="/overlays/assets/app.js?v=20260611-preview" defer></script>
+  </body>
+</html>

@@ -31,6 +31,32 @@ function Invoke-Runtime {
   }
 }
 
+function Invoke-RuntimeInput {
+  param([string[]]$Arguments, [string]$InputText)
+  $InputText | & docker run --rm -i --mount "type=bind,source=$Root,target=/workspace" -w /workspace $RuntimeImage node installer/frame-installer.mjs @Arguments
+  if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+  }
+}
+
+function Invoke-Verification {
+  & docker run --rm -i --mount "type=bind,source=$Root,target=/workspace" -w /workspace $RuntimeImage node scripts/verify.mjs
+  if ($LASTEXITCODE -ne 0) {
+    exit $LASTEXITCODE
+  }
+}
+
+function Read-PlainTextSecret {
+  param([string]$Prompt)
+  $secure = Read-Host $Prompt -AsSecureString
+  $pointer = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+  try {
+    return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($pointer)
+  } finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($pointer)
+  }
+}
+
 function Invoke-Compose {
   param([string[]]$Arguments)
   if (-not (Test-Path (Join-Path $Root "docker-compose.yml"))) {
@@ -45,6 +71,24 @@ function Invoke-Compose {
 Assert-Docker
 
 switch ($Command) {
+  "hybrid-stage" {
+    $hostname = Read-Host "Cloudflare public hostname (for example frame.syroni.us)"
+    if ([string]::IsNullOrWhiteSpace($hostname)) {
+      throw "A Cloudflare public hostname is required."
+    }
+    Invoke-Runtime (@("install", "--mode", "HYBRID", "--public-hostname", $hostname) + $CommandArgs)
+    Invoke-Compose @("config", "--quiet")
+    Write-Host "Hybrid configuration staged. No tunnel was started."
+  }
+  "tunnel-token" {
+    $token = Read-PlainTextSecret "Paste the Cloudflare tunnel token (input hidden)"
+    Invoke-RuntimeInput @("set-tunnel-token") $token
+  }
+  "portal-auth" {
+    $username = Read-Host "Portal username"
+    $password = Read-PlainTextSecret "Portal password (input hidden)"
+    Invoke-RuntimeInput @("set-portal-auth") "$username`n$password"
+  }
   "install" {
     Invoke-Runtime (@("install") + $CommandArgs)
     Invoke-Compose @("config", "--quiet")
@@ -53,6 +97,13 @@ switch ($Command) {
     Invoke-Runtime (@("validate") + $CommandArgs)
     Invoke-Compose @("config", "--quiet")
     Write-Host "Docker Compose configuration is valid."
+  }
+  "verify" {
+    Invoke-Verification
+    if (Test-Path (Join-Path $Root "docker-compose.yml")) {
+      Invoke-Compose @("config", "--quiet")
+    }
+    Write-Host "FRAME contracts, scripts, and Docker Compose configuration are valid."
   }
   "start" {
     Invoke-Runtime @("validate", "--for-start")

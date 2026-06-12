@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FRAME Audio Capture</title>
+    <link rel="icon" href="/audio/assets/frame-logo-square.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/audio/assets/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand"><img src="/audio/assets/frame-logo-square.svg" alt="FRAME"><div><strong>Audio Capture</strong><span>LAN publisher</span></div></div>
+      <div class="top-actions"><span id="publish-status" class="status-pill">Offline</span><button id="theme-toggle" class="icon-button">Theme</button></div>
+    </header>
+    <main>
+      <section class="panel">
+        <div class="panel-head"><div><h1 id="source-name">Audio Source</h1><p id="source-id"></p></div><button id="popout-button" class="secondary">Pop out</button></div>
+        <div id="notice" class="notice hidden"></div>
+        <div class="form-grid">
+          <label class="wide">Capture device<select id="device-select"></select><small>Select a virtual audio cable, VoiceMeeter output, microphone, or other browser-visible input.</small></label>
+          <label>Capture profile
+            <select id="profile-select">
+              <option value="voice">Voice</option>
+              <option value="music" selected>Music / Desktop</option>
+              <option value="maximum">Maximum Quality</option>
+              <option value="custom">Custom</option>
+            </select>
+          </label>
+          <label>Opus upload quality
+            <select id="capture-bitrate-select">
+              <option value="96000">96 kbps</option>
+              <option value="128000">128 kbps</option>
+              <option value="192000">192 kbps</option>
+              <option value="256000" selected>256 kbps</option>
+              <option value="320000">320 kbps</option>
+              <option value="510000">510 kbps maximum</option>
+            </select>
+          </label>
+          <label>Channels
+            <select id="channel-select">
+              <option value="1">Mono</option>
+              <option value="2" selected>Stereo</option>
+            </select>
+          </label>
+          <div class="quality-toggles">
+            <label class="toggle-label"><input id="echo-cancellation-input" type="checkbox"> Echo cancellation</label>
+            <label class="toggle-label"><input id="noise-suppression-input" type="checkbox"> Noise suppression</label>
+            <label class="toggle-label"><input id="auto-gain-input" type="checkbox"> Automatic gain</label>
+          </div>
+          <small id="profile-description" class="wide quality-description">Full-range stereo with browser voice processing disabled. Recommended for stream mixes and virtual audio cables.</small>
+        </div>
+        <div class="capture-actions"><button id="live-button">Go live</button><button id="refresh-devices-button" class="secondary">Refresh devices</button></div>
+      </section>
+      <section class="panel">
+        <div class="panel-head"><div><h2>Input Meter</h2><p>Measured locally before MediaRecorder encoding.</p></div><strong id="level-readout">-60 dB</strong></div>
+        <div class="meter"><div id="meter-fill" class="meter-fill"></div></div>
+        <div class="capture-grid">
+          <div class="capture-stat"><span>Capture</span><strong id="capture-state">Stopped</strong></div>
+          <div class="capture-stat"><span>Publish socket</span><strong id="socket-state">Disconnected</strong></div>
+          <div class="capture-stat"><span>Relay</span><strong id="relay-state">Offline</strong></div>
+          <div class="capture-stat"><span>Target bitrate</span><strong id="target-bitrate">--</strong></div>
+          <div class="capture-stat"><span>Incoming bitrate</span><strong id="input-bitrate">--</strong></div>
+          <div class="capture-stat"><span>Capture format</span><strong id="capture-format">--</strong></div>
+          <div class="capture-stat"><span>Browser processing</span><strong id="browser-processing">--</strong></div>
+          <div class="capture-stat"><span>Upload target</span><strong id="upload-bitrate">--</strong></div>
+          <div class="capture-stat"><span>Listeners</span><strong id="listener-count">0</strong></div>
+        </div>
+      </section>
+    </main>
+    <script src="/audio/assets/capture.js" defer></script>
+  </body>
+</html>

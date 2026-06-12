@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "profileOrder": [
+    "audio-bridge",
+    "audio-monitor",
+    "video-relay",
+    "overlays",
+    "photo-pipeline",
+    "photo-ftp",
+    "photo-webupload",
+    "photo-gallery",
+    "photo-discord",
+    "photo-today",
+    "hybrid"
+  ],
+  "capabilities": {
+    "frame-video-relay": {
+      "implemented": true,
+      "profiles": ["video-relay"],
+      "requires": [],
+      "requiresAny": []
+    },
+    "frame-audio-relay": {
+      "implemented": true,
+      "profiles": ["audio-monitor"],
+      "requires": [],
+      "requiresAny": []
+    },
+    "frame-discord-audio-bridge": {
+      "implemented": true,
+      "profiles": ["audio-bridge"],
+      "requires": [],
+      "requiresAny": []
+    },
+    "frame-photo-gallery": {
+      "implemented": false,
+      "profiles": ["photo-pipeline", "photo-gallery"],
+      "requires": [],
+      "requiresAny": ["frame-photo-ftp", "frame-photo-webupload"]
+    },
+    "frame-photo-ftp": {
+      "implemented": false,
+      "profiles": ["photo-pipeline", "photo-ftp"],
+      "requires": [],
+      "requiresAny": []
+    },
+    "frame-photo-webupload": {
+      "implemented": false,
+      "profiles": ["photo-pipeline", "photo-webupload"],
+      "requires": [],
+      "requiresAny": []
+    },
+    "frame-photo-discord": {
+      "implemented": false,
+      "profiles": ["photo-pipeline", "photo-discord"],
+      "requires": [],
+      "requiresAny": ["frame-photo-ftp", "frame-photo-webupload"]
+    },
+    "frame-photo-todaytools": {
+      "implemented": false,
+      "profiles": ["photo-pipeline", "photo-today"],
+      "requires": [],
+      "requiresAny": ["frame-photo-ftp", "frame-photo-webupload"]
+    },
+    "frame-overlays": {
+      "implemented": true,
+      "profiles": ["overlays"],
+      "requires": ["frame-video-relay"],
+      "requiresAny": []
+    }
+  },
+  "internalServices": {
+    "frame-pipeline-photos": {
+      "profile": "photo-pipeline",
+      "userSelectable": false,
+      "activation": "Enabled automatically whenever an implemented photo capability is enabled."
+    }
+  },
+  "routes": {
+    "dashboard": "/dashboard",
+    "status": "/status",
+    "video_relay_ui": "/slsui",
+    "overlays_root": "/overlays",
+    "overlays_wizard": "/overlays/setup",
+    "photo_gallery": "/gallery",
+    "today_gallery": "/today/gallery",
+    "today_viewer": "/today/viewer",
+    "today_remote": "/today/remote",
+    "audio_admin": "/audio/admin",
+    "audio_capture": "/audio/capture",
+    "audio_listen": "/audio/listen",
+    "audio_hls": "/audio/hls",
+    "discord_audio_bridge_root": "/bridge"
+  },
+  "publicRoutes": [
+    { "prefix": "/dashboard", "capability": null },
+    { "prefix": "/status", "capability": null },
+    { "prefix": "/assets", "capability": null },
+    { "prefix": "/api/portal", "capability": null },
+    { "prefix": "/overlays/view", "capability": "frame-overlays" },
+    { "prefix": "/overlays/assets", "capability": "frame-overlays" },
+    { "prefix": "/today", "capability": "frame-photo-todaytools" },
+    { "prefix": "/gallery", "capability": "frame-photo-gallery" },
+    { "prefix": "/audio/listen", "capability": "frame-audio-relay" },
+    { "prefix": "/audio/hls", "capability": "frame-audio-relay" },
+    { "prefix": "/audio/assets", "capability": "frame-audio-relay" },
+    { "prefix": "/audio/public", "capability": "frame-audio-relay" },
+    { "prefix": "/bridge", "capability": "frame-discord-audio-bridge" }
+  ],
+  "forbiddenPublicPrefixes": [
+    "/audio/admin",
+    "/audio/capture",
+    "/overlays/setup",
+    "/overlays/api",
+    "/slsui"
+  ]
+}

@@ -1,0 +1,20 @@
+services:
+  frame-overlays:
+    build: .
+    container_name: frame-overlays
+    restart: unless-stopped
+    environment:
+      PORT: 3733
+      DATA_ROOT: /data
+      STREAMS_API_URL: ${STREAMS_API_URL:-http://host.docker.internal:3732}
+      SLS_API_KEY: ${SLS_API_KEY}
+      PUBLIC_BASE_URL: ${OVERLAYS_PUBLIC_BASE_URL:-http://localhost:3733}
+      OVERLAYS_USERNAME: ${OVERLAYS_USERNAME:-}
+      OVERLAYS_PASSWORD: ${OVERLAYS_PASSWORD:-}
+      REQUEST_TIMEOUT_MS: ${REQUEST_TIMEOUT_MS:-3000}
+    ports:
+      - "${OVERLAYS_PORT:-3733}:3733"
+    volumes:
+      - ${OVERLAYS_DATA_DIR:-./data}:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

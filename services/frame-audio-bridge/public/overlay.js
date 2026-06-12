@@ -48,7 +48,7 @@
       wsParams.set("obsToken", obsToken);
     }
 
-    socket = new WebSocket(`${scheme}//${location.host}/ws?${wsParams.toString()}`);
+    socket = new WebSocket(`${scheme}//${location.host}/bridge/ws?${wsParams.toString()}`);
 
     socket.addEventListener("open", () => {
       reconnectDelay = 500;

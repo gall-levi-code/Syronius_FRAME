@@ -1,6 +1,91 @@
 name: syronius-frame
 
 services:
+  frame-edge:
+    image: traefik@sha256:cc1799c50550f730f686df9b368e690f9199542787db8d1dd328a7c3779f6eea
+    container_name: frame-edge
+    restart: unless-stopped
+    command:
+      - --api.dashboard=false
+      - --entrypoints.web.address=:80
+      - --global.checknewversion=false
+      - --global.sendanonymoususage=false
+      - --ping=true
+      - --ping.entrypoint=web
+      - --providers.docker.endpoint=tcp://frame-docker-proxy:2375
+      - --providers.docker.constraints=Label(`com.docker.compose.project`,`syronius-frame`)
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=frame-internal
+      - --providers.docker.watch=true
+      - --log.level=INFO
+      - --accesslog=true
+      - --accesslog.fields.queryparameters.defaultmode=drop
+    ports:
+      - "${EDGE_HTTP_PORT:-80}:80"
+    depends_on:
+      frame-docker-proxy:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/ping"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+    networks:
+      - frame-internal
+
+  frame-public-gateway:
+    profiles: ["hybrid"]
+    image: traefik@sha256:cc1799c50550f730f686df9b368e690f9199542787db8d1dd328a7c3779f6eea
+    container_name: frame-public-gateway
+    restart: unless-stopped
+    command:
+      - --api.dashboard=false
+      - --entrypoints.public.address=:8080
+      - --entrypoints.health.address=:8081
+      - --global.checknewversion=false
+      - --global.sendanonymoususage=false
+      - --providers.file.filename=/etc/frame/public-routes.yml
+      - --providers.file.watch=false
+      - --log.level=INFO
+      - --accesslog=true
+      - --accesslog.fields.queryparameters.defaultmode=drop
+    volumes:
+      - ${FRAME_DATA_ROOT:-./data}/state/public-routes.yml:/etc/frame/public-routes.yml:ro
+    depends_on:
+      frame-edge:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8081/__frame_gateway_health"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+    networks:
+      - frame-internal
+
+  frame-tunnel:
+    profiles: ["hybrid"]
+    image: cloudflare/cloudflared@sha256:ba461b8aa9c042156dbd39c38657fe7431bafa063220eab8d5330a523863da9f
+    container_name: frame-tunnel
+    restart: unless-stopped
+    command:
+      - tunnel
+      - --loglevel
+      - info
+      - --metrics
+      - 0.0.0.0:2000
+      - run
+      - --token-file
+      - /run/secrets/cloudflare-tunnel-token
+    volumes:
+      - ${FRAME_DATA_ROOT:-./data}/state/cloudflare-tunnel-token:/run/secrets/cloudflare-tunnel-token:ro
+    depends_on:
+      frame-public-gateway:
+        condition: service_healthy
+    networks:
+      - frame-internal
+
   frame-portal:
     build:
       context: ./services/frame-portal
@@ -12,6 +97,7 @@ services:
       DATA_ROOT: /data
       STACK_CONFIG_PATH: /data/state/stack-config.json
       DOCKER_HOST: http://frame-docker-proxy:2375
+      DOCKER_COMPOSE_PROJECT: syronius-frame
       ENABLE_CONTAINER_RESTARTS: ${ENABLE_CONTAINER_RESTARTS:-false}
       STATUS_REFRESH_MS: ${STATUS_REFRESH_MS:-5000}
       STATUS_CACHE_MS: ${STATUS_CACHE_MS:-4000}
@@ -31,6 +117,12 @@ services:
     depends_on:
       frame-docker-proxy:
         condition: service_healthy
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.frame-portal.entrypoints: web
+      traefik.http.routers.frame-portal.priority: "1"
+      traefik.http.routers.frame-portal.rule: PathPrefix(`/`)
+      traefik.http.services.frame-portal.loadbalancer.server.port: "3730"
     networks:
       - frame-internal
 
@@ -40,8 +132,12 @@ services:
     restart: unless-stopped
     environment:
       CONTAINERS: 1
+      EVENTS: 1
       INFO: 1
+      NETWORKS: 1
+      PING: 1
       POST: ${DOCKER_PROXY_POST:-0}
+      VERSION: 1
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2375/_ping"]
       interval: 30s
@@ -72,9 +168,123 @@ services:
       PORTAL_SERVICE_TOKEN: ${PORTAL_SERVICE_TOKEN}
       DATA_DIR: /data
     ports:
-      - "${AUDIO_BRIDGE_PORT:-3728}:3728"
+      - "${AUDIO_BRIDGE_PORT:-3729}:3728"
     volumes:
       - ${FRAME_DATA_ROOT:-./data}/audio-bridge:/data
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.frame-audio-bridge.entrypoints: web
+      traefik.http.routers.frame-audio-bridge.priority: "100"
+      traefik.http.routers.frame-audio-bridge.rule: PathPrefix(`/bridge`)
+      traefik.http.services.frame-audio-bridge.loadbalancer.server.port: "3728"
+    networks:
+      - frame-internal
+
+  frame-audio:
+    profiles: ["audio-monitor"]
+    build:
+      context: ./services/frame-audio
+    container_name: frame-audio
+    restart: unless-stopped
+    environment:
+      PORT: 3734
+      DATA_ROOT: /data
+      PUBLIC_BASE_URL: ${AUDIO_PUBLIC_BASE_URL:-http://localhost}
+      CAPTURE_BASE_URL: ${AUDIO_CAPTURE_BASE_URL:-${AUDIO_PUBLIC_BASE_URL:-http://localhost}}
+      FFMPEG_PATH: ffmpeg
+    ports:
+      - "${AUDIO_MONITOR_PORT:-3734}:3734"
+    volumes:
+      - ${FRAME_DATA_ROOT:-./data}/audio-monitor:/data
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.frame-audio.entrypoints: web
+      traefik.http.routers.frame-audio.priority: "100"
+      traefik.http.routers.frame-audio.rule: PathPrefix(`/audio`)
+      traefik.http.services.frame-audio.loadbalancer.server.port: "3734"
+    networks:
+      - frame-internal
+
+  frame-ingest-video:
+    profiles: ["video-relay"]
+    build:
+      context: ./services/frame-ingest-video
+    container_name: frame-ingest-video
+    restart: unless-stopped
+    environment:
+      SLS_API_KEY: ${SLS_API_KEY}
+    ports:
+      - "${SRTLA_PORT:-5000}:5000/udp"
+      - "${SRT_PLAYER_PORT:-4000}:4000/udp"
+      - "${SRT_SENDER_PORT:-4001}:4001/udp"
+      - "${SLS_STATS_PORT:-8080}:8080/tcp"
+    volumes:
+      - ${FRAME_DATA_ROOT:-./data}/video-relay:/var/lib/sls
+    networks:
+      - frame-internal
+
+  frame-streams:
+    profiles: ["video-relay", "overlays"]
+    build:
+      context: ./services/frame-streams
+    container_name: frame-streams
+    restart: unless-stopped
+    environment:
+      PORT: 3732
+      DATA_ROOT: /data
+      SLS_API_URL: http://frame-ingest-video:8080
+      SLS_API_KEY: ${SLS_API_KEY}
+      PUBLIC_RELAY_HOST: ${PUBLIC_RELAY_HOST:-localhost}
+      SRTLA_PORT: ${SRTLA_PORT:-5000}
+      SRT_PLAYER_PORT: ${SRT_PLAYER_PORT:-4000}
+      SRT_SENDER_PORT: ${SRT_SENDER_PORT:-4001}
+      SLS_STATS_PORT: ${SLS_STATS_PORT:-8080}
+      OVERLAY_WIZARD_URL: ${EDGE_PUBLIC_BASE_URL:-http://localhost}/overlays/setup
+      OVERLAYS_API_URL: http://frame-overlays:3733
+      STREAMS_USERNAME: ${STREAMS_USERNAME:-}
+      STREAMS_PASSWORD: ${STREAMS_PASSWORD:-}
+      REQUEST_TIMEOUT_MS: ${REQUEST_TIMEOUT_MS:-3000}
+    ports:
+      - "${STREAMS_PORT:-3732}:3732"
+    volumes:
+      - ${FRAME_DATA_ROOT:-./data}/streams:/data
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.frame-streams.entrypoints: web
+      traefik.http.routers.frame-streams.priority: "100"
+      traefik.http.routers.frame-streams.rule: PathPrefix(`/slsui`)
+      traefik.http.services.frame-streams.loadbalancer.server.port: "3732"
+    networks:
+      - frame-internal
+
+  frame-overlays:
+    profiles: ["overlays"]
+    build:
+      context: ./services/frame-overlays
+    container_name: frame-overlays
+    restart: unless-stopped
+    environment:
+      PORT: 3733
+      DATA_ROOT: /data
+      STREAMS_API_URL: http://frame-streams:3732
+      SLS_API_KEY: ${SLS_API_KEY}
+      PUBLIC_BASE_URL: ${OVERLAYS_PUBLIC_BASE_URL:-http://localhost}
+      OVERLAYS_USERNAME: ${OVERLAYS_USERNAME:-}
+      OVERLAYS_PASSWORD: ${OVERLAYS_PASSWORD:-}
+      REQUEST_TIMEOUT_MS: ${REQUEST_TIMEOUT_MS:-3000}
+    ports:
+      - "${OVERLAYS_PORT:-3733}:3733"
+    volumes:
+      - ${FRAME_DATA_ROOT:-./data}/overlays:/data
+    depends_on:
+      frame-streams:
+        condition: service_healthy
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.frame-overlays.entrypoints: web
+      traefik.http.routers.frame-overlays.priority: "100"
+      traefik.http.routers.frame-overlays.rule: PathPrefix(`/overlays`)
+      traefik.http.services.frame-overlays.loadbalancer.server.port: "3733"
     networks:
       - frame-internal
 

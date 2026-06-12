@@ -1,0 +1,577 @@
+{
+  "docker_container_samples/Docker_OBS_Overlays/package.json": {
+    "mtime": 1780780640.2212684,
+    "ast_hash": "90ff1c7cab4536a788a0645f59f22d8f",
+    "semantic_hash": ""
+  },
+  "docker_container_samples/Docker_OBS_Overlays/public/app.js": {
+    "mtime": 1780780640.2222729,
+    "ast_hash": "905f3674348241711b1fb6880a4ea542",
+    "semantic_hash": ""
+  },
+  "docker_container_samples/Docker_OBS_Overlays/server.js": {
+    "mtime": 1780780640.2227776,
+    "ast_hash": "c5e957e69b11faba900926b2975535ed",
+    "semantic_hash": ""
+  },
+  "docs/schemas/latest.schema.json": {
+    "mtime": 1780780640.2242877,
+    "ast_hash": "ded9dc990a711932a10eca9e34dc2c0b",
+    "semantic_hash": ""
+  },
+  "docs/schemas/overlay-presets.default.json": {
+    "mtime": 1781213050.0650575,
+    "ast_hash": "bd06bf089cef39c6c67acccfff0ccd8c",
+    "semantic_hash": ""
+  },
+  "docs/schemas/overlay-presets.example.json": {
+    "mtime": 1781213448.5431883,
+    "ast_hash": "7464f9225fd63d64c0ece243cc038f57",
+    "semantic_hash": ""
+  },
+  "docs/schemas/overlay-presets.schema.json": {
+    "mtime": 1781213050.064048,
+    "ast_hash": "477adcec6fd76048e2a3342c6c06b053",
+    "semantic_hash": ""
+  },
+  "docs/schemas/stack-config.schema.json": {
+    "mtime": 1780867635.876972,
+    "ast_hash": "dffa68c0d9c3a803726163797776ff5c",
+    "semantic_hash": ""
+  },
+  "docs/schemas/status.schema.json": {
+    "mtime": 1780867635.8774784,
+    "ast_hash": "67dc8f26cf8a0db774e562ae158584ce",
+    "semantic_hash": ""
+  },
+  "installer/frame-installer.mjs": {
+    "mtime": 1781219298.9738183,
+    "ast_hash": "b97c31fa612f9817abdeca19aac4770a",
+    "semantic_hash": ""
+  },
+  "installer/stack.ps1": {
+    "mtime": 1781219298.9723177,
+    "ast_hash": "20e154eeed6134048295161f50fbb953",
+    "semantic_hash": ""
+  },
+  "installer/stack.sh": {
+    "mtime": 1781219298.9728196,
+    "ast_hash": "b19b80c7bf3987e00663685a2a1c42f8",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/cloudflare-worker.js": {
+    "mtime": 1780867635.8867729,
+    "ast_hash": "c21a83738e13c50b496864eebd735b80",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/package.json": {
+    "mtime": 1780867635.8882864,
+    "ast_hash": "597b5b9df765fb7b98c0fb39f90bd7c3",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/public/control.js": {
+    "mtime": 1781193582.6482332,
+    "ast_hash": "7c8a0ece97445c7667441de0fdcdb203",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/public/overlay.js": {
+    "mtime": 1781193582.6472332,
+    "ast_hash": "11ed5269799e1ee127171e686f255c89",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/src/bot/client.ts": {
+    "mtime": 1780867635.8938346,
+    "ast_hash": "562d4ee6f6609c0579c398d876528643",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/src/bot/commands.ts": {
+    "mtime": 1780867635.8943393,
+    "ast_hash": "e1ff409ea560dea8d952ba076ff30e8d",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/src/bot/interactions.ts": {
+    "mtime": 1780867635.8948455,
+    "ast_hash": "dcb5020af9215cac68e16ed4a9e7472d",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/src/bridgeActions.ts": {
+    "mtime": 1780867635.8948455,
+    "ast_hash": "84c439fe25cdfdb783e121f8a5ee9391",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/src/config.ts": {
+    "mtime": 1780867635.8963554,
+    "ast_hash": "b8d582c21a7d956cc5720b29d4a1091b",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/src/index.ts": {
+    "mtime": 1780867635.8963554,
+    "ast_hash": "5a018067309d3c9312a31acda6db7ef8",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/src/sessions/guildConfig.ts": {
+    "mtime": 1780867635.8968596,
+    "ast_hash": "46bfd70d1e6744ff260fa118a1a733f5",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/src/sessions/sessionManager.ts": {
+    "mtime": 1780867635.897865,
+    "ast_hash": "f1ca3feb33ccb3387b470476eb37940d",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/src/storage/jsonStore.ts": {
+    "mtime": 1780867635.898366,
+    "ast_hash": "7ab37f14bf45ce9397e674bfdd5687ca",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/src/storage/store.ts": {
+    "mtime": 1780867635.898873,
+    "ast_hash": "23f9545315f24c7d185a17d4e7c4532b",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/src/voice/delayBuffer.ts": {
+    "mtime": 1780867635.898873,
+    "ast_hash": "cc0e4ae5e5b17e9e2f6f8851b0b19629",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/src/voice/mixer.ts": {
+    "mtime": 1780867635.8999014,
+    "ast_hash": "324b31dfedb9b849a29f560c62c9c5e3",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/src/voice/receiver.ts": {
+    "mtime": 1780867635.9004114,
+    "ast_hash": "749159cdd6003d37b50eaac80129126e",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/src/voice/speakingState.ts": {
+    "mtime": 1780867635.9004114,
+    "ast_hash": "d9919c9e40b4649b0f81808e0f4b2d31",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/src/voice/voiceManager.ts": {
+    "mtime": 1780867635.9004114,
+    "ast_hash": "a51d66e161dd0252ecbe3e9a06495124",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/src/web/routes.ts": {
+    "mtime": 1780867635.9014156,
+    "ast_hash": "db2c7d049ef6fb0735ed0c0a694470a4",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/src/web/server.ts": {
+    "mtime": 1781193582.6365955,
+    "ast_hash": "62dd881be154d43d531044ca201daa34",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/src/web/websocket.ts": {
+    "mtime": 1781193582.639111,
+    "ast_hash": "d1885e6a3ac2301433ead9f039a5c2ac",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/tsconfig.json": {
+    "mtime": 1780867635.9019217,
+    "ast_hash": "3d5f19beed286272046d257471ef1790",
+    "semantic_hash": ""
+  },
+  "services/frame-audio/package.json": {
+    "mtime": 1781219336.4723396,
+    "ast_hash": "c353103445687000e865d64042e41392",
+    "semantic_hash": ""
+  },
+  "services/frame-audio/public/admin.js": {
+    "mtime": 1781191529.0016484,
+    "ast_hash": "a38829818a7425ad70741a0310481cca",
+    "semantic_hash": ""
+  },
+  "services/frame-audio/public/capture.js": {
+    "mtime": 1781191529.0016484,
+    "ast_hash": "dee670f0b5328b563d2544cf70950d70",
+    "semantic_hash": ""
+  },
+  "services/frame-audio/public/listen.js": {
+    "mtime": 1781193543.1798089,
+    "ast_hash": "237bf74fb6efe297bd22ed9ca290d9ff",
+    "semantic_hash": ""
+  },
+  "services/frame-audio/src/config.ts": {
+    "mtime": 1781193310.2912853,
+    "ast_hash": "32eb8d2a3b3497db8d42c0258990d4b7",
+    "semantic_hash": ""
+  },
+  "services/frame-audio/src/index.ts": {
+    "mtime": 1781193945.8444047,
+    "ast_hash": "1eee1670b6bcb3d9eba219c7a0e6133b",
+    "semantic_hash": ""
+  },
+  "services/frame-audio/src/relayManager.ts": {
+    "mtime": 1781193310.2912853,
+    "ast_hash": "0e67ed614242103c0d4834fc7ef6a50d",
+    "semantic_hash": ""
+  },
+  "services/frame-audio/src/store.ts": {
+    "mtime": 1781219369.9898686,
+    "ast_hash": "c78df5b8ff69e29cd04d20417345a3b4",
+    "semantic_hash": ""
+  },
+  "services/frame-audio/tsconfig.json": {
+    "mtime": 1781157836.9012792,
+    "ast_hash": "c91923e437f5073d38333c3e5fbfe7c4",
+    "semantic_hash": ""
+  },
+  "services/frame-ingest-video/frame-init.sh": {
+    "mtime": 1780871445.8957233,
+    "ast_hash": "4aa2d14bf2e719684bb4eb136e66819f",
+    "semantic_hash": ""
+  },
+  "services/frame-overlays/config/overlay-presets.default.json": {
+    "mtime": 1781213050.064557,
+    "ast_hash": "bd06bf089cef39c6c67acccfff0ccd8c",
+    "semantic_hash": ""
+  },
+  "services/frame-overlays/config/overlay-presets.schema.json": {
+    "mtime": 1781213050.0629044,
+    "ast_hash": "477adcec6fd76048e2a3342c6c06b053",
+    "semantic_hash": ""
+  },
+  "services/frame-overlays/package.json": {
+    "mtime": 1780872034.0488527,
+    "ast_hash": "035f1d331d93d71e5a164e039adbb7fc",
+    "semantic_hash": ""
+  },
+  "services/frame-overlays/public/app.js": {
+    "mtime": 1781214096.6680217,
+    "ast_hash": "1728383c7d64aba006a44764eaa2b30a",
+    "semantic_hash": ""
+  },
+  "services/frame-overlays/public/renderer.js": {
+    "mtime": 1781213244.9869554,
+    "ast_hash": "3197b776b53f5f59f7b6508f4f70c5cf",
+    "semantic_hash": ""
+  },
+  "services/frame-overlays/src/index.ts": {
+    "mtime": 1781210056.4422271,
+    "ast_hash": "5846381eab697e5ef07945f1db280405",
+    "semantic_hash": ""
+  },
+  "services/frame-overlays/tsconfig.json": {
+    "mtime": 1780871806.6446464,
+    "ast_hash": "c91923e437f5073d38333c3e5fbfe7c4",
+    "semantic_hash": ""
+  },
+  "services/frame-portal/package.json": {
+    "mtime": 1780867635.9060109,
+    "ast_hash": "93d337fcc7bffdecea5f0450515a6de3",
+    "semantic_hash": ""
+  },
+  "services/frame-portal/public/portal.js": {
+    "mtime": 1780867635.9075208,
+    "ast_hash": "1eef78be36393417d54a26bbc8e0d7d9",
+    "semantic_hash": ""
+  },
+  "services/frame-portal/src/config.ts": {
+    "mtime": 1780966504.1793587,
+    "ast_hash": "95260a2ab1bcc21afc066d95686ffd55",
+    "semantic_hash": ""
+  },
+  "services/frame-portal/src/dockerClient.ts": {
+    "mtime": 1780966504.1803596,
+    "ast_hash": "33f26426da146dcc5571173d600ec6c5",
+    "semantic_hash": ""
+  },
+  "services/frame-portal/src/index.ts": {
+    "mtime": 1780966504.1798592,
+    "ast_hash": "c593437420a301616df3b950fdcd5294",
+    "semantic_hash": ""
+  },
+  "services/frame-portal/src/stackConfig.ts": {
+    "mtime": 1781159135.1954758,
+    "ast_hash": "bb025ac5c361fdc52a8ed8c1d93070d0",
+    "semantic_hash": ""
+  },
+  "services/frame-portal/src/statusCollector.ts": {
+    "mtime": 1780867635.9095926,
+    "ast_hash": "5cc73a9dfda7bf4711e3f260995a26ea",
+    "semantic_hash": ""
+  },
+  "services/frame-portal/src/types.ts": {
+    "mtime": 1780867635.910099,
+    "ast_hash": "b2d22d0e04be71bb64d3822548fdaf1d",
+    "semantic_hash": ""
+  },
+  "services/frame-portal/tsconfig.json": {
+    "mtime": 1780867635.928621,
+    "ast_hash": "35365b016a22d6fac3b8ce109336d261",
+    "semantic_hash": ""
+  },
+  "services/frame-streams/package.json": {
+    "mtime": 1780871602.9363468,
+    "ast_hash": "638cb6a4434438fabf2401728eefabdb",
+    "semantic_hash": ""
+  },
+  "services/frame-streams/public/app.js": {
+    "mtime": 1781210017.9674606,
+    "ast_hash": "6b02aa48c1a3bbe49c324c796532d161",
+    "semantic_hash": ""
+  },
+  "services/frame-streams/src/index.ts": {
+    "mtime": 1781210017.9664629,
+    "ast_hash": "0272561d0e1fc6d2e1522327bca6c131",
+    "semantic_hash": ""
+  },
+  "services/frame-streams/tsconfig.json": {
+    "mtime": 1780871602.9363468,
+    "ast_hash": "07f609d22453ff369f7bc65f1c9b27fb",
+    "semantic_hash": ""
+  },
+  "stack.sh": {
+    "mtime": 1780867635.9296296,
+    "ast_hash": "bd01b2e69abe67332424d29de517f60c",
+    "semantic_hash": ""
+  },
+  ".github/workflows/claude-code-review.yml": {
+    "mtime": 1780780640.2197306,
+    "ast_hash": "eb8350983dfe3661a54b70c99fb2f60e",
+    "semantic_hash": ""
+  },
+  ".github/workflows/claude.yml": {
+    "mtime": 1780780640.2197306,
+    "ast_hash": "2e918f34313c24594c2c8c90ac2d4d06",
+    "semantic_hash": ""
+  },
+  "AGENTS.md": {
+    "mtime": 1781218022.0192654,
+    "ast_hash": "752aa83aa64361ac32860f882dcff932",
+    "semantic_hash": ""
+  },
+  "CHANGELOG.md": {
+    "mtime": 1781193676.3135672,
+    "ast_hash": "87ead3b14aea3e5b14802a0c9a0742f4",
+    "semantic_hash": ""
+  },
+  "README.md": {
+    "mtime": 1781219439.3005095,
+    "ast_hash": "8f882f2d1d8aeb8b9fe6cf1d485efc90",
+    "semantic_hash": ""
+  },
+  "docker_container_samples/Docker_OBS_Overlays/public/index.html": {
+    "mtime": 1780780640.2227776,
+    "ast_hash": "504d1617373332932e40321a42d46450",
+    "semantic_hash": ""
+  },
+  "docker_container_samples/Docker_OBS_Overlays/public/uploads_progress.html": {
+    "mtime": 1780780640.2227776,
+    "ast_hash": "5d9e81f4bdfb0ba2d567ff90bbcb3ae1",
+    "semantic_hash": ""
+  },
+  "docs/TODO.md": {
+    "mtime": 1781219439.2989738,
+    "ast_hash": "e658202d002fe0d40b368942ea864311",
+    "semantic_hash": ""
+  },
+  "docs/adr/0001-stack-config-source-of-truth.md": {
+    "mtime": 1780780640.2242877,
+    "ast_hash": "95532e7aef02980e272b8686baf60bc5",
+    "semantic_hash": ""
+  },
+  "docs/adr/0002-discord-audio-bridge-service.md": {
+    "mtime": 1780867635.8758965,
+    "ast_hash": "4cc5e7d07ef1a7d24d868cd4fac68320",
+    "semantic_hash": ""
+  },
+  "docs/adr/0003-portal-docker-access.md": {
+    "mtime": 1780867635.8758965,
+    "ast_hash": "e2d7823cb4f841cb45c103c4ce0701f4",
+    "semantic_hash": ""
+  },
+  "docs/adr/0004-frame-edge-routing.md": {
+    "mtime": 1780966544.1217878,
+    "ast_hash": "b4ac7621ae234986b4ea23793044033b",
+    "semantic_hash": ""
+  },
+  "docs/adr/0004-shared-installer-runtime.md": {
+    "mtime": 1780867635.8758965,
+    "ast_hash": "85e800ccc4a4c0dd1dc99eb99225e86b",
+    "semantic_hash": ""
+  },
+  "docs/adr/0005-hybrid-public-gateway.md": {
+    "mtime": 1781194634.2555583,
+    "ast_hash": "b0442aed308d72507a78dfa34dc7f4d4",
+    "semantic_hash": ""
+  },
+  "docs/spec/v1.1.md": {
+    "mtime": 1781219468.9450247,
+    "ast_hash": "ff8fa4a2343d3732c5910018d10cb1e9",
+    "semantic_hash": ""
+  },
+  "installer/README.md": {
+    "mtime": 1781219468.944025,
+    "ast_hash": "b48b08668d33854e6f3a765f31cc9e25",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/README.md": {
+    "mtime": 1780867635.885724,
+    "ast_hash": "67faca1dfb7502599f768daa304f9155",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/public/audio.html": {
+    "mtime": 1781193582.6437082,
+    "ast_hash": "9ed03de59956aa8a0d123db751c24bf3",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/public/control.html": {
+    "mtime": 1781193582.6467333,
+    "ast_hash": "b9dd92946dd63bb2a296ca8d8762deb3",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/public/overlay.html": {
+    "mtime": 1781193582.6447146,
+    "ast_hash": "54ed9d80376103dbb0ad1ee918347c15",
+    "semantic_hash": ""
+  },
+  "services/frame-audio/README.md": {
+    "mtime": 1781193543.1803138,
+    "ast_hash": "954c38447343096875c56d0c6b66d3cb",
+    "semantic_hash": ""
+  },
+  "services/frame-audio/public/admin.html": {
+    "mtime": 1781161702.3746057,
+    "ast_hash": "6a8b76a5f5e2ea1c0948a0e9862e1720",
+    "semantic_hash": ""
+  },
+  "services/frame-audio/public/capture.html": {
+    "mtime": 1781161999.4468336,
+    "ast_hash": "42459a7bf00178a622cd1c83fe3c5542",
+    "semantic_hash": ""
+  },
+  "services/frame-audio/public/listen.html": {
+    "mtime": 1781190805.5234227,
+    "ast_hash": "1192eaa223b134f4166bb5c81caddfa5",
+    "semantic_hash": ""
+  },
+  "services/frame-edge/README.md": {
+    "mtime": 1781193676.2927222,
+    "ast_hash": "6672db20a5bf7d3600a7a26650b70e0f",
+    "semantic_hash": ""
+  },
+  "services/frame-ingest-video/OPENIRL-LICENSE.txt": {
+    "mtime": 1780871300.4256358,
+    "ast_hash": "4e5ec44fe5564450f9c1061ad18aeb38",
+    "semantic_hash": ""
+  },
+  "services/frame-ingest-video/README.md": {
+    "mtime": 1780871445.910619,
+    "ast_hash": "2ac20785ae6e6a71d9dbd4366a29eed3",
+    "semantic_hash": ""
+  },
+  "services/frame-overlays/README.md": {
+    "mtime": 1781213448.5431883,
+    "ast_hash": "a175841a7be7a3898d1a25ca3de2c950",
+    "semantic_hash": ""
+  },
+  "services/frame-overlays/public/index.html": {
+    "mtime": 1781213109.6089852,
+    "ast_hash": "7c924e0336c1781e225d694f79634d76",
+    "semantic_hash": ""
+  },
+  "services/frame-overlays/public/renderer.html": {
+    "mtime": 1781213221.4434247,
+    "ast_hash": "7c6672f2ad5296d4a6476e20eee3ab95",
+    "semantic_hash": ""
+  },
+  "services/frame-portal/README.md": {
+    "mtime": 1780867635.903466,
+    "ast_hash": "c6deea9fda2be65613d4cedc168b1c47",
+    "semantic_hash": ""
+  },
+  "services/frame-portal/public/index.html": {
+    "mtime": 1780867635.9065106,
+    "ast_hash": "ca188ec691ffb55bc241eb06ee2b081a",
+    "semantic_hash": ""
+  },
+  "services/frame-streams/README.md": {
+    "mtime": 1781210056.4457438,
+    "ast_hash": "7dca45000aa301a800f0d25e5b1eee6c",
+    "semantic_hash": ""
+  },
+  "services/frame-streams/public/index.html": {
+    "mtime": 1781210056.4432273,
+    "ast_hash": "a522576a902238a071552aa1c39a254f",
+    "semantic_hash": ""
+  },
+  "services/frame-tunnel/README.md": {
+    "mtime": 1781194381.1309178,
+    "ast_hash": "517d95f97e517ded09d0e821e61f4ef8",
+    "semantic_hash": ""
+  },
+  "services/frame-audio-bridge/public/frame-logo-square.svg": {
+    "mtime": 1780867635.8903086,
+    "ast_hash": "444f4bae3ef7005b5a877e5684c6292b",
+    "semantic_hash": ""
+  },
+  "services/frame-audio/public/frame-logo-square.svg": {
+    "mtime": 1780867635.9065106,
+    "ast_hash": "444f4bae3ef7005b5a877e5684c6292b",
+    "semantic_hash": ""
+  },
+  "services/frame-overlays/public/frame-logo-square.svg": {
+    "mtime": 1780867635.9065106,
+    "ast_hash": "444f4bae3ef7005b5a877e5684c6292b",
+    "semantic_hash": ""
+  },
+  "services/frame-portal/public/frame-logo-square.svg": {
+    "mtime": 1780867635.9065106,
+    "ast_hash": "444f4bae3ef7005b5a877e5684c6292b",
+    "semantic_hash": ""
+  },
+  "services/frame-streams/public/frame-logo-square.svg": {
+    "mtime": 1780867635.9065106,
+    "ast_hash": "444f4bae3ef7005b5a877e5684c6292b",
+    "semantic_hash": ""
+  },
+  "config/frame-services.json": {
+    "mtime": 1781219180.744041,
+    "ast_hash": "bae4f4838cb911b7785611c6a7373cd8",
+    "semantic_hash": ""
+  },
+  "installer/frame-contract.mjs": {
+    "mtime": 1781219180.7445416,
+    "ast_hash": "ad3fdd1e5e92a31a32cfd678b6465115",
+    "semantic_hash": ""
+  },
+  "package.json": {
+    "mtime": 1781219336.4711747,
+    "ast_hash": "5a0e14823d069c566520dcd255759529",
+    "semantic_hash": ""
+  },
+  "scripts/verify.mjs": {
+    "mtime": 1781219336.4711747,
+    "ast_hash": "b37594ae6cde1835b0330b130d3b6d77",
+    "semantic_hash": ""
+  },
+  "services/frame-audio/tests/store.test.mjs": {
+    "mtime": 1781219283.5663803,
+    "ast_hash": "386aea16a954507f9a96b1c9dd24b2b4",
+    "semantic_hash": ""
+  },
+  "tests/frame-contract.test.mjs": {
+    "mtime": 1781219523.4719367,
+    "ast_hash": "87bf3bd819452e92d67887eab3a93b2d",
+    "semantic_hash": ""
+  },
+  ".github/workflows/verify.yml": {
+    "mtime": 1781219283.5673902,
+    "ast_hash": "60e7abdaa038323bf649f2f78a15dce1",
+    "semantic_hash": ""
+  },
+  "docs/STABILIZATION.md": {
+    "mtime": 1781219439.2979703,
+    "ast_hash": "964e43f0c2a20e5a598222503621e33e",
+    "semantic_hash": ""
+  },
+  "docs/adr/0006-photo-pipeline-activation.md": {
+    "mtime": 1781219439.2989738,
+    "ast_hash": "6959851984550108641856f32c66bd52",
+    "semantic_hash": ""
+  }
+}

@@ -1,0 +1,15 @@
+services:
+  frame-audio:
+    build: .
+    container_name: frame-audio
+    restart: unless-stopped
+    environment:
+      PORT: 3734
+      DATA_ROOT: /data
+      PUBLIC_BASE_URL: ${AUDIO_PUBLIC_BASE_URL:-http://localhost:3734}
+      CAPTURE_BASE_URL: ${AUDIO_CAPTURE_BASE_URL:-${AUDIO_PUBLIC_BASE_URL:-http://localhost:3734}}
+      FFMPEG_PATH: ${FFMPEG_PATH:-ffmpeg}
+    ports:
+      - "${AUDIO_MONITOR_PORT:-3734}:3734"
+    volumes:
+      - ${FRAME_DATA_ROOT:-./data}/audio-monitor:/data

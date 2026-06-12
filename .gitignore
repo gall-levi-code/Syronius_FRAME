@@ -1,3 +1,6 @@
 /.env
 /docker-compose.yml
 /data/
+/cf_token.txt
+/graphify-out/cache/
+/graphify-out/cost.json
