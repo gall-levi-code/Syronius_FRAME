@@ -1,0 +1,17 @@
+# Runtime state and local secrets
+.env
+cf_token.txt
+data/
+docker-compose.yml
+
+# Generated and third-party content
+graphify-out/
+.codex/
+.codex-remote-attachments/
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+coverage/
+**/coverage/
+*.log

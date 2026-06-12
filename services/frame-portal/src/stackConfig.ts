@@ -11,9 +11,9 @@ export interface LoadedStackConfig {
 const FALLBACK_ROUTES: Record<string, string> = {
   dashboard: "/dashboard",
   status: "/status",
-  video_relay_ui: "/streams",
+  video_relay_ui: "/slsui",
   overlays_root: "/overlays",
-  overlays_wizard: "/overlays/wizard",
+  overlays_wizard: "/overlays/setup",
   photo_gallery: "/gallery",
   today_gallery: "/today/gallery",
   today_viewer: "/today/viewer",
@@ -63,8 +63,8 @@ const TOOL_DEFINITIONS: Array<
   {
     id: "audio",
     name: "Audio Monitor",
-    description: "Open the browser-capture audio listener.",
-    routeKey: "audio_listen",
+    description: "Manage browser-capture audio sources and listener links.",
+    routeKey: "audio_admin",
     capability: "frame-audio-relay",
     serviceName: "frame-audio",
   },
@@ -108,7 +108,7 @@ export async function loadStackConfig(appConfig: AppConfig): Promise<LoadedStack
       config: {
         mode: appConfig.mode,
         capabilities: {
-          "frame-discord-audio-bridge": true,
+          "frame-discord-audio-bridge": false,
         },
         routes: { ...FALLBACK_ROUTES },
         public_route_prefixes: ["/dashboard", "/status"],

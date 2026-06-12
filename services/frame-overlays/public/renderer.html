@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FRAME Overlay</title>
+    <link rel="stylesheet" href="/overlays/assets/renderer.css?v=20260611-blocks">
+  </head>
+  <body>
+    <div id="overlay-root" class="overlay-root">
+      <section id="widget" class="widget">
+        <div id="telemetry-layout" class="telemetry-layout">
+          <header id="widget-head" class="widget-head telemetry-block" data-block="header">
+            <div class="signal-dot"></div>
+            <div>
+              <strong id="status-value">NO SIGNAL</strong>
+              <span id="stream-name">Waiting for stream</span>
+            </div>
+          </header>
+          <div id="meter" class="meter telemetry-block" data-block="meter"><div id="meter-fill"></div></div>
+          <canvas id="chart" class="telemetry-block" data-block="chart" width="320" height="88"></canvas>
+        </div>
+      </section>
+    </div>
+    <script>
+      window.FRAME_OVERLAY = /*__FRAME_OVERLAY_CONFIG__*/null;
+    </script>
+    <script src="/overlays/assets/renderer.js?v=20260611-blocks"></script>
+  </body>
+</html>

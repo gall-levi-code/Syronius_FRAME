@@ -76,8 +76,13 @@ export class BridgeWebSocketServer {
     private readonly voiceManager: VoiceManager,
     private readonly discordClient: Client,
   ) {
-    this.wss = new WebSocketServer({ server, path: "/ws" });
+    this.wss = new WebSocketServer({ server });
     this.wss.on("connection", (ws, request) => {
+      const pathname = new URL(request.url ?? "/ws", this.appConfig.publicBaseUrl).pathname;
+      if (pathname !== "/ws" && pathname !== "/bridge/ws") {
+        ws.close(1008, "Unknown WebSocket route");
+        return;
+      }
       void this.handleConnection(ws, request);
     });
     this.clientStatsTimer = setInterval(() => {

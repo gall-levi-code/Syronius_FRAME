@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FRAME Stream Management</title>
+    <link rel="icon" href="/slsui/assets/frame-logo-square.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/slsui/assets/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <img src="/slsui/assets/frame-logo-square.svg" alt="FRAME">
+        <div><strong>Stream Management</strong><span>SRTLA relay control</span></div>
+      </div>
+      <div class="top-actions">
+        <span id="receiver-status" class="status-pill">Checking telemetry</span>
+        <button id="theme-toggle" class="icon-button" title="Toggle day/night theme">Theme</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="toolbar">
+        <div>
+          <h1>Stream Profiles</h1>
+          <p>Manage publisher/player pairs and watch relay quality.</p>
+        </div>
+        <div class="toolbar-actions">
+          <button id="refresh-button" class="secondary">Refresh</button>
+          <button id="add-button">Add stream</button>
+        </div>
+      </section>
+
+      <div id="notice" class="notice hidden"></div>
+      <section id="stream-list" class="stream-list" aria-live="polite"></section>
+    </main>
+
+    <dialog id="stream-dialog">
+      <form id="stream-form" method="dialog">
+        <div class="dialog-head">
+          <div><strong id="dialog-title">Add stream</strong><span>Secure IDs are generated automatically.</span></div>
+          <button type="button" class="icon-button close-dialog" title="Close">Close</button>
+        </div>
+        <label>Stream name<input id="description-input" required maxlength="160" placeholder="Main IRL feed"></label>
+        <label class="source-toggle">
+          <span><strong>Custom telemetry</strong><small>Connect an existing BELABOX relay instead of creating FRAME relay keys.</small></span>
+          <input id="custom-toggle" type="checkbox" role="switch">
+        </label>
+        <div id="frame-source-fields">
+          <label>Private publisher key<input id="publisher-input" required pattern="[A-Za-z0-9_-]{3,128}"></label>
+          <label>Private player key<input id="player-input" required pattern="[A-Za-z0-9_-]{3,128}"></label>
+        </div>
+        <div id="custom-source-fields" class="hidden">
+          <label>BELABOX stats URL or relay ID
+            <input id="stats-url-input" placeholder="https://stats.srt.belabox.net/...">
+            <small>FRAME fetches this server-side. The relay ID is not exposed in public overlay pages.</small>
+          </label>
+        </div>
+        <div class="dialog-actions">
+          <button type="button" id="regenerate-button" class="secondary">Regenerate IDs</button>
+          <button type="submit">Save stream</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="links-dialog">
+      <div class="dialog-head">
+        <div><strong>Stream links</strong><span>Ready for publishers, players, OBS, and diagnostics.</span></div>
+        <button type="button" class="icon-button close-dialog" title="Close">Close</button>
+      </div>
+      <div id="links-list" class="links-list"></div>
+    </dialog>
+
+    <script src="/slsui/assets/app.js" defer></script>
+  </body>
+</html>

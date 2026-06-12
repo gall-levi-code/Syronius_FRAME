@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FRAME Audio Monitor</title>
+    <link rel="icon" href="/audio/assets/frame-logo-square.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/audio/assets/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand"><img src="/audio/assets/frame-logo-square.svg" alt="FRAME"><div><strong>Audio Monitor</strong><span>Browser capture and remote listening</span></div></div>
+      <div class="top-actions"><span id="service-status" class="status-pill">Checking relay</span><button id="theme-toggle" class="icon-button">Theme</button></div>
+    </header>
+    <main>
+      <section class="toolbar">
+        <div><h1>Audio Sources</h1><p>Create stable capture and listen links for remote stream monitoring.</p></div>
+        <div class="toolbar-actions"><button id="refresh-button" class="secondary">Refresh</button><button id="add-button">Add audio source</button></div>
+      </section>
+      <div id="notice" class="notice hidden"></div>
+      <section id="stream-list" class="stream-list" aria-live="polite"></section>
+    </main>
+    <dialog id="stream-dialog">
+      <form id="stream-form">
+        <div class="dialog-head"><div><strong id="dialog-title">Add audio source</strong><span>Stream IDs become part of stable capture and listen URLs.</span></div><button type="button" class="secondary" id="close-dialog">Close</button></div>
+        <div class="form-grid">
+          <label class="wide">Source name<input id="name-input" required maxlength="80" placeholder="Main IRL program audio"></label>
+          <label class="wide">Stream ID<input id="stream-id-input" required pattern="[a-z0-9][a-z0-9-]{6,63}"><small>Create a new source to change this permanent URL ID.</small></label>
+          <label>Listener AAC quality<select id="bitrate-input"><option value="64">64 kbps - Data saver</option><option value="96">96 kbps - Voice</option><option value="128">128 kbps - Balanced</option><option value="160">160 kbps - Good</option><option value="192" selected>192 kbps - High</option><option value="256">256 kbps - Very high</option><option value="320">320 kbps - Maximum</option></select><small>Higher values improve the final encode while increasing bandwidth for every listener.</small></label>
+          <label>Listener limit<input id="listener-limit-input" type="number" min="1" max="100" value="10" required></label>
+          <label class="wide toggle-label"><input id="always-on-input" type="checkbox" checked> Keep listen link alive with silence while capture is offline</label>
+        </div>
+        <div class="dialog-actions"><button type="button" id="regenerate-button" class="secondary">Regenerate ID</button><button type="submit">Save source</button></div>
+      </form>
+    </dialog>
+    <script src="/audio/assets/admin.js" defer></script>
+  </body>
+</html>

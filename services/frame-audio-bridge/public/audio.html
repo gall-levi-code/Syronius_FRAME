@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>FRAME Audio Bridge Audio</title>
-    <link rel="icon" type="image/svg+xml" href="/assets/frame-logo-square.svg?v=__ASSET_VERSION__" />
+    <link rel="icon" type="image/svg+xml" href="/bridge/assets/frame-logo-square.svg?v=__ASSET_VERSION__" />
     <style>
       html,
       body {
@@ -39,7 +39,7 @@
             wsParams.set("obsToken", obsToken);
           }
 
-          socket = new WebSocket(`${scheme}//${location.host}/ws?${wsParams.toString()}`);
+          socket = new WebSocket(`${scheme}//${location.host}/bridge/ws?${wsParams.toString()}`);
           socket.binaryType = "arraybuffer";
 
           socket.addEventListener("open", () => {

@@ -656,7 +656,7 @@
       token,
     });
 
-    socket = new WebSocket(`${scheme}//${location.host}/ws?${params.toString()}`);
+    socket = new WebSocket(`${scheme}//${location.host}/bridge/ws?${params.toString()}`);
 
     socket.addEventListener("open", () => {
       reconnectDelay = 500;

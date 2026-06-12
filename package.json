@@ -1,0 +1,14 @@
+{
+  "name": "syronius-frame",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Verification tooling for the Syronius FRAME service stack.",
+  "scripts": {
+    "test": "node --test tests/frame-contract.test.mjs",
+    "verify": "node scripts/verify.mjs",
+    "graphify:update": "graphify update . --force"
+  },
+  "engines": {
+    "node": ">=22.12"
+  }
+}

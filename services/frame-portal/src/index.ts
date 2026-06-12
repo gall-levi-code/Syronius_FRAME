@@ -12,6 +12,7 @@ const dockerClient = new DockerClient(
   appConfig.serviceNamePrefix,
   appConfig.dockerHost,
   appConfig.requestTimeoutMs,
+  appConfig.dockerComposeProject,
 );
 const statusCollector = new StatusCollector(appConfig, dockerClient);
 const app = express();

@@ -9,6 +9,7 @@ export interface AppConfig {
   stackConfigPath: string;
   dockerHost?: string;
   dockerSocketPath: string;
+  dockerComposeProject?: string;
   serviceNamePrefix: string;
   enableContainerRestarts: boolean;
   statusRefreshMs: number;
@@ -76,6 +77,7 @@ export function loadConfig(): AppConfig {
     ),
     dockerHost: process.env.DOCKER_HOST?.trim() || undefined,
     dockerSocketPath: process.env.DOCKER_SOCKET_PATH?.trim() || "/var/run/docker.sock",
+    dockerComposeProject: process.env.DOCKER_COMPOSE_PROJECT?.trim() || undefined,
     serviceNamePrefix: process.env.SERVICE_NAME_PREFIX?.trim() || "frame-",
     enableContainerRestarts: readBoolean("ENABLE_CONTAINER_RESTARTS", false),
     statusRefreshMs: readInt("STATUS_REFRESH_MS", 5_000, 1_000),

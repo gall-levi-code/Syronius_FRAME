@@ -31,7 +31,7 @@ export function createWebServer(
   });
 
   app.use(
-    "/assets",
+    ["/assets", "/bridge/assets"],
     (_request, response, next) => {
       response.setHeader("Cache-Control", "no-store");
       next();
