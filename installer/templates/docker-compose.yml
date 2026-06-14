@@ -23,6 +23,8 @@ services:
     ports:
       - "${EDGE_HTTP_PORT:-80}:80"
     depends_on:
+      frame-auth:
+        condition: service_healthy
       frame-docker-proxy:
         condition: service_healthy
     healthcheck:
@@ -31,6 +33,35 @@ services:
       timeout: 3s
       start_period: 5s
       retries: 3
+    networks:
+      - frame-internal
+
+  frame-auth:
+    build:
+      context: ./services/frame-auth
+    container_name: frame-auth
+    restart: unless-stopped
+    environment:
+      PORT: 3740
+      FRAME_AUTH_SESSION_SECRET: ${FRAME_AUTH_SESSION_SECRET}
+      FRAME_AUTH_SESSION_DAYS: ${FRAME_AUTH_SESSION_DAYS:-7}
+      PORTAL_USERNAME: ${PORTAL_USERNAME:-}
+      PORTAL_PASSWORD: ${PORTAL_PASSWORD:-}
+      STREAMS_USERNAME: ${STREAMS_USERNAME:-}
+      STREAMS_PASSWORD: ${STREAMS_PASSWORD:-}
+      OVERLAYS_USERNAME: ${OVERLAYS_USERNAME:-}
+      OVERLAYS_PASSWORD: ${OVERLAYS_PASSWORD:-}
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.frame-auth.entrypoints: web
+      traefik.http.routers.frame-auth.priority: "300"
+      traefik.http.routers.frame-auth.rule: PathPrefix(`/auth`)
+      traefik.http.routers.frame-auth.service: frame-auth
+      traefik.http.services.frame-auth.loadbalancer.server.port: "3740"
+      traefik.http.middlewares.frame-sso.forwardauth.address: http://frame-auth:3740/auth/check
+      traefik.http.middlewares.frame-sso.forwardauth.trustForwardHeader: "true"
+      traefik.http.middlewares.frame-sso.forwardauth.maxResponseBodySize: "65536"
+      traefik.http.middlewares.frame-sso.forwardauth.authResponseHeaders: Authorization,X-Frame-Authenticated-User
     networks:
       - frame-internal
 
@@ -122,6 +153,12 @@ services:
       traefik.http.routers.frame-portal.entrypoints: web
       traefik.http.routers.frame-portal.priority: "1"
       traefik.http.routers.frame-portal.rule: PathPrefix(`/`)
+      traefik.http.routers.frame-portal.middlewares: frame-sso
+      traefik.http.routers.frame-portal.service: frame-portal
+      traefik.http.routers.frame-portal-public.entrypoints: web
+      traefik.http.routers.frame-portal-public.priority: "200"
+      traefik.http.routers.frame-portal-public.rule: Path(`/healthz`) || PathPrefix(`/assets`)
+      traefik.http.routers.frame-portal-public.service: frame-portal
       traefik.http.services.frame-portal.loadbalancer.server.port: "3730"
     networks:
       - frame-internal
@@ -201,6 +238,12 @@ services:
       traefik.http.routers.frame-audio.entrypoints: web
       traefik.http.routers.frame-audio.priority: "100"
       traefik.http.routers.frame-audio.rule: PathPrefix(`/audio`)
+      traefik.http.routers.frame-audio.service: frame-audio
+      traefik.http.routers.frame-audio-admin.entrypoints: web
+      traefik.http.routers.frame-audio-admin.priority: "200"
+      traefik.http.routers.frame-audio-admin.rule: Path(`/audio`) || Path(`/audio/admin`) || PathPrefix(`/audio/api`) || PathPrefix(`/audio/capture`)
+      traefik.http.routers.frame-audio-admin.middlewares: frame-sso
+      traefik.http.routers.frame-audio-admin.service: frame-audio
       traefik.http.services.frame-audio.loadbalancer.server.port: "3734"
     networks:
       - frame-internal
@@ -220,6 +263,164 @@ services:
       - "${SLS_STATS_PORT:-8080}:8080/tcp"
     volumes:
       - ${FRAME_DATA_ROOT:-./data}/video-relay:/var/lib/sls
+    networks:
+      - frame-internal
+
+  frame-pipeline-photos:
+    profiles: ["photo-pipeline"]
+    build:
+      context: ./services/frame-pipeline-photos
+    container_name: frame-pipeline-photos
+    restart: unless-stopped
+    environment:
+      PORT: 3735
+      DATA_ROOT: /data
+      HOST_DATA_ROOT: ${FRAME_HOST_DATA_ROOT:-/data}
+      TIMEZONE: ${TIMEZONE:-America/Chicago}
+      PIPELINE_POLL_MS: ${PIPELINE_POLL_MS:-1000}
+      PIPELINE_CONCURRENCY: ${PIPELINE_CONCURRENCY:-2}
+      PHOTO_MAX_INPUT_MB: ${PHOTO_MAX_INPUT_MB:-50}
+      PHOTO_MAX_MEGAPIXELS: ${PHOTO_MAX_MEGAPIXELS:-80}
+      PHOTO_CONVERSION_ATTEMPTS: ${PHOTO_CONVERSION_ATTEMPTS:-3}
+      PHOTO_ARCHIVE_ORIGINALS: ${PHOTO_ARCHIVE_ORIGINALS:-true}
+      PORTAL_SERVICE_TOKEN: ${PORTAL_SERVICE_TOKEN}
+    volumes:
+      - ${FRAME_DATA_ROOT:-./data}:/data
+    networks:
+      - frame-internal
+
+  frame-photo-upload:
+    profiles: ["photo-webupload"]
+    build:
+      context: ./services/frame-photo-upload
+    container_name: frame-photo-upload
+    restart: unless-stopped
+    environment:
+      PORT: 3736
+      DATA_ROOT: /data
+      PHOTO_MAX_INPUT_MB: ${PHOTO_MAX_INPUT_MB:-50}
+      PORTAL_USERNAME: ${PORTAL_USERNAME:-}
+      PORTAL_PASSWORD: ${PORTAL_PASSWORD:-}
+      PORTAL_REALM: ${PORTAL_REALM:-FRAME Portal}
+    ports:
+      - "${PHOTO_UPLOAD_PORT:-3736}:3736"
+    volumes:
+      - ${FRAME_DATA_ROOT:-./data}:/data
+    depends_on:
+      frame-pipeline-photos:
+        condition: service_healthy
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.frame-photo-upload.entrypoints: web
+      traefik.http.routers.frame-photo-upload.priority: "100"
+      traefik.http.routers.frame-photo-upload.rule: PathPrefix(`/photos`)
+      traefik.http.routers.frame-photo-upload.middlewares: frame-sso
+      traefik.http.services.frame-photo-upload.loadbalancer.server.port: "3736"
+    networks:
+      - frame-internal
+
+  frame-photo-ftp:
+    profiles: ["photo-ftp"]
+    build:
+      context: ./services/frame-photo-ftp
+    container_name: frame-photo-ftp
+    restart: unless-stopped
+    environment:
+      PORT: 3737
+      DATA_ROOT: /data
+      PHOTO_FTP_PORT: 2121
+      PHOTO_FTP_USERNAME: ${PHOTO_FTP_USERNAME:-frame}
+      PHOTO_FTP_PASSWORD: ${PHOTO_FTP_PASSWORD:-}
+      PHOTO_FTP_PASSIVE_HOST: ${PHOTO_FTP_PASSIVE_HOST:-127.0.0.1}
+      PHOTO_FTP_PASSIVE_MIN: ${PHOTO_FTP_PASSIVE_MIN:-30000}
+      PHOTO_FTP_PASSIVE_MAX: ${PHOTO_FTP_PASSIVE_MAX:-30009}
+      PHOTO_FTP_STABLE_MS: ${PHOTO_FTP_STABLE_MS:-3000}
+      PHOTO_FTP_SCAN_MS: ${PHOTO_FTP_SCAN_MS:-1000}
+    ports:
+      - "${PHOTO_FTP_PORT:-2121}:2121"
+      - "${PHOTO_FTP_PASSIVE_MIN:-30000}-${PHOTO_FTP_PASSIVE_MAX:-30009}:${PHOTO_FTP_PASSIVE_MIN:-30000}-${PHOTO_FTP_PASSIVE_MAX:-30009}"
+    volumes:
+      - ${FRAME_DATA_ROOT:-./data}:/data
+    depends_on:
+      frame-pipeline-photos:
+        condition: service_healthy
+    networks:
+      - frame-internal
+
+  frame-gallery:
+    profiles: ["photo-gallery"]
+    build:
+      context: ./services/frame-gallery
+    container_name: frame-gallery
+    restart: unless-stopped
+    environment:
+      PORT: 3738
+      DATA_ROOT: /data
+      GALLERY_THUMB_WIDTH: ${GALLERY_THUMB_WIDTH:-720}
+      GALLERY_THUMB_QUALITY: ${GALLERY_THUMB_QUALITY:-82}
+      PHOTO_PIPELINE_URL: http://frame-pipeline-photos:3735
+      PORTAL_SERVICE_TOKEN: ${PORTAL_SERVICE_TOKEN}
+      PORTAL_USERNAME: ${PORTAL_USERNAME:-}
+      PORTAL_PASSWORD: ${PORTAL_PASSWORD:-}
+      PORTAL_REALM: ${PORTAL_REALM:-FRAME Portal}
+    ports:
+      - "${GALLERY_PORT:-3738}:3738"
+    volumes:
+      - ${FRAME_DATA_ROOT:-./data}/galleries:/data/galleries:ro
+      - ${FRAME_DATA_ROOT:-./data}/gallery-cache:/data/gallery-cache
+    depends_on:
+      frame-pipeline-photos:
+        condition: service_healthy
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.frame-gallery.entrypoints: web
+      traefik.http.routers.frame-gallery.priority: "110"
+      traefik.http.routers.frame-gallery.rule: PathPrefix(`/gallery`) || PathPrefix(`/today/gallery`)
+      traefik.http.services.frame-gallery.loadbalancer.server.port: "3738"
+      traefik.http.routers.frame-gallery-admin.entrypoints: web
+      traefik.http.routers.frame-gallery-admin.priority: "220"
+      traefik.http.routers.frame-gallery-admin.rule: PathPrefix(`/gallery/admin`) || PathPrefix(`/today/gallery/admin`)
+      traefik.http.routers.frame-gallery-admin.middlewares: frame-sso
+      traefik.http.routers.frame-gallery-admin.service: frame-gallery
+    networks:
+      - frame-internal
+
+  frame-today:
+    profiles: ["photo-today"]
+    build:
+      context: ./services/frame-today
+    container_name: frame-today
+    restart: unless-stopped
+    environment:
+      PORT: 3739
+      DATA_ROOT: /data
+      TODAY_DEFAULT_INTERVAL_MS: ${TODAY_DEFAULT_INTERVAL_MS:-10000}
+      TODAY_REFRESH_MS: ${TODAY_REFRESH_MS:-1000}
+      PORTAL_USERNAME: ${PORTAL_USERNAME:-}
+      PORTAL_PASSWORD: ${PORTAL_PASSWORD:-}
+      PORTAL_REALM: ${PORTAL_REALM:-FRAME Portal}
+    ports:
+      - "${TODAY_PORT:-3739}:3739"
+    volumes:
+      - ${FRAME_DATA_ROOT:-./data}/galleries:/data/galleries:ro
+      - ${FRAME_DATA_ROOT:-./data}/state:/data/state:ro
+    depends_on:
+      frame-pipeline-photos:
+        condition: service_healthy
+      frame-gallery:
+        condition: service_healthy
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.frame-today.entrypoints: web
+      traefik.http.routers.frame-today.priority: "100"
+      traefik.http.routers.frame-today.rule: PathPrefix(`/today`)
+      traefik.http.routers.frame-today.service: frame-today
+      traefik.http.routers.frame-today-control.entrypoints: web
+      traefik.http.routers.frame-today-control.priority: "200"
+      traefik.http.routers.frame-today-control.rule: Path(`/today/remote`) || Path(`/today/api/command`) || Path(`/today/ws/control`)
+      traefik.http.routers.frame-today-control.middlewares: frame-sso
+      traefik.http.routers.frame-today-control.service: frame-today
+      traefik.http.services.frame-today.loadbalancer.server.port: "3739"
     networks:
       - frame-internal
 
@@ -253,6 +454,7 @@ services:
       traefik.http.routers.frame-streams.entrypoints: web
       traefik.http.routers.frame-streams.priority: "100"
       traefik.http.routers.frame-streams.rule: PathPrefix(`/slsui`)
+      traefik.http.routers.frame-streams.middlewares: frame-sso
       traefik.http.services.frame-streams.loadbalancer.server.port: "3732"
     networks:
       - frame-internal
@@ -284,6 +486,12 @@ services:
       traefik.http.routers.frame-overlays.entrypoints: web
       traefik.http.routers.frame-overlays.priority: "100"
       traefik.http.routers.frame-overlays.rule: PathPrefix(`/overlays`)
+      traefik.http.routers.frame-overlays.service: frame-overlays
+      traefik.http.routers.frame-overlays-management.entrypoints: web
+      traefik.http.routers.frame-overlays-management.priority: "200"
+      traefik.http.routers.frame-overlays-management.rule: Path(`/overlays`) || Path(`/overlays/setup`) || PathPrefix(`/overlays/api`)
+      traefik.http.routers.frame-overlays-management.middlewares: frame-sso
+      traefik.http.routers.frame-overlays-management.service: frame-overlays
       traefik.http.services.frame-overlays.loadbalancer.server.port: "3733"
     networks:
       - frame-internal

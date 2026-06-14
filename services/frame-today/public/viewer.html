@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#02080c">
+    <title>FRAME Today Viewer</title>
+    <link rel="icon" href="/today/assets/frame-logo-square.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/today/assets/today.css">
+  </head>
+  <body class="viewer-page">
+    <main class="viewer" aria-live="polite">
+      <div id="viewer-empty" class="viewer-empty">
+        <img src="/today/assets/frame-logo-square.svg" alt="">
+        <strong>Waiting for today's first photo</strong>
+        <span>Published photos appear automatically.</span>
+      </div>
+      <div id="photo-stage" class="photo-stage" hidden>
+        <img id="photo-current" class="photo-layer current" alt="">
+        <img id="photo-next" class="photo-layer next" alt="">
+      </div>
+      <section id="exif-panel" class="exif-panel" hidden>
+        <div class="exif-heading">
+          <span>Camera information</span>
+          <strong id="photo-name"></strong>
+        </div>
+        <pre id="camera-text"></pre>
+        <span id="photo-details" class="photo-details"></span>
+      </section>
+      <div id="viewer-status" class="viewer-status">Connecting</div>
+    </main>
+    <script type="module" src="/today/assets/viewer.js"></script>
+  </body>
+</html>

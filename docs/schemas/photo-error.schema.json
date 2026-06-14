@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Syronius FRAME photo quarantine descriptor (V1)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "reason_code",
+    "reason",
+    "detail",
+    "original_name",
+    "detected_mime",
+    "attempts",
+    "timestamp",
+    "log_ref"
+  ],
+  "properties": {
+    "reason_code": {
+      "type": "string",
+      "enum": ["PPL-01", "PPL-02", "PPL-03", "PPL-04", "PPL-05", "PPL-06", "PPL-07"]
+    },
+    "reason": {
+      "type": "string",
+      "enum": [
+        "NOT_IMAGE",
+        "CONVERT_FAILED",
+        "RAW_UNSUPPORTED",
+        "DECODE_FAILED",
+        "EXIF_EXTRACT_FAILED",
+        "FILE_ACCESS_ERROR",
+        "PIPELINE_INTERNAL_ERROR"
+      ]
+    },
+    "detail": { "type": "string", "minLength": 1 },
+    "original_name": { "type": "string", "minLength": 1 },
+    "detected_mime": { "type": "string", "minLength": 1 },
+    "attempts": { "type": "integer", "minimum": 0 },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "log_ref": { "type": "string", "minLength": 1 }
+  }
+}

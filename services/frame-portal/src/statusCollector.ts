@@ -1,4 +1,5 @@
-import { statfs } from "node:fs/promises";
+import { readFile, statfs } from "node:fs/promises";
+import path from "node:path";
 import type { AppConfig } from "./config";
 import type { DockerClient } from "./dockerClient";
 import { loadStackConfig } from "./stackConfig";
@@ -81,18 +82,33 @@ export class StatusCollector {
     const disk = await this.readDisk(alerts);
     const audioBridgeService = services.find((service) => service.name === "frame-audio-bridge");
     const discordAudioBridges = await this.readAudioBridgeStatus(audioBridgeService, alerts);
+    const lastPhoto = await this.readLastPhoto();
 
     return {
       generated_at: new Date().toISOString(),
       mode: loadedStackConfig.config.mode,
       services,
-      last_photo: null,
+      last_photo: lastPhoto,
       last_ingest: null,
       audio_streams: [],
       discord_audio_bridges: discordAudioBridges,
       disk,
       alerts,
     };
+  }
+
+  private async readLastPhoto(): Promise<StatusResponse["last_photo"]> {
+    try {
+      const latest = JSON.parse(
+        await readFile(path.join(this.appConfig.dataRoot, "state", "latest.json"), "utf8"),
+      ) as { updated_at?: unknown; latest_photo_at?: unknown; latest_base?: unknown };
+      const photoAt = typeof latest.latest_photo_at === "string" ? latest.latest_photo_at : latest.updated_at;
+      return typeof photoAt === "string" && typeof latest.latest_base === "string"
+        ? { at: photoAt, base: latest.latest_base }
+        : null;
+    } catch {
+      return null;
+    }
   }
 
   private async readAudioBridgeStatus(

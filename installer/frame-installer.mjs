@@ -41,6 +41,9 @@ const IMPORTABLE_ENV_KEYS = new Set([
   "MAX_AUDIO_DELAY_MS",
   "SESSION_IDLE_TIMEOUT_MINUTES",
   "READONLY_OBS_TOKEN",
+  "TIMEZONE",
+  "FRAME_HOST_DATA_ROOT",
+  "PHOTO_FTP_PASSIVE_HOST",
 ]);
 
 try {
@@ -72,7 +75,8 @@ try {
 async function install(options) {
   const existingEnv = await loadEnv();
   const importedEnv = options["import-env"] ? await loadImportEnv(options["import-env"]) : {};
-  const existingConfig = await readJsonIfExists(getConfigPathFromEnv(existingEnv));
+  const existingConfigRaw = await readJsonIfExists(getConfigPathFromEnv(existingEnv));
+  const existingConfig = existingConfigRaw ? upgradeExistingConfig(existingConfigRaw) : null;
   if (existingConfig) {
     validateConfig(existingConfig);
   }
@@ -137,6 +141,10 @@ async function install(options) {
   console.log(`  Audio Monitor: ${capabilities["frame-audio-relay"] ? "enabled" : "disabled"}`);
   console.log(`  Video Relay: ${capabilities["frame-video-relay"] ? "enabled" : "disabled"}`);
   console.log(`  Overlays: ${capabilities["frame-overlays"] ? "enabled" : "disabled"}`);
+  console.log(`  Photo Upload: ${capabilities["frame-photo-webupload"] ? "enabled" : "disabled"}`);
+  console.log(`  Photo FTP: ${capabilities["frame-photo-ftp"] ? "enabled" : "disabled"}`);
+  console.log(`  Photo Gallery: ${capabilities["frame-photo-gallery"] ? "enabled" : "disabled"}`);
+  console.log(`  Today Tools: ${capabilities["frame-photo-todaytools"] ? "enabled" : "disabled"}`);
   if (mode === "HYBRID") {
     console.log(`  Public hostname: ${env.CLOUDFLARE_PUBLIC_HOSTNAME}`);
     console.log(`  Public routes: ${effectivePublicPrefixes.join(", ")}`);
@@ -150,6 +158,15 @@ async function install(options) {
     (isPlaceholder(env.DISCORD_TOKEN) || isPlaceholder(env.DISCORD_CLIENT_ID))
   ) {
     console.warn("  Setup needed: add Discord credentials to the generated .env before running stack start.");
+  }
+  if (capabilities["frame-photo-ftp"] && env.PHOTO_FTP_PASSIVE_HOST === "127.0.0.1") {
+    console.warn("  Setup needed: set PHOTO_FTP_PASSIVE_HOST to this FRAME host's LAN address for camera FTP.");
+  }
+  if (
+    (capabilities["frame-photo-ftp"] || capabilities["frame-photo-webupload"]) &&
+    env.FRAME_HOST_DATA_ROOT === "/data"
+  ) {
+    console.warn("  StreamerBot setup: set FRAME_HOST_DATA_ROOT to the host-visible FRAME data path before using .ready manifests.");
   }
   if (mode === "HYBRID") {
     if (!env.PORTAL_USERNAME || !env.PORTAL_PASSWORD) {
@@ -220,6 +237,26 @@ async function status() {
       config.capabilities["frame-overlays"] ? `${env.EDGE_PUBLIC_BASE_URL}/overlays/setup` : "disabled"
     }`,
   );
+  console.log(
+    `  Photo Upload: ${
+      config.capabilities["frame-photo-webupload"] ? `${env.EDGE_LAN_BASE_URL}/photos/upload` : "disabled"
+    }`,
+  );
+  console.log(
+    `  Photo FTP: ${
+      config.capabilities["frame-photo-ftp"] ? `${env.PHOTO_FTP_PASSIVE_HOST}:${env.PHOTO_FTP_PORT}` : "disabled"
+    }`,
+  );
+  console.log(
+    `  Photo Gallery: ${
+      config.capabilities["frame-photo-gallery"] ? `${env.EDGE_PUBLIC_BASE_URL}/gallery` : "disabled"
+    }`,
+  );
+  console.log(
+    `  Today Viewer: ${
+      config.capabilities["frame-photo-todaytools"] ? `${env.EDGE_PUBLIC_BASE_URL}/today/viewer` : "disabled"
+    }`,
+  );
   console.log(`  Enabled capabilities: ${enabled.length ? enabled.join(", ") : "none"}`);
 }
 
@@ -282,6 +319,15 @@ function buildEnvironment(existing, options, mode, capabilities) {
   const audioMonitorPort = normalizePort(existing.AUDIO_MONITOR_PORT ?? "3734", "Audio Monitor port");
   const streamsPort = normalizePort(existing.STREAMS_PORT ?? "3732", "Stream Management port");
   const overlaysPort = normalizePort(existing.OVERLAYS_PORT ?? "3733", "Overlay Wizard port");
+  const photoUploadPort = normalizePort(existing.PHOTO_UPLOAD_PORT ?? "3736", "Photo Upload port");
+  const photoFtpPort = normalizePort(existing.PHOTO_FTP_PORT ?? "2121", "Photo FTP port");
+  const galleryPort = normalizePort(existing.GALLERY_PORT ?? "3738", "Photo Gallery port");
+  const todayPort = normalizePort(existing.TODAY_PORT ?? "3739", "Today Tools port");
+  const photoFtpPassiveMin = normalizePort(existing.PHOTO_FTP_PASSIVE_MIN ?? "30000", "Photo FTP passive minimum");
+  const photoFtpPassiveMax = normalizePort(existing.PHOTO_FTP_PASSIVE_MAX ?? "30009", "Photo FTP passive maximum");
+  if (Number(photoFtpPassiveMin) > Number(photoFtpPassiveMax)) {
+    throw new Error("Photo FTP passive minimum cannot exceed its maximum.");
+  }
   const slsStatsPort = normalizePort(existing.SLS_STATS_PORT ?? "8080", "SLS statistics port");
   const srtlaPort = normalizePort(existing.SRTLA_PORT ?? "5000", "SRTLA port");
   const srtPlayerPort = normalizePort(existing.SRT_PLAYER_PORT ?? "4000", "SRT player port");
@@ -293,6 +339,10 @@ function buildEnvironment(existing, options, mode, capabilities) {
     ["Audio Monitor", audioMonitorPort, capabilities["frame-audio-relay"]],
     ["Stream Management", streamsPort, capabilities["frame-video-relay"]],
     ["Overlay Wizard", overlaysPort, capabilities["frame-overlays"]],
+    ["Photo Upload", photoUploadPort, capabilities["frame-photo-webupload"]],
+    ["Photo FTP", photoFtpPort, capabilities["frame-photo-ftp"]],
+    ["Photo Gallery", galleryPort, capabilities["frame-photo-gallery"]],
+    ["Today Tools", todayPort, capabilities["frame-photo-todaytools"]],
     ["SLS statistics", slsStatsPort, capabilities["frame-video-relay"]],
     ["SRTLA ingest", srtlaPort, capabilities["frame-video-relay"]],
     ["SRT player", srtPlayerPort, capabilities["frame-video-relay"]],
@@ -303,6 +353,8 @@ function buildEnvironment(existing, options, mode, capabilities) {
   return {
     FRAME_MODE: mode,
     FRAME_DATA_ROOT: dataRoot,
+    FRAME_HOST_DATA_ROOT: existing.FRAME_HOST_DATA_ROOT ?? "/data",
+    TIMEZONE: existing.TIMEZONE ?? "America/Chicago",
     COMPOSE_PROFILES: profiles.join(","),
     EDGE_HTTP_PORT: edgePort,
     EDGE_PUBLIC_BASE_URL: edgePublicBaseUrl,
@@ -316,6 +368,29 @@ function buildEnvironment(existing, options, mode, capabilities) {
     AUDIO_CAPTURE_BASE_URL: edgeLanBaseUrl,
     STREAMS_PORT: streamsPort,
     OVERLAYS_PORT: overlaysPort,
+    PHOTO_UPLOAD_PORT: photoUploadPort,
+    PHOTO_FTP_PORT: photoFtpPort,
+    GALLERY_PORT: galleryPort,
+    TODAY_PORT: todayPort,
+    PHOTO_FTP_PASSIVE_MIN: photoFtpPassiveMin,
+    PHOTO_FTP_PASSIVE_MAX: photoFtpPassiveMax,
+    PHOTO_FTP_PASSIVE_HOST: existing.PHOTO_FTP_PASSIVE_HOST ?? "127.0.0.1",
+    PHOTO_FTP_USERNAME: existing.PHOTO_FTP_USERNAME ?? "frame",
+    PHOTO_FTP_PASSWORD: preserveSecret(existing.PHOTO_FTP_PASSWORD, 18),
+    PHOTO_FTP_STABLE_MS: existing.PHOTO_FTP_STABLE_MS ?? "3000",
+    PHOTO_FTP_SCAN_MS: existing.PHOTO_FTP_SCAN_MS ?? "1000",
+    PIPELINE_POLL_MS: existing.PIPELINE_POLL_MS ?? "1000",
+    PIPELINE_CONCURRENCY: existing.PIPELINE_CONCURRENCY ?? "2",
+    PHOTO_MAX_INPUT_MB: existing.PHOTO_MAX_INPUT_MB ?? "50",
+    PHOTO_MAX_MEGAPIXELS: existing.PHOTO_MAX_MEGAPIXELS ?? "80",
+    PHOTO_CONVERSION_ATTEMPTS: existing.PHOTO_CONVERSION_ATTEMPTS ?? "3",
+    PHOTO_ARCHIVE_ORIGINALS: existing.PHOTO_ARCHIVE_ORIGINALS ?? "true",
+    GALLERY_THUMB_WIDTH: existing.GALLERY_THUMB_WIDTH ?? "720",
+    GALLERY_THUMB_QUALITY: existing.GALLERY_THUMB_QUALITY ?? "82",
+    TODAY_DEFAULT_INTERVAL_MS: existing.TODAY_DEFAULT_INTERVAL_MS ?? "10000",
+    TODAY_REFRESH_MS: existing.TODAY_REFRESH_MS ?? "1000",
+    FRAME_AUTH_SESSION_SECRET: preserveSecret(existing.FRAME_AUTH_SESSION_SECRET, 32),
+    FRAME_AUTH_SESSION_DAYS: existing.FRAME_AUTH_SESSION_DAYS ?? "7",
     PORTAL_SERVICE_TOKEN: preserveSecret(existing.PORTAL_SERVICE_TOKEN, 32),
     PORTAL_USERNAME: existing.PORTAL_USERNAME ?? "",
     PORTAL_PASSWORD: existing.PORTAL_PASSWORD ?? "",
@@ -359,6 +434,15 @@ function validateEnvironment(env, config, forStart) {
   const audioMonitorPort = normalizePort(env.AUDIO_MONITOR_PORT, "Audio Monitor port");
   const streamsPort = normalizePort(env.STREAMS_PORT, "Stream Management port");
   const overlaysPort = normalizePort(env.OVERLAYS_PORT, "Overlay Wizard port");
+  const photoUploadPort = normalizePort(env.PHOTO_UPLOAD_PORT, "Photo Upload port");
+  const photoFtpPort = normalizePort(env.PHOTO_FTP_PORT, "Photo FTP port");
+  const galleryPort = normalizePort(env.GALLERY_PORT, "Photo Gallery port");
+  const todayPort = normalizePort(env.TODAY_PORT, "Today Tools port");
+  const photoFtpPassiveMin = normalizePort(env.PHOTO_FTP_PASSIVE_MIN, "Photo FTP passive minimum");
+  const photoFtpPassiveMax = normalizePort(env.PHOTO_FTP_PASSIVE_MAX, "Photo FTP passive maximum");
+  if (Number(photoFtpPassiveMin) > Number(photoFtpPassiveMax)) {
+    throw new Error("Photo FTP passive minimum cannot exceed its maximum.");
+  }
   const slsStatsPort = normalizePort(env.SLS_STATS_PORT, "SLS statistics port");
   const srtlaPort = normalizePort(env.SRTLA_PORT, "SRTLA port");
   const srtPlayerPort = normalizePort(env.SRT_PLAYER_PORT, "SRT player port");
@@ -370,6 +454,10 @@ function validateEnvironment(env, config, forStart) {
     ["Audio Monitor", audioMonitorPort, config.capabilities["frame-audio-relay"]],
     ["Stream Management", streamsPort, config.capabilities["frame-video-relay"]],
     ["Overlay Wizard", overlaysPort, config.capabilities["frame-overlays"]],
+    ["Photo Upload", photoUploadPort, config.capabilities["frame-photo-webupload"]],
+    ["Photo FTP", photoFtpPort, config.capabilities["frame-photo-ftp"]],
+    ["Photo Gallery", galleryPort, config.capabilities["frame-photo-gallery"]],
+    ["Today Tools", todayPort, config.capabilities["frame-photo-todaytools"]],
     ["SLS statistics", slsStatsPort, config.capabilities["frame-video-relay"]],
     ["SRTLA ingest", srtlaPort, config.capabilities["frame-video-relay"]],
     ["SRT player", srtPlayerPort, config.capabilities["frame-video-relay"]],
@@ -384,6 +472,13 @@ function validateEnvironment(env, config, forStart) {
   }
   assertCredentialPair(env.STREAMS_USERNAME, env.STREAMS_PASSWORD, "Stream Management");
   assertCredentialPair(env.OVERLAYS_USERNAME, env.OVERLAYS_PASSWORD, "Overlay Wizard");
+  if ((env.FRAME_AUTH_SESSION_SECRET ?? "").length < 32) {
+    throw new Error("FRAME_AUTH_SESSION_SECRET is missing or too short. Re-run stack install.");
+  }
+  const authSessionDays = Number.parseInt(String(env.FRAME_AUTH_SESSION_DAYS ?? ""), 10);
+  if (!Number.isInteger(authSessionDays) || String(authSessionDays) !== String(env.FRAME_AUTH_SESSION_DAYS) || authSessionDays < 1 || authSessionDays > 30) {
+    throw new Error("FRAME_AUTH_SESSION_DAYS must be an integer from 1 to 30.");
+  }
   if (!isHttpUrl(env.EDGE_PUBLIC_BASE_URL)) {
     throw new Error("EDGE_PUBLIC_BASE_URL must be a valid http:// or https:// URL.");
   }
@@ -398,6 +493,9 @@ function validateEnvironment(env, config, forStart) {
   }
   if (config.capabilities["frame-video-relay"] && !String(env.PUBLIC_RELAY_HOST ?? "").trim()) {
     throw new Error("PUBLIC_RELAY_HOST is required when the Video Relay is enabled.");
+  }
+  if (config.capabilities["frame-photo-ftp"] && String(env.PHOTO_FTP_PASSWORD ?? "").length < 12) {
+    throw new Error("PHOTO_FTP_PASSWORD is missing or too short. Re-run stack install.");
   }
   if (config.mode === "HYBRID") {
     const hostname = normalizeHostname(env.CLOUDFLARE_PUBLIC_HOSTNAME, true);
@@ -469,6 +567,23 @@ function validateConfig(config) {
   for (const prefix of config.public_route_prefixes) {
     validatePath(prefix, "Public route prefix");
   }
+}
+
+function upgradeExistingConfig(config) {
+  return {
+    ...config,
+    capabilities: {
+      ...Object.fromEntries(CAPABILITIES.map((name) => [name, false])),
+      ...(config?.capabilities ?? {}),
+    },
+    routes: {
+      ...ROUTES,
+      ...(config?.routes ?? {}),
+    },
+    public_route_prefixes: Array.isArray(config?.public_route_prefixes)
+      ? [...new Set([...config.public_route_prefixes, ...PUBLIC_PREFIXES])]
+      : [...PUBLIC_PREFIXES],
+  };
 }
 
 function generatePublicRoutes(prefixes) {
@@ -551,7 +666,7 @@ async function readStandardInput() {
 }
 
 async function ensureDataDirectories(dataRoot) {
-  for (const directory of ["state", "audio-bridge", "audio-monitor", "video-relay", "overlays", "logs", "archive", "quarantine"]) {
+  for (const directory of ["state", "audio-bridge", "audio-monitor", "video-relay", "overlays", "logs", "inbox", "staging", "processing", "galleries", "gallery-cache", "archive", "quarantine"]) {
     await mkdir(path.join(dataRoot, directory), { recursive: true });
   }
 }
@@ -792,14 +907,37 @@ function parseEnv(text) {
 
 function serializeEnv(env) {
   const sections = [
-    ["FRAME stack", ["FRAME_MODE", "FRAME_DATA_ROOT", "COMPOSE_PROFILES"]],
+    ["FRAME stack", ["FRAME_MODE", "FRAME_DATA_ROOT", "FRAME_HOST_DATA_ROOT", "TIMEZONE", "COMPOSE_PROFILES"]],
     ["FRAME Edge", ["EDGE_HTTP_PORT", "EDGE_PUBLIC_BASE_URL", "EDGE_LAN_BASE_URL"]],
+    ["FRAME Auth", ["FRAME_AUTH_SESSION_SECRET", "FRAME_AUTH_SESSION_DAYS"]],
     ["Cloudflare Tunnel", ["CLOUDFLARE_PUBLIC_HOSTNAME", "CLOUDFLARE_TUNNEL_ORIGIN"]],
     [
       "Direct service ports",
-      ["PORTAL_PORT", "AUDIO_BRIDGE_PORT", "AUDIO_MONITOR_PORT", "STREAMS_PORT", "OVERLAYS_PORT"],
+      ["PORTAL_PORT", "AUDIO_BRIDGE_PORT", "AUDIO_MONITOR_PORT", "STREAMS_PORT", "OVERLAYS_PORT", "PHOTO_UPLOAD_PORT", "PHOTO_FTP_PORT", "GALLERY_PORT", "TODAY_PORT"],
     ],
     ["Audio Monitor", ["AUDIO_PUBLIC_BASE_URL", "AUDIO_CAPTURE_BASE_URL"]],
+    [
+      "Photo workflow",
+      [
+        "PHOTO_FTP_PASSIVE_MIN",
+        "PHOTO_FTP_PASSIVE_MAX",
+        "PHOTO_FTP_PASSIVE_HOST",
+        "PHOTO_FTP_USERNAME",
+        "PHOTO_FTP_PASSWORD",
+        "PHOTO_FTP_STABLE_MS",
+        "PHOTO_FTP_SCAN_MS",
+        "PIPELINE_POLL_MS",
+        "PIPELINE_CONCURRENCY",
+        "PHOTO_MAX_INPUT_MB",
+        "PHOTO_MAX_MEGAPIXELS",
+        "PHOTO_CONVERSION_ATTEMPTS",
+        "PHOTO_ARCHIVE_ORIGINALS",
+        "GALLERY_THUMB_WIDTH",
+        "GALLERY_THUMB_QUALITY",
+        "TODAY_DEFAULT_INTERVAL_MS",
+        "TODAY_REFRESH_MS",
+      ],
+    ],
     [
       "Portal",
       [

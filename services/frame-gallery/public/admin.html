@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#071923">
+    <title>FRAME Gallery Admin</title>
+    <link rel="icon" href="/gallery/assets/frame-logo-square.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/gallery/assets/admin.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/today/gallery" aria-label="Open FRAME Photo Gallery">
+        <img src="/gallery/assets/frame-logo-square.svg" alt="">
+        <span><small>Syronius FRAME</small><strong>Gallery Admin</strong></span>
+      </a>
+      <div class="header-actions">
+        <a class="icon-button" href="/today/gallery" aria-label="Open gallery" title="Open gallery">▦</a>
+        <button id="refresh" class="icon-button" type="button" aria-label="Refresh gallery" title="Refresh">↻</button>
+        <a class="icon-button" href="/auth/logout" aria-label="Sign out of FRAME" title="Sign out">⇥</a>
+      </div>
+    </header>
+
+    <main>
+      <section class="page-heading">
+        <div>
+          <p>Protected photo management</p>
+          <h1>Gallery Admin</h1>
+          <span id="summary">Loading photo library...</span>
+        </div>
+        <span id="status" class="status">Connecting</span>
+      </section>
+
+      <nav class="tabs" aria-label="Gallery management views">
+        <button id="published-tab" type="button" aria-pressed="true">Published <strong id="published-count">0</strong></button>
+        <button id="trash-tab" type="button" aria-pressed="false">Trash <strong id="trash-count">0</strong></button>
+      </nav>
+
+      <section id="published-view">
+        <div id="albums" class="album-list"></div>
+        <section id="album-detail" class="album-detail" hidden>
+          <div class="section-heading">
+            <div><p>Published album</p><h2 id="album-title"></h2><span id="album-summary"></span></div>
+            <button id="trash-album" class="danger-button" type="button">Move album to trash</button>
+          </div>
+          <div id="photos" class="photo-grid"></div>
+        </section>
+      </section>
+
+      <section id="trash-view" hidden>
+        <div class="section-heading">
+          <div><p>Recoverable publications</p><h2>Trash</h2><span>Restore keeps .ready untouched. Permanent deletion removes the published gallery copy; archived sources follow retention policy.</span></div>
+          <button id="empty-trash" class="danger-button" type="button">Empty trash</button>
+        </div>
+        <div id="trash-albums" class="trash-list"></div>
+      </section>
+
+      <section id="empty" class="empty" hidden>
+        <strong>Nothing here</strong>
+        <span>This view has no photos to manage.</span>
+      </section>
+    </main>
+
+    <template id="album-template">
+      <article class="album-card">
+        <button class="album-open" type="button">
+          <img alt="" loading="lazy">
+          <span><strong></strong><small></small></span>
+        </button>
+        <button class="album-trash icon-action" type="button">Move to trash</button>
+      </article>
+    </template>
+
+    <template id="photo-template">
+      <article class="photo-card">
+        <img alt="" loading="lazy">
+        <span><strong></strong><small></small></span>
+        <button class="danger-button" type="button">Trash</button>
+      </article>
+    </template>
+
+    <template id="trash-album-template">
+      <article class="trash-album">
+        <div class="trash-album-heading">
+          <div><strong></strong><small></small></div>
+          <div>
+            <button class="restore-button restore-album" type="button">Restore album</button>
+            <button class="danger-button purge-album" type="button">Delete published copies</button>
+          </div>
+        </div>
+        <div class="trash-photo-grid"></div>
+      </article>
+    </template>
+
+    <template id="trash-photo-template">
+      <article class="trash-photo">
+        <img alt="" loading="lazy">
+        <span><strong></strong><small></small></span>
+        <div>
+          <button class="restore-button restore-photo" type="button">Restore</button>
+          <button class="danger-button purge-photo" type="button">Delete published copy</button>
+        </div>
+      </article>
+    </template>
+
+    <script type="module" src="/gallery/assets/admin.js"></script>
+  </body>
+</html>

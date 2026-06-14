@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#071923">
+    <title>FRAME Photo Upload</title>
+    <link rel="icon" href="/photos/assets/frame-logo-square.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/photos/assets/styles.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <img class="logo" src="/photos/assets/frame-logo-square.svg" alt="">
+        <div><p>Syronius FRAME</p><h1>Photo Upload</h1></div>
+      </header>
+      <form id="upload-form">
+        <label class="drop" for="photo">
+          <strong>Select photos</strong>
+          <span>JPEG, PNG, WebP, TIFF, HEIC, and HEIF files are queued one at a time.</span>
+          <input id="photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp,image/tiff,image/heic,image/heif" multiple required>
+        </label>
+        <div class="queue-heading">
+          <strong>Upload queue</strong>
+          <span id="selection">No photos selected</span>
+        </div>
+        <ol id="queue" class="queue"></ol>
+        <button id="upload-button" type="submit">Upload to FRAME</button>
+        <p id="status" role="status"></p>
+      </form>
+    </main>
+    <template id="queue-template">
+      <li class="queue-item">
+        <div class="file-row"><strong></strong><span class="file-state">Ready</span></div>
+        <div class="progress-row">
+          <progress max="100" value="0"></progress>
+          <span class="progress-label">0% · 0 B</span>
+        </div>
+      </li>
+    </template>
+    <script src="/photos/assets/upload.js"></script>
+  </body>
+</html>

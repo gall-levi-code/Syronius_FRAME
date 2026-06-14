@@ -1,0 +1,28 @@
+{
+  "name": "frame-photo-upload",
+  "version": "0.1.0",
+  "description": "Portal-authenticated mobile and browser photo input for FRAME.",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --test tests/upload.test.mjs"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "busboy": "^1.6.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.1"
+  },
+  "devDependencies": {
+    "@types/busboy": "^1.5.4",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.9.0",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=22.12"
+  }
+}

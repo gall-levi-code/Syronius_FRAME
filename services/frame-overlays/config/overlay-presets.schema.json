@@ -478,7 +478,7 @@
         "show_thumbnail": {
           "type": "boolean",
           "default": false,
-          "description": "Show a small thumbnail of the latest photo. Sourced from the SFPG-generated thumb for <base>.jpg. Best-effort: no thumbnail shown if the thumb does not yet exist."
+          "description": "Show a small thumbnail of the latest photo. Sourced from the FRAME Gallery thumbnail route. Best-effort: no thumbnail shown if the thumb does not yet exist."
         },
         "thumbnail_size_px": {
           "type": "integer",

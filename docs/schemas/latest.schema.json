@@ -8,7 +8,7 @@
     "updated_at": {
       "type": "string",
       "format": "date-time",
-      "description": "ISO 8601 UTC timestamp of the most recent successful publish. e.g. 2025-12-29T03:14:07Z"
+      "description": "ISO 8601 UTC revision timestamp. Advances after every publish, trash, restore, or permanent deletion so consumers refresh visible state."
     },
     "date_folder": {
       "type": "string",
@@ -22,7 +22,12 @@
     "count_today": {
       "type": "integer",
       "minimum": 0,
-      "description": "Total images successfully published today."
+      "description": "Total visible published images in date_folder."
+    },
+    "latest_photo_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Original publication time for latest_base. Unlike updated_at, management changes do not make this look newer."
     }
   }
 }
