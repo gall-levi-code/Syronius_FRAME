@@ -119,6 +119,7 @@ h3 {
   height: 38px;
   flex: 0 0 auto;
   place-items: center;
+  text-decoration: none;
   border: 1px solid var(--frame-border);
   border-radius: 7px;
   background: var(--frame-panel);

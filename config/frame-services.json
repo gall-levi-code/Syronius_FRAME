@@ -33,19 +33,19 @@
       "requiresAny": []
     },
     "frame-photo-gallery": {
-      "implemented": false,
+      "implemented": true,
       "profiles": ["photo-pipeline", "photo-gallery"],
       "requires": [],
       "requiresAny": ["frame-photo-ftp", "frame-photo-webupload"]
     },
     "frame-photo-ftp": {
-      "implemented": false,
+      "implemented": true,
       "profiles": ["photo-pipeline", "photo-ftp"],
       "requires": [],
       "requiresAny": []
     },
     "frame-photo-webupload": {
-      "implemented": false,
+      "implemented": true,
       "profiles": ["photo-pipeline", "photo-webupload"],
       "requires": [],
       "requiresAny": []
@@ -57,9 +57,9 @@
       "requiresAny": ["frame-photo-ftp", "frame-photo-webupload"]
     },
     "frame-photo-todaytools": {
-      "implemented": false,
+      "implemented": true,
       "profiles": ["photo-pipeline", "photo-today"],
-      "requires": [],
+      "requires": ["frame-photo-gallery"],
       "requiresAny": ["frame-photo-ftp", "frame-photo-webupload"]
     },
     "frame-overlays": {
@@ -70,6 +70,11 @@
     }
   },
   "internalServices": {
+    "frame-auth": {
+      "profile": null,
+      "userSelectable": false,
+      "activation": "Always enabled to provide shared login sessions for protected FRAME routes."
+    },
     "frame-pipeline-photos": {
       "profile": "photo-pipeline",
       "userSelectable": false,
@@ -82,7 +87,8 @@
     "video_relay_ui": "/slsui",
     "overlays_root": "/overlays",
     "overlays_wizard": "/overlays/setup",
-    "photo_gallery": "/gallery",
+    "photo_upload": "/photos/upload",
+    "photo_gallery": "/today/gallery",
     "today_gallery": "/today/gallery",
     "today_viewer": "/today/viewer",
     "today_remote": "/today/remote",
@@ -93,12 +99,14 @@
     "discord_audio_bridge_root": "/bridge"
   },
   "publicRoutes": [
+    { "prefix": "/auth", "capability": null },
     { "prefix": "/dashboard", "capability": null },
     { "prefix": "/status", "capability": null },
     { "prefix": "/assets", "capability": null },
     { "prefix": "/api/portal", "capability": null },
     { "prefix": "/overlays/view", "capability": "frame-overlays" },
     { "prefix": "/overlays/assets", "capability": "frame-overlays" },
+    { "prefix": "/photos", "capability": "frame-photo-webupload" },
     { "prefix": "/today", "capability": "frame-photo-todaytools" },
     { "prefix": "/gallery", "capability": "frame-photo-gallery" },
     { "prefix": "/audio/listen", "capability": "frame-audio-relay" },

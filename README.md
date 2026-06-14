@@ -17,6 +17,11 @@ Syronius’ Frame (F.R.A.M.E.) is a modular, containerized IRL streamer applianc
 - `services/frame-ingest-video/` — Pinned OpenIRL SRTLA receiver wrapper with deterministic FRAME API-key seeding.
 - `services/frame-streams/` — FRAME-owned stream profile management and live relay telemetry UI.
 - `services/frame-overlays/` — Stable OBS connectivity overlays and mobile-friendly preset wizard.
+- `services/frame-pipeline-photos/` — Internal photo validation, normalization, and publication pipeline.
+- `services/frame-photo-upload/` — Portal-authenticated mobile and browser photo upload input.
+- `services/frame-photo-ftp/` — Camera FTP input with a completed-upload stability gate.
+- `services/frame-gallery/` — Published photo gallery with cached thumbnails and protected Gallery Admin.
+- `services/frame-today/` — OBS photo viewer, live camera information, and authenticated mobile remote.
 - `docker_container_samples/` — Reference container examples that are not yet first-class FRAME services.
 
 ## Implemented Services
@@ -36,6 +41,11 @@ an internal-only generated public gateway before FRAME Edge, keeping LAN-only ro
 
 `services/frame-portal/` is the shared FRAME dashboard and observability service. It builds navigation
 from `stack-config.json`, reports container and disk health, and streams container logs.
+
+Protected tools reached through FRAME Edge redirect to the shared `/auth/login` page. One successful
+Portal login unlocks protected FRAME panels on the same hostname for seven days by default, then
+returns the browser to the originally requested page. Public OBS, listener, gallery, viewer, and
+tokenized routes remain login-free.
 
 ```bash
 cd services/frame-portal
@@ -93,6 +103,45 @@ Open Stream Management at `http://localhost/slsui` and the Overlay Wizard at
 `http://localhost/overlays/setup`. Direct development ports `3732` and `3733` remain available.
 The relay exposes SRTLA on `5000/udp`, SRT player output on
 `4000/udp`, direct SRT publisher ingest on `4001/udp`, and receiver statistics on `8080/tcp`.
+
+### FRAME Photo Inputs And Pipeline
+
+The internal Photo Pipeline is activated automatically when either photo input is enabled. Manual
+uploads stream to disk before entering staging; FTP uploads remain in the inbox until unchanged for
+three seconds. FTP remains LAN-only; browser upload can be exposed in Hybrid mode behind Portal authentication.
+
+```bash
+stack.cmd install --enable frame-photo-webupload --enable frame-photo-ftp
+stack.cmd start
+```
+
+Open the Portal-authenticated manual upload queue at `http://localhost/photos/upload`. Configure cameras with the generated
+`PHOTO_FTP_USERNAME`, `PHOTO_FTP_PASSWORD`, FTP port, and passive port range from `.env`.
+
+Enable the gallery alongside either photo input:
+
+```bash
+stack.cmd install --enable frame-photo-webupload --enable frame-photo-gallery
+stack.cmd start
+```
+
+Open the multi-day gallery at `http://localhost/today/gallery`.
+Manage individual photos, complete albums, and the reversible trash at
+`http://localhost/today/gallery/admin`. Restoring a photo preserves its original `.ready` receipt,
+so it does not create a second StreamerBot event.
+
+Enable Today Tools with the Gallery and either photo input:
+
+```bash
+stack.cmd install --enable frame-photo-webupload --enable frame-photo-gallery --enable frame-photo-todaytools
+stack.cmd start
+```
+
+Open the OBS viewer at `http://localhost/today/viewer`, its phone controller at
+`http://localhost/today/remote`, and the multi-day gallery at `http://localhost/today/gallery`.
+The upload page and remote controller use the configured Portal login.
+The viewer displays camera and exposure information extracted by the Photo Pipeline when EXIF is
+available.
 
 ## Unified installer
 

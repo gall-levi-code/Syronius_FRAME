@@ -49,11 +49,17 @@ test("portal routes and implemented Compose profiles stay aligned with the regis
 
 test("implemented Node services expose build and typecheck scripts", async () => {
   for (const service of [
+    "frame-auth",
     "frame-audio",
     "frame-audio-bridge",
     "frame-overlays",
     "frame-portal",
     "frame-streams",
+    "frame-pipeline-photos",
+    "frame-photo-upload",
+    "frame-photo-ftp",
+    "frame-gallery",
+    "frame-today",
   ]) {
     const manifest = JSON.parse(await readFile(`services/${service}/package.json`, "utf8"));
     assert.equal(typeof manifest.scripts?.build, "string", `${service} is missing build`);
@@ -69,17 +75,28 @@ test("implemented capability profiles are stable and ordered", () => {
     "audio-monitor",
     "video-relay",
     "overlays",
+    "photo-pipeline",
+    "photo-ftp",
+    "photo-webupload",
+    "photo-gallery",
+    "photo-today",
   ]);
   assert.deepEqual(computeComposeProfiles(capabilities, "HYBRID"), [
     "audio-bridge",
     "audio-monitor",
     "video-relay",
     "overlays",
+    "photo-pipeline",
+    "photo-ftp",
+    "photo-webupload",
+    "photo-gallery",
+    "photo-today",
     "hybrid",
   ]);
 });
 
 test("photo pipeline is internal and activated by every photo capability", () => {
+  assert.equal(SERVICE_REGISTRY.internalServices["frame-auth"].userSelectable, false);
   assert.equal(SERVICE_REGISTRY.internalServices["frame-pipeline-photos"].userSelectable, false);
   for (const [name, definition] of Object.entries(SERVICE_REGISTRY.capabilities)) {
     if (!name.startsWith("frame-photo-")) continue;
@@ -87,14 +104,26 @@ test("photo pipeline is internal and activated by every photo capability", () =>
   }
 });
 
-test("dependency enforcement disables overlays without relay and photo outputs without inputs", () => {
+test("shared login route is always available through Hybrid routing", () => {
+  assert.ok(PUBLIC_PREFIXES.includes("/auth"));
+  const capabilities = Object.fromEntries(CAPABILITIES.map((name) => [name, false]));
+  assert.ok(computeEffectivePublicPrefixes({
+    mode: "HYBRID",
+    capabilities,
+    public_route_prefixes: [...PUBLIC_PREFIXES],
+  }).includes("/auth"));
+});
+
+test("dependency enforcement disables overlays and photo outputs with missing dependencies", () => {
   const capabilities = Object.fromEntries(CAPABILITIES.map((name) => [name, false]));
   capabilities["frame-overlays"] = true;
   capabilities["frame-photo-gallery"] = true;
+  capabilities["frame-photo-todaytools"] = true;
   const warnings = enforceDependencies(capabilities);
   assert.equal(capabilities["frame-overlays"], false);
   assert.equal(capabilities["frame-photo-gallery"], false);
-  assert.equal(warnings.length, 2);
+  assert.equal(capabilities["frame-photo-todaytools"], false);
+  assert.equal(warnings.length, 3);
 });
 
 test("hybrid exposure removes forbidden and disabled capability routes", () => {

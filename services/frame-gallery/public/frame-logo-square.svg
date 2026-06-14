@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 800.88 800">
+  <!-- Generator: Adobe Illustrator 30.5.1, SVG Export Plug-In . SVG Version: 2.1.4 Build 3)  -->
+  <defs>
+    <style>
+      .st0, .st1 {
+        fill: #231f20;
+      }
+
+      .st2, .st3, .st4 {
+        fill: none;
+      }
+
+      .st5 {
+        fill: #4cb0e3;
+      }
+
+      .st6 {
+        display: none;
+      }
+
+      .st3 {
+        stroke-width: .5px;
+      }
+
+      .st3, .st4 {
+        stroke: #231f20;
+        stroke-miterlimit: 10;
+      }
+
+      .st1 {
+        font-family: MyriadPro-Regular, 'Myriad Pro';
+        font-size: 14px;
+      }
+    </style>
+  </defs>
+  <g id="Layer_1">
+    <path class="st5" d="M330.88.06H22.82C10.24,0,0,10.74,0,24.02v751.96c0,13.23,10.17,23.96,22.71,23.96l247.49.06,27.76-83.77-211.46.86V85.38l216.39,1.01L330.88.06Z"/>
+    <polygon class="st5" points="393.88 0 800.88 0 746.61 181.88 334.71 181.88 393.88 0"/>
+    <path class="st5" d="M800.88,491.26v284.78c0,13.23-10.17,23.96-22.71,23.96h-442.93l28.02-83.93h353.98v-224.81h83.65Z"/>
+    <polygon class="st5" points="317.7 244.54 731.94 244.54 679.95 428.76 393.44 428.76 318.31 654.98 172.75 654.98 317.7 244.54"/>
+    <line class="st2" x1="393.44" y1="428.76" x2="271.32" y2="796.44"/>
+    <line class="st2" x1="86.5" y1="716.58" x2="717.23" y2="715.56"/>
+  </g>
+  <g id="Dimensions" class="st6">
+    <g id="Manual_Dimension">
+      <line class="st3" x1="516.88" y1="244.54" x2="174.75" y2="244.54"/>
+      <line class="st3" x1="505.48" y1="181.88" x2="174.75" y2="181.88"/>
+      <text class="st1" transform="translate(174.75 239.78) rotate(-90)"><tspan x="0" y="0" xml:space="preserve"> 62.67 pt </tspan></text>
+      <g>
+        <line class="st4" x1="183.75" y1="189.05" x2="183.75" y2="237.37"/>
+        <polygon class="st0" points="178.76 190.51 183.75 181.88 188.73 190.51 178.76 190.51"/>
+        <polygon class="st0" points="178.76 235.91 183.75 244.54 188.73 235.91 178.76 235.91"/>
+      </g>
+    </g>
+    <g id="Manual_Dimension1" data-name="Manual_Dimension">
+      <line class="st3" x1="379.72" y1="48.53" x2="379.72" y2="217.2"/>
+      <line class="st3" x1="317.35" y1="46.81" x2="317.35" y2="217.2"/>
+      <text class="st1" transform="translate(321.97 226.46)"><tspan x="0" y="0" xml:space="preserve"> 62.37 pt </tspan></text>
+      <g>
+        <line class="st4" x1="324.52" y1="208.2" x2="372.54" y2="208.2"/>
+        <polygon class="st0" points="325.98 213.19 317.35 208.2 325.98 203.22 325.98 213.19"/>
+        <polygon class="st0" points="371.08 213.19 379.72 208.2 371.08 203.22 371.08 213.19"/>
+      </g>
+    </g>
+    <g id="Manual_Dimension2" data-name="Manual_Dimension">
+      <line class="st3" x1="627.75" y1="428.76" x2="633.78" y2="428.76"/>
+      <line class="st3" x1="615.72" y1="491.26" x2="633.78" y2="491.26"/>
+      <text class="st1" transform="translate(615.78 482.98) rotate(-90)"><tspan x="0" y="0" xml:space="preserve"> 62.5 pt </tspan></text>
+      <g>
+        <line class="st4" x1="624.78" y1="484.09" x2="624.78" y2="435.93"/>
+        <polygon class="st0" points="629.77 482.63 624.78 491.26 619.79 482.63 629.77 482.63"/>
+        <polygon class="st0" points="629.77 437.39 624.78 428.76 619.79 437.39 629.77 437.39"/>
+      </g>
+    </g>
+    <g id="Manual_Dimension3" data-name="Manual_Dimension">
+      <line class="st3" x1="231.66" y1="716.48" x2="131.33" y2="716.48"/>
+      <line class="st3" x1="230.66" y1="654.98" x2="131.33" y2="654.98"/>
+      <text class="st1" transform="translate(131.33 708.7) rotate(-90)"><tspan x="0" y="0" xml:space="preserve"> 61.5 pt </tspan></text>
+      <g>
+        <line class="st4" x1="140.33" y1="662.15" x2="140.33" y2="709.3"/>
+        <polygon class="st0" points="135.34 663.61 140.33 654.98 145.32 663.61 135.34 663.61"/>
+        <polygon class="st0" points="135.34 707.84 140.33 716.48 145.32 707.84 135.34 707.84"/>
+      </g>
+    </g>
+  </g>
+</svg>

@@ -70,6 +70,7 @@
         "video_relay_ui",
         "overlays_root",
         "overlays_wizard",
+        "photo_upload",
         "photo_gallery",
         "today_gallery",
         "today_viewer",
@@ -98,6 +99,10 @@
           "pattern": "^/"
         },
         "overlays_wizard": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "photo_upload": {
           "type": "string",
           "pattern": "^/"
         },

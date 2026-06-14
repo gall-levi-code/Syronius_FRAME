@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#071923">
+    <title>FRAME Today Remote</title>
+    <link rel="icon" href="/today/assets/frame-logo-square.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/today/assets/today.css">
+  </head>
+  <body class="remote-page">
+    <span id="remote-connection" class="connection-led" role="status" aria-label="Connecting" title="Connecting"></span>
+    <main class="remote-main">
+      <section class="current-card">
+        <div id="remote-preview" class="remote-preview">
+          <img id="remote-image" alt="" hidden>
+          <span id="remote-empty">Waiting for a published photo</span>
+          <button data-command="PREV" class="preview-nav previous" type="button" aria-label="Previous photo">&larr;</button>
+          <button data-command="NEXT" class="preview-nav next" type="button" aria-label="Next photo">&rarr;</button>
+          <span id="playback-progress" class="playback-progress" hidden></span>
+        </div>
+        <div class="current-copy">
+          <span id="position">0 of 0</span>
+          <strong id="current-name">No photo selected</strong>
+          <pre id="remote-camera"></pre>
+        </div>
+      </section>
+
+      <section class="control-panel">
+        <div class="playback-controls">
+          <button id="play" class="play" type="button" aria-label="Play slideshow">&#9654; Play</button>
+          <button id="pause" class="pause" type="button" aria-label="Pause slideshow">&#10074;&#10074; Pause</button>
+          <button id="stop" class="stop" type="button" aria-label="Stop slideshow">&#9632; Stop</button>
+        </div>
+        <button id="auto-scroll" class="auto-scroll-button" type="button">Scroll image once</button>
+        <label class="slider-row" for="interval">
+          <span><strong>Image duration</strong><output id="interval-value">10 seconds</output></span>
+          <input id="interval" type="range" min="1" max="120" step="1" value="10">
+        </label>
+        <div class="toggle-row">
+          <button id="exif-toggle" class="toggle-button" type="button" aria-pressed="true">Camera info</button>
+          <button id="thumbnails-toggle" class="toggle-button" type="button" aria-pressed="false">Thumbnails</button>
+        </div>
+      </section>
+
+      <section id="thumbnail-section" class="thumbnail-section" hidden>
+        <div class="section-heading">
+          <strong>Today's photos</strong>
+          <span id="photo-count">0 photos</span>
+        </div>
+        <div id="thumbnails" class="thumbnail-list"></div>
+      </section>
+      <p id="remote-message" class="remote-message" role="status"></p>
+    </main>
+    <script type="module" src="/today/assets/remote.js"></script>
+  </body>
+</html>

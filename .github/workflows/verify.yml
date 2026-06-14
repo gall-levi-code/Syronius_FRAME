@@ -26,6 +26,11 @@ jobs:
           - frame-overlays
           - frame-portal
           - frame-streams
+          - frame-pipeline-photos
+          - frame-photo-upload
+          - frame-photo-ftp
+          - frame-gallery
+          - frame-today
     defaults:
       run:
         working-directory: services/${{ matrix.service }}
@@ -39,5 +44,5 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
-      - if: matrix.service == 'frame-audio'
+      - if: contains(fromJSON('["frame-audio","frame-pipeline-photos","frame-photo-upload","frame-photo-ftp","frame-gallery","frame-today"]'), matrix.service)
         run: npm test

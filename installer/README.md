@@ -9,6 +9,7 @@ Docker Compose v2 installation for container lifecycle commands.
 The installer currently deploys the implemented FRAME services:
 
 - `frame-edge`
+- `frame-auth`
 - `frame-public-gateway` (Hybrid only)
 - `frame-tunnel` (Hybrid only)
 - `frame-portal`
@@ -17,6 +18,11 @@ The installer currently deploys the implemented FRAME services:
 - `frame-ingest-video`
 - `frame-streams`
 - `frame-overlays`
+- `frame-pipeline-photos` (automatic internal dependency)
+- `frame-photo-upload`
+- `frame-photo-ftp`
+- `frame-gallery`
+- `frame-today`
 
 Fresh installs enable the shared Edge and Portal only. Every optional capability is opt-in and must
 be explicitly enabled with `stack install --enable <capability>`.
@@ -32,6 +38,8 @@ Current limitations:
   still planned.
 - Data roots are repository-relative until cross-platform external-volume reset boundaries are
   defined.
+- Photo `.ready` manifests use `FRAME_HOST_DATA_ROOT`; set it to the host-visible data directory
+  before connecting host-side StreamerBot actions.
 
 ## Commands
 
@@ -39,6 +47,9 @@ Current limitations:
 .\stack.cmd install
 .\stack.cmd install --enable frame-audio-relay
 .\stack.cmd install --enable frame-video-relay --enable frame-overlays
+.\stack.cmd install --enable frame-photo-webupload --enable frame-photo-ftp
+.\stack.cmd install --enable frame-photo-webupload --enable frame-photo-gallery
+.\stack.cmd install --enable frame-photo-webupload --enable frame-photo-gallery --enable frame-photo-todaytools
 .\stack.cmd hybrid-stage
 .\stack.cmd validate
 .\stack.cmd verify
@@ -63,6 +74,35 @@ Audio Bridge configuration, place its ignored `.env` inside the repository and i
 
 The import accepts Audio Bridge settings only. It does not allow an imported file to replace
 installer-owned mode, capability, port, or Portal security configuration.
+
+## Shared portal login
+
+Protected FRAME routes use `/auth/login` through FRAME Edge. A successful Portal login creates one
+signed, `HttpOnly` session cookie for the current hostname and returns the browser to its original
+URL. The session lasts seven days by default and unlocks all protected panels on that hostname.
+Change `FRAME_AUTH_SESSION_DAYS` in `.env` to a value from 1 to 30, then restart the stack.
+
+Public OBS viewers, gallery pages, overlay views, listener links, and tokenized Audio Bridge pages
+do not require this shared login. Direct service ports retain their existing service-level
+authentication behavior.
+
+## Photo FTP credentials and persisted galleries
+
+When `frame-photo-ftp` is enabled, `stack install` writes `PHOTO_FTP_USERNAME` and a generated
+`PHOTO_FTP_PASSWORD` into the repository root `.env`. Re-running the installer preserves both
+values. The correct variable name is `PHOTO_FTP_USERNAME`; `PHOTO_FTP_USERNAEM` is not recognized.
+
+The FTP credentials only authorize camera uploads. Published photos and Today/Gallery state live
+under `FRAME_DATA_ROOT` (normally `./data`) and are not stored in the container image. Relaunch the
+photo services through the generated Compose stack so these persistent mounts remain attached:
+
+```powershell
+.\stack.cmd start
+```
+
+Starting `frame-today` or `frame-gallery` directly from an image without the generated mounts
+creates an empty view. `frame-today` requires the persisted `galleries` and `state` directories,
+while `frame-gallery` requires `galleries` and its thumbnail cache.
 
 ## Staging Hybrid mode
 
