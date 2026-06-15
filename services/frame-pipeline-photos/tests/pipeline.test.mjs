@@ -1,10 +1,26 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { watch } from "node:fs";
+import { mkdir, mkdtemp, readFile, readdir, readlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import sharp from "sharp";
+import { atomicWrite } from "../dist/fsUtils.js";
 import { PhotoPipeline } from "../dist/pipeline.js";
+
+test("atomic manifest publication never exposes a temporary name containing .ready", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-pipeline-"));
+  const observed = [];
+  const watcher = watch(root, (_event, filename) => observed.push(String(filename)));
+
+  await atomicWrite(path.join(root, "photo.ready"), "complete\n");
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  watcher.close();
+
+  assert.ok(observed.includes("photo.ready"));
+  assert.equal(observed.some((filename) => filename !== "photo.ready" && filename.includes(".ready")), false);
+  assert.deepEqual(await readdir(root), ["photo.ready"]);
+});
 
 test("publishes a valid staged image with ready last and latest state", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-pipeline-"));
@@ -24,6 +40,17 @@ test("publishes a valid staged image with ready last and latest state", async ()
   assert.equal(await readFile(path.join(root, "galleries", latest.date_folder, `${latest.latest_base}.orientation`), "utf8"), "1\n");
   assert.equal(latest.count_today, 1);
   assert.equal((await readdir(path.join(root, "archive", latest.date_folder))).length, 1);
+  assert.equal(await readlink(path.join(root, "today")), path.join("galleries", latest.date_folder));
+  assert.equal(
+    await readFile(path.join(root, "today", `${latest.latest_base}.ready`), "utf8"),
+    await readFile(path.join(root, "galleries", latest.date_folder, `${latest.latest_base}.ready`), "utf8"),
+  );
+  const manifest = (await readFile(path.join(root, "today", `${latest.latest_base}.ready`), "utf8")).trimEnd().split("\n");
+  assert.equal(manifest.length, 3);
+  assert.equal(path.basename(manifest[0], ".jpg"), latest.latest_base);
+  assert.equal(path.basename(manifest[1], ".txt"), latest.latest_base);
+  await readFile(manifest[0]);
+  await readFile(manifest[1]);
 
   await pipeline.processOnce();
   assert.equal((await readdir(path.join(root, "galleries", latest.date_folder))).filter((name) => name.endsWith(".ready")).length, 1);
@@ -74,7 +101,7 @@ test("recovers a ready publication without publishing the claimed source twice",
   await pipeline.init();
   const originalName = "Recovered Photo.png";
   const claim = path.join(root, "processing", `job-recovery--${Buffer.from(originalName).toString("base64url")}`);
-  const dateFolder = "2026-06-13";
+  const dateFolder = currentDateFolder();
   const base = "Recovered_Photo_2026-06-13_01_02_03";
   const gallery = path.join(root, "galleries", dateFolder);
   await Promise.all([mkdir(claim, { recursive: true }), mkdir(gallery, { recursive: true })]);
@@ -139,6 +166,7 @@ test("trash and restore preserve ready while every management change advances la
   const purged = await pipeline.managePhotos("purge-photo", published.date_folder, published.latest_base);
   assert.equal(purged.latest_base, null);
   await assert.rejects(readFile(ready, "utf8"));
+  assert.equal(await readlink(path.join(root, "today")), path.join("galleries", published.date_folder));
 });
 
 test("trashing the latest photo recalculates latest_base to the newest visible publication", async () => {
@@ -179,4 +207,13 @@ function config(dataRoot) {
     conversionAttempts: 3,
     archiveOriginals: true,
   };
+}
+
+function currentDateFolder() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }

@@ -95,6 +95,10 @@ export function createApp(config: AuthConfig): Express {
     response.redirect(303, "/auth/login");
   });
 
+  app.all("/auth/public-denied", (_request, response) => {
+    response.status(404).type("text").send("Not found.");
+  });
+
   return app;
 }
 
@@ -149,7 +153,7 @@ function forwardedValue(request: Request, name: string): string {
 }
 
 function returnTarget(value: string | undefined): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//") || value.startsWith("/auth")) return "/dashboard";
+  if (!value || value === "/" || !value.startsWith("/") || value.startsWith("//") || value.startsWith("/auth")) return "/dashboard";
   return value;
 }
 

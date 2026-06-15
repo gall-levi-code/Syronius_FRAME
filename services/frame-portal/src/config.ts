@@ -5,6 +5,7 @@ import type { FrameMode } from "./types";
 export interface AppConfig {
   port: number;
   mode: FrameMode;
+  publicHostname?: string;
   dataRoot: string;
   stackConfigPath: string;
   dockerHost?: string;
@@ -71,6 +72,7 @@ export function loadConfig(): AppConfig {
   return {
     port: readInt("PORT", 3730, 1),
     mode,
+    publicHostname: process.env.CLOUDFLARE_PUBLIC_HOSTNAME?.trim().toLowerCase() || undefined,
     dataRoot,
     stackConfigPath: path.resolve(
       process.env.STACK_CONFIG_PATH?.trim() || path.join(dataRoot, "state", "stack-config.json"),

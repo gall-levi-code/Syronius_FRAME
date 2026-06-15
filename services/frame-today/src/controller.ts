@@ -5,7 +5,8 @@ export type TodayCommand =
   | { type: "NEXT" | "PREV" | "PLAY_SLIDESHOW" | "PAUSE_SLIDESHOW" | "STOP_SLIDESHOW" | "AUTO_SCROLL_IMAGE" }
   | { type: "SET_INTERVAL_MS"; interval_ms: number }
   | { type: "GOTO_INDEX"; index: number }
-  | { type: "SET_SHOW_EXIF"; show_exif: boolean };
+  | { type: "SET_SHOW_EXIF"; show_exif: boolean }
+  | { type: "SET_SHOW_BACKGROUND"; show_background: boolean };
 
 export type PlaybackState = "playing" | "paused" | "stopped";
 export type PresentationMode = "default" | "auto-scroll";
@@ -29,6 +30,7 @@ export interface TodayState {
   presentation_duration_ms: number;
   count_today: number;
   show_exif: boolean;
+  show_background: boolean;
   current_photo: TodayPhoto | null;
   photos: Array<Pick<TodayPhoto, "base" | "filename" | "thumbnail_url" | "processed_at">>;
 }
@@ -43,6 +45,7 @@ export class TodayController {
   private presentationMode: PresentationMode = "default";
   private presentationStartedAt: string | null = null;
   private showExif = true;
+  private showBackground = true;
   private revision = 0;
   private slideshowTimer: NodeJS.Timeout | null = null;
   private presentationTimer: NodeJS.Timeout | null = null;
@@ -97,6 +100,7 @@ export class TodayController {
       presentation_duration_ms: 7_000,
       count_today: this.photos.length,
       show_exif: this.showExif,
+      show_background: this.showBackground,
       current_photo: photo,
       photos: this.photos.map(({ base, filename, thumbnail_url, processed_at }) => ({
         base,
@@ -160,6 +164,11 @@ export class TodayController {
       case "SET_SHOW_EXIF":
         if (typeof command.show_exif !== "boolean") throw new TodayCommandError("show_exif must be a boolean.");
         this.showExif = command.show_exif;
+        this.emit();
+        break;
+      case "SET_SHOW_BACKGROUND":
+        if (typeof command.show_background !== "boolean") throw new TodayCommandError("show_background must be a boolean.");
+        this.showBackground = command.show_background;
         this.emit();
         break;
     }
@@ -244,6 +253,10 @@ export function parseCommand(value: unknown): TodayCommand {
   if (command.type === "SET_SHOW_EXIF") {
     if (typeof command.show_exif !== "boolean") throw new TodayCommandError("show_exif must be a boolean.");
     return { type: command.type, show_exif: command.show_exif };
+  }
+  if (command.type === "SET_SHOW_BACKGROUND") {
+    if (typeof command.show_background !== "boolean") throw new TodayCommandError("show_background must be a boolean.");
+    return { type: command.type, show_background: command.show_background };
   }
   throw new TodayCommandError("Unknown command.");
 }

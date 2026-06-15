@@ -16,7 +16,7 @@ elements.refresh.addEventListener("click", refresh);
 elements.published_tab.addEventListener("click", () => setView("published"));
 elements.trash_tab.addEventListener("click", () => setView("trash"));
 elements.trash_album.addEventListener("click", () => manage("trash-album", state.selectedDate, null, `Move every photo from ${state.selectedDate} to trash?`));
-elements.empty_trash.addEventListener("click", () => manage("empty-trash", null, null, "Permanently delete every trashed published gallery copy? Archived sources follow the separate retention policy."));
+elements.empty_trash.addEventListener("click", () => manage("empty-trash", null, null, "Permanently delete every trashed published gallery copy and its .ready receipt? Queued StreamerBot actions will no longer be able to read those published paths. Archived sources follow the separate retention policy."));
 
 await refresh();
 
@@ -113,7 +113,7 @@ function renderTrash() {
     album.querySelector("strong").textContent = formatDate(dateFolder);
     album.querySelector("small").textContent = photoLabel(photos.length);
     album.querySelector(".restore-album").addEventListener("click", () => manage("restore-album", dateFolder));
-    album.querySelector(".purge-album").addEventListener("click", () => manage("purge-album", dateFolder, null, `Permanently delete all trashed published copies from ${formatDate(dateFolder)}?`));
+    album.querySelector(".purge-album").addEventListener("click", () => manage("purge-album", dateFolder, null, `Permanently delete all trashed published copies and .ready receipts from ${formatDate(dateFolder)}? Queued StreamerBot actions will no longer be able to read those published paths.`));
     album.querySelector(".trash-photo-grid").replaceChildren(...photos.map((photo) => {
       const card = templates.trashPhoto.content.firstElementChild.cloneNode(true);
       card.querySelector("img").src = `/gallery/admin/thumb/${photo.date_folder}/${photo.base}.webp`;
@@ -121,7 +121,7 @@ function renderTrash() {
       card.querySelector("strong").textContent = photo.original_name || friendlyBase(photo.base);
       card.querySelector("small").textContent = `Trashed ${formatTime(photo.trashed_at)}`;
       card.querySelector(".restore-photo").addEventListener("click", () => manage("restore-photo", photo.date_folder, photo.base));
-      card.querySelector(".purge-photo").addEventListener("click", () => manage("purge-photo", photo.date_folder, photo.base, `Permanently delete the published copy of ${photo.original_name || friendlyBase(photo.base)}?`));
+      card.querySelector(".purge-photo").addEventListener("click", () => manage("purge-photo", photo.date_folder, photo.base, `Permanently delete the published copy and .ready receipt for ${photo.original_name || friendlyBase(photo.base)}? Queued StreamerBot actions will no longer be able to read that published path.`));
       return card;
     }));
     return album;

@@ -24,7 +24,7 @@ export async function createApp(config: UploadConfig): Promise<Express> {
   });
   app.use("/photos", requireBasicAuth(config.auth));
   app.use("/photos/assets", express.static(config.publicDir, { index: false, maxAge: "1h" }));
-  app.get("/photos/upload", (_request, response) => {
+  app.get(["/photos/upload", "/photos/upload/"], (_request, response) => {
     response.sendFile(path.join(config.publicDir, "index.html"));
   });
   app.post("/photos/api/upload", (request, response, next) => {

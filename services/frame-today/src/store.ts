@@ -1,4 +1,5 @@
 import { access, readdir, readFile, stat } from "node:fs/promises";
+import type { Dirent } from "node:fs";
 import path from "node:path";
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -23,6 +24,22 @@ export interface TodayPhoto {
   processed_at: string;
   camera_text: string;
   exif: Record<string, unknown>;
+}
+
+export interface TodayGallerySummary {
+  date_folder: string;
+  count: number;
+  first_at: string | null;
+  latest_at: string | null;
+  duration_ms: number;
+}
+
+export interface TodayDashboardSummary {
+  latest: LatestPublication | null;
+  latest_photo: TodayPhoto | null;
+  current_gallery: TodayGallerySummary | null;
+  total_albums: number;
+  total_images: number;
 }
 
 interface PhotoSidecar {
@@ -83,6 +100,38 @@ export class TodayStore {
     return photos.sort((left, right) => left.processed_at.localeCompare(right.processed_at));
   }
 
+  async dashboardSummary(): Promise<TodayDashboardSummary> {
+    const latest = await this.readLatest();
+    let entries: Dirent[];
+    try {
+      entries = await readdir(this.galleriesRoot, { withFileTypes: true });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return { latest, latest_photo: null, current_gallery: null, total_albums: 0, total_images: 0 };
+      }
+      throw error;
+    }
+    const albums = (await Promise.all(entries
+      .filter((entry) => entry.isDirectory() && DATE_PATTERN.test(entry.name))
+      .map(async (entry) => summarizeGallery(entry.name, await this.listPhotos(entry.name)))))
+      .filter((album) => album.count > 0)
+      .sort((left, right) => right.date_folder.localeCompare(left.date_folder));
+    const currentGallery = (latest
+      ? albums.find((album) => album.date_folder === latest.date_folder)
+      : null) ?? albums[0] ?? null;
+    const currentPhotos = currentGallery ? await this.listPhotos(currentGallery.date_folder) : [];
+    const latestPhoto = (latest?.latest_base
+      ? currentPhotos.find((photo) => photo.base === latest.latest_base)
+      : null) ?? currentPhotos[currentPhotos.length - 1] ?? null;
+    return {
+      latest,
+      latest_photo: latestPhoto,
+      current_gallery: currentGallery,
+      total_albums: albums.length,
+      total_images: albums.reduce((total, album) => total + album.count, 0),
+    };
+  }
+
   async requireImage(dateFolder: string, base: string): Promise<string> {
     assertDate(dateFolder);
     assertBase(base);
@@ -118,6 +167,20 @@ export class TodayStore {
       exif: displayExif(sidecar?.exif),
     };
   }
+}
+
+function summarizeGallery(dateFolder: string, photos: TodayPhoto[]): TodayGallerySummary {
+  const first = photos[0] ?? null;
+  const latest = photos[photos.length - 1] ?? null;
+  return {
+    date_folder: dateFolder,
+    count: photos.length,
+    first_at: first?.processed_at ?? null,
+    latest_at: latest?.processed_at ?? null,
+    duration_ms: first && latest
+      ? Math.max(0, new Date(latest.processed_at).getTime() - new Date(first.processed_at).getTime())
+      : 0,
+  };
 }
 
 export class TodayRequestError extends Error {

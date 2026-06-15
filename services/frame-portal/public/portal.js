@@ -1,5 +1,7 @@
 const elements = {
   connectionPill: document.getElementById("connection-pill"),
+  pageTitle: document.getElementById("page-title"),
+  accessBanner: document.getElementById("access-banner"),
   refreshButton: document.getElementById("refresh-button"),
   themeToggle: document.getElementById("theme-toggle"),
   overallValue: document.getElementById("overall-value"),
@@ -34,15 +36,18 @@ let refreshTimer = null;
 let logsSource = null;
 let toastTimer = null;
 let logLines = [];
+let currentView = "dashboard";
 const MAX_LOG_LINES = 1000;
 
 initializeTheme();
+initializeView();
 bindEvents();
 initialize();
 
 async function initialize() {
   try {
     portalConfig = await fetchJson("/api/portal");
+    renderAccessContext();
     renderTools(portalConfig.tools);
     scheduleRefresh(portalConfig.refresh_ms);
     await refreshStatus();
@@ -130,25 +135,53 @@ function renderTools(tools) {
         offline: "Offline",
         disabled: "Disabled",
       };
-      const state = labels[tool.readiness] || "Unknown";
-      if (tool.readiness !== "ready") {
+      const state = tool.accessible ? labels[tool.readiness] || "Unknown" : "LAN only";
+      const accessLabel = tool.access === "public" ? "Public route" : "LAN only";
+      if (tool.readiness !== "ready" || !tool.accessible) {
         return `
           <div class="tool-card disabled readiness-${escapeAttribute(tool.readiness)}" aria-disabled="true">
             <div><h3>${escapeHtml(tool.name)}</h3><p>${escapeHtml(tool.description)}</p></div>
-            <span class="tool-state">${state}</span>
+            <div class="tool-card-footer">
+              <span class="tool-access access-${escapeAttribute(tool.access)}">${accessLabel}</span>
+              <span class="tool-state">${state}</span>
+            </div>
           </div>`;
       }
       return `
         <a class="tool-card" href="${escapeAttribute(tool.route)}">
           <div><h3>${escapeHtml(tool.name)}</h3><p>${escapeHtml(tool.description)}</p></div>
-          <span class="tool-state">${state}</span>
+          <div class="tool-card-footer">
+            <span class="tool-access access-${escapeAttribute(tool.access)}">${accessLabel}</span>
+            <span class="tool-state">${state}</span>
+          </div>
         </a>`;
     })
     .join("");
 }
 
+function renderAccessContext() {
+  const isPublic = portalConfig?.access_context === "public";
+  elements.accessBanner.classList.toggle("access-banner-public", isPublic);
+  elements.accessBanner.innerHTML = isPublic
+    ? "<strong>Public dashboard</strong><span>Public-safe tools are available here. Management and capture tools remain available only from the FRAME host or LAN.</span>"
+    : "<strong>LAN dashboard</strong><span>This browser can open both local management tools and public-safe presentation links.</span>";
+}
+
+function initializeView() {
+  currentView = window.location.pathname === "/status" ? "status" : "dashboard";
+  document.querySelectorAll("[data-portal-view]").forEach((element) => {
+    element.hidden = !element.dataset.portalView.split(/\s+/).includes(currentView);
+  });
+  document.querySelectorAll("[data-portal-nav]").forEach((link) => {
+    const active = link.dataset.portalNav === currentView;
+    link.classList.toggle("active", active);
+    if (active) link.setAttribute("aria-current", "page");
+  });
+  elements.pageTitle.textContent = currentView === "status" ? "System Status" : "Dashboard";
+}
+
 function renderAlerts(alerts) {
-  elements.alertsSection.hidden = alerts.length === 0;
+  elements.alertsSection.hidden = alerts.length === 0 || currentView !== "status";
   elements.alertCount.textContent = String(alerts.length);
   elements.alertsList.innerHTML = alerts
     .map(

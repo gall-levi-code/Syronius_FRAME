@@ -73,6 +73,7 @@
         "photo_upload",
         "photo_gallery",
         "today_gallery",
+        "today_dashboard",
         "today_viewer",
         "today_remote",
         "audio_admin",
@@ -111,6 +112,10 @@
           "pattern": "^/"
         },
         "today_gallery": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "today_dashboard": {
           "type": "string",
           "pattern": "^/"
         },

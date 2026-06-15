@@ -25,6 +25,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   min-width: 320px;
   margin: 0;
@@ -53,6 +57,50 @@ button {
   justify-content: space-between;
   gap: 18px;
   padding: 4px 0 20px;
+}
+
+.portal-nav {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--frame-border);
+}
+
+.portal-nav a {
+  padding: 10px 13px;
+  border-bottom: 2px solid transparent;
+  color: var(--frame-label);
+  font-size: 13px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.portal-nav a:hover,
+.portal-nav a:focus-visible,
+.portal-nav a.active {
+  border-bottom-color: var(--frame-accent);
+  color: var(--frame-accent-strong);
+}
+
+.access-banner {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 11px 13px;
+  border-left: 3px solid var(--frame-accent);
+  background: var(--frame-accent-soft);
+  color: var(--frame-accent-contrast);
+  font-size: 12px;
+}
+
+.access-banner span {
+  color: var(--frame-label);
+}
+
+.access-banner-public {
+  border-left-color: var(--frame-warning);
+  background: #3b3315;
 }
 
 .brand {
@@ -330,6 +378,29 @@ h3 {
   font-weight: 800;
 }
 
+.tool-card-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tool-access {
+  padding: 3px 6px;
+  border: 1px solid var(--frame-border);
+  border-radius: 999px;
+  color: var(--frame-label);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.tool-access.access-public {
+  border-color: var(--frame-accent-border);
+  color: var(--frame-accent-strong);
+}
+
 .tool-card.disabled .tool-state {
   color: var(--frame-label);
 }
@@ -569,9 +640,16 @@ body.theme-day {
 
   .portal-header {
     align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .access-banner {
+    display: grid;
+    gap: 3px;
   }
 
   .brand {
+    width: 100%;
     gap: 10px;
   }
 
@@ -585,12 +663,12 @@ body.theme-day {
   }
 
   .header-actions {
-    flex-wrap: wrap;
+    width: 100%;
+    flex-wrap: nowrap;
   }
 
   .header-actions .pill {
-    order: 3;
-    width: 100%;
+    margin-right: auto;
   }
 
   .summary-grid {

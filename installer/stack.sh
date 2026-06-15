@@ -3,7 +3,55 @@ set -eu
 
 ROOT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 RUNTIME_IMAGE="node:22-alpine@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920"
-COMMAND=${1:-help}
+ADVANCED_SETTINGS="TIMEZONE
+FRAME_AUTH_SESSION_DAYS
+PORTAL_PORT
+AUDIO_BRIDGE_PORT
+AUDIO_MONITOR_PORT
+STREAMS_PORT
+OVERLAYS_PORT
+PHOTO_UPLOAD_PORT
+PHOTO_FTP_PORT
+GALLERY_PORT
+TODAY_PORT
+PHOTO_FTP_PASSIVE_MIN
+PHOTO_FTP_PASSIVE_MAX
+PHOTO_FTP_PASSIVE_HOST
+PHOTO_FTP_USERNAME
+PHOTO_FTP_STABLE_MS
+PHOTO_FTP_SCAN_MS
+PIPELINE_POLL_MS
+PIPELINE_CONCURRENCY
+PHOTO_MAX_INPUT_MB
+PHOTO_MAX_MEGAPIXELS
+PHOTO_CONVERSION_ATTEMPTS
+PHOTO_ARCHIVE_ORIGINALS
+GALLERY_THUMB_WIDTH
+GALLERY_THUMB_QUALITY
+TODAY_DEFAULT_INTERVAL_MS
+TODAY_REFRESH_MS
+ENABLE_CONTAINER_RESTARTS
+STATUS_REFRESH_MS
+STATUS_CACHE_MS
+REQUEST_TIMEOUT_MS
+DISK_WARN_PERCENT
+DISK_ERROR_PERCENT
+DISK_MINIMUM_FREE_GB
+DEFAULT_AUDIO_DELAY_MS
+MAX_AUDIO_DELAY_MS
+SESSION_IDLE_TIMEOUT_MINUTES
+PUBLIC_RELAY_HOST
+SRTLA_PORT
+SRT_PLAYER_PORT
+SRT_SENDER_PORT
+SLS_STATS_PORT"
+if [ "$#" -gt 0 ]; then
+  COMMAND=$1
+elif [ -t 0 ]; then
+  COMMAND=menu
+else
+  COMMAND=help
+fi
 if [ "$#" -gt 0 ]; then
   shift
 fi
@@ -48,9 +96,392 @@ compose() {
     -f "$ROOT_DIR/docker-compose.yml" "$@"
 }
 
+read_default() {
+  prompt=$1
+  default=$2
+  if [ -n "$default" ]; then
+    printf "%s [%s]: " "$prompt" "$default"
+  else
+    printf "%s: " "$prompt"
+  fi
+  read -r REPLY
+  [ -n "$REPLY" ] || REPLY=$default
+}
+
+read_secret() {
+  printf "%s: " "$1"
+  stty -echo
+  read -r REPLY
+  stty echo
+  printf "\n"
+}
+
+yes_no() {
+  printf "%s [y/N]: " "$1"
+  read -r answer
+  [ "$answer" = "y" ] || [ "$answer" = "Y" ] || [ "$answer" = "yes" ] || [ "$answer" = "YES" ]
+}
+
+pause_menu() {
+  printf "Press Enter to return to the menu: "
+  read -r _
+}
+
+env_value() {
+  key=$1
+  default=$2
+  if [ -f "$ROOT_DIR/.env" ]; then
+    value=$(sed -n "s/^${key}=//p" "$ROOT_DIR/.env" | tail -n 1)
+    value=${value#\"}
+    value=${value%\"}
+    [ -n "$value" ] && {
+      printf "%s" "$value"
+      return
+    }
+  fi
+  printf "%s" "$default"
+}
+
+profile_enabled() {
+  profiles=$(env_value COMPOSE_PROFILES "")
+  case ",$profiles," in
+    *",$1,"*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+run_install() {
+  runtime install "$@"
+  compose config --quiet
+}
+
+start_stack() {
+  echo "Validating startup requirements..."
+  runtime validate --for-start
+  compose up -d --build --remove-orphans --wait --wait-timeout 120
+  echo "FRAME stack reconciliation completed."
+}
+
+readiness_flow() {
+  echo ""
+  echo "Validation"
+  runtime validate
+  compose config --quiet
+  echo ""
+  echo "Verification"
+  verify
+  compose config --quiet
+  echo "Configuration and contracts are ready."
+  if yes_no "Start or update the complete FRAME stack now?"; then
+    start_stack
+  fi
+}
+
+configure_services() {
+  echo ""
+  echo "Configure services"
+  echo "Choose Keep, Enable, or Disable for each capability."
+  echo "Dependencies are enabled or disabled automatically by the installer."
+  configure_capability "frame-video-relay" "Video Relay and Stream Management"
+  configure_capability "frame-overlays" "Overlay Wizard"
+  configure_capability "frame-audio-relay" "Audio Monitor"
+  configure_capability "frame-discord-audio-bridge" "Discord Audio Bridge"
+  configure_capability "frame-photo-ftp" "Photo FTP Ingest"
+  configure_capability "frame-photo-webupload" "Browser Photo Upload"
+  configure_capability "frame-photo-gallery" "Photo Gallery"
+  configure_capability "frame-photo-todaytools" "Today Tools"
+}
+
+configure_capability() {
+  capability=$1
+  label=$2
+  printf "%s: 0) Keep  1) Enable  2) Disable: " "$label"
+  read -r choice
+  case "$choice" in
+    1) run_install --enable "$capability" ;;
+    2) run_install --disable "$capability" ;;
+  esac
+}
+
+configure_network_storage() {
+  current_mode=$(env_value FRAME_MODE LAN)
+  printf "Deployment mode: 0) Keep %s  1) LAN  2) HYBRID: " "$current_mode"
+  read -r mode_choice
+  case "$mode_choice" in
+    1) mode=LAN ;;
+    2) mode=HYBRID ;;
+    *) mode=$current_mode ;;
+  esac
+  if [ "$mode" = "HYBRID" ]; then
+    read_default "Cloudflare public hostname" "$(env_value CLOUDFLARE_PUBLIC_HOSTNAME "")"
+    hostname=$REPLY
+    run_install --mode HYBRID --public-hostname "$hostname"
+  else
+    run_install --mode LAN
+  fi
+
+  read_default "FRAME Edge HTTP port" "$(env_value EDGE_HTTP_PORT 80)"
+  edge_port=$REPLY
+  read_default "Host-visible FRAME data path" "$(env_value FRAME_HOST_DATA_ROOT "$ROOT_DIR/data")"
+  host_data=$REPLY
+  read_default "Timezone" "$(env_value TIMEZONE America/Chicago)"
+  timezone=$REPLY
+  run_install --edge-http-port "$edge_port" --host-data-root "$host_data" --set "TIMEZONE=$timezone"
+}
+
+configure_standard() {
+  configure_network_storage
+  configure_services
+  if profile_enabled photo-ftp; then
+    read_default "Photo FTP passive/LAN host" "$(env_value PHOTO_FTP_PASSIVE_HOST 127.0.0.1)"
+    run_install --set "PHOTO_FTP_PASSIVE_HOST=$REPLY"
+  fi
+}
+
+show_setup_issues() {
+  ISSUE_COUNT=0
+  if [ ! -f "$ROOT_DIR/.env" ]; then
+    echo "- FRAME has not been configured yet."
+    ISSUE_COUNT=$((ISSUE_COUNT + 1))
+    return
+  fi
+  if profile_enabled photo-ftp && [ "$(env_value PHOTO_FTP_PASSIVE_HOST 127.0.0.1)" = "127.0.0.1" ]; then
+    echo "- Photo FTP passive host still points at 127.0.0.1."
+    ISSUE_COUNT=$((ISSUE_COUNT + 1))
+  fi
+  if { profile_enabled photo-ftp || profile_enabled photo-webupload; } && [ "$(env_value FRAME_HOST_DATA_ROOT /data)" = "/data" ]; then
+    echo "- Host-visible photo data path is not configured for StreamerBot."
+    ISSUE_COUNT=$((ISSUE_COUNT + 1))
+  fi
+  if [ "$(env_value FRAME_MODE LAN)" = "HYBRID" ]; then
+    if [ -z "$(env_value CLOUDFLARE_PUBLIC_HOSTNAME "")" ]; then
+      echo "- Hybrid mode needs a public hostname."
+      ISSUE_COUNT=$((ISSUE_COUNT + 1))
+    fi
+    if [ -z "$(env_value PORTAL_USERNAME "")" ] || [ -z "$(env_value PORTAL_PASSWORD "")" ]; then
+      echo "- Hybrid mode needs Portal credentials."
+      ISSUE_COUNT=$((ISSUE_COUNT + 1))
+    fi
+    data_root=$(env_value FRAME_DATA_ROOT ./data)
+    token_file="$ROOT_DIR/${data_root#./}/state/cloudflare-tunnel-token"
+    token=""
+    [ ! -f "$token_file" ] || token=$(cat "$token_file")
+    if [ "${#token}" -lt 100 ] || [ "$token" = "paste_cloudflare_tunnel_token_here" ]; then
+      echo "- Hybrid mode needs a Cloudflare tunnel token."
+      ISSUE_COUNT=$((ISSUE_COUNT + 1))
+    fi
+  fi
+  if profile_enabled discord-audio-bridge; then
+    discord_token=$(env_value DISCORD_TOKEN your_bot_token_here)
+    discord_client_id=$(env_value DISCORD_CLIENT_ID your_discord_application_client_id_here)
+    case "$discord_token:$discord_client_id" in
+      your_*|*:your_*)
+        echo "- Discord Audio Bridge credentials need setup."
+        ISSUE_COUNT=$((ISSUE_COUNT + 1))
+        ;;
+    esac
+  fi
+}
+
+resolve_setup_issues() {
+  if [ ! -f "$ROOT_DIR/.env" ]; then
+    configure_standard
+    return
+  fi
+  if profile_enabled photo-ftp && [ "$(env_value PHOTO_FTP_PASSIVE_HOST 127.0.0.1)" = "127.0.0.1" ]; then
+    read_default "Photo FTP passive/LAN host" "127.0.0.1"
+    run_install --set "PHOTO_FTP_PASSIVE_HOST=$REPLY"
+  fi
+  if { profile_enabled photo-ftp || profile_enabled photo-webupload; } && [ "$(env_value FRAME_HOST_DATA_ROOT /data)" = "/data" ]; then
+    read_default "Host-visible FRAME data path" "$ROOT_DIR/data"
+    run_install --host-data-root "$REPLY"
+  fi
+  if [ "$(env_value FRAME_MODE LAN)" = "HYBRID" ] && yes_no "Review Hybrid credentials now?"; then
+    configure_credentials
+  fi
+}
+
+advanced_setting() {
+  echo ""
+  echo "Advanced non-secret settings"
+  printf "%s\n" "$ADVANCED_SETTINGS" | awk '{ printf "%d. %s\n", NR, $0 }'
+  echo "0. Back"
+  printf "Setting to change: "
+  read -r choice
+  [ "$choice" != "0" ] || return
+  case "$choice" in *[!0-9]*|"") echo "Invalid selection."; return ;; esac
+  key=$(printf "%s\n" "$ADVANCED_SETTINGS" | sed -n "${choice}p")
+  [ -n "$key" ] || { echo "Invalid selection."; return; }
+  read_default "New value" "$(env_value "$key" "")"
+  run_install --set "$key=$REPLY"
+}
+
+configure_credentials() {
+  while :; do
+    echo ""
+    echo "Credentials and security"
+    echo "1. Portal login"
+    echo "2. Cloudflare tunnel token"
+    echo "3. Discord bot credentials"
+    echo "4. Photo FTP credentials"
+    echo "5. Stream Management basic auth"
+    echo "6. Overlay Wizard basic auth"
+    echo "0. Back"
+    printf "Selection: "
+    read -r choice
+    case "$choice" in
+      0) return ;;
+      1)
+        read_default "Portal username" "$(env_value PORTAL_USERNAME "")"
+        username=$REPLY
+        read_secret "Portal password (input hidden)"
+        password=$REPLY
+        printf "%s\n%s\n" "$username" "$password" | runtime set-portal-auth
+        unset password
+        ;;
+      2)
+        read_secret "Cloudflare tunnel token (input hidden)"
+        token=$REPLY
+        printf "%s\n" "$token" | runtime set-tunnel-token
+        unset token
+        ;;
+      3)
+        read_default "Discord application client ID" "$(env_value DISCORD_CLIENT_ID "")"
+        client_id=$REPLY
+        read_secret "Discord bot token (input hidden)"
+        token=$REPLY
+        printf "%s\n%s\n" "$client_id" "$token" | runtime set-discord-auth
+        unset token
+        ;;
+      4)
+        read_default "Photo FTP username" "$(env_value PHOTO_FTP_USERNAME frame)"
+        username=$REPLY
+        read_secret "Photo FTP password, at least 12 characters (input hidden)"
+        password=$REPLY
+        printf "photo-ftp\n%s\n%s\n" "$username" "$password" | runtime set-service-auth
+        unset password
+        ;;
+      5)
+        read_default "Stream Management username" "$(env_value STREAMS_USERNAME "")"
+        username=$REPLY
+        read_secret "Stream Management password (input hidden)"
+        password=$REPLY
+        printf "streams\n%s\n%s\n" "$username" "$password" | runtime set-service-auth
+        unset password
+        ;;
+      6)
+        read_default "Overlay Wizard username" "$(env_value OVERLAYS_USERNAME "")"
+        username=$REPLY
+        read_secret "Overlay Wizard password (input hidden)"
+        password=$REPLY
+        printf "overlays\n%s\n%s\n" "$username" "$password" | runtime set-service-auth
+        unset password
+        ;;
+    esac
+  done
+}
+
+guided_setup() {
+  echo ""
+  echo "Guided FRAME setup"
+  show_setup_issues
+  if [ "$ISSUE_COUNT" -gt 0 ]; then
+    echo ""
+    echo "1. Resolve these issues only"
+    echo "2. Review everything"
+    echo "0. Cancel"
+    printf "Selection: "
+    read -r scope
+    case "$scope" in
+      0) return ;;
+      1) resolve_setup_issues; readiness_flow; return ;;
+    esac
+  fi
+  echo "1. Standard configuration"
+  echo "2. Advanced configuration"
+  echo "0. Cancel"
+  printf "Selection: "
+  read -r level
+  [ "$level" != "0" ] || return
+  configure_standard
+  if [ "$level" = "2" ]; then
+    while yes_no "Change an advanced setting?"; do advanced_setting; done
+  fi
+  if yes_no "Review credentials and security now?"; then configure_credentials; fi
+  readiness_flow
+}
+
+interactive_menu() {
+  while :; do
+    printf "\033c"
+    echo "Syronius FRAME Installer"
+    echo "Guided configuration and lifecycle management"
+    echo ""
+    if [ -f "$ROOT_DIR/.env" ]; then
+      echo "Current mode: $(env_value FRAME_MODE LAN)"
+    else
+      echo "Current state: Not configured"
+    fi
+    echo ""
+    echo "1. Guided setup"
+    echo "2. Configure services"
+    echo "3. Configure network and storage"
+    echo "4. Configure Hybrid access"
+    echo "5. Credentials and security"
+    echo "6. Validate and verify"
+    echo "7. Start or update stack"
+    echo "8. Status and logs"
+    echo "9. Stop stack"
+    echo "10. Advanced settings"
+    echo "11. Reset FRAME"
+    echo "0. Exit"
+    printf "Selection: "
+    read -r choice
+    case "$choice" in
+      0) return ;;
+      1) guided_setup; pause_menu ;;
+      2) configure_services; readiness_flow; pause_menu ;;
+      3) configure_network_storage; readiness_flow; pause_menu ;;
+      4)
+        read_default "Cloudflare public hostname" "$(env_value CLOUDFLARE_PUBLIC_HOSTNAME "")"
+        run_install --mode HYBRID --public-hostname "$REPLY"
+        configure_credentials
+        readiness_flow
+        pause_menu
+        ;;
+      5) configure_credentials; pause_menu ;;
+      6) readiness_flow; pause_menu ;;
+      7) start_stack; pause_menu ;;
+      8)
+        runtime status
+        compose ps --all
+        if yes_no "Show recent logs?"; then
+          read_default "Service name, or leave blank for all" ""
+          if [ -n "$REPLY" ]; then compose logs --tail 150 "$REPLY"; else compose logs --tail 150; fi
+        fi
+        pause_menu
+        ;;
+      9) if yes_no "Stop the complete FRAME stack?"; then compose down; fi; pause_menu ;;
+      10) advanced_setting; readiness_flow; pause_menu ;;
+      11)
+        printf "Reset removes FRAME's generated config and data. Type RESET to continue: "
+        read -r answer
+        if [ "$answer" = "RESET" ]; then
+          [ ! -f "$ROOT_DIR/docker-compose.yml" ] || compose down --remove-orphans
+          runtime reset --yes
+        fi
+        pause_menu
+        ;;
+    esac
+  done
+}
+
 assert_docker
 
 case "$COMMAND" in
+  menu)
+    interactive_menu
+    ;;
   hybrid-stage)
     printf "Cloudflare public hostname (for example frame.syroni.us): "
     read -r hostname
@@ -81,6 +512,14 @@ case "$COMMAND" in
     printf "\n"
     printf "%s\n%s\n" "$username" "$password" | runtime set-portal-auth
     unset username password
+    ;;
+  discord-auth)
+    printf "Discord application client ID: "
+    read -r client_id
+    read_secret "Discord bot token (input hidden)"
+    token=$REPLY
+    printf "%s\n%s\n" "$client_id" "$token" | runtime set-discord-auth
+    unset token
     ;;
   install)
     runtime install "$@"

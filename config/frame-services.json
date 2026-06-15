@@ -90,6 +90,7 @@
     "photo_upload": "/photos/upload",
     "photo_gallery": "/today/gallery",
     "today_gallery": "/today/gallery",
+    "today_dashboard": "/today/dashboard",
     "today_viewer": "/today/viewer",
     "today_remote": "/today/remote",
     "audio_admin": "/audio/admin",

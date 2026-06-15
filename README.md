@@ -143,6 +143,21 @@ The upload page and remote controller use the configured Portal login.
 The viewer displays camera and exposure information extracted by the Photo Pipeline when EXIF is
 available.
 
+For a host-side StreamerBot folder watcher, configure the absolute host path once and watch its
+current-day convenience link:
+
+```powershell
+stack.cmd install --host-data-root "D:\path\to\Syronius_FRAME\data"
+```
+
+Then watch `D:\path\to\Syronius_FRAME\data\today\*.ready`. The pipeline atomically keeps `today`
+pointed at the current local-date gallery. Existing `.ready` manifests are never rewritten, which
+prevents duplicate StreamerBot events.
+
+The final publish appears to StreamerBot as a `Renamed` event. Process `fullPath` only when
+`fileName` ends exactly in `.ready`; ignore `oldFullPath`, which identifies the neutral
+`.frame-write-<uuid>.tmp` source used to guarantee the manifest is complete before it appears.
+
 ## Unified installer
 
 The implemented installer entrypoints own configuration, data layout, shared secrets, generated
@@ -166,14 +181,21 @@ capability choice.
 > Docker and Docker Compose v2 are the only host runtime prerequisites. Both entrypoints use the
 > same shared installer runtime, preventing Windows and Unix behavior from drifting.
 
+Running `stack.cmd` or `./stack.sh` without arguments in an interactive terminal opens the numbered
+FRAME command center. It shows setup issues first, supports Standard and Advanced configuration,
+walks through hidden credential prompts, validates and verifies the result, then offers to reconcile
+the complete Compose stack. Direct commands remain available for scripts and automation.
+
 **Install / reconfigure**
 - Windows:
   ```bat
+  stack.cmd
   stack.cmd install
   ```
 - Linux/macOS:
   ```bash
   chmod +x stack.sh
+  ./stack.sh
   ./stack.sh install
   ```
 

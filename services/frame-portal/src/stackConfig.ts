@@ -17,6 +17,7 @@ const FALLBACK_ROUTES: Record<string, string> = {
   photo_upload: "/photos/upload",
   photo_gallery: "/today/gallery",
   today_gallery: "/today/gallery",
+  today_dashboard: "/today/dashboard",
   today_viewer: "/today/viewer",
   today_remote: "/today/remote",
   audio_admin: "/audio/admin",
@@ -27,7 +28,10 @@ const FALLBACK_ROUTES: Record<string, string> = {
 };
 
 const TOOL_DEFINITIONS: Array<
-  Omit<PortalTool, "route" | "enabled" | "readiness"> & { routeKey: string; serviceName: string }
+  Omit<PortalTool, "route" | "enabled" | "access" | "accessible" | "readiness"> & {
+    routeKey: string;
+    serviceName: string;
+  }
 > = [
   {
     id: "streams",
@@ -64,8 +68,8 @@ const TOOL_DEFINITIONS: Array<
   {
     id: "today",
     name: "Today Tools",
-    description: "Open the viewer and remote controls for today's stream.",
-    routeKey: "today_viewer",
+    description: "Manage today's gallery, viewer, remote, and photo workflow.",
+    routeKey: "today_dashboard",
     capability: "frame-photo-todaytools",
     serviceName: "frame-today",
   },
@@ -129,22 +133,33 @@ export async function loadStackConfig(appConfig: AppConfig): Promise<LoadedStack
 export function buildPortalTools(
   loadedStackConfig: LoadedStackConfig,
   services: ServiceSummary[],
+  accessContext: "lan" | "public" = "lan",
 ): PortalTool[] {
   const { config } = loadedStackConfig;
   const servicesByName = new Map(services.map((service) => [service.name, service]));
   return TOOL_DEFINITIONS.map(({ routeKey, serviceName, ...definition }) => {
     const enabled = definition.capability ? config.capabilities[definition.capability] === true : true;
     const service = servicesByName.get(serviceName);
+    const route =
+      definition.id === "audio-bridge"
+        ? `${config.routes.status || FALLBACK_ROUTES.status}#services`
+        : config.routes[routeKey] || FALLBACK_ROUTES[routeKey];
+    const access = routeIsPublic(route, config.public_route_prefixes) ? "public" : "lan-only";
+    const accessible = accessContext === "lan" || access === "public";
     return {
       ...definition,
-      route:
-        definition.id === "audio-bridge"
-          ? `${config.routes.status || FALLBACK_ROUTES.status}#services`
-          : config.routes[routeKey] || FALLBACK_ROUTES[routeKey],
+      route: accessible ? route : "",
       enabled,
+      access,
+      accessible,
       readiness: getToolReadiness(loadedStackConfig, definition.id, enabled, service),
     };
   });
+}
+
+function routeIsPublic(route: string, publicPrefixes: string[]): boolean {
+  const path = route.split("#", 1)[0] || "/";
+  return publicPrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 }
 
 function getToolReadiness(

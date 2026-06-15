@@ -25,6 +25,14 @@ computed from `stack-config.json` and the enabled capabilities. It has no Docker
 discover additional services. Traefik access logs drop query parameters so control tokens embedded
 in URLs are not written to gateway logs.
 
+When `/dashboard` is public, the gateway also forwards the exact `/` path so Portal can redirect the
+root hostname to the dashboard. This exact-path route does not expose any additional prefixes.
+
+FRAME Edge also carries a high-priority deny router for known LAN-only management paths when a
+request uses the configured public hostname or Cloudflare request headers. The deny router is a
+defense-in-depth boundary for remotely managed tunnel routes that accidentally bypass the public
+gateway.
+
 The installer stages Hybrid mode without starting it. Startup validation requires:
 
 - a valid public hostname,

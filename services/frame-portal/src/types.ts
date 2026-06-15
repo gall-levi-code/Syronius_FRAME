@@ -16,6 +16,8 @@ export interface PortalTool {
   route: string;
   enabled: boolean;
   capability?: string;
+  access: "public" | "lan-only";
+  accessible: boolean;
   readiness: "ready" | "needs-setup" | "offline" | "disabled";
 }
 

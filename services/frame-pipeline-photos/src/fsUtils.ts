@@ -3,8 +3,9 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 
 export async function atomicWrite(file: string, contents: string | Buffer): Promise<void> {
-  await mkdir(path.dirname(file), { recursive: true });
-  const temporary = `${file}.${randomUUID()}.tmp`;
+  const directory = path.dirname(file);
+  await mkdir(directory, { recursive: true });
+  const temporary = path.join(directory, `.frame-write-${randomUUID()}.tmp`);
   await writeFile(temporary, contents);
   try {
     await rename(temporary, file);

@@ -15,6 +15,7 @@ const elements = {
   intervalValue: document.querySelector("#interval-value"),
   exif: document.querySelector("#exif-toggle"),
   thumbnailsToggle: document.querySelector("#thumbnails-toggle"),
+  backgroundToggle: document.querySelector("#background-toggle"),
   thumbnailSection: document.querySelector("#thumbnail-section"),
   thumbnails: document.querySelector("#thumbnails"),
   count: document.querySelector("#photo-count"),
@@ -41,6 +42,10 @@ elements.thumbnailsToggle.addEventListener("click", () => {
   elements.thumbnailsToggle.setAttribute("aria-pressed", String(thumbnailsVisible));
   elements.thumbnailSection.hidden = !thumbnailsVisible;
 });
+elements.backgroundToggle.addEventListener("click", () => send({
+  type: "SET_SHOW_BACKGROUND",
+  show_background: !state?.show_background,
+}));
 elements.interval.addEventListener("input", () => {
   elements.intervalValue.textContent = durationLabel(Number(elements.interval.value) * 1000);
 });
@@ -100,6 +105,7 @@ function render() {
   elements.interval.value = String(Math.round(state.interval_ms / 1000));
   elements.intervalValue.textContent = durationLabel(state.interval_ms);
   elements.exif.setAttribute("aria-pressed", String(state.show_exif));
+  elements.backgroundToggle.setAttribute("aria-pressed", String(state.show_background));
   elements.count.textContent = `${state.count_today} photo${state.count_today === 1 ? "" : "s"}`;
   elements.thumbnails.replaceChildren(...state.photos.map((item, index) => {
     const button = document.createElement("button");
