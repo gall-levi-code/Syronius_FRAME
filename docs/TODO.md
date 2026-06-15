@@ -49,7 +49,7 @@ removed.
 - Add API integration tests for implemented HTTP services.
 - Add Audio Bridge session, profile, and control mutation tests before splitting `SessionManager`.
 - Split installer environment/state responsibilities out of `frame-installer.mjs`.
-- Expand the interactive installer beyond the current Hybrid hostname staging prompt.
+- [x] Add a numbered interactive command center with issue-first Standard/Advanced guided setup.
 - Add host-port conflict preflight detection.
 - [x] Build the shared Traefik LAN HTTP edge and route implemented web services through it.
 - [x] Add capability-aware Cloudflare Tunnel routing and staged HYBRID deployment.

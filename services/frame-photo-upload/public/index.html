@@ -9,11 +9,22 @@
     <link rel="stylesheet" href="/photos/assets/styles.css">
   </head>
   <body>
+    <header class="topbar">
+      <a class="brand" href="/today/dashboard" aria-label="Open Today Dashboard">
+        <img src="/photos/assets/frame-logo-square.svg" alt="FRAME">
+        <span><small>Syronius FRAME</small><strong>Photo Upload</strong></span>
+      </a>
+      <div class="header-actions">
+        <a class="icon-button" href="/today/dashboard">Today Tools</a>
+        <a class="icon-button" href="/auth/logout">Sign out</a>
+      </div>
+    </header>
     <main>
-      <header>
-        <img class="logo" src="/photos/assets/frame-logo-square.svg" alt="">
-        <div><p>Syronius FRAME</p><h1>Photo Upload</h1></div>
-      </header>
+      <section class="page-heading">
+        <p>Photo workflow</p>
+        <h1>Upload Photos</h1>
+        <span>Queue completed photos from this device into the FRAME pipeline.</span>
+      </section>
       <form id="upload-form">
         <label class="drop" for="photo">
           <strong>Select photos</strong>
@@ -34,7 +45,7 @@
         <div class="file-row"><strong></strong><span class="file-state">Ready</span></div>
         <div class="progress-row">
           <progress max="100" value="0"></progress>
-          <span class="progress-label">0% · 0 B</span>
+          <span class="progress-label">0% &middot; 0 B</span>
         </div>
       </li>
     </template>

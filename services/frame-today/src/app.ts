@@ -34,10 +34,21 @@ export function createApp(
     response.redirect(state.date_folder && state.current_base ? `/today/gallery/${state.date_folder}/` : "/today/gallery");
   });
   app.get("/today/viewer", (_request, response) => response.sendFile(path.join(publicDir, "viewer.html")));
+  app.get(["/today/dashboard", "/today/dashboard/"], requireBasicAuth(auth), (_request, response) => {
+    response.sendFile(path.join(publicDir, "dashboard.html"));
+  });
   app.get("/today/remote", requireBasicAuth(auth), (_request, response) => response.sendFile(path.join(publicDir, "remote.html")));
   app.get("/today/api/state", (_request, response) => {
     response.setHeader("Cache-Control", "no-store");
     response.json(controller.state());
+  });
+  app.get("/today/api/dashboard", requireBasicAuth(auth), async (_request, response, next) => {
+    try {
+      response.setHeader("Cache-Control", "no-store");
+      response.json(await store.dashboardSummary());
+    } catch (error) {
+      next(error);
+    }
   });
   app.post("/today/api/command", requireBasicAuth(auth), (request, response, next) => {
     try {

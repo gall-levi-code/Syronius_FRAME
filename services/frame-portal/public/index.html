@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#07111b" />
     <title>FRAME Control Center</title>
     <link rel="icon" type="image/svg+xml" href="/assets/frame-logo-square.svg?v=2026-06-07-hardening" />
-    <link rel="stylesheet" href="/assets/styles.css?v=2026-06-07-hardening" />
+    <link rel="stylesheet" href="/assets/styles.css?v=2026-06-14-hybrid-context" />
   </head>
   <body>
     <main class="portal-shell">
@@ -15,7 +15,7 @@
           <img class="brand-logo" src="/assets/frame-logo-square.svg" alt="" aria-hidden="true" />
           <div class="brand-copy">
             <p class="eyebrow">Syronius FRAME</p>
-            <h1>Control Center</h1>
+            <h1 id="page-title">Dashboard</h1>
           </div>
         </div>
         <div class="header-actions">
@@ -33,7 +33,17 @@
         </div>
       </header>
 
-      <section class="summary-grid" aria-label="FRAME summary">
+      <nav class="portal-nav" aria-label="FRAME Portal">
+        <a href="/dashboard" data-portal-nav="dashboard">Dashboard</a>
+        <a href="/status" data-portal-nav="status">Status</a>
+      </nav>
+
+      <section id="access-banner" class="access-banner" data-portal-view="dashboard" aria-live="polite">
+        <strong>Checking access path</strong>
+        <span>Determining which FRAME tools are available from this browser.</span>
+      </section>
+
+      <section class="summary-grid" data-portal-view="status" aria-label="FRAME summary">
         <article class="metric">
           <span class="metric-label">Overall</span>
           <strong id="overall-value">Checking</strong>
@@ -57,7 +67,7 @@
         </article>
       </section>
 
-      <section id="alerts-section" class="portal-section" hidden>
+      <section id="alerts-section" class="portal-section" data-portal-view="status" hidden>
         <div class="section-heading">
           <div>
             <p class="eyebrow">Needs attention</p>
@@ -68,7 +78,7 @@
         <div id="alerts-list" class="alert-list"></div>
       </section>
 
-      <section id="services" class="portal-section">
+      <section id="tools" class="portal-section" data-portal-view="dashboard">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Capability aware</p>
@@ -81,7 +91,7 @@
         </div>
       </section>
 
-      <section class="portal-section">
+      <section id="services" class="portal-section" data-portal-view="status">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Container runtime</p>
@@ -94,7 +104,7 @@
         </div>
       </section>
 
-      <section class="portal-section">
+      <section class="portal-section" data-portal-view="status">
         <div class="section-heading">
           <div>
             <p class="eyebrow">Current signals</p>
@@ -141,6 +151,6 @@
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script src="/assets/portal.js?v=2026-06-07-hardening"></script>
+    <script src="/assets/portal.js?v=2026-06-14-hybrid-context"></script>
   </body>
 </html>

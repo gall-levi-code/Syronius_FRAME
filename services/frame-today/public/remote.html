@@ -8,8 +8,17 @@
     <link rel="icon" href="/today/assets/frame-logo-square.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/today/assets/today.css">
   </head>
-  <body class="remote-page">
-    <span id="remote-connection" class="connection-led" role="status" aria-label="Connecting" title="Connecting"></span>
+  <body class="tool-page remote-page">
+    <header class="topbar remote-topbar">
+      <a class="brand" href="/today/dashboard" aria-label="Open Today Dashboard">
+        <img src="/today/assets/frame-logo-square.svg" alt="FRAME">
+        <span><small>Syronius FRAME</small><strong>Today Remote</strong></span>
+      </a>
+      <div class="header-actions">
+        <span id="remote-connection" class="connection-led" role="status" aria-label="Connecting" title="Connecting"></span>
+        <a class="icon-button" href="/today/dashboard">Dashboard</a>
+      </div>
+    </header>
     <main class="remote-main">
       <section class="current-card">
         <div id="remote-preview" class="remote-preview">
@@ -40,6 +49,7 @@
         <div class="toggle-row">
           <button id="exif-toggle" class="toggle-button" type="button" aria-pressed="true">Camera info</button>
           <button id="thumbnails-toggle" class="toggle-button" type="button" aria-pressed="false">Thumbnails</button>
+          <button id="background-toggle" class="toggle-button" type="button" aria-pressed="true">Viewer background</button>
         </div>
       </section>
 

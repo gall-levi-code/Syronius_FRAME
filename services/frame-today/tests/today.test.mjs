@@ -19,6 +19,7 @@ test("controller follows latest publications and handles remote commands", async
     assert.equal(controller.command({ type: "PREV" }).current_base, "first");
     assert.equal(controller.command({ type: "SET_INTERVAL_MS", interval_ms: 5_000 }).interval_ms, 5_000);
     assert.equal(controller.command({ type: "SET_SHOW_EXIF", show_exif: false }).show_exif, false);
+    assert.equal(controller.command({ type: "SET_SHOW_BACKGROUND", show_background: false }).show_background, false);
     const playing = controller.command({ type: "PLAY_SLIDESHOW" });
     assert.equal(playing.playback_state, "playing");
     assert.ok(playing.interval_started_at);
@@ -67,6 +68,8 @@ test("HTTP API serves published media and rejects unpublished media", async () =
     assert.equal((await fetch(`${base}/today/image/2026-06-13/second.jpg`)).status, 200);
     assert.equal((await fetch(`${base}/today/image/2026-06-13/hidden.jpg`)).status, 404);
     assert.equal((await fetch(`${base}/today/assets/remote.js`)).headers.get("cache-control"), "no-store");
+    assert.equal((await fetch(`${base}/today/dashboard`)).status, 401);
+    assert.equal((await fetch(`${base}/today/api/dashboard`)).status, 401);
     assert.equal((await fetch(`${base}/today/remote`)).status, 401);
     assert.equal((await fetch(`${base}/today/api/command`, {
       method: "POST",
@@ -82,6 +85,13 @@ test("HTTP API serves published media and rejects unpublished media", async () =
       body: JSON.stringify({ type: "GOTO_INDEX", index: 0 }),
     })).json();
     assert.equal(changed.current_base, "first");
+    const dashboard = await (await fetch(`${base}/today/api/dashboard`, {
+      headers: { authorization: `Basic ${Buffer.from("frame:secret").toString("base64")}` },
+    })).json();
+    assert.equal(dashboard.total_albums, 1);
+    assert.equal(dashboard.total_images, 2);
+    assert.equal(dashboard.current_gallery.count, 2);
+    assert.equal(dashboard.latest_photo.base, "second");
   } finally {
     controller.close();
     await new Promise((resolve) => server.close(resolve));

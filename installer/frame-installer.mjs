@@ -46,6 +46,51 @@ const IMPORTABLE_ENV_KEYS = new Set([
   "PHOTO_FTP_PASSIVE_HOST",
 ]);
 
+const CUSTOMIZABLE_ENV_KEYS = new Set([
+  "TIMEZONE",
+  "FRAME_AUTH_SESSION_DAYS",
+  "PORTAL_PORT",
+  "AUDIO_BRIDGE_PORT",
+  "AUDIO_MONITOR_PORT",
+  "STREAMS_PORT",
+  "OVERLAYS_PORT",
+  "PHOTO_UPLOAD_PORT",
+  "PHOTO_FTP_PORT",
+  "GALLERY_PORT",
+  "TODAY_PORT",
+  "PHOTO_FTP_PASSIVE_MIN",
+  "PHOTO_FTP_PASSIVE_MAX",
+  "PHOTO_FTP_PASSIVE_HOST",
+  "PHOTO_FTP_USERNAME",
+  "PHOTO_FTP_STABLE_MS",
+  "PHOTO_FTP_SCAN_MS",
+  "PIPELINE_POLL_MS",
+  "PIPELINE_CONCURRENCY",
+  "PHOTO_MAX_INPUT_MB",
+  "PHOTO_MAX_MEGAPIXELS",
+  "PHOTO_CONVERSION_ATTEMPTS",
+  "PHOTO_ARCHIVE_ORIGINALS",
+  "GALLERY_THUMB_WIDTH",
+  "GALLERY_THUMB_QUALITY",
+  "TODAY_DEFAULT_INTERVAL_MS",
+  "TODAY_REFRESH_MS",
+  "ENABLE_CONTAINER_RESTARTS",
+  "STATUS_REFRESH_MS",
+  "STATUS_CACHE_MS",
+  "REQUEST_TIMEOUT_MS",
+  "DISK_WARN_PERCENT",
+  "DISK_ERROR_PERCENT",
+  "DISK_MINIMUM_FREE_GB",
+  "DEFAULT_AUDIO_DELAY_MS",
+  "MAX_AUDIO_DELAY_MS",
+  "SESSION_IDLE_TIMEOUT_MINUTES",
+  "PUBLIC_RELAY_HOST",
+  "SRTLA_PORT",
+  "SRT_PLAYER_PORT",
+  "SRT_SENDER_PORT",
+  "SLS_STATS_PORT",
+]);
+
 try {
   const command = process.argv[2] ?? "help";
   const options = parseOptions(process.argv.slice(3));
@@ -60,6 +105,10 @@ try {
     await setTunnelToken();
   } else if (command === "set-portal-auth") {
     await setPortalAuth();
+  } else if (command === "set-discord-auth") {
+    await setDiscordAuth();
+  } else if (command === "set-service-auth") {
+    await setServiceAuth();
   } else if (command === "reset") {
     await reset(options);
   } else if (command === "help" || command === "--help" || command === "-h") {
@@ -75,6 +124,7 @@ try {
 async function install(options) {
   const existingEnv = await loadEnv();
   const importedEnv = options["import-env"] ? await loadImportEnv(options["import-env"]) : {};
+  const settingOverrides = parseSettingOverrides(options.set);
   const existingConfigRaw = await readJsonIfExists(getConfigPathFromEnv(existingEnv));
   const existingConfig = existingConfigRaw ? upgradeExistingConfig(existingConfigRaw) : null;
   if (existingConfig) {
@@ -104,7 +154,7 @@ async function install(options) {
   assertDeployableCapabilities(capabilities);
 
   const dependencyWarnings = enforceDependencies(capabilities);
-  const env = buildEnvironment({ ...existingEnv, ...importedEnv }, options, mode, capabilities);
+  const env = buildEnvironment({ ...existingEnv, ...importedEnv, ...settingOverrides }, options, mode, capabilities);
   const dataRoot = resolveDataRoot(env.FRAME_DATA_ROOT);
   const config = {
     mode,
@@ -224,17 +274,17 @@ async function status() {
   );
   console.log(
     `  Audio Monitor: ${
-      config.capabilities["frame-audio-relay"] ? `${env.EDGE_PUBLIC_BASE_URL}/audio/admin` : "disabled"
+      config.capabilities["frame-audio-relay"] ? `${env.EDGE_LAN_BASE_URL}/audio/admin` : "disabled"
     }`,
   );
   console.log(
     `  Stream Management: ${
-      config.capabilities["frame-video-relay"] ? `${env.EDGE_PUBLIC_BASE_URL}/slsui` : "disabled"
+      config.capabilities["frame-video-relay"] ? `${env.EDGE_LAN_BASE_URL}/slsui` : "disabled"
     }`,
   );
   console.log(
     `  Overlay Wizard: ${
-      config.capabilities["frame-overlays"] ? `${env.EDGE_PUBLIC_BASE_URL}/overlays/setup` : "disabled"
+      config.capabilities["frame-overlays"] ? `${env.EDGE_LAN_BASE_URL}/overlays/setup` : "disabled"
     }`,
   );
   console.log(
@@ -253,8 +303,8 @@ async function status() {
     }`,
   );
   console.log(
-    `  Today Viewer: ${
-      config.capabilities["frame-photo-todaytools"] ? `${env.EDGE_PUBLIC_BASE_URL}/today/viewer` : "disabled"
+    `  Today Tools: ${
+      config.capabilities["frame-photo-todaytools"] ? `${env.EDGE_PUBLIC_BASE_URL}/today/dashboard` : "disabled"
     }`,
   );
   console.log(`  Enabled capabilities: ${enabled.length ? enabled.join(", ") : "none"}`);
@@ -288,6 +338,44 @@ async function setPortalAuth() {
   console.log("Portal credentials stored.");
 }
 
+async function setDiscordAuth() {
+  const env = await loadEnv(true);
+  const [clientId = "", ...tokenLines] = (await readStandardInput()).replace(/\r/g, "").split("\n");
+  const token = tokenLines.join("\n").replace(/\n$/, "");
+  if (!/^\d{10,30}$/.test(clientId.trim()) || !token || isPlaceholder(token)) {
+    throw new Error("Discord client ID and bot token are both required.");
+  }
+  env.DISCORD_CLIENT_ID = clientId.trim();
+  env.DISCORD_TOKEN = token;
+  await atomicWrite(ENV_PATH, serializeEnv(env));
+  console.log("Discord Audio Bridge credentials stored.");
+}
+
+async function setServiceAuth() {
+  const env = await loadEnv(true);
+  const [group = "", username = "", ...passwordLines] = (await readStandardInput()).replace(/\r/g, "").split("\n");
+  const password = passwordLines.join("\n").replace(/\n$/, "");
+  const credentials = {
+    "photo-ftp": ["PHOTO_FTP_USERNAME", "PHOTO_FTP_PASSWORD", true],
+    streams: ["STREAMS_USERNAME", "STREAMS_PASSWORD", false],
+    overlays: ["OVERLAYS_USERNAME", "OVERLAYS_PASSWORD", false],
+  }[group.trim()];
+  if (!credentials) {
+    throw new Error("Unknown service credential group.");
+  }
+  const [usernameKey, passwordKey, required] = credentials;
+  if (required && (!username.trim() || password.length < 12)) {
+    throw new Error("Photo FTP username and a password of at least 12 characters are required.");
+  }
+  if (!required && Boolean(username.trim()) !== Boolean(password)) {
+    throw new Error("Username and password must both be set, or both be empty.");
+  }
+  env[usernameKey] = username.trim();
+  env[passwordKey] = password;
+  await atomicWrite(ENV_PATH, serializeEnv(env));
+  console.log(`${group.trim()} credentials stored.`);
+}
+
 async function reset(options) {
   if (!options.yes) {
     throw new Error("Reset requires --yes after the wrapper confirmation.");
@@ -304,6 +392,7 @@ async function reset(options) {
 
 function buildEnvironment(existing, options, mode, capabilities) {
   const dataRoot = normalizeDataRoot(String(options["data-root"] ?? existing.FRAME_DATA_ROOT ?? "./data"));
+  const hostDataRoot = normalizeHostDataRoot(String(options["host-data-root"] ?? existing.FRAME_HOST_DATA_ROOT ?? "/data"));
   const edgePort = normalizePort(options["edge-http-port"] ?? existing.EDGE_HTTP_PORT ?? "80", "FRAME Edge port");
   const edgeLanBaseUrl = formatLocalHttpUrl(edgePort);
   const cloudflarePublicHostname = normalizeHostname(
@@ -353,7 +442,7 @@ function buildEnvironment(existing, options, mode, capabilities) {
   return {
     FRAME_MODE: mode,
     FRAME_DATA_ROOT: dataRoot,
-    FRAME_HOST_DATA_ROOT: existing.FRAME_HOST_DATA_ROOT ?? "/data",
+    FRAME_HOST_DATA_ROOT: hostDataRoot,
     TIMEZONE: existing.TIMEZONE ?? "America/Chicago",
     COMPOSE_PROFILES: profiles.join(","),
     EDGE_HTTP_PORT: edgePort,
@@ -587,6 +676,15 @@ function upgradeExistingConfig(config) {
 }
 
 function generatePublicRoutes(prefixes) {
+  const rootRouter = prefixes.includes("/dashboard")
+    ? `    frame-public-root:
+      entryPoints:
+        - public
+      rule: "Path(\`/\`)"
+      priority: 110
+      service: frame-edge
+`
+    : "";
   const publicRouter = prefixes.length
     ? `    frame-public:
       entryPoints:
@@ -606,7 +704,7 @@ http:
       middlewares:
         - frame-public-gateway-health-path
       service: frame-edge
-${publicRouter}  middlewares:
+${rootRouter}${publicRouter}  middlewares:
     frame-public-gateway-health-path:
       replacePath:
         path: /healthz
@@ -688,6 +786,14 @@ function normalizeDataRoot(value) {
     throw new Error("FRAME_DATA_ROOT must be a repository-relative path without '..'.");
   }
   return normalized.startsWith("./") ? normalized : `./${normalized}`;
+}
+
+function normalizeHostDataRoot(value) {
+  const normalized = String(value ?? "").trim().replace(/[\\/]+$/, "");
+  if (!normalized) {
+    throw new Error("FRAME_HOST_DATA_ROOT cannot be empty.");
+  }
+  return normalized;
 }
 
 function assertInsideWorkspace(target) {
@@ -810,7 +916,7 @@ function parseOptions(args) {
       throw new Error(`${argument} requires a value.`);
     }
     index += 1;
-    if (key === "enable" || key === "disable") {
+    if (key === "enable" || key === "disable" || key === "set") {
       parsed[key] = [...toArray(parsed[key]), value];
     } else {
       parsed[key] = value;
@@ -824,6 +930,7 @@ function assertAllowedOptions(command, options) {
     install: new Set([
       "mode",
       "data-root",
+      "host-data-root",
       "edge-http-port",
       "portal-port",
       "audio-bridge-port",
@@ -831,10 +938,13 @@ function assertAllowedOptions(command, options) {
       "import-env",
       "enable",
       "disable",
+      "set",
     ]),
     validate: new Set(["for-start"]),
     "set-tunnel-token": new Set(),
     "set-portal-auth": new Set(),
+    "set-discord-auth": new Set(),
+    "set-service-auth": new Set(),
     reset: new Set(["yes"]),
     status: new Set(),
     help: new Set(),
@@ -850,6 +960,26 @@ function assertAllowedOptions(command, options) {
       throw new Error(`--${key} is not valid for ${command}.`);
     }
   }
+}
+
+function parseSettingOverrides(values) {
+  const overrides = {};
+  for (const assignment of toArray(values)) {
+    const equals = assignment.indexOf("=");
+    if (equals < 1) {
+      throw new Error("--set values must use KEY=VALUE.");
+    }
+    const key = assignment.slice(0, equals).trim();
+    const value = assignment.slice(equals + 1).trim();
+    if (!CUSTOMIZABLE_ENV_KEYS.has(key)) {
+      throw new Error(`${key} is not an installer-customizable setting.`);
+    }
+    if (!value) {
+      throw new Error(`${key} cannot be empty.`);
+    }
+    overrides[key] = value;
+  }
+  return overrides;
 }
 
 function toArray(value) {
@@ -894,10 +1024,13 @@ function parseEnv(text) {
     }
     const key = line.slice(0, equals).trim();
     let value = line.slice(equals + 1).trim();
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
+    if (value.startsWith('"') && value.endsWith('"')) {
+      try {
+        value = JSON.parse(value);
+      } catch {
+        value = value.slice(1, -1);
+      }
+    } else if (value.startsWith("'") && value.endsWith("'")) {
       value = value.slice(1, -1);
     }
     env[key] = value;
@@ -1045,6 +1178,7 @@ Usage:
   stack hybrid-stage       Prompt for a hostname and stage Hybrid mode without starting it
   stack tunnel-token       Securely prompt for and store the Cloudflare tunnel token
   stack portal-auth        Securely prompt for and store Portal credentials
+  stack discord-auth       Securely prompt for Discord Audio Bridge credentials
   stack validate           Validate config and startup requirements
   stack verify             Run contract tests and static verification
   stack start              Build and start enabled services
@@ -1057,12 +1191,14 @@ Install options:
   --mode LAN|HYBRID        Stage a LAN or Cloudflare Tunnel deployment
   --public-hostname <host> Required for HYBRID, for example frame.syroni.us
   --data-root ./data       Repository-relative FRAME data directory
+  --host-data-root <path>  Host-visible data path written into photo .ready manifests
   --edge-http-port 80      Shared FRAME web entry point
   --portal-port 3730       Portal host port
   --audio-bridge-port 3729 Audio Bridge host port
   --import-env <path>      Import Audio Bridge settings from a repo-relative .env
   --enable <capability>    Enable a deployable capability
   --disable <capability>   Disable a capability
+  --set KEY=VALUE          Set an advanced non-secret setting (repeatable)
 
 Re-running install preserves existing credentials and generated secrets.
 `);

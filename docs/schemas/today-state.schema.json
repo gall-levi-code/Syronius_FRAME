@@ -22,6 +22,7 @@
     "presentation_duration_ms",
     "count_today",
     "show_exif",
+    "show_background",
     "current_photo",
     "photos"
   ],
@@ -44,6 +45,7 @@
     "presentation_duration_ms": { "type": "integer", "const": 7000 },
     "count_today": { "type": "integer", "minimum": 0 },
     "show_exif": { "type": "boolean" },
+    "show_background": { "type": "boolean" },
     "current_photo": { "type": ["object", "null"] },
     "photos": { "type": "array", "items": { "type": "object" } }
   }

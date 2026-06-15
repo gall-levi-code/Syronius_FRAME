@@ -9,7 +9,8 @@ Audio Bridge.
 
 ## Current Features
 
-- `/dashboard` and `/status` responsive dashboard.
+- `/dashboard` navigation-first tool launcher and `/status` operational status view.
+- Public/LAN access-context awareness that disables LAN-only management links on the public dashboard.
 - `/status/api` machine-readable FRAME status response.
 - Dynamic tools generated from `/data/state/stack-config.json`.
 - Docker container status, health, and uptime for containers whose names begin with `frame-`.
@@ -27,8 +28,9 @@ FRAME Portal uses a restricted Docker socket proxy by default and disables Docke
 and restart actions.
 
 The proxy exposes container-read endpoints for status and log collection without mounting the
-Docker socket into the Portal container. Keep the Portal LAN-only unless it is protected by an
-authenticated edge service.
+Docker socket into the Portal container. Hybrid mode may expose the Portal through the generated
+allowlist gateway. LAN-only management surfaces remain disabled on the public dashboard and are
+defensively denied at FRAME Edge.
 
 Basic authentication is optional in LAN mode and required in HYBRID mode:
 

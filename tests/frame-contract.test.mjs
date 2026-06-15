@@ -144,11 +144,58 @@ test("hybrid exposure removes forbidden and disabled capability routes", () => {
   assert.equal(warnings.length, 1);
 });
 
+test("FRAME Edge denies management surfaces when a tunnel bypasses the public gateway", async () => {
+  const composeTemplate = await readFile("installer/templates/docker-compose.yml", "utf8");
+  assert.ok(composeTemplate.includes("traefik.http.routers.frame-public-deny.rule"));
+  for (const route of ["/slsui", "/audio/admin", "/audio/capture", "/audio/api", "/overlays/setup", "/overlays/api"]) {
+    assert.ok(composeTemplate.includes(`Path(\`${route}\`)`), `${route} is missing from the Edge deny router`);
+  }
+});
+
+test("Hybrid public gateway forwards the exact root when the dashboard is public", async () => {
+  const installer = await readFile("installer/frame-installer.mjs", "utf8");
+  assert.ok(installer.includes('prefixes.includes("/dashboard")'));
+  assert.ok(installer.includes('frame-public-root:'));
+  assert.ok(installer.includes('rule: "Path(\\`/\\`)"'));
+});
+
+test("Stream Management opens overlay management through the LAN edge", async () => {
+  const composeTemplate = await readFile("installer/templates/docker-compose.yml", "utf8");
+  assert.ok(composeTemplate.includes("OVERLAY_WIZARD_URL: /overlays/setup"));
+  assert.ok(
+    !composeTemplate.includes("OVERLAY_WIZARD_URL: ${EDGE_PUBLIC_BASE_URL:-http://localhost}/overlays/setup"),
+  );
+});
+
 test("prefix normalization removes duplicates and child routes", () => {
   assert.deepEqual(normalizePrefixes(["/today/viewer", "/today", "/today", "/status"]), [
     "/today",
     "/status",
   ]);
+});
+
+test("Windows and Unix wrappers preserve direct commands while offering the numbered command center", async () => {
+  const [powershell, shell, installer] = await Promise.all([
+    readFile("installer/stack.ps1", "utf8"),
+    readFile("installer/stack.sh", "utf8"),
+    readFile("installer/frame-installer.mjs", "utf8"),
+  ]);
+  for (const wrapper of [powershell, shell]) {
+    assert.ok(wrapper.includes("Guided setup"));
+    assert.ok(wrapper.includes("Configure services"));
+    assert.ok(wrapper.includes("Validate and verify"));
+    assert.ok(wrapper.includes("Start or update stack"));
+    assert.ok(wrapper.includes("set-discord-auth"));
+    assert.ok(wrapper.includes("set-service-auth"));
+  }
+  assert.ok(installer.includes('"set"'));
+  assert.ok(installer.includes("CUSTOMIZABLE_ENV_KEYS"));
+  assert.ok(installer.includes("setDiscordAuth"));
+  assert.ok(installer.includes("setServiceAuth"));
+  assert.ok(installer.includes("value = JSON.parse(value)"), "quoted .env values must remain idempotent");
+  assert.ok(!powershell.includes("$(if"), "PowerShell wrapper must not execute inline if expressions as commands");
+  assert.ok(!powershell.includes("= if ("), "PowerShell wrapper must remain compatible with Windows PowerShell 5");
+  assert.ok(!powershell.includes("return if ("), "PowerShell wrapper must not return an if expression");
 });
 
 async function assertSameFile(left, right) {

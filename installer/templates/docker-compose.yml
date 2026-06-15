@@ -57,7 +57,13 @@ services:
       traefik.http.routers.frame-auth.priority: "300"
       traefik.http.routers.frame-auth.rule: PathPrefix(`/auth`)
       traefik.http.routers.frame-auth.service: frame-auth
+      traefik.http.routers.frame-public-deny.entrypoints: web
+      traefik.http.routers.frame-public-deny.priority: "1000"
+      traefik.http.routers.frame-public-deny.rule: (Host(`${CLOUDFLARE_PUBLIC_HOSTNAME:-frame.invalid}`) || HeaderRegexp(`Cf-Ray`, `.+`)) && (Path(`/audio`) || Path(`/audio/admin`) || PathPrefix(`/audio/admin/`) || Path(`/audio/capture`) || PathPrefix(`/audio/capture/`) || Path(`/audio/api`) || PathPrefix(`/audio/api/`) || Path(`/slsui`) || PathPrefix(`/slsui/`) || Path(`/overlays`) || Path(`/overlays/setup`) || PathPrefix(`/overlays/setup/`) || Path(`/overlays/api`) || PathPrefix(`/overlays/api/`))
+      traefik.http.routers.frame-public-deny.middlewares: frame-public-deny-path
+      traefik.http.routers.frame-public-deny.service: frame-auth
       traefik.http.services.frame-auth.loadbalancer.server.port: "3740"
+      traefik.http.middlewares.frame-public-deny-path.replacepath.path: /auth/public-denied
       traefik.http.middlewares.frame-sso.forwardauth.address: http://frame-auth:3740/auth/check
       traefik.http.middlewares.frame-sso.forwardauth.trustForwardHeader: "true"
       traefik.http.middlewares.frame-sso.forwardauth.maxResponseBodySize: "65536"
@@ -125,6 +131,7 @@ services:
     environment:
       PORT: 3730
       FRAME_MODE: ${FRAME_MODE:-LAN}
+      CLOUDFLARE_PUBLIC_HOSTNAME: ${CLOUDFLARE_PUBLIC_HOSTNAME:-}
       DATA_ROOT: /data
       STACK_CONFIG_PATH: /data/state/stack-config.json
       DOCKER_HOST: http://frame-docker-proxy:2375
@@ -417,7 +424,7 @@ services:
       traefik.http.routers.frame-today.service: frame-today
       traefik.http.routers.frame-today-control.entrypoints: web
       traefik.http.routers.frame-today-control.priority: "200"
-      traefik.http.routers.frame-today-control.rule: Path(`/today/remote`) || Path(`/today/api/command`) || Path(`/today/ws/control`)
+      traefik.http.routers.frame-today-control.rule: PathPrefix(`/today/dashboard`) || Path(`/today/remote`) || Path(`/today/api/dashboard`) || Path(`/today/api/command`) || Path(`/today/ws/control`)
       traefik.http.routers.frame-today-control.middlewares: frame-sso
       traefik.http.routers.frame-today-control.service: frame-today
       traefik.http.services.frame-today.loadbalancer.server.port: "3739"
@@ -440,7 +447,7 @@ services:
       SRT_PLAYER_PORT: ${SRT_PLAYER_PORT:-4000}
       SRT_SENDER_PORT: ${SRT_SENDER_PORT:-4001}
       SLS_STATS_PORT: ${SLS_STATS_PORT:-8080}
-      OVERLAY_WIZARD_URL: ${EDGE_PUBLIC_BASE_URL:-http://localhost}/overlays/setup
+      OVERLAY_WIZARD_URL: /overlays/setup
       OVERLAYS_API_URL: http://frame-overlays:3733
       STREAMS_USERNAME: ${STREAMS_USERNAME:-}
       STREAMS_PASSWORD: ${STREAMS_PASSWORD:-}

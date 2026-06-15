@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#071923">
+    <title>FRAME Today Tools</title>
+    <link rel="icon" href="/today/assets/frame-logo-square.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/today/assets/today.css">
+  </head>
+  <body class="tool-page dashboard-page">
+    <header class="topbar">
+      <a class="brand" href="/dashboard" aria-label="Open FRAME dashboard">
+        <img src="/today/assets/frame-logo-square.svg" alt="FRAME">
+        <span><small>Syronius FRAME</small><strong>Today Tools</strong></span>
+      </a>
+      <div class="header-actions">
+        <span id="dashboard-status" class="status-pill">Loading library</span>
+        <a class="icon-button" href="/auth/logout">Sign out</a>
+      </div>
+    </header>
+
+    <main class="dashboard-main">
+      <section class="dashboard-heading">
+        <div>
+          <p>Photo workflow</p>
+          <h1>Today Dashboard</h1>
+          <span>One place for the live viewer, current gallery, remote controls, and published library.</span>
+        </div>
+        <button id="copy-viewer" class="primary-button" type="button">Copy OBS viewer URL</button>
+      </section>
+
+      <section class="stats-grid" aria-label="Photo library summary">
+        <article><span>Albums</span><strong id="total-albums">0</strong></article>
+        <article><span>Published photos</span><strong id="total-images">0</strong></article>
+        <article><span>Current gallery</span><strong id="current-images">0</strong></article>
+        <article><span>Capture span</span><strong id="current-duration">0 min</strong></article>
+      </section>
+
+      <section class="dashboard-grid">
+        <article class="latest-panel">
+          <div class="panel-heading">
+            <div><p>Latest capture</p><h2 id="latest-name">Waiting for a photo</h2></div>
+            <span id="latest-time">No publication yet</span>
+          </div>
+          <div class="latest-preview">
+            <img id="latest-image" alt="Latest published capture" hidden>
+            <span id="latest-empty">Published photos will appear here.</span>
+          </div>
+        </article>
+
+        <div class="dashboard-side">
+          <article class="links-panel">
+            <div class="panel-heading"><div><p>Open tools</p><h2>Photo workflow</h2></div></div>
+            <nav class="tool-links">
+              <a href="/today/gallery"><strong>All galleries</strong><span>Browse every published album</span></a>
+              <a id="today-gallery-link" href="/today/gallery" aria-disabled="true"><strong>Current gallery</strong><span id="today-gallery-copy">No current album</span></a>
+              <a href="/today/gallery/admin"><strong>Gallery management</strong><span>Trash, restore, or remove photos</span></a>
+              <a href="/today/remote"><strong>Viewer remote</strong><span>Control playback from another screen</span></a>
+              <a href="/photos/upload"><strong>Photo upload</strong><span>Send files into the photo pipeline</span></a>
+            </nav>
+          </article>
+
+          <article class="latest-json-panel">
+            <div class="panel-heading"><div><p>Pipeline pointer</p><h2>latest.json</h2></div></div>
+            <p class="panel-description">The pipeline updates this small state file after publishing or gallery changes. Today Tools watches its <code>updated_at</code> value to refresh the viewer and remote.</p>
+            <dl>
+              <div><dt>Date folder</dt><dd id="latest-date">None</dd></div>
+              <div><dt>Latest base</dt><dd id="latest-base">None</dd></div>
+              <div><dt>Count today</dt><dd id="latest-count">0</dd></div>
+              <div><dt>Updated</dt><dd id="latest-updated">Never</dd></div>
+            </dl>
+          </article>
+        </div>
+      </section>
+    </main>
+    <p id="dashboard-message" class="dashboard-message" role="status"></p>
+    <script type="module" src="/today/assets/dashboard.js"></script>
+  </body>
+</html>

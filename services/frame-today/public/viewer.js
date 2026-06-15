@@ -41,6 +41,8 @@ function connect() {
 
 function render(state) {
   latestState = state;
+  document.documentElement.classList.toggle("viewer-transparent", !state.show_background);
+  document.body.classList.toggle("viewer-transparent", !state.show_background);
   const photo = state.current_photo;
   elements.empty.hidden = Boolean(photo);
   elements.stage.hidden = !photo;

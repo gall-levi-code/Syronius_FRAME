@@ -51,16 +51,20 @@ app.use((request, response, next) => {
   response.status(401).send("Authentication required.");
 });
 
-app.get("/api/portal", async (_request, response, next) => {
+app.get("/api/portal", async (request, response, next) => {
   try {
     const [stackConfig, status] = await Promise.all([
       loadStackConfig(appConfig),
       statusCollector.collect(),
     ]);
+    const accessContext = isPublicRequest(request.header("host"), appConfig.publicHostname)
+      ? "public"
+      : "lan";
     response.json({
       mode: stackConfig.config.mode,
+      access_context: accessContext,
       config_source: stackConfig.source,
-      tools: buildPortalTools(stackConfig, status.services),
+      tools: buildPortalTools(stackConfig, status.services, accessContext),
       restarts_enabled: appConfig.enableContainerRestarts,
       refresh_ms: appConfig.statusRefreshMs,
     });
@@ -116,7 +120,11 @@ app.get("/status/logs/:name", async (request, response) => {
   }
 });
 
-app.get(["/", "/dashboard", "/status"], (_request, response) => {
+app.get("/", (_request, response) => {
+  response.redirect(302, "/dashboard");
+});
+
+app.get(["/dashboard", "/status"], (_request, response) => {
   response.setHeader("Cache-Control", "no-store");
   response.sendFile(path.join(publicDir, "index.html"));
 });
@@ -170,4 +178,10 @@ function safeEqual(left: string, right: string): boolean {
   const leftBuffer = Buffer.from(left);
   const rightBuffer = Buffer.from(right);
   return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function isPublicRequest(hostHeader: string | undefined, publicHostname: string | undefined): boolean {
+  if (!publicHostname) return false;
+  const host = (hostHeader || "").split(":", 1)[0]?.trim().toLowerCase();
+  return host === publicHostname;
 }

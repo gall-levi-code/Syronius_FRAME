@@ -28,6 +28,17 @@ test("protected requests redirect to login and one session unlocks multiple pane
     assert.equal(denied.status, 302);
     assert.equal(denied.headers.get("location"), "https://frame.example.test/auth/login?return_to=%2Ftoday%2Fremote");
 
+    const rootDenied = await fetch(`${base}/auth/check`, {
+      redirect: "manual",
+      headers: {
+        "x-forwarded-host": "frame.example.test",
+        "x-forwarded-proto": "https",
+        "x-forwarded-uri": "/",
+      },
+    });
+    assert.equal(rootDenied.status, 302);
+    assert.equal(rootDenied.headers.get("location"), "https://frame.example.test/auth/login?return_to=%2Fdashboard");
+
     const login = await fetch(`${base}/auth/login`, {
       method: "POST",
       redirect: "manual",
@@ -70,6 +81,26 @@ test("unconfigured installs pass through without a login wall", async () => {
   assert.ok(address && typeof address === "object");
   try {
     assert.equal((await fetch(`http://127.0.0.1:${address.port}/auth/check`)).status, 200);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("public deny endpoint returns an unbranded not-found response", async () => {
+  const app = createApp({
+    portal: { username: "frame", password: "secret" },
+    streams: { username: "", password: "" },
+    overlays: { username: "", password: "" },
+    sessionSigner: new SessionSigner("01234567890123456789012345678901", 604800),
+    sessionDays: 7,
+  });
+  const server = app.listen(0);
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  try {
+    const response = await fetch(`http://127.0.0.1:${address.port}/auth/public-denied`);
+    assert.equal(response.status, 404);
+    assert.equal(await response.text(), "Not found.");
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

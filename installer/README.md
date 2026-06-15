@@ -24,13 +24,23 @@ The installer currently deploys the implemented FRAME services:
 - `frame-gallery`
 - `frame-today`
 
-Fresh installs enable the shared Edge and Portal only. Every optional capability is opt-in and must
-be explicitly enabled with `stack install --enable <capability>`.
+Fresh installs enable the shared Edge and Portal only. Every optional capability is opt-in. Run
+`stack.cmd` or `./stack.sh` without arguments in an interactive terminal to open the numbered FRAME
+command center, or continue using direct commands for automation.
 
 LAN HTTP routing is supported through FRAME Edge. HYBRID mode is staged through a remotely managed
 Cloudflare Tunnel and a separate internal FRAME Public Gateway. The public gateway forwards only
 the generated capability-aware allowlist; LAN-only admin, capture, ingest, and management routes
 remain unavailable through the tunnel.
+
+FRAME Edge also denies known LAN-only management routes when requests arrive through the configured
+public hostname or Cloudflare headers. This defense-in-depth protects the stack if a remotely
+managed Cloudflare Published application is accidentally pointed at FRAME Edge instead of
+`http://frame-public-gateway:8080`.
+
+The public gateway forwards the exact root path to Portal so the Portal can redirect `/` to
+`/dashboard`. Stream Management links to Overlay Wizard with the relative `/overlays/setup` route,
+keeping management navigation on whichever trusted LAN Edge origin opened SLSUI.
 
 Current limitations:
 
@@ -41,16 +51,37 @@ Current limitations:
 - Photo `.ready` manifests use `FRAME_HOST_DATA_ROOT`; set it to the host-visible data directory
   before connecting host-side StreamerBot actions.
 
+## Interactive command center
+
+The no-argument command center guides both first-time and existing installations:
+
+1. Existing installs show known setup issues first, with a choice to resolve only those issues or
+   review everything.
+2. Standard configuration covers deployment mode, hostname, Edge port, data path, timezone,
+   capabilities, and relevant service basics.
+3. Advanced configuration can edit any installer-whitelisted non-secret setting.
+4. Secrets use hidden-input flows and never appear in command arguments or summaries.
+5. Guided setup runs validation and verification, then explicitly offers to reconcile the complete
+   Docker Compose stack.
+
+The command center uses numbered prompts for broad terminal compatibility. Direct commands remain
+stable and do not enter the menu.
+
 ## Commands
 
 ```powershell
+.\stack.cmd
 .\stack.cmd install
 .\stack.cmd install --enable frame-audio-relay
 .\stack.cmd install --enable frame-video-relay --enable frame-overlays
 .\stack.cmd install --enable frame-photo-webupload --enable frame-photo-ftp
 .\stack.cmd install --enable frame-photo-webupload --enable frame-photo-gallery
 .\stack.cmd install --enable frame-photo-webupload --enable frame-photo-gallery --enable frame-photo-todaytools
+.\stack.cmd install --host-data-root "D:\FRAME\data"
 .\stack.cmd hybrid-stage
+.\stack.cmd tunnel-token
+.\stack.cmd portal-auth
+.\stack.cmd discord-auth
 .\stack.cmd validate
 .\stack.cmd verify
 .\stack.cmd start
@@ -61,6 +92,18 @@ Current limitations:
 ```
 
 Use `./stack.sh` with the same arguments on Linux/macOS.
+
+Advanced automation can repeat `--set KEY=VALUE` for installer-whitelisted non-secret settings:
+
+```powershell
+.\stack.cmd install --set TIMEZONE=America/Chicago --set PHOTO_MAX_INPUT_MB=100
+```
+
+For host-side StreamerBot, set `--host-data-root` to the absolute host directory that backs
+`FRAME_DATA_ROOT`, then watch `<host-data-root>\today\*.ready`. The pipeline maintains `today` as a
+relative link to the current local-date gallery so it remains usable from both Docker and Windows.
+Only newly published manifests receive a changed host path; existing `.ready` files are never
+rewritten or replayed.
 
 `verify` runs deterministic capability/route contract tests and JavaScript syntax checks, then
 validates the generated Docker Compose configuration when it exists.
