@@ -97,6 +97,7 @@ Advanced automation can repeat `--set KEY=VALUE` for installer-whitelisted non-s
 
 ```powershell
 .\stack.cmd install --set TIMEZONE=America/Chicago --set PHOTO_MAX_INPUT_MB=100
+.\stack.cmd install --set PHOTO_UPLOAD_MAX_FILES=10 --set PHOTO_UPLOAD_MAX_SESSIONS=10
 ```
 
 For host-side StreamerBot, set `--host-data-root` to the absolute host directory that backs
@@ -133,7 +134,13 @@ authentication behavior.
 
 When `frame-photo-ftp` is enabled, `stack install` writes `PHOTO_FTP_USERNAME` and a generated
 `PHOTO_FTP_PASSWORD` into the repository root `.env`. Re-running the installer preserves both
-values. The correct variable name is `PHOTO_FTP_USERNAME`; `PHOTO_FTP_USERNAEM` is not recognized.
+values. `PHOTO_FTP_MIN_PASSWORD_LENGTH` defaults to `5`; the interactive credential prompt uses
+that configured minimum. The correct variable name is `PHOTO_FTP_USERNAME`; `PHOTO_FTP_USERNAEM` is
+not recognized.
+
+FTP daemon messages are bridged into `docker logs frame-photo-ftp`. When troubleshooting a camera
+that connects but times out, temporarily set `PHOTO_FTP_VERBOSE_LOG=true`, restart the FTP service,
+then return it to `false` after collecting logs.
 
 The FTP credentials only authorize camera uploads. Published photos and Today/Gallery state live
 under `FRAME_DATA_ROOT` (normally `./data`) and are not stored in the container image. Relaunch the

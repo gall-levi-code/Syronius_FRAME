@@ -32,7 +32,9 @@ $AdvancedSettings = @(
   "TIMEZONE", "FRAME_AUTH_SESSION_DAYS", "PORTAL_PORT", "AUDIO_BRIDGE_PORT", "AUDIO_MONITOR_PORT",
   "STREAMS_PORT", "OVERLAYS_PORT", "PHOTO_UPLOAD_PORT", "PHOTO_FTP_PORT", "GALLERY_PORT", "TODAY_PORT",
   "PHOTO_FTP_PASSIVE_MIN", "PHOTO_FTP_PASSIVE_MAX", "PHOTO_FTP_PASSIVE_HOST", "PHOTO_FTP_USERNAME",
-  "PHOTO_FTP_STABLE_MS", "PHOTO_FTP_SCAN_MS", "PIPELINE_POLL_MS", "PIPELINE_CONCURRENCY",
+  "PHOTO_FTP_MIN_PASSWORD_LENGTH", "PHOTO_FTP_MAX_SESSIONS", "PHOTO_FTP_MAX_SESSIONS_PER_IP",
+  "PHOTO_FTP_VERBOSE_LOG", "PHOTO_FTP_STABLE_MS", "PHOTO_FTP_SCAN_MS", "PHOTO_UPLOAD_MAX_FILES", "PHOTO_UPLOAD_MAX_SESSIONS",
+  "PIPELINE_POLL_MS", "PIPELINE_CONCURRENCY",
   "PHOTO_MAX_INPUT_MB", "PHOTO_MAX_MEGAPIXELS", "PHOTO_CONVERSION_ATTEMPTS", "PHOTO_ARCHIVE_ORIGINALS",
   "GALLERY_THUMB_WIDTH", "GALLERY_THUMB_QUALITY", "TODAY_DEFAULT_INTERVAL_MS", "TODAY_REFRESH_MS",
   "ENABLE_CONTAINER_RESTARTS", "STATUS_REFRESH_MS", "STATUS_CACHE_MS", "REQUEST_TIMEOUT_MS",
@@ -409,7 +411,11 @@ function Configure-Credentials {
       "4" {
         $env = Get-EnvMap
         $username = Read-Default "Photo FTP username" $env.PHOTO_FTP_USERNAME
-        $password = Read-PlainTextSecret "Photo FTP password, at least 12 characters (input hidden)"
+        $minimum = "5"
+        if ($env.PHOTO_FTP_MIN_PASSWORD_LENGTH) {
+          $minimum = $env.PHOTO_FTP_MIN_PASSWORD_LENGTH
+        }
+        $password = Read-PlainTextSecret "Photo FTP password, at least $minimum characters (input hidden)"
         Invoke-RuntimeInput @("set-service-auth") "photo-ftp`n$username`n$password"
       }
       "5" {

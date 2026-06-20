@@ -22,6 +22,8 @@ Syronius’ Frame (F.R.A.M.E.) is a modular, containerized IRL streamer applianc
 - `services/frame-photo-ftp/` — Camera FTP input with a completed-upload stability gate.
 - `services/frame-gallery/` — Published photo gallery with cached thumbnails and protected Gallery Admin.
 - `services/frame-today/` — OBS photo viewer, live camera information, and authenticated mobile remote.
+- `apps/frame-setup/` — Tauri-based native setup and launcher prototype for host checks, storage
+  selection, and the future GUI-first installer flow.
 - `docker_container_samples/` — Reference container examples that are not yet first-class FRAME services.
 
 ## Implemented Services
@@ -117,6 +119,9 @@ stack.cmd start
 
 Open the Portal-authenticated manual upload queue at `http://localhost/photos/upload`. Configure cameras with the generated
 `PHOTO_FTP_USERNAME`, `PHOTO_FTP_PASSWORD`, FTP port, and passive port range from `.env`.
+Photo Upload defaults to 10 selected files and 10 concurrent upload sessions; tune
+`PHOTO_UPLOAD_MAX_FILES` and `PHOTO_UPLOAD_MAX_SESSIONS` from Advanced setup or `.env`.
+Photo FTP passwords default to a 5-character minimum through `PHOTO_FTP_MIN_PASSWORD_LENGTH`.
 
 Enable the gallery alongside either photo input:
 
@@ -185,6 +190,11 @@ Running `stack.cmd` or `./stack.sh` without arguments in an interactive terminal
 FRAME command center. It shows setup issues first, supports Standard and Advanced configuration,
 walks through hidden credential prompts, validates and verifies the result, then offers to reconcile
 the complete Compose stack. Direct commands remain available for scripts and automation.
+
+The native [`apps/frame-setup`](apps/frame-setup) prototype explores the GUI-first installer path. It
+uses the same dark FRAME theme, offers Quick Start, Guided Setup, and Advanced flows, detects Docker
+readiness and previous installs, plans host storage, checks the small set of exposed ports, and opens
+the local `/setup` handoff.
 
 **Install / reconfigure**
 - Windows:

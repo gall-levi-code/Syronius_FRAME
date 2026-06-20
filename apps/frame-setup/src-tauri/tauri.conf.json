@@ -1,0 +1,39 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "FRAME Setup",
+  "version": "0.1.0",
+  "identifier": "us.syroni.frame.setup",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devUrl": "http://127.0.0.1:5174",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "FRAME Setup",
+        "width": 1120,
+        "height": 760,
+        "minWidth": 900,
+        "minHeight": 640
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Utility",
+    "icon": [
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "../../../services/": "frame-stack/services",
+      "../../../config/": "frame-stack/config",
+      "../../../installer/templates/docker-compose.yml": "frame-stack/installer/templates/docker-compose.yml"
+    }
+  }
+}

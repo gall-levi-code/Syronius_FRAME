@@ -25,3 +25,23 @@ large arbitrary port range.
 
 `PHOTO_FTP_PASSIVE_HOST` must be an address the camera can reach. `127.0.0.1` works only for an FTP
 client running on the FRAME host itself; LAN cameras should use the FRAME host's stable LAN IP.
+
+`PHOTO_FTP_MIN_PASSWORD_LENGTH` defaults to `5`. `PHOTO_FTP_MAX_SESSIONS` and
+`PHOTO_FTP_MAX_SESSIONS_PER_IP` default to `10`, which allows several camera/browser FTP operations
+without leaving the service unbounded.
+
+The container starts `syslogd` so Pure-FTPd messages appear in `docker logs frame-photo-ftp`.
+For deeper diagnostics, temporarily set `PHOTO_FTP_VERBOSE_LOG=true`, rebuild/restart the service,
+and then set it back to `false` after testing.
+
+## Camera troubleshooting
+
+If a camera connects but times out during or after upload:
+
+1. Use plain `FTP`, not `FTPS`, unless you have configured certificates for the camera.
+2. Set the camera's FTP server address to the FRAME host's LAN IP, not `127.0.0.1`.
+3. Set `PHOTO_FTP_PASSIVE_HOST` to that same LAN IP and restart the FTP container.
+4. Enable passive mode on the camera.
+5. Make sure the FTP control port and the full passive range are reachable through the host firewall.
+6. Prefer the camera's root target folder while testing.
+7. Disable FTP power saving on the camera while debugging intermittent timeouts.

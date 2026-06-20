@@ -198,6 +198,82 @@ test("Windows and Unix wrappers preserve direct commands while offering the numb
   assert.ok(!powershell.includes("return if ("), "PowerShell wrapper must not return an if expression");
 });
 
+test("FRAME Setup app captures the approved GUI installer decisions", async () => {
+  const [manifest, frontend, styles, cargo, tauriConfig, rust, buildScript, appReadme, adr] = await Promise.all([
+    readFile("apps/frame-setup/package.json", "utf8").then(JSON.parse),
+    readFile("apps/frame-setup/src/main.js", "utf8"),
+    readFile("apps/frame-setup/src/styles.css", "utf8"),
+    readFile("apps/frame-setup/src-tauri/Cargo.toml", "utf8"),
+    readFile("apps/frame-setup/src-tauri/tauri.conf.json", "utf8").then(JSON.parse),
+    readFile("apps/frame-setup/src-tauri/src/lib.rs", "utf8"),
+    readFile("apps/frame-setup/scripts/build-windows.ps1", "utf8"),
+    readFile("apps/frame-setup/README.md", "utf8"),
+    readFile("docs/adr/0011-native-frame-setup-app.md", "utf8"),
+  ]);
+  assert.equal(manifest.name, "@syronius-frame/setup");
+  assert.equal(tauriConfig.productName, "FRAME Setup");
+  for (const expected of ["Quick Start", "Guided Setup", "Advanced", "Welcome to FRAME", "Install FRAME"]) {
+    assert.ok(frontend.includes(expected), `${expected} is missing from the setup flow`);
+  }
+  for (const expected of ["SETUP_STAGES", "stageStatusLabel", "Locked", "canProceedFromStage", "Run readiness checks", "syncProgressControls", "readinessPassed"]) {
+    assert.ok(frontend.includes(expected), `${expected} is missing from the staged wizard flow`);
+  }
+  for (const expected of ["Browse folder", "usePreviewFolder", "hostReadyForInstall", "dockerBlockingChecks", "Install Docker first"]) {
+    assert.ok(frontend.includes(expected), `${expected} is missing from the guarded install flow`);
+  }
+  for (const expected of ["Installer", "stage-check", "publicHostnameValidation", "isValidPublicHostname", "step-page animate"]) {
+    assert.ok(frontend.includes(expected) || styles.includes(expected), `${expected} is missing from the installer UX flow`);
+  }
+  for (const expected of ["validationMessageForStage", "renderStageNotice", "portValidation", "numericPortInput", "network-controls"]) {
+    assert.ok(frontend.includes(expected) || styles.includes(expected), `${expected} is missing from installer validation`);
+  }
+  for (const expected of ["renderGuidedServicePanel", "guidedServiceIndex", "guidedReviewedServices", "Next service", "Finish service review", "markCurrentGuidedServiceReviewed", "service-detail-card"]) {
+    assert.ok(frontend.includes(expected) || styles.includes(expected), `${expected} is missing from guided service review`);
+  }
+  for (const expected of ["installStatus", "startInstallLogListener", "install-log", "isTauriRuntime", "Open FRAME Setup", "finishInstaller", "lastSetupUrl"]) {
+    assert.ok(frontend.includes(expected), `${expected} is missing from install progress handling`);
+  }
+  for (const expected of ["What it does", "Why you might want it", "Ports and exposure", "What comes next in localhost/setup", "service-info-block"]) {
+    assert.ok(frontend.includes(expected) || styles.includes(expected), `${expected} is missing from guided service explanations`);
+  }
+  assert.ok(frontend.includes("stage-viewport"));
+  assert.ok(styles.includes("grid-template-rows: minmax(0, 1fr) auto"));
+  assert.ok(styles.includes(".stage-viewport"));
+  for (const expected of ['value.includes("://")', 'value.includes("/")', 'value.includes(":")', '!value.includes(".")']) {
+    assert.ok(frontend.includes(expected), `${expected} is missing from public hostname malformed checks`);
+  }
+  assert.ok(!frontend.includes("window.prompt"), "Storage selection should use the native folder picker, not typed browser prompts");
+  for (const expected of ["EDGE_HTTP_PORT", "PHOTO_FTP_PORT", "PHOTO_FTP_PASSIVE_MIN", "PHOTO_FTP_PASSIVE_MAX", "PHOTO_FTP_PASSIVE_MIN/MAX", "PHOTO_FTP_MIN_PASSWORD_LENGTH", "PHOTO_FTP_MAX_SESSIONS", "PHOTO_UPLOAD_MAX_FILES", "PHOTO_UPLOAD_MAX_SESSIONS", "SRTLA_PORT", "SRT_PLAYER_PORT", "SRT_SENDER_PORT"]) {
+    assert.ok(frontend.includes(expected), `${expected} is missing from exposed port planning`);
+  }
+  assert.ok(frontend.includes("selectedServices"));
+  assert.ok(frontend.includes("subfolders"));
+  assert.ok(frontend.includes("state/frame-install-plan.json"));
+  assert.ok(frontend.includes("frame-logo-square.png"));
+  assert.ok(styles.includes("--frame-accent: #2cb4fb"));
+  assert.ok(!frontend.includes("day mode"));
+  assert.ok(cargo.includes("tauri-plugin-dialog"));
+  assert.ok(cargo.includes("tauri-plugin-opener"));
+  for (const expected of ["detect_previous_installations", "run_preflight", "save_install_plan", "apply_install_plan", "frame-install.json", "record_installation"]) {
+    assert.ok(rust.includes(expected), `${expected} is missing from host setup commands`);
+  }
+  for (const expected of ["docker", "compose", "docker-compose.yml", "COMPOSE_PROFILES", "find_stack_source", "frame-stack", "resource_dir", "hidden_command", "CREATE_NO_WINDOW", "BUILDKIT_PROGRESS", "advanced_settings", "PHOTO_FTP_MIN_PASSWORD_LENGTH", "PHOTO_UPLOAD_MAX_FILES"]) {
+    assert.ok(rust.includes(expected), `${expected} is missing from native install/apply backend`);
+  }
+  assert.ok(tauriConfig.bundle.resources["../../../services/"], "setup app must bundle FRAME services");
+  assert.ok(tauriConfig.bundle.resources["../../../config/"], "setup app must bundle FRAME config");
+  assert.ok(tauriConfig.bundle.icon.includes("icons/icon.ico"));
+  assert.ok((await readFile("apps/frame-setup/src-tauri/src/main.rs", "utf8")).includes("windows_subsystem"));
+  assert.ok(frontend.includes("apply_install_plan"), "Install FRAME must call the native apply backend");
+  assert.ok(styles.includes("install-frame-button"), "Install FRAME should use the Audio Bridge action button treatment");
+  assert.ok(rust.includes("Start Docker, then recheck."), "Docker Engine must be a blocking readiness check");
+  assert.ok(buildScript.includes("npm install"));
+  assert.ok(buildScript.includes("npm run tauri build"));
+  assert.ok(appReadme.includes("Windows installer build"));
+  assert.ok(appReadme.includes("Microsoft C++ Build Tools"));
+  assert.ok(adr.includes("native Windows host"));
+});
+
 async function assertSameFile(left, right) {
   const [leftContents, rightContents] = await Promise.all([
     readFile(left, "utf8"),

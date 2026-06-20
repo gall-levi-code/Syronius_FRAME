@@ -10,6 +10,7 @@ const syntaxFiles = [
   "installer/frame-installer.mjs",
   "installer/frame-contract.mjs",
   ...(await findJavaScriptFiles(path.join(root, "services"))),
+  ...(await findJavaScriptFiles(path.join(root, "apps"))),
 ].filter((file) => !file.includes(`${path.sep}dist${path.sep}`));
 
 for (const file of syntaxFiles) {
@@ -21,7 +22,7 @@ console.log(`FRAME verification passed: tests plus ${syntaxFiles.length} JavaScr
 async function findJavaScriptFiles(directory) {
   const files = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
-    if (entry.name === "node_modules" || entry.name === "dist") continue;
+    if (entry.name === "node_modules" || entry.name === "dist" || entry.name === "target") continue;
     const fullPath = path.join(directory, entry.name);
     if (entry.isDirectory()) {
       files.push(...(await findJavaScriptFiles(fullPath)));

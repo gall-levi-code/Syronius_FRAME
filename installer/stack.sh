@@ -18,8 +18,14 @@ PHOTO_FTP_PASSIVE_MIN
 PHOTO_FTP_PASSIVE_MAX
 PHOTO_FTP_PASSIVE_HOST
 PHOTO_FTP_USERNAME
+PHOTO_FTP_MIN_PASSWORD_LENGTH
+PHOTO_FTP_MAX_SESSIONS
+PHOTO_FTP_MAX_SESSIONS_PER_IP
+PHOTO_FTP_VERBOSE_LOG
 PHOTO_FTP_STABLE_MS
 PHOTO_FTP_SCAN_MS
+PHOTO_UPLOAD_MAX_FILES
+PHOTO_UPLOAD_MAX_SESSIONS
 PIPELINE_POLL_MS
 PIPELINE_CONCURRENCY
 PHOTO_MAX_INPUT_MB
@@ -356,7 +362,8 @@ configure_credentials() {
       4)
         read_default "Photo FTP username" "$(env_value PHOTO_FTP_USERNAME frame)"
         username=$REPLY
-        read_secret "Photo FTP password, at least 12 characters (input hidden)"
+        minimum=$(env_value PHOTO_FTP_MIN_PASSWORD_LENGTH 5)
+        read_secret "Photo FTP password, at least ${minimum} characters (input hidden)"
         password=$REPLY
         printf "photo-ftp\n%s\n%s\n" "$username" "$password" | runtime set-service-auth
         unset password
