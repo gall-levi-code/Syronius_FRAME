@@ -62,6 +62,9 @@ function uploadEntry(entry) {
     data.append("photo", entry.file, entry.file.name);
     const request = new XMLHttpRequest();
     request.open("POST", "/photos/api/upload");
+    entry.transferId ||= createTransferId();
+    request.setRequestHeader("X-Frame-Transfer-Id", entry.transferId);
+    request.setRequestHeader("X-Frame-File-Size", String(entry.file.size));
     setEntryState(entry, "uploading", "Uploading");
     updateProgress(entry, 0, entry.file.size);
     request.upload.addEventListener("progress", (event) => {
@@ -82,6 +85,13 @@ function uploadEntry(entry) {
     request.addEventListener("abort", () => reject(new Error("Upload cancelled.")));
     request.send(data);
   });
+}
+
+function createTransferId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  const bytes = new Uint8Array(18);
+  globalThis.crypto.getRandomValues(bytes);
+  return [...bytes].map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 
 function createQueueItem(file) {

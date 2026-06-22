@@ -106,9 +106,16 @@ body.preview {
   background: linear-gradient(90deg, var(--plot-primary, #2cb4fb), var(--plot-secondary, #8de7ff));
   transition: width var(--transition, 250ms);
 }
+.chart-block { padding: 8px; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 5px; color: var(--muted); font-size: 10px; line-height: 1.2; }
+.chart-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.chart-legend span::before { content: ""; width: 12px; height: 3px; border-radius: 999px; background: var(--plot-primary, #2cb4fb); }
+.chart-legend .warn-line::before { height: 0; border-top: 2px dashed var(--warn, #ffd166); background: transparent; }
+.chart-legend .rtt-line::before { background: var(--plot-secondary, #8de7ff); }
+.chart-legend strong { color: inherit; font-weight: 600; }
 canvas {
   width: 100%;
-  height: max(88px, var(--block-height, 72px));
+  height: max(72px, calc(var(--block-height, 72px) - 24px));
   background: rgba(255,255,255,0.06);
   border-radius: 6px;
 }

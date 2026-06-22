@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FRAME Overlay</title>
+    <link rel="stylesheet" href="/overlays/assets/renderer.css?v=20260621-upload-v1">
+    <link rel="stylesheet" href="/overlays/assets/upload-renderer.css?v=20260621-upload-v1">
+  </head>
+  <body>
+    <div class="overlay-root">
+      <section id="widget" class="widget upload-widget hidden">
+        <header class="upload-head">
+          <div class="signal-dot"></div>
+          <div><strong id="upload-status">WAITING</strong><span id="source-name">FRAME Uploads</span></div>
+          <span id="adapter-label" class="adapter-label">WEB</span>
+        </header>
+        <div class="upload-focus"><strong id="focus-name">Waiting for an upload</strong><span id="upload-summary"></span></div>
+        <div id="progress-track" class="upload-progress"><div id="progress-fill"></div></div>
+        <div class="upload-details">
+          <span id="sent-detail"><small>Sent</small><strong id="sent-value">0 B</strong></span>
+          <span id="speed-detail"><small>Speed</small><strong id="speed-value">--</strong></span>
+          <span id="elapsed-detail"><small>Elapsed</small><strong id="elapsed-value">--</strong></span>
+        </div>
+        <div id="upload-error" class="upload-error" hidden></div>
+      </section>
+    </div>
+    <script>window.FRAME_OVERLAY = /*__FRAME_OVERLAY_CONFIG__*/null;</script>
+    <script type="module" src="/overlays/assets/upload-renderer.js?v=20260621-upload-v1"></script>
+  </body>
+</html>

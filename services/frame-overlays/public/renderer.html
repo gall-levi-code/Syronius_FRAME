@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>FRAME Overlay</title>
-    <link rel="stylesheet" href="/overlays/assets/renderer.css?v=20260611-blocks">
+    <link rel="stylesheet" href="/overlays/assets/renderer.css?v=20260620-v4">
   </head>
   <body>
     <div id="overlay-root" class="overlay-root">
@@ -12,19 +12,25 @@
         <div id="telemetry-layout" class="telemetry-layout">
           <header id="widget-head" class="widget-head telemetry-block" data-block="header">
             <div class="signal-dot"></div>
-            <div>
-              <strong id="status-value">NO SIGNAL</strong>
-              <span id="stream-name">Waiting for stream</span>
-            </div>
+            <div><strong id="status-value">CONNECTING</strong><span id="stream-name">Waiting for stream</span></div>
           </header>
+          <div class="detail telemetry-block" data-block="bitrate"><span>Bitrate</span><strong data-value="bitrate">--</strong></div>
+          <div class="detail telemetry-block" data-block="rtt"><span>RTT</span><strong data-value="rtt">--</strong></div>
+          <div class="detail telemetry-block" data-block="latency"><span>Latency</span><strong data-value="latency">--</strong></div>
+          <div class="detail telemetry-block" data-block="buffer"><span>Buffer</span><strong data-value="buffer">--</strong></div>
+          <div class="detail telemetry-block" data-block="server"><span>Server</span><strong data-value="server">FRAME</strong></div>
+          <div class="detail telemetry-block" data-block="dropped"><span>Dropped</span><strong data-value="dropped">0</strong></div>
+          <div class="detail telemetry-block" data-block="uptime"><span>Uptime</span><strong data-value="uptime">0h 0m</strong></div>
+          <div class="detail telemetry-block" data-block="recovery"><span>Recovery</span><strong data-value="recovery">--</strong></div>
           <div id="meter" class="meter telemetry-block" data-block="meter"><div id="meter-fill"></div></div>
-          <canvas id="chart" class="telemetry-block" data-block="chart" width="320" height="88"></canvas>
+          <div id="chart-block" class="chart-block telemetry-block" data-block="chart">
+            <div class="chart-legend"><span class="bitrate-line">Bitrate</span><span class="warn-line">Warn <strong id="chart-warn-value">--</strong></span><span class="rtt-line">RTT <strong id="chart-rtt-value">--</strong></span></div>
+            <canvas id="chart"></canvas>
+          </div>
         </div>
       </section>
     </div>
-    <script>
-      window.FRAME_OVERLAY = /*__FRAME_OVERLAY_CONFIG__*/null;
-    </script>
-    <script src="/overlays/assets/renderer.js?v=20260611-blocks"></script>
+    <script>window.FRAME_OVERLAY = /*__FRAME_OVERLAY_CONFIG__*/null;</script>
+    <script type="module" src="/overlays/assets/renderer.js?v=20260620-v4"></script>
   </body>
 </html>

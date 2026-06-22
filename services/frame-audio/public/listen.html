@@ -10,13 +10,45 @@
   <body>
     <header class="topbar">
       <div class="brand"><img src="/audio/assets/frame-logo-square.svg" alt="FRAME"><div><strong>Audio Monitor</strong><span>Remote listener</span></div></div>
-      <div class="top-actions"><button id="theme-toggle" class="icon-button">Theme</button></div>
+      <div class="top-actions">
+        <button id="theme-toggle" class="icon-button theme-toggle" type="button" aria-label="Switch to day mode" title="Switch to day mode">
+          <svg class="moon-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"/></svg>
+          <svg class="sun-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/></svg>
+        </button>
+      </div>
     </header>
     <div class="listen-shell">
       <main class="listen-card">
         <div class="listen-status"><div><h1 id="source-name">Loading audio source</h1><p id="source-state">Connecting</p></div><span id="status-pill" class="status-pill">Waiting</span></div>
-        <audio id="player" controls playsinline preload="auto"></audio>
-        <button id="listen-button">Tap to listen</button>
+        <audio id="player" playsinline crossorigin="anonymous" preload="none"></audio>
+        <section class="monitor-player" aria-label="Audio monitor player">
+          <div class="player-primary">
+            <button id="play-button" class="play-button" type="button" data-action="play">
+              <span id="play-button-label">Play</span>
+            </button>
+            <div class="player-now">
+              <span>Playback</span>
+              <strong id="playback-state">Waiting</strong>
+            </div>
+            <button id="mute-button" class="secondary" type="button" aria-pressed="false">Mute</button>
+          </div>
+          <div class="timeline-head">
+            <span>Active buffer</span>
+            <strong id="buffer-window-label">20 s rolling</strong>
+          </div>
+          <div id="live-timeline" class="live-timeline" aria-label="Rolling live buffer">
+            <div id="timeline-available" class="timeline-available"></div>
+            <div id="timeline-buffer" class="timeline-buffer"></div>
+            <div id="timeline-target" class="timeline-marker timeline-target"></div>
+            <div id="timeline-playhead" class="timeline-marker timeline-playhead"></div>
+            <div class="timeline-marker timeline-live"></div>
+          </div>
+          <div class="timeline-scale" aria-hidden="true"><span>-20 s</span><span id="safe-target-label">6 s safe</span><span>Live</span></div>
+          <label class="volume-control">Volume
+            <input id="volume-slider" type="range" min="0" max="100" value="100" step="1">
+            <strong id="volume-value">100%</strong>
+          </label>
+        </section>
         <p id="playback-error" class="notice hidden"></p>
         <label>Playback stability
           <select id="buffer-profile">
@@ -30,11 +62,10 @@
           <div class="capture-stat"><span>Relay</span><strong id="relay-mode">--</strong></div>
           <div class="capture-stat"><span>Bitrate</span><strong id="bitrate">--</strong></div>
           <div class="capture-stat"><span>Listeners</span><strong id="listeners">--</strong></div>
-          <div class="capture-stat"><span>Playback</span><strong id="playback-state">Waiting</strong></div>
           <div class="capture-stat"><span>Buffered locally</span><strong id="buffered-seconds">0.0 s</strong></div>
           <div class="capture-stat"><span>Behind live</span><strong id="live-latency">--</strong></div>
+          <div class="capture-stat"><span>Safe delay</span><strong id="safe-delay">6 s</strong></div>
         </div>
-        <p class="muted">This page follows relay generation changes automatically. Balanced or Stable mode is recommended when listening over Wi-Fi.</p>
       </main>
     </div>
     <script src="/audio/assets/hls.min.js"></script>

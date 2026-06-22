@@ -1,0 +1,91 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { QUALITY, QualityStabilizer, canvasPixelSize, qualityStatusText, shouldResetRuntimeState, telemetryAvailability, telemetryIsStale } from "../public/renderer-core.js";
+import { clampBitrateLevels, clampNumericValue, clampRttLevels, samplingWindowLabel } from "../public/wizard-core.js";
+import { deriveUploadView, uploadSummary } from "../public/upload-renderer-core.js";
+
+test("quality requires a streak before showing BAD and avoids initial BAD flicker", () => {
+  const quality = new QualityStabilizer();
+  const config = { bitrate_good_min:5000, bitrate_warn_min:2500, bitrate_streak_bad:2, rtt_streak_bad:2 };
+  assert.equal(quality.update({ bitrate:100 }, config), QUALITY.UNKNOWN);
+  assert.equal(quality.update({ bitrate:100 }, config), QUALITY.BAD);
+  assert.equal(quality.update({ bitrate:7000 }, config), QUALITY.GOOD);
+});
+
+test("visual-only revisions preserve runtime state while binding changes reset it", () => {
+  assert.equal(shouldResetRuntimeState({ telemetry_identity:"a", revision:"1" }, { telemetry_identity:"a", revision:"2" }), false);
+  assert.equal(shouldResetRuntimeState({ telemetry_identity:"a" }, { telemetry_identity:"b" }), true);
+});
+
+test("staleness and high-DPI canvas dimensions are time and pixel aware", () => {
+  const received = "2026-06-20T12:00:00Z";
+  assert.equal(telemetryIsStale({ received_at:received, stale:false }, 1000, Date.parse("2026-06-20T12:00:04Z")), false);
+  assert.equal(telemetryIsStale({ received_at:received, stale:false }, 1000, Date.parse("2026-06-20T12:00:06Z")), true);
+  assert.deepEqual(canvasPixelSize(320, 88, 2), { width:640, height:176, ratio:2 });
+});
+
+test("bitrate handles clamp independently in warn < good < max order", () => {
+  assert.deepEqual(clampBitrateLevels({ warn:7000, good:5000, max:12000 }, "warn"), { warn:4750, good:5000, max:12000 });
+  assert.deepEqual(clampBitrateLevels({ warn:2500, good:1000, max:12000 }, "good"), { warn:2500, good:2750, max:12000 });
+  assert.deepEqual(clampBitrateLevels({ warn:2500, good:5000, max:4000 }, "max"), { warn:2500, good:5000, max:5250 });
+});
+
+test("RTT handles clamp independently in good < bad < max order", () => {
+  assert.deepEqual(clampRttLevels({ good:5000, bad:3500, max:6000 }, "good"), { good:3400, bad:3500, max:5000 });
+  assert.deepEqual(clampRttLevels({ good:1500, bad:8000, max:6000 }, "bad"), { good:1500, bad:4900, max:5000 });
+  assert.deepEqual(clampRttLevels({ good:1500, bad:3500, max:2000 }, "max"), { good:1500, bad:3500, max:3600 });
+});
+
+test("compact GOOD status includes bitrate without opening the bitrate card", () => {
+  const config = { show_bitrate:true, show_bitrate_in_good:true };
+  assert.equal(qualityStatusText(QUALITY.GOOD, { bitrate:7200 }, config, true), "GOOD · 7.20 Mbps");
+  assert.equal(qualityStatusText(QUALITY.GOOD, { bitrate:7200 }, { ...config, show_bitrate_in_good:false }, true), "GOOD");
+  assert.equal(qualityStatusText(QUALITY.GOOD, { bitrate:7200 }, config, false), "GOOD");
+});
+
+test("sampling history reports the visible time window", () => {
+  assert.equal(samplingWindowLabel(20, 20), "400 ms");
+  assert.equal(samplingWindowLabel(1000, 20), "20 sec");
+});
+
+test("numeric sampling controls honor their min, max, and step", () => {
+  assert.equal(clampNumericValue(10, 20, 2000, 20), 20);
+  assert.equal(clampNumericValue(2200, 20, 2000, 20), 2000);
+  assert.equal(clampNumericValue(57, 20, 2000, 20), 60);
+});
+
+test("unavailable feed telemetry is omitted while supported values remain visible", () => {
+  assert.deepEqual(telemetryAvailability({
+    bitrate: 7200,
+    rtt: null,
+    latency: null,
+    buffer: null,
+    dropped_pkts: 0,
+    uptime: 120,
+    recovery_rate: null,
+  }), {
+    bitrate: true,
+    rtt: false,
+    latency: false,
+    buffer: false,
+    server: true,
+    dropped: true,
+    uptime: true,
+    recovery: false,
+    meter: true,
+    chart: true,
+  });
+});
+
+test("upload renderer keeps a stable oldest focus and does not invent mixed-adapter percentages", () => {
+  const transfers=[
+    {transfer_id:"web:a",phase:"receiving",bytes_received:400,bytes_total:1000,speed_bps:100,started_at:"2026-06-21T12:00:00Z",updated_at:"2026-06-21T12:00:02Z"},
+    {transfer_id:"ftp:b",phase:"receiving",bytes_received:200,bytes_total:null,speed_bps:50,started_at:"2026-06-21T12:00:01Z",updated_at:"2026-06-21T12:00:02Z"},
+    {transfer_id:"web:c",phase:"queued",bytes_received:100,bytes_total:100,speed_bps:null,started_at:"2026-06-21T11:59:00Z",updated_at:"2026-06-21T12:00:02Z"},
+  ];
+  const view=deriveUploadView(transfers,5000,Date.parse("2026-06-21T12:00:03Z"));
+  assert.equal(view.focus.transfer_id,"web:a");
+  assert.equal(view.percent,null);
+  assert.equal(view.speed_bps,150);
+  assert.equal(uploadSummary(view),"2 uploading · 1 queued");
+});

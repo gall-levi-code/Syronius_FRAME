@@ -12,6 +12,7 @@ const FALLBACK_ROUTES: Record<string, string> = {
   dashboard: "/dashboard",
   status: "/status",
   video_relay_ui: "/slsui",
+  video_relay_stats: "/stats",
   overlays_root: "/overlays",
   overlays_wizard: "/overlays/setup",
   photo_upload: "/photos/upload",
