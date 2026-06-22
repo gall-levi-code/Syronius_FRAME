@@ -1,6 +1,7 @@
 import { createWriteStream } from "node:fs";
 import { access, mkdir, rename, rm } from "node:fs/promises";
 import path from "node:path";
+import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { Readable } from "node:stream";
 
@@ -21,13 +22,19 @@ export async function streamCompletedUpload(
   filename: string,
   inbox: string,
   staging: string,
+  onChunk?: (bytes: number) => void,
 ): Promise<string> {
   await Promise.all([mkdir(inbox, { recursive: true }), mkdir(staging, { recursive: true })]);
   const safe = safeFilename(filename);
   const finalInbox = await availablePath(inbox, safe);
   const uploading = `${finalInbox}.uploading`;
   try {
-    await pipeline(stream, createWriteStream(uploading, { flags: "wx" }));
+    const output = createWriteStream(uploading, { flags: "wx" });
+    if (onChunk) {
+      await pipeline(stream, countBytes(onChunk), output);
+    } else {
+      await pipeline(stream, output);
+    }
     await rename(uploading, finalInbox);
     const finalStaging = await availablePath(staging, path.basename(finalInbox));
     await rename(finalInbox, finalStaging);
@@ -37,6 +44,15 @@ export async function streamCompletedUpload(
     await rm(finalInbox, { force: true });
     throw error;
   }
+}
+
+function countBytes(onChunk: (bytes: number) => void): Transform {
+  return new Transform({
+    transform(chunk: Buffer, _encoding, callback) {
+      onChunk(chunk.length);
+      callback(null, chunk);
+    },
+  });
 }
 
 async function availablePath(directory: string, filename: string): Promise<string> {

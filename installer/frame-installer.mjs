@@ -283,6 +283,11 @@ async function status() {
     }`,
   );
   console.log(
+    `  Stream Statistics: ${
+      config.capabilities["frame-video-relay"] ? `${env.STREAMS_PUBLIC_BASE_URL}/stats/<stream-id>` : "disabled"
+    }`,
+  );
+  console.log(
     `  Overlay Wizard: ${
       config.capabilities["frame-overlays"] ? `${env.EDGE_LAN_BASE_URL}/overlays/setup` : "disabled"
     }`,
@@ -456,6 +461,7 @@ function buildEnvironment(existing, options, mode, capabilities) {
     AUDIO_PUBLIC_BASE_URL: edgePublicBaseUrl,
     AUDIO_CAPTURE_BASE_URL: edgeLanBaseUrl,
     STREAMS_PORT: streamsPort,
+    STREAMS_PUBLIC_BASE_URL: edgePublicBaseUrl,
     OVERLAYS_PORT: overlaysPort,
     PHOTO_UPLOAD_PORT: photoUploadPort,
     PHOTO_FTP_PORT: photoFtpPort,
@@ -582,6 +588,9 @@ function validateEnvironment(env, config, forStart) {
   }
   if (config.capabilities["frame-video-relay"] && !String(env.PUBLIC_RELAY_HOST ?? "").trim()) {
     throw new Error("PUBLIC_RELAY_HOST is required when the Video Relay is enabled.");
+  }
+  if (config.capabilities["frame-video-relay"] && env.STREAMS_PUBLIC_BASE_URL !== env.EDGE_PUBLIC_BASE_URL) {
+    throw new Error("STREAMS_PUBLIC_BASE_URL must match EDGE_PUBLIC_BASE_URL. Re-run stack install.");
   }
   if (config.capabilities["frame-photo-ftp"] && String(env.PHOTO_FTP_PASSWORD ?? "").length < 12) {
     throw new Error("PHOTO_FTP_PASSWORD is missing or too short. Re-run stack install.");
@@ -1110,6 +1119,7 @@ function serializeEnv(env) {
         "SRT_PLAYER_PORT",
         "SRT_SENDER_PORT",
         "SLS_STATS_PORT",
+        "STREAMS_PUBLIC_BASE_URL",
         "STREAMS_USERNAME",
         "STREAMS_PASSWORD",
       ],

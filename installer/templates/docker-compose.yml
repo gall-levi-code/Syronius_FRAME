@@ -309,6 +309,7 @@ services:
       PORTAL_USERNAME: ${PORTAL_USERNAME:-}
       PORTAL_PASSWORD: ${PORTAL_PASSWORD:-}
       PORTAL_REALM: ${PORTAL_REALM:-FRAME Portal}
+      PORTAL_SERVICE_TOKEN: ${PORTAL_SERVICE_TOKEN}
     ports:
       - "${PHOTO_UPLOAD_PORT:-3736}:3736"
     volumes:
@@ -447,6 +448,7 @@ services:
       SRT_PLAYER_PORT: ${SRT_PLAYER_PORT:-4000}
       SRT_SENDER_PORT: ${SRT_SENDER_PORT:-4001}
       SLS_STATS_PORT: ${SLS_STATS_PORT:-8080}
+      STREAMS_PUBLIC_BASE_URL: ${STREAMS_PUBLIC_BASE_URL:-http://localhost}
       OVERLAY_WIZARD_URL: /overlays/setup
       OVERLAYS_API_URL: http://frame-overlays:3733
       STREAMS_USERNAME: ${STREAMS_USERNAME:-}
@@ -463,6 +465,10 @@ services:
       traefik.http.routers.frame-streams.rule: PathPrefix(`/slsui`)
       traefik.http.routers.frame-streams.middlewares: frame-sso
       traefik.http.services.frame-streams.loadbalancer.server.port: "3732"
+      traefik.http.routers.frame-streams-stats.entrypoints: web
+      traefik.http.routers.frame-streams-stats.priority: "150"
+      traefik.http.routers.frame-streams-stats.rule: Path(`/stats`) || PathPrefix(`/stats/`)
+      traefik.http.routers.frame-streams-stats.service: frame-streams
     networks:
       - frame-internal
 
@@ -476,7 +482,9 @@ services:
       PORT: 3733
       DATA_ROOT: /data
       STREAMS_API_URL: http://frame-streams:3732
+      PHOTO_UPLOAD_API_URL: http://frame-photo-upload:3736
       SLS_API_KEY: ${SLS_API_KEY}
+      PORTAL_SERVICE_TOKEN: ${PORTAL_SERVICE_TOKEN}
       PUBLIC_BASE_URL: ${OVERLAYS_PUBLIC_BASE_URL:-http://localhost}
       OVERLAYS_USERNAME: ${OVERLAYS_USERNAME:-}
       OVERLAYS_PASSWORD: ${OVERLAYS_PASSWORD:-}

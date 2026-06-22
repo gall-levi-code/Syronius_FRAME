@@ -6,7 +6,9 @@ FRAME-owned management UI for the OpenIRL SRTLA Receiver API.
 - Creates and removes publisher/player pairs.
 - Displays live bitrate, RTT, latency, buffer, dropped packets, and uptime.
 - Generates SRTLA, direct SRT, player, and statistics links.
-- Links each player profile directly into the FRAME Overlay Wizard.
+- Publishes unauthenticated read-only statistics at `/stats/:stream-id`; Hybrid links use the configured tunnel hostname while `/slsui` management remains LAN-only.
+- Supports stats output adapters, including `/stats/:stream-id?output=bbox_receiver` for Datagutt BBox-receiver style integrations such as IRL+ Chat.
+- Opens Overlay Studio from the top toolbar and shows the overlay sources bound to each stream.
 - Connects existing BELABOX relay telemetry by full stats URL or relay ID.
 - Normalizes SLS and BELABOX telemetry behind one private internal API.
 - Supports optional HTTP Basic authentication.

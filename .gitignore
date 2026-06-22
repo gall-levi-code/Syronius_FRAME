@@ -4,3 +4,6 @@
 /cf_token.txt
 /graphify-out/cache/
 /graphify-out/cost.json
+/apps/frame-setup/dist/
+/apps/frame-setup/node_modules/
+/apps/frame-setup/src-tauri/target/

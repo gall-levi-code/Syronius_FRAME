@@ -63,6 +63,12 @@ test("protected requests redirect to login and one session unlocks multiple pane
     });
     assert.equal(streams.status, 200);
     assert.equal(streams.headers.get("authorization"), `Basic ${Buffer.from("streams:streams-secret").toString("base64")}`);
+
+    const statsFallback = await fetch(`${base}/auth/check`, {
+      headers: { cookie: cookie || "", "x-forwarded-uri": "/stats/play_test" },
+    });
+    assert.equal(statsFallback.status, 200);
+    assert.equal(statsFallback.headers.get("authorization"), `Basic ${Buffer.from("frame:secret").toString("base64")}`);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

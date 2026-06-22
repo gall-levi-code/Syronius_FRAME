@@ -11,19 +11,20 @@ removed.
 - [x] Build `frame-ingest-video` around the OpenIRL SRTLA Receiver.
 - [x] Build a FRAME-owned, themed `frame-streams` management UI against the receiver API.
 - [x] Build the `frame-overlays` connectivity renderer and wizard.
-- [x] Seed `default-connectivity` as the stock preset on first run.
-- [x] Let users restore or duplicate the stock default without overwriting their custom presets.
-- [x] Validate that `default_preset_id` resolves to an existing preset.
-- [x] Allow stock connectivity presets to remain unbound until selected in the wizard.
+- [x] Ship `default-connectivity` as an immutable built-in template.
+- [x] Separate reusable presets from bound OBS sources and permanent source URLs.
+- [x] Migrate V1 state with backups and preserve every legacy `/overlays/view/<preset-id>` URL.
+- [x] Deduplicate telemetry polling and fan out live telemetry/config revisions over SSE.
 - [x] Warn when visibility toggles would make an overlay completely blank.
-- [x] Provide stable `/overlays/view/<preset-id>` OBS URLs.
-- [x] Add stream-card actions for Create Overlay, Manage Overlays, and Open Statistics.
+- [x] Provide keyed `/overlays/view/<slug>/<source-key>` URLs while preserving V1 aliases.
+- [x] Add a top-level Manage Overlays action and per-stream bound-source counts/listing.
+- [x] Add the immutable upload-progress template, type-isolated presets, web-upload telemetry adapter, and multi-file renderer foundation.
 - Add preset import/export to the wizard.
 - Add live SRT publisher integration tests so renderer quality states are exercised with real traffic.
 
 ### Keep Separate For Later
 
-- Upload progress overlay and photo-pipeline telemetry integration.
+- FTP/BELABOX upload-progress adapters and photo-pipeline queued/processing/published correlation.
 - Latest-photo overlay and Today Tools integration.
 - General-purpose freeform overlay editor.
 - Cross-service overlay composition and scene bundles.

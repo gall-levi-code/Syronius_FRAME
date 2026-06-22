@@ -32,6 +32,20 @@ test("runtime overlay schema and stock defaults match their canonical copies", a
   );
 });
 
+test("generated Compose stays synchronized with the installer service contracts", async () => {
+  await assertSameFile("installer/templates/docker-compose.yml", "docker-compose.yml");
+  const compose = await readFile("installer/templates/docker-compose.yml", "utf8");
+  const photoUpload = composeServiceBlock(compose, "frame-photo-upload");
+  const streams = composeServiceBlock(compose, "frame-streams");
+  const overlays = composeServiceBlock(compose, "frame-overlays");
+  assert.ok(photoUpload.includes("PORTAL_SERVICE_TOKEN: ${PORTAL_SERVICE_TOKEN}"));
+  assert.ok(overlays.includes("PORTAL_SERVICE_TOKEN: ${PORTAL_SERVICE_TOKEN}"));
+  assert.ok(overlays.includes("PHOTO_UPLOAD_API_URL: http://frame-photo-upload:3736"));
+  assert.ok(streams.includes("STREAMS_PUBLIC_BASE_URL: ${STREAMS_PUBLIC_BASE_URL:-http://localhost}"));
+  assert.ok(streams.includes("Path(`/stats`) || PathPrefix(`/stats/`)"));
+  assert.ok(!streams.includes("traefik.http.routers.frame-streams-stats.middlewares"));
+});
+
 test("portal routes and implemented Compose profiles stay aligned with the registry", async () => {
   const [portalStackConfig, composeTemplate] = await Promise.all([
     readFile("services/frame-portal/src/stackConfig.ts", "utf8"),
@@ -144,6 +158,18 @@ test("hybrid exposure removes forbidden and disabled capability routes", () => {
   assert.equal(warnings.length, 1);
 });
 
+test("Hybrid exposes unauthenticated read-only stream stats without exposing Stream Management", () => {
+  const capabilities = Object.fromEntries(CAPABILITIES.map((name) => [name, false]));
+  capabilities["frame-video-relay"] = true;
+  const prefixes = computeEffectivePublicPrefixes({
+    mode: "HYBRID",
+    capabilities,
+    public_route_prefixes: [...PUBLIC_PREFIXES],
+  });
+  assert.ok(prefixes.includes("/stats"));
+  assert.ok(!prefixes.includes("/slsui"));
+});
+
 test("FRAME Edge denies management surfaces when a tunnel bypasses the public gateway", async () => {
   const composeTemplate = await readFile("installer/templates/docker-compose.yml", "utf8");
   assert.ok(composeTemplate.includes("traefik.http.routers.frame-public-deny.rule"));
@@ -204,4 +230,16 @@ async function assertSameFile(left, right) {
     readFile(right, "utf8"),
   ]);
   assert.equal(rightContents, leftContents, `${right} drifted from ${left}`);
+}
+
+function composeServiceBlock(compose, service) {
+  compose = compose.replaceAll("\r\n", "\n");
+  const marker = `  ${service}:\n`;
+  const start = compose.indexOf(marker);
+  assert.notEqual(start, -1, `${service} is missing from the installer Compose template`);
+  const followingService = compose.slice(start + marker.length).match(/\n  [A-Za-z0-9_-]+:\n/);
+  const end = followingService
+    ? start + marker.length + followingService.index
+    : -1;
+  return compose.slice(start, end === -1 ? undefined : end);
 }

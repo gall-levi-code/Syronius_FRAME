@@ -27,6 +27,7 @@
         </div>
         <div class="toolbar-actions">
           <button id="refresh-button" class="secondary">Refresh</button>
+          <button id="manage-overlays-button" class="secondary">Manage overlays</button>
           <button id="add-button">Add stream</button>
         </div>
       </section>
@@ -69,6 +70,22 @@
         <button type="button" class="icon-button close-dialog" title="Close">Close</button>
       </div>
       <div id="links-list" class="links-list"></div>
+    </dialog>
+
+    <dialog id="stats-output-dialog">
+      <div class="dialog-head">
+        <div><strong id="stats-output-title">Stats outputs</strong><span>Public read-only URLs for apps and diagnostics.</span></div>
+        <button type="button" class="icon-button close-dialog" title="Close">Close</button>
+      </div>
+      <div id="stats-output-list" class="links-list"></div>
+    </dialog>
+
+    <dialog id="bound-overlays-dialog">
+      <div class="dialog-head">
+        <div><strong id="bound-overlays-title">Bound overlays</strong><span>Sources using this stream as their data source.</span></div>
+        <button type="button" class="icon-button close-dialog" title="Close">Close</button>
+      </div>
+      <div id="bound-overlays-list" class="bound-overlays-list"></div>
     </dialog>
 
     <script src="/slsui/assets/app.js" defer></script>

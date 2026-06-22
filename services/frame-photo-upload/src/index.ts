@@ -14,6 +14,7 @@ const app = await createApp({
     password: process.env.PORTAL_PASSWORD?.trim() || "",
     realm: process.env.PORTAL_REALM?.trim() || "FRAME Portal",
   },
+  serviceToken: process.env.PORTAL_SERVICE_TOKEN?.trim() || "",
 });
 const server = app.listen(port, () => console.log(`[photo-upload] listening on ${port}`));
 

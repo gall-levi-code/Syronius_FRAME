@@ -1,221 +1,50 @@
 {
-  "schema_version": "1.0",
-  "default_preset_id": "default-connectivity",
-  "presets": [
+  "schema_version": "2.0",
+  "revision": 4,
+  "default_template_id": "default-connectivity",
+  "default_template_ids": { "connectivity": "default-connectivity" },
+  "templates": [
     {
       "id": "default-connectivity",
+      "builtin": true,
+      "readonly": true,
       "name": "Default Connectivity",
-      "description": "Stock FRAME connectivity profile. Keeps the most useful live relay fields visible and clearly marks degraded stream quality.",
-      "tags": [
-        "connectivity",
-        "stock",
-        "default",
-        "full-stats"
-      ],
       "enabled": true,
-      "window_title": "FRAME: Default Connectivity",
       "type": "connectivity",
-      "layout": {
-        "dock": "br",
-        "pad": 20,
-        "scale": 1,
-        "width_px": 420,
-        "height_px": 0
-      },
-      "theme": {
-        "text_color": "#eef8ff",
-        "muted_color": "#9fc6dc",
-        "good_color": "#2cb4fb",
-        "warn_color": "#ffd166",
-        "bad_color": "#ff5f6d",
-        "plot_primary": "rgba(44, 180, 251, 0.95)",
-        "plot_secondary": "#8de7ff",
-        "bg_opacity_good": 0.3,
-        "bg_opacity_warn": 0.5,
-        "bg_opacity_bad": 0.72,
-        "border_radius_px": 8,
-        "backdrop_blur_px": 2,
-        "font_size_base_px": 16
-      },
-      "config": {
-        "stream_profile_id": null,
-        "poll_ms": 1000,
-        "bitrate_good_min": 5000,
-        "bitrate_warn_min": 2500,
-        "rtt_warn_max": 1500,
-        "rtt_bad_max": 3500,
-        "bitrate_meter_max": 12000,
-        "chart_bitrate_max": 12000,
-        "chart_rtt_max": 6000,
-        "history_len": 10,
-        "bitrate_streak_warn": 2,
-        "bitrate_streak_bad": 2,
-        "rtt_streak_warn": 2,
-        "rtt_streak_bad": 2,
-        "use_rtt_in_good": true,
-        "compact_when_good": false,
-        "show_name": true,
-        "show_status": true,
-        "show_bitrate": true,
-        "show_rtt": true,
-        "show_latency": false,
-        "show_buffer": false,
-        "show_chart": true,
-        "show_meter": true,
-        "show_server": true,
-        "show_dropped": true,
-        "show_uptime": true,
-        "show_recovery": false,
-        "telemetry_order": ["header", "bitrate", "rtt", "latency", "buffer", "server", "dropped", "uptime", "meter", "chart", "recovery"],
-        "telemetry_block_width_px": 160,
-        "telemetry_block_height_px": 72,
-        "no_signal_behavior": "show_offline",
-        "no_signal_label": "NO SIGNAL",
-        "label_style": "svg",
-        "transition_ms": 250
-      }
-    },
+      "layout": { "dock": "br", "pad": 20 },
+      "theme": {},
+      "config": { "poll_ms": 1000 }
+    }
+  ],
+  "presets": [
     {
       "id": "minimal-connectivity",
-      "name": "Main Stream — Minimal",
-      "description": "Status dot only when good. No chart, no meter. For tight corner placement.",
-      "tags": [
-        "connectivity",
-        "minimal"
-      ],
+      "template_id": "default-connectivity",
+      "revision": 2,
+      "name": "Minimal Connectivity",
+      "description": "Reusable design with no stream or URL binding.",
       "enabled": true,
-      "window_title": "FRAME: Minimal Connectivity",
       "type": "connectivity",
-      "layout": {
-        "dock": "tr",
-        "pad": 16,
-        "scale": 0.85,
-        "width_px": 320,
-        "height_px": 0
-      },
-      "theme": {
-        "bg_opacity_good": 0,
-        "bg_opacity_warn": 0.3,
-        "bg_opacity_bad": 0.6,
-        "border_radius_px": 8,
-        "backdrop_blur_px": 0
-      },
-      "config": {
-        "stream_profile_id": "main-player",
-        "poll_ms": 1000,
-        "bitrate_good_min": 5000,
-        "bitrate_warn_min": 2500,
-        "rtt_warn_max": 1500,
-        "rtt_bad_max": 3500,
-        "bitrate_meter_max": 12000,
-        "chart_bitrate_max": 12000,
-        "chart_rtt_max": 6000,
-        "history_len": 10,
-        "bitrate_streak_warn": 2,
-        "bitrate_streak_bad": 2,
-        "rtt_streak_warn": 2,
-        "rtt_streak_bad": 2,
-        "use_rtt_in_good": true,
-        "compact_when_good": true,
-        "show_name": true,
-        "show_status": true,
-        "show_bitrate": false,
-        "show_rtt": false,
-        "show_latency": false,
-        "show_buffer": false,
-        "show_chart": false,
-        "show_meter": false,
-        "show_server": false,
-        "show_dropped": false,
-        "show_uptime": false,
-        "show_recovery": false,
-        "telemetry_order": ["header", "bitrate", "rtt", "latency", "buffer", "server", "dropped", "uptime", "meter", "chart", "recovery"],
-        "telemetry_block_width_px": 140,
-        "telemetry_block_height_px": 64,
-        "no_signal_behavior": "show_offline",
-        "no_signal_label": "NO SIGNAL",
-        "label_style": "svg",
-        "transition_ms": 150
-      },
-      "created_at": "2025-12-29T03:14:07Z",
-      "updated_at": "2025-12-29T03:14:07Z"
-    },
-    {
-      "id": "photo-upload",
-      "name": "Photo Upload Progress",
-      "description": "Shows FTP/manual upload progress. Hides when idle, auto-dismisses 2s after complete.",
-      "tags": [
-        "upload"
-      ],
-      "enabled": true,
-      "window_title": "FRAME: Upload Progress",
-      "type": "upload_progress",
-      "layout": {
-        "dock": "br",
-        "pad": 20,
-        "scale": 1
-      },
-      "theme": {
-        "text_color": "#e8f0ff",
-        "muted_color": "#a7b1c2",
-        "good_color": "#4caf50",
-        "bg_opacity_good": 0.58,
-        "bg_opacity_warn": 0.58,
-        "bg_opacity_bad": 0.58,
-        "border_radius_px": 14,
-        "backdrop_blur_px": 0,
-        "font_size_base_px": 14
-      },
-      "config": {
-        "active_poll_ms": 400,
-        "idle_poll_ms": 1500,
-        "complete_poll_ms": 1000,
-        "complete_hide_ms": 2000,
-        "fetch_timeout_ms": 1200,
-        "show_speed": true,
-        "show_elapsed": true,
-        "show_sent": true,
-        "width_px": 360
-      },
-      "created_at": "2025-12-29T03:14:07Z",
-      "updated_at": "2025-12-29T03:14:07Z"
-    },
-    {
-      "id": "latest-photo-info",
-      "name": "Latest Photo",
-      "description": "Shows count and filename of the most recently published photo. Hides until first photo of the day.",
-      "tags": [
-        "photo"
-      ],
-      "enabled": true,
-      "window_title": "FRAME: Latest Photo",
-      "type": "latest_photo",
-      "layout": {
-        "dock": "bl",
-        "pad": 20,
-        "scale": 1
-      },
-      "theme": {
-        "text_color": "#e8f0ff",
-        "muted_color": "#a7b1c2",
-        "bg_opacity_good": 0.45,
-        "bg_opacity_warn": 0.45,
-        "bg_opacity_bad": 0.45,
-        "border_radius_px": 14,
-        "backdrop_blur_px": 2,
-        "font_size_base_px": 15
-      },
-      "config": {
-        "poll_ms": 1000,
-        "show_count": true,
-        "show_filename": true,
-        "show_thumbnail": false,
-        "thumbnail_size_px": 80,
-        "no_photos_behavior": "hide",
-        "no_photos_label": "No photos yet"
-      },
-      "created_at": "2025-12-29T03:14:07Z",
-      "updated_at": "2025-12-29T03:14:07Z"
+      "layout": { "dock": "tr", "pad": 16, "scale": 0.85, "width_px": 320 },
+      "theme": { "bg_opacity_good": 0.2, "bg_opacity_warn": 0.45, "bg_opacity_bad": 0.7 },
+      "config": { "poll_ms": 1000, "show_name": true, "show_status": true, "show_chart": false },
+      "created_at": "2026-06-20T12:00:00Z",
+      "updated_at": "2026-06-20T12:05:00Z"
     }
-  ]
+  ],
+  "sources": [
+    {
+      "id": "source-0d33d956-a395-43d8-92c3-f77168bea017",
+      "slug": "main-camera",
+      "source_key": "ZPcKXxl4M0ty8zPtDZoSu7x4",
+      "display_name": "Main Camera",
+      "preset_id": "minimal-connectivity",
+      "enabled": true,
+      "data_source": { "kind": "stream", "stream_profile_id": "main-player" },
+      "revision": 1,
+      "created_at": "2026-06-20T12:05:00Z",
+      "updated_at": "2026-06-20T12:05:00Z"
+    }
+  ],
+  "legacy_aliases": { "old-main-overlay": "source-0d33d956-a395-43d8-92c3-f77168bea017" }
 }
