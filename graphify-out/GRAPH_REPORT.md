@@ -1,16 +1,16 @@
 # Graph Report - Syronius_FRAME  (2026-06-22)
 
 ## Corpus Check
-- 176 files · ~116,560 words
+- 176 files · ~116,557 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 3454 nodes · 4870 edges · 306 communities (274 shown, 32 thin omitted)
+- 3454 nodes · 4870 edges · 305 communities (273 shown, 32 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 34 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `1869234b`
+- Built from commit: `a148ae15`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -227,7 +227,6 @@
 - [[_COMMUNITY_Community 212|Community 212]]
 - [[_COMMUNITY_Community 213|Community 213]]
 - [[_COMMUNITY_Community 214|Community 214]]
-- [[_COMMUNITY_Community 215|Community 215]]
 - [[_COMMUNITY_Community 216|Community 216]]
 - [[_COMMUNITY_Community 217|Community 217]]
 - [[_COMMUNITY_Community 218|Community 218]]
@@ -340,7 +339,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (306 total, 32 thin omitted)
+## Communities (305 total, 32 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.05
@@ -451,8 +450,8 @@ Cohesion: 0.08
 Nodes (25): additionalProperties, description, minimum, type, description, pattern, type, description (+17 more)
 
 ### Community 27 - "Community 27"
-Cohesion: 0.08
-Nodes (25): type, type, enum, type, type, enum, type, properties (+17 more)
+Cohesion: 0.09
+Nodes (22): type, type, enum, type, type, properties, enum, type (+14 more)
 
 ### Community 28 - "Community 28"
 Cohesion: 0.05
@@ -515,8 +514,8 @@ Cohesion: 0.08
 Nodes (15): escapeHtml(), app, port, server, AttemptState, AuthConfig, CredentialPair, forwardedValue() (+7 more)
 
 ### Community 43 - "Community 43"
-Cohesion: 0.26
-Nodes (12): items, type, items, items, type, items, additionalProperties, required (+4 more)
+Cohesion: 0.19
+Nodes (15): items, type, items, items, type, items, additionalProperties, required (+7 more)
 
 ### Community 44 - "Community 44"
 Cohesion: 0.14
@@ -855,8 +854,8 @@ Cohesion: 0.21
 Nodes (12): applyBlockVisibility(), applyHeaderVisibility(), colorFor(), drawChart(), drawGuide(), drawLine(), formatBitrate(), formatDuration() (+4 more)
 
 ### Community 130 - "Community 130"
-Cohesion: 0.20
-Nodes (10): minimum, type, pattern, type, properties, format, type, count (+2 more)
+Cohesion: 0.15
+Nodes (13): minimum, type, properties, minimum, type, format, type, format (+5 more)
 
 ### Community 131 - "Community 131"
 Cohesion: 0.27
@@ -988,7 +987,7 @@ Nodes (3): maxLength, type, no_signal_label
 
 ### Community 165 - "Community 165"
 Cohesion: 0.22
-Nodes (9): pattern, type, type, minimum, type, properties, base, camera_text (+1 more)
+Nodes (9): type, pattern, type, properties, camera_text, date_folder, thumbnail_url, pattern (+1 more)
 
 ### Community 166 - "Community 166"
 Cohesion: 0.27
@@ -1008,7 +1007,7 @@ Nodes (3): minimum, type, chart_bitrate_max
 
 ### Community 171 - "Community 171"
 Cohesion: 0.67
-Nodes (3): minimum, type, duration_ms
+Nodes (3): pattern, type, base
 
 ### Community 172 - "Community 172"
 Cohesion: 0.60
@@ -1140,7 +1139,7 @@ Nodes (4): scale, maximum, minimum, type
 
 ### Community 209 - "Community 209"
 Cohesion: 0.67
-Nodes (3): format, type, latest_at
+Nodes (3): minimum, type, height
 
 ### Community 210 - "Community 210"
 Cohesion: 0.10
@@ -1160,11 +1159,7 @@ Nodes (3): minimum, type, active_poll_ms
 
 ### Community 214 - "Community 214"
 Cohesion: 0.67
-Nodes (3): thumbnail_url, pattern, type
-
-### Community 215 - "Community 215"
-Cohesion: 0.67
-Nodes (3): speaking_users, items, type
+Nodes (3): enum, type, health
 
 ### Community 216 - "Community 216"
 Cohesion: 0.67

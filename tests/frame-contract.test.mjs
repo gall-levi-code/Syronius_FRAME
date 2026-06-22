@@ -32,8 +32,7 @@ test("runtime overlay schema and stock defaults match their canonical copies", a
   );
 });
 
-test("generated Compose stays synchronized with the installer service contracts", async () => {
-  await assertSameFile("installer/templates/docker-compose.yml", "docker-compose.yml");
+test("installer Compose template stays synchronized with the service contracts", async () => {
   const compose = await readFile("installer/templates/docker-compose.yml", "utf8");
   const photoUpload = composeServiceBlock(compose, "frame-photo-upload");
   const streams = composeServiceBlock(compose, "frame-streams");

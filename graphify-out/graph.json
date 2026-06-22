@@ -560,7 +560,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_properties_date_folder",
-      "community": 130,
+      "community": 165,
       "norm_label": "date_folder"
     },
     {
@@ -570,7 +570,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_date_folder_type",
-      "community": 130,
+      "community": 165,
       "norm_label": "type"
     },
     {
@@ -580,7 +580,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_date_folder_pattern",
-      "community": 130,
+      "community": 165,
       "norm_label": "pattern"
     },
     {
@@ -650,7 +650,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_properties_latest_at",
-      "community": 209,
+      "community": 130,
       "norm_label": "latest_at"
     },
     {
@@ -660,7 +660,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_latest_at_type",
-      "community": 209,
+      "community": 130,
       "norm_label": "type"
     },
     {
@@ -670,7 +670,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_latest_at_format",
-      "community": 209,
+      "community": 130,
       "norm_label": "format"
     },
     {
@@ -680,7 +680,7 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_properties_duration_ms",
-      "community": 171,
+      "community": 130,
       "norm_label": "duration_ms"
     },
     {
@@ -690,7 +690,7 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_duration_ms_type",
-      "community": 171,
+      "community": 130,
       "norm_label": "type"
     },
     {
@@ -700,7 +700,7 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_duration_ms_minimum",
-      "community": 171,
+      "community": 130,
       "norm_label": "minimum"
     },
     {
@@ -790,7 +790,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_properties_base",
-      "community": 165,
+      "community": 171,
       "norm_label": "base"
     },
     {
@@ -800,7 +800,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_base_type",
-      "community": 165,
+      "community": 171,
       "norm_label": "type"
     },
     {
@@ -810,7 +810,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_base_pattern",
-      "community": 165,
+      "community": 171,
       "norm_label": "pattern"
     },
     {
@@ -850,7 +850,7 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_properties_thumbnail_url",
-      "community": 214,
+      "community": 165,
       "norm_label": "thumbnail_url"
     },
     {
@@ -860,7 +860,7 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_thumbnail_url_type",
-      "community": 214,
+      "community": 165,
       "norm_label": "type"
     },
     {
@@ -870,7 +870,7 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_thumbnail_url_pattern",
-      "community": 214,
+      "community": 165,
       "norm_label": "pattern"
     },
     {
@@ -910,7 +910,7 @@
       "source_location": "L38",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_properties_height",
-      "community": 165,
+      "community": 209,
       "norm_label": "height"
     },
     {
@@ -920,7 +920,7 @@
       "source_location": "L38",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_height_type",
-      "community": 165,
+      "community": 209,
       "norm_label": "type"
     },
     {
@@ -930,7 +930,7 @@
       "source_location": "L38",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_height_minimum",
-      "community": 165,
+      "community": 209,
       "norm_label": "minimum"
     },
     {
@@ -6850,7 +6850,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "schemas_status_schema_properties_health",
-      "community": 27,
+      "community": 214,
       "norm_label": "health"
     },
     {
@@ -6860,7 +6860,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "schemas_status_schema_health_type",
-      "community": 27,
+      "community": 214,
       "norm_label": "type"
     },
     {
@@ -6870,7 +6870,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "schemas_status_schema_health_enum",
-      "community": 27,
+      "community": 214,
       "norm_label": "enum"
     },
     {
@@ -7270,7 +7270,7 @@
       "source_location": "L87",
       "_origin": "ast",
       "id": "schemas_status_schema_properties_speaking_users",
-      "community": 215,
+      "community": 43,
       "norm_label": "speaking_users"
     },
     {
@@ -7280,7 +7280,7 @@
       "source_location": "L88",
       "_origin": "ast",
       "id": "schemas_status_schema_speaking_users_type",
-      "community": 215,
+      "community": 43,
       "norm_label": "type"
     },
     {
@@ -7290,7 +7290,7 @@
       "source_location": "L89",
       "_origin": "ast",
       "id": "schemas_status_schema_speaking_users_items",
-      "community": 215,
+      "community": 43,
       "norm_label": "items"
     },
     {
@@ -31531,7 +31531,7 @@
       "label": "assertSameFile()",
       "file_type": "code",
       "source_file": "tests/frame-contract.test.mjs",
-      "source_location": "L227",
+      "source_location": "L226",
       "_origin": "ast",
       "id": "tests_frame_contract_test_assertsamefile",
       "community": 1,
@@ -31541,7 +31541,7 @@
       "label": "composeServiceBlock()",
       "file_type": "code",
       "source_file": "tests/frame-contract.test.mjs",
-      "source_location": "L235",
+      "source_location": "L234",
       "_origin": "ast",
       "id": "tests_frame_contract_test_composeserviceblock",
       "community": 1,
@@ -57096,9 +57096,9 @@
       "source_file": "services/frame-audio/public/listen.js",
       "source_location": "L5",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "public_listen",
-      "target": "public_listen_playbuttonlabel",
-      "confidence_score": 1.0
+      "target": "public_listen_playbuttonlabel"
     },
     {
       "relation": "contains",
@@ -57186,9 +57186,9 @@
       "source_file": "services/frame-audio/public/listen.js",
       "source_location": "L501",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "public_listen",
-      "target": "public_listen_setthememode",
-      "confidence_score": 1.0
+      "target": "public_listen_setthememode"
     },
     {
       "relation": "contains",
@@ -57246,9 +57246,9 @@
       "source_file": "services/frame-audio/public/listen.js",
       "source_location": "L11",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "public_listen",
-      "target": "public_listen_themetoggle",
-      "confidence_score": 1.0
+      "target": "public_listen_themetoggle"
     },
     {
       "relation": "contains",
@@ -84845,5 +84845,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "1869234ba0fa9450225c05cb837890e7fb388d52"
+  "built_at_commit": "a148ae156af9825d7fc0217f0c6c7021b86614f6"
 }
