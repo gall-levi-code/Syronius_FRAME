@@ -11,6 +11,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+COPY public ./public
 EXPOSE 3740
 HEALTHCHECK --interval=30s --timeout=4s --start-period=10s --retries=3 \
   CMD wget -qO- http://127.0.0.1:3740/healthz >/dev/null || exit 1

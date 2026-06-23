@@ -100,10 +100,9 @@ Advanced automation can repeat `--set KEY=VALUE` for installer-whitelisted non-s
 ```
 
 For host-side StreamerBot, set `--host-data-root` to the absolute host directory that backs
-`FRAME_DATA_ROOT`, then watch `<host-data-root>\today\*.ready`. The pipeline maintains `today` as a
-relative link to the current local-date gallery so it remains usable from both Docker and Windows.
-Only newly published manifests receive a changed host path; existing `.ready` files are never
-rewritten or replayed.
+`FRAME_DATA_ROOT`, then watch `<host-data-root>\galleries` with subfolders included and process only
+files whose names end exactly in `.ready`. Only newly published manifests receive a changed host
+path; existing `.ready` files are never rewritten or replayed.
 
 `verify` runs deterministic capability/route contract tests and JavaScript syntax checks, then
 validates the generated Docker Compose configuration when it exists.
@@ -167,6 +166,8 @@ Both credential commands hide typed input. The tunnel token is mounted into `fra
 environment variables. Cloudflare Tunnel supports WebSockets, which are required by Audio Bridge.
 The generated `public-routes.yml` remains the final local allowlist even if the Cloudflare
 Published application route is broad.
+External requests that miss the allowlist or receive a gateway/service error use shared FRAME error
+pages instead of Traefik's bare default responses.
 
 ## Migrating standalone services
 

@@ -44,5 +44,5 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build
-      - if: contains(fromJSON('["frame-audio","frame-pipeline-photos","frame-photo-upload","frame-photo-ftp","frame-gallery","frame-today"]'), matrix.service)
+      - if: contains(fromJSON('["frame-audio","frame-audio-bridge","frame-pipeline-photos","frame-photo-upload","frame-photo-ftp","frame-gallery","frame-today"]'), matrix.service)
         run: npm test

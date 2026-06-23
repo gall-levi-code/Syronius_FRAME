@@ -184,6 +184,16 @@ test("Hybrid public gateway forwards the exact root when the dashboard is public
   assert.ok(installer.includes('rule: "Path(\\`/\\`)"'));
 });
 
+test("Hybrid public gateway serves branded external error pages", async () => {
+  const installer = await readFile("installer/frame-installer.mjs", "utf8");
+  assert.ok(installer.includes("frame-public-errors:"));
+  assert.ok(installer.includes('query: "/auth/error/{status}"'));
+  assert.ok(installer.includes("frame-public-not-found:"));
+  assert.ok(installer.includes('rule: "PathPrefix(\\`/\\`)"'));
+  assert.ok(installer.includes("frame-public-not-found-path:"));
+  assert.ok(installer.includes("path: /auth/error/404"));
+});
+
 test("Stream Management opens overlay management through the LAN edge", async () => {
   const composeTemplate = await readFile("installer/templates/docker-compose.yml", "utf8");
   assert.ok(composeTemplate.includes("OVERLAY_WIZARD_URL: /overlays/setup"));
