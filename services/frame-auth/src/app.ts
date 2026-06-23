@@ -1,7 +1,10 @@
 import express, { type Express, type Request } from "express";
+import path from "node:path";
 import { SessionSigner, safeEqual } from "./session.js";
 
 const COOKIE_NAME = "frame_session";
+const FRAME_LOGO_SVG = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800.88 800"><path fill="#4cb0e3" d="M330.88.06H22.82C10.24 0 0 10.74 0 24.02v751.96c0 13.23 10.17 23.96 22.71 23.96l247.49.06 27.76-83.77-211.46.86V85.38l216.39 1.01L330.88.06Z"/><polygon fill="#4cb0e3" points="393.88 0 800.88 0 746.61 181.88 334.71 181.88 393.88 0"/><path fill="#4cb0e3" d="M800.88 491.26v284.78c0 13.23-10.17 23.96-22.71 23.96H335.24l28.02-83.93h353.98V491.26h83.65Z"/><polygon fill="#4cb0e3" points="317.7 244.54 731.94 244.54 679.95 428.76 393.44 428.76 318.31 654.98 172.75 654.98 317.7 244.54"/></svg>';
+const FRAME_LOGO_DATA_URI = `data:image/svg+xml,${encodeURIComponent(FRAME_LOGO_SVG)}`;
 
 export interface CredentialPair {
   username: string;
@@ -22,6 +25,7 @@ interface AttemptState {
 
 export function createApp(config: AuthConfig): Express {
   const app = express();
+  const publicDir = path.resolve(process.cwd(), "public");
   const attempts = new Map<string, AttemptState>();
   app.disable("x-powered-by");
   app.use(express.urlencoded({ extended: false, limit: "16kb" }));
@@ -32,6 +36,14 @@ export function createApp(config: AuthConfig): Express {
     response.setHeader("X-Frame-Options", "SAMEORIGIN");
     next();
   });
+  app.use(
+    "/assets",
+    (_request, response, next) => {
+      response.setHeader("Cache-Control", "no-store");
+      next();
+    },
+    express.static(publicDir),
+  );
 
   app.get("/healthz", (_request, response) => {
     response.json({ ok: true, service: "frame-auth", configured: configured(config.portal), session_days: config.sessionDays });
@@ -95,8 +107,13 @@ export function createApp(config: AuthConfig): Express {
     response.redirect(303, "/auth/login");
   });
 
+  app.all("/auth/error/:status", (request, response) => {
+    const status = errorStatus(request.params.status);
+    response.status(status).type("html").send(errorPage(status, errorCopy(status)));
+  });
+
   app.all("/auth/public-denied", (_request, response) => {
-    response.status(404).type("text").send("Not found.");
+    response.status(404).type("html").send(errorPage(404, errorCopy(404)));
   });
 
   return app;
@@ -177,6 +194,228 @@ function recordFailure(attempts: Map<string, AttemptState>, key: string): void {
   const state = attempts.get(key) ?? { failures: [] };
   state.failures.push(Date.now());
   attempts.set(key, state);
+}
+
+interface ErrorPageCopy {
+  eyebrow: string;
+  title: string;
+  message: string;
+}
+
+const ERROR_COPY: Record<number, ErrorPageCopy> = {
+  400: {
+    eyebrow: "400",
+    title: "Request not accepted",
+    message: "FRAME could not read that public request.",
+  },
+  401: {
+    eyebrow: "401",
+    title: "Sign in required",
+    message: "This FRAME page needs a valid session before it can open.",
+  },
+  403: {
+    eyebrow: "403",
+    title: "Access not available",
+    message: "This public FRAME link cannot open that address.",
+  },
+  404: {
+    eyebrow: "404",
+    title: "Page not found",
+    message: "That FRAME address is not available from this public link.",
+  },
+  429: {
+    eyebrow: "429",
+    title: "Too many attempts",
+    message: "FRAME is slowing this request down for a moment.",
+  },
+  500: {
+    eyebrow: "500",
+    title: "FRAME hit an error",
+    message: "The request reached FRAME, but something failed while handling it.",
+  },
+  502: {
+    eyebrow: "502",
+    title: "Service did not answer",
+    message: "FRAME could not reach this service.\nIt may still be starting.",
+  },
+  503: {
+    eyebrow: "503",
+    title: "FRAME is unavailable",
+    message: "The requested FRAME service is not ready right now.",
+  },
+  504: {
+    eyebrow: "504",
+    title: "Request timed out",
+    message: "FRAME did not finish answering before the gateway stopped waiting.",
+  },
+};
+
+function errorStatus(value: string | undefined): number {
+  const parsed = Number.parseInt(value ?? "", 10);
+  if (!Number.isInteger(parsed) || parsed < 400 || parsed > 599) return 500;
+  return parsed;
+}
+
+function errorCopy(status: number): ErrorPageCopy {
+  const known = ERROR_COPY[status];
+  if (known) return known;
+  if (status >= 500) {
+    return {
+      eyebrow: String(status),
+      title: "FRAME could not complete the request",
+      message: "The public gateway reached an unexpected service error.",
+    };
+  }
+  return {
+    eyebrow: String(status),
+    title: "This address cannot be opened",
+    message: "FRAME could not serve that public address.",
+  };
+}
+
+function errorPage(status: number, copy: ErrorPageCopy): string {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#06151e">
+  <title>${status} - ${escapeHtml(copy.title)} - Syronius FRAME</title>
+  <link rel="icon" href="${FRAME_LOGO_DATA_URI}" type="image/svg+xml">
+  <style>
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; color: #e9f8ff; background: #06151e; --cyan: #2cb4fb; --ice: #e9f8ff; --deep: #06151e; --gold: #ffb454; --muted: #b9d3df; }
+    * { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      min-height: 100vh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      overflow: hidden;
+      background:
+        linear-gradient(135deg, #06151e 0%, #0e2a36 26%, #184a68 48%, #2cb4fb 72%, #e9f8ff 100%);
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background:
+        linear-gradient(180deg, rgb(3 12 18 / 34%), rgb(3 12 18 / 64%)),
+        linear-gradient(90deg, rgb(44 180 251 / 18%), transparent 38%, rgb(255 180 84 / 16%));
+      pointer-events: none;
+    }
+    main {
+      position: relative;
+      isolation: isolate;
+      width: min(100%, 760px);
+      min-height: min(760px, calc(100vh - 36px));
+      display: grid;
+      place-items: center;
+    }
+    .mark {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .mark img,
+    .mark .fill,
+    .mark .glow {
+      position: absolute;
+      width: min(80vw, 590px);
+      aspect-ratio: 1;
+    }
+    .mark img {
+      object-fit: contain;
+      opacity: .18;
+      filter: drop-shadow(0 0 26px rgb(233 248 255 / 35%));
+    }
+    .mark .fill,
+    .mark .glow {
+      background: linear-gradient(315deg, var(--ice) 0%, var(--cyan) 34%, #0b2230 62%, var(--gold) 100%);
+      -webkit-mask: url("${FRAME_LOGO_DATA_URI}") center / contain no-repeat;
+      mask: url("${FRAME_LOGO_DATA_URI}") center / contain no-repeat;
+    }
+    .mark .fill {
+      opacity: .9;
+      filter:
+        drop-shadow(0 0 10px rgb(233 248 255 / 72%))
+        drop-shadow(0 0 32px rgb(44 180 251 / 62%))
+        drop-shadow(0 0 74px rgb(255 180 84 / 24%));
+    }
+    .mark .glow {
+      opacity: .5;
+      transform: scale(1.035);
+      filter: blur(18px);
+    }
+    .copy {
+      position: relative;
+      z-index: 1;
+      width: min(100%, 560px);
+      min-height: 320px;
+      display: grid;
+      place-items: center;
+      align-content: center;
+      gap: 12px;
+      padding: 56px 28px;
+      text-align: center;
+      background: radial-gradient(ellipse at center, rgb(2 9 14 / 92%) 0%, rgb(2 9 14 / 78%) 38%, rgb(2 9 14 / 0%) 72%);
+    }
+    .status {
+      margin: 0;
+      color: var(--ice);
+      font-size: 7rem;
+      line-height: .82;
+      font-weight: 950;
+      text-shadow: 0 0 18px rgb(233 248 255 / 46%), 0 0 54px rgb(44 180 251 / 42%);
+    }
+    h1 {
+      margin: 0;
+      max-width: 14ch;
+      color: var(--ice);
+      font-size: 2.15rem;
+      line-height: 1.05;
+      font-weight: 900;
+    }
+    p {
+      margin: 0;
+      max-width: 34rem;
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1.5;
+    }
+    @media (max-width: 560px) {
+      main { min-height: calc(100vh - 36px); }
+      .mark img, .mark .fill, .mark .glow { width: min(104vw, 430px); }
+      .copy { min-height: 270px; padding: 42px 18px; }
+      .status { font-size: 4.8rem; }
+      h1 { font-size: 1.55rem; }
+      p { font-size: .95rem; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="mark" aria-hidden="true">
+      <img src="${FRAME_LOGO_DATA_URI}" alt="">
+      <div class="glow"></div>
+      <div class="fill"></div>
+    </div>
+    <section class="copy" aria-labelledby="error-title">
+      <p class="status" aria-label="HTTP status ${status}">${escapeHtml(copy.eyebrow)}</p>
+      <h1 id="error-title">${escapeHtml(copy.title)}</h1>
+      <p>${formatMessage(copy.message)}</p>
+    </section>
+  </main>
+</body>
+</html>`;
+}
+
+function formatMessage(value: string): string {
+  return value.split("\n").map(escapeHtml).join("<br>");
 }
 
 function loginPage(returnTo: string, error: string, sessionDays: number, enabled: boolean): string {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { watch } from "node:fs";
-import { mkdir, mkdtemp, readFile, readdir, readlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -40,12 +40,8 @@ test("publishes a valid staged image with ready last and latest state", async ()
   assert.equal(await readFile(path.join(root, "galleries", latest.date_folder, `${latest.latest_base}.orientation`), "utf8"), "1\n");
   assert.equal(latest.count_today, 1);
   assert.equal((await readdir(path.join(root, "archive", latest.date_folder))).length, 1);
-  assert.equal(await readlink(path.join(root, "today")), path.join("galleries", latest.date_folder));
-  assert.equal(
-    await readFile(path.join(root, "today", `${latest.latest_base}.ready`), "utf8"),
-    await readFile(path.join(root, "galleries", latest.date_folder, `${latest.latest_base}.ready`), "utf8"),
-  );
-  const manifest = (await readFile(path.join(root, "today", `${latest.latest_base}.ready`), "utf8")).trimEnd().split("\n");
+  assert.equal((await readdir(root)).includes("today"), false);
+  const manifest = (await readFile(path.join(root, "galleries", latest.date_folder, `${latest.latest_base}.ready`), "utf8")).trimEnd().split("\n");
   assert.equal(manifest.length, 3);
   assert.equal(path.basename(manifest[0], ".jpg"), latest.latest_base);
   assert.equal(path.basename(manifest[1], ".txt"), latest.latest_base);
@@ -166,7 +162,7 @@ test("trash and restore preserve ready while every management change advances la
   const purged = await pipeline.managePhotos("purge-photo", published.date_folder, published.latest_base);
   assert.equal(purged.latest_base, null);
   await assert.rejects(readFile(ready, "utf8"));
-  assert.equal(await readlink(path.join(root, "today")), path.join("galleries", published.date_folder));
+  assert.equal((await readdir(root)).includes("today"), false);
 });
 
 test("trashing the latest photo recalculates latest_base to the newest visible publication", async () => {

@@ -691,6 +691,8 @@ function generatePublicRoutes(prefixes) {
         - public
       rule: "Path(\`/\`)"
       priority: 110
+      middlewares:
+        - frame-public-errors
       service: frame-edge
 `
     : "";
@@ -700,6 +702,8 @@ function generatePublicRoutes(prefixes) {
         - public
       rule: "${prefixes.map((prefix) => `(Path(\`${prefix}\`) || PathPrefix(\`${prefix}/\`))`).join(" || ")}"
       priority: 100
+      middlewares:
+        - frame-public-errors
       service: frame-edge
 `
     : "";
@@ -713,7 +717,24 @@ http:
       middlewares:
         - frame-public-gateway-health-path
       service: frame-edge
-${rootRouter}${publicRouter}  middlewares:
+${rootRouter}${publicRouter}    frame-public-not-found:
+      entryPoints:
+        - public
+      rule: "PathPrefix(\`/\`)"
+      priority: 1
+      middlewares:
+        - frame-public-not-found-path
+      service: frame-edge
+  middlewares:
+    frame-public-errors:
+      errors:
+        status:
+          - "400-599"
+        service: frame-edge
+        query: "/auth/error/{status}"
+    frame-public-not-found-path:
+      replacePath:
+        path: /auth/error/404
     frame-public-gateway-health-path:
       replacePath:
         path: /healthz
