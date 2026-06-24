@@ -2440,7 +2440,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema",
-      "community": 163,
+      "community": 198,
       "norm_label": "overlay-presets.schema.json"
     },
     {
@@ -2450,7 +2450,7 @@
       "source_location": "L2",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_schema",
-      "community": 163,
+      "community": 198,
       "norm_label": "$schema"
     },
     {
@@ -2460,7 +2460,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_id",
-      "community": 163,
+      "community": 198,
       "norm_label": "$id"
     },
     {
@@ -2470,7 +2470,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_title",
-      "community": 163,
+      "community": 198,
       "norm_label": "title"
     },
     {
@@ -2480,7 +2480,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_type",
-      "community": 163,
+      "community": 198,
       "norm_label": "type"
     },
     {
@@ -2490,7 +2490,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_additionalproperties",
-      "community": 163,
+      "community": 198,
       "norm_label": "additionalproperties"
     },
     {
@@ -2500,7 +2500,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_required",
-      "community": 163,
+      "community": 198,
       "norm_label": "required"
     },
     {
@@ -2590,7 +2590,7 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_default_template_ids",
-      "community": 163,
+      "community": 162,
       "norm_label": "default_template_ids"
     },
     {
@@ -2600,7 +2600,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_default_template_ids_type",
-      "community": 163,
+      "community": 162,
       "norm_label": "type"
     },
     {
@@ -2610,7 +2610,7 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_default_template_ids_additionalproperties",
-      "community": 163,
+      "community": 162,
       "norm_label": "additionalproperties"
     },
     {
@@ -2620,7 +2620,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_default_template_ids_properties",
-      "community": 163,
+      "community": 162,
       "norm_label": "properties"
     },
     {
@@ -2630,7 +2630,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_connectivity",
-      "community": 163,
+      "community": 162,
       "norm_label": "connectivity"
     },
     {
@@ -2640,7 +2640,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_connectivity_ref",
-      "community": 163,
+      "community": 162,
       "norm_label": "$ref"
     },
     {
@@ -2650,7 +2650,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_upload_progress",
-      "community": 163,
+      "community": 162,
       "norm_label": "upload_progress"
     },
     {
@@ -2660,7 +2660,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_upload_progress_ref",
-      "community": 163,
+      "community": 162,
       "norm_label": "$ref"
     },
     {
@@ -2670,7 +2670,7 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_latest_photo",
-      "community": 163,
+      "community": 162,
       "norm_label": "latest_photo"
     },
     {
@@ -2680,7 +2680,7 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_latest_photo_ref",
-      "community": 163,
+      "community": 162,
       "norm_label": "$ref"
     },
     {
@@ -2800,7 +2800,7 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_legacy_aliases",
-      "community": 163,
+      "community": 201,
       "norm_label": "legacy_aliases"
     },
     {
@@ -2810,7 +2810,7 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_legacy_aliases_type",
-      "community": 163,
+      "community": 201,
       "norm_label": "type"
     },
     {
@@ -2820,7 +2820,7 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_legacy_aliases_propertynames",
-      "community": 163,
+      "community": 201,
       "norm_label": "propertynames"
     },
     {
@@ -2830,7 +2830,7 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_propertynames_ref",
-      "community": 163,
+      "community": 201,
       "norm_label": "$ref"
     },
     {
@@ -2840,7 +2840,7 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_legacy_aliases_additionalproperties",
-      "community": 163,
+      "community": 201,
       "norm_label": "additionalproperties"
     },
     {
@@ -2850,7 +2850,7 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_additionalproperties_ref",
-      "community": 163,
+      "community": 201,
       "norm_label": "$ref"
     },
     {
@@ -3240,7 +3240,7 @@
       "source_location": "L69",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_text_color",
-      "community": 281,
+      "community": 119,
       "norm_label": "text_color"
     },
     {
@@ -3250,7 +3250,7 @@
       "source_location": "L69",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_text_color_type",
-      "community": 281,
+      "community": 119,
       "norm_label": "type"
     },
     {
@@ -3260,7 +3260,7 @@
       "source_location": "L69",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_text_color_maxlength",
-      "community": 281,
+      "community": 119,
       "norm_label": "maxlength"
     },
     {
@@ -3450,7 +3450,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_bg_opacity_good",
-      "community": 214,
+      "community": 119,
       "norm_label": "bg_opacity_good"
     },
     {
@@ -3460,7 +3460,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_bg_opacity_good_type",
-      "community": 214,
+      "community": 119,
       "norm_label": "type"
     },
     {
@@ -3470,7 +3470,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_bg_opacity_good_minimum",
-      "community": 214,
+      "community": 119,
       "norm_label": "minimum"
     },
     {
@@ -3480,7 +3480,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_bg_opacity_good_maximum",
-      "community": 214,
+      "community": 119,
       "norm_label": "maximum"
     },
     {
@@ -3490,7 +3490,7 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_bg_opacity_warn",
-      "community": 216,
+      "community": 119,
       "norm_label": "bg_opacity_warn"
     },
     {
@@ -3500,7 +3500,7 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_bg_opacity_warn_type",
-      "community": 216,
+      "community": 119,
       "norm_label": "type"
     },
     {
@@ -3510,7 +3510,7 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_bg_opacity_warn_minimum",
-      "community": 216,
+      "community": 119,
       "norm_label": "minimum"
     },
     {
@@ -3520,7 +3520,7 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_bg_opacity_warn_maximum",
-      "community": 216,
+      "community": 119,
       "norm_label": "maximum"
     },
     {
@@ -3530,7 +3530,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_bg_opacity_bad",
-      "community": 207,
+      "community": 119,
       "norm_label": "bg_opacity_bad"
     },
     {
@@ -3540,7 +3540,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_bg_opacity_bad_type",
-      "community": 207,
+      "community": 119,
       "norm_label": "type"
     },
     {
@@ -3550,7 +3550,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_bg_opacity_bad_minimum",
-      "community": 207,
+      "community": 119,
       "norm_label": "minimum"
     },
     {
@@ -3560,7 +3560,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_bg_opacity_bad_maximum",
-      "community": 207,
+      "community": 119,
       "norm_label": "maximum"
     },
     {
@@ -3570,7 +3570,7 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_border_radius_px",
-      "community": 217,
+      "community": 119,
       "norm_label": "border_radius_px"
     },
     {
@@ -3580,7 +3580,7 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_border_radius_px_type",
-      "community": 217,
+      "community": 119,
       "norm_label": "type"
     },
     {
@@ -3590,7 +3590,7 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_border_radius_px_minimum",
-      "community": 217,
+      "community": 119,
       "norm_label": "minimum"
     },
     {
@@ -3600,7 +3600,7 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_border_radius_px_maximum",
-      "community": 217,
+      "community": 119,
       "norm_label": "maximum"
     },
     {
@@ -3650,7 +3650,7 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_font_size_base_px",
-      "community": 223,
+      "community": 119,
       "norm_label": "font_size_base_px"
     },
     {
@@ -3660,7 +3660,7 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_font_size_base_px_type",
-      "community": 223,
+      "community": 119,
       "norm_label": "type"
     },
     {
@@ -3670,7 +3670,7 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_font_size_base_px_minimum",
-      "community": 223,
+      "community": 119,
       "norm_label": "minimum"
     },
     {
@@ -3680,7 +3680,7 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_font_size_base_px_maximum",
-      "community": 223,
+      "community": 119,
       "norm_label": "maximum"
     },
     {
@@ -3920,7 +3920,7 @@
       "source_location": "L94",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_chart_bitrate_max",
-      "community": 51,
+      "community": 214,
       "norm_label": "chart_bitrate_max"
     },
     {
@@ -3930,7 +3930,7 @@
       "source_location": "L94",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_chart_bitrate_max_type",
-      "community": 51,
+      "community": 214,
       "norm_label": "type"
     },
     {
@@ -3940,7 +3940,7 @@
       "source_location": "L94",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_chart_bitrate_max_minimum",
-      "community": 51,
+      "community": 214,
       "norm_label": "minimum"
     },
     {
@@ -3950,7 +3950,7 @@
       "source_location": "L95",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_chart_rtt_max",
-      "community": 254,
+      "community": 51,
       "norm_label": "chart_rtt_max"
     },
     {
@@ -3960,7 +3960,7 @@
       "source_location": "L95",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_chart_rtt_max_type",
-      "community": 254,
+      "community": 51,
       "norm_label": "type"
     },
     {
@@ -3970,7 +3970,7 @@
       "source_location": "L95",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_chart_rtt_max_minimum",
-      "community": 254,
+      "community": 51,
       "norm_label": "minimum"
     },
     {
@@ -4180,7 +4180,7 @@
       "source_location": "L101",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_use_rtt_in_good",
-      "community": 51,
+      "community": 309,
       "norm_label": "use_rtt_in_good"
     },
     {
@@ -4190,7 +4190,7 @@
       "source_location": "L101",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_use_rtt_in_good_type",
-      "community": 51,
+      "community": 309,
       "norm_label": "type"
     },
     {
@@ -4240,7 +4240,7 @@
       "source_location": "L104",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_show_status",
-      "community": 51,
+      "community": 307,
       "norm_label": "show_status"
     },
     {
@@ -4250,7 +4250,7 @@
       "source_location": "L104",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_show_status_type",
-      "community": 51,
+      "community": 307,
       "norm_label": "type"
     },
     {
@@ -4340,7 +4340,7 @@
       "source_location": "L109",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_show_buffer",
-      "community": 278,
+      "community": 51,
       "norm_label": "show_buffer"
     },
     {
@@ -4350,7 +4350,7 @@
       "source_location": "L109",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_show_buffer_type",
-      "community": 278,
+      "community": 51,
       "norm_label": "type"
     },
     {
@@ -4360,7 +4360,7 @@
       "source_location": "L110",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_show_chart",
-      "community": 51,
+      "community": 303,
       "norm_label": "show_chart"
     },
     {
@@ -4370,7 +4370,7 @@
       "source_location": "L110",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_show_chart_type",
-      "community": 51,
+      "community": 303,
       "norm_label": "type"
     },
     {
@@ -4400,7 +4400,7 @@
       "source_location": "L112",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_show_server",
-      "community": 51,
+      "community": 305,
       "norm_label": "show_server"
     },
     {
@@ -4410,7 +4410,7 @@
       "source_location": "L112",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_show_server_type",
-      "community": 51,
+      "community": 305,
       "norm_label": "type"
     },
     {
@@ -4440,7 +4440,7 @@
       "source_location": "L114",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_show_uptime",
-      "community": 51,
+      "community": 308,
       "norm_label": "show_uptime"
     },
     {
@@ -4450,7 +4450,7 @@
       "source_location": "L114",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_show_uptime_type",
-      "community": 51,
+      "community": 308,
       "norm_label": "type"
     },
     {
@@ -4610,7 +4610,7 @@
       "source_location": "L123",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_no_signal_behavior",
-      "community": 51,
+      "community": 302,
       "norm_label": "no_signal_behavior"
     },
     {
@@ -4620,7 +4620,7 @@
       "source_location": "L123",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_no_signal_behavior_enum",
-      "community": 51,
+      "community": 302,
       "norm_label": "enum"
     },
     {
@@ -5210,7 +5210,7 @@
       "source_location": "L159",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_defs_design",
-      "community": 247,
+      "community": 69,
       "norm_label": "design"
     },
     {
@@ -5220,7 +5220,7 @@
       "source_location": "L160",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_design_type",
-      "community": 247,
+      "community": 69,
       "norm_label": "type"
     },
     {
@@ -5230,7 +5230,7 @@
       "source_location": "L161",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_design_required",
-      "community": 247,
+      "community": 69,
       "norm_label": "required"
     },
     {
@@ -5520,7 +5520,7 @@
       "source_location": "L178",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_design_allof",
-      "community": 247,
+      "community": 69,
       "norm_label": "allof"
     },
     {
@@ -5610,7 +5610,7 @@
       "source_location": "L264",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_defs_source",
-      "community": 248,
+      "community": 210,
       "norm_label": "source"
     },
     {
@@ -5620,7 +5620,7 @@
       "source_location": "L265",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_source_type",
-      "community": 248,
+      "community": 210,
       "norm_label": "type"
     },
     {
@@ -5630,7 +5630,7 @@
       "source_location": "L266",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_source_additionalproperties",
-      "community": 248,
+      "community": 210,
       "norm_label": "additionalproperties"
     },
     {
@@ -5640,7 +5640,7 @@
       "source_location": "L267",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_source_required",
-      "community": 248,
+      "community": 210,
       "norm_label": "required"
     },
     {
@@ -6780,7 +6780,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_stack_config_schema",
-      "community": 312,
+      "community": 206,
       "norm_label": "stack-config.schema.json"
     },
     {
@@ -6790,7 +6790,7 @@
       "source_location": "L2",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_schema",
-      "community": 312,
+      "community": 206,
       "norm_label": "$schema"
     },
     {
@@ -6800,7 +6800,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_title",
-      "community": 312,
+      "community": 206,
       "norm_label": "title"
     },
     {
@@ -6810,7 +6810,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_type",
-      "community": 312,
+      "community": 206,
       "norm_label": "type"
     },
     {
@@ -6820,7 +6820,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_additionalproperties",
-      "community": 312,
+      "community": 206,
       "norm_label": "additionalproperties"
     },
     {
@@ -6830,7 +6830,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_required",
-      "community": 312,
+      "community": 206,
       "norm_label": "required"
     },
     {
@@ -7110,7 +7110,7 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_properties_routes",
-      "community": 282,
+      "community": 312,
       "norm_label": "routes"
     },
     {
@@ -7120,7 +7120,7 @@
       "source_location": "L65",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_routes_type",
-      "community": 282,
+      "community": 312,
       "norm_label": "type"
     },
     {
@@ -7130,7 +7130,7 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_routes_additionalproperties",
-      "community": 282,
+      "community": 312,
       "norm_label": "additionalproperties"
     },
     {
@@ -7140,7 +7140,7 @@
       "source_location": "L67",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_routes_required",
-      "community": 282,
+      "community": 312,
       "norm_label": "required"
     },
     {
@@ -7190,7 +7190,7 @@
       "source_location": "L92",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_properties_status",
-      "community": 54,
+      "community": 216,
       "norm_label": "status"
     },
     {
@@ -7200,7 +7200,7 @@
       "source_location": "L93",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_status_type",
-      "community": 54,
+      "community": 216,
       "norm_label": "type"
     },
     {
@@ -7210,7 +7210,7 @@
       "source_location": "L94",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_status_pattern",
-      "community": 54,
+      "community": 216,
       "norm_label": "pattern"
     },
     {
@@ -7250,7 +7250,7 @@
       "source_location": "L100",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_properties_video_relay_ui",
-      "community": 54,
+      "community": 219,
       "norm_label": "video_relay_ui"
     },
     {
@@ -7260,7 +7260,7 @@
       "source_location": "L101",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_video_relay_ui_type",
-      "community": 54,
+      "community": 219,
       "norm_label": "type"
     },
     {
@@ -7270,7 +7270,7 @@
       "source_location": "L102",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_video_relay_ui_pattern",
-      "community": 54,
+      "community": 219,
       "norm_label": "pattern"
     },
     {
@@ -7370,7 +7370,7 @@
       "source_location": "L116",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_properties_photo_upload",
-      "community": 302,
+      "community": 54,
       "norm_label": "photo_upload"
     },
     {
@@ -7380,7 +7380,7 @@
       "source_location": "L117",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_photo_upload_type",
-      "community": 302,
+      "community": 54,
       "norm_label": "type"
     },
     {
@@ -7390,7 +7390,7 @@
       "source_location": "L118",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_photo_upload_pattern",
-      "community": 302,
+      "community": 54,
       "norm_label": "pattern"
     },
     {
@@ -7430,7 +7430,7 @@
       "source_location": "L124",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_properties_today_gallery",
-      "community": 54,
+      "community": 217,
       "norm_label": "today_gallery"
     },
     {
@@ -7440,7 +7440,7 @@
       "source_location": "L125",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_today_gallery_type",
-      "community": 54,
+      "community": 217,
       "norm_label": "type"
     },
     {
@@ -7450,7 +7450,7 @@
       "source_location": "L126",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_today_gallery_pattern",
-      "community": 54,
+      "community": 217,
       "norm_label": "pattern"
     },
     {
@@ -7460,7 +7460,7 @@
       "source_location": "L128",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_properties_today_dashboard",
-      "community": 303,
+      "community": 54,
       "norm_label": "today_dashboard"
     },
     {
@@ -7470,7 +7470,7 @@
       "source_location": "L129",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_today_dashboard_type",
-      "community": 303,
+      "community": 54,
       "norm_label": "type"
     },
     {
@@ -7480,7 +7480,7 @@
       "source_location": "L130",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_today_dashboard_pattern",
-      "community": 303,
+      "community": 54,
       "norm_label": "pattern"
     },
     {
@@ -7520,7 +7520,7 @@
       "source_location": "L136",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_properties_today_remote",
-      "community": 305,
+      "community": 54,
       "norm_label": "today_remote"
     },
     {
@@ -7530,7 +7530,7 @@
       "source_location": "L137",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_today_remote_type",
-      "community": 305,
+      "community": 54,
       "norm_label": "type"
     },
     {
@@ -7540,7 +7540,7 @@
       "source_location": "L138",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_today_remote_pattern",
-      "community": 305,
+      "community": 54,
       "norm_label": "pattern"
     },
     {
@@ -7770,7 +7770,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_status_schema",
-      "community": 59,
+      "community": 207,
       "norm_label": "status.schema.json"
     },
     {
@@ -7780,7 +7780,7 @@
       "source_location": "L2",
       "_origin": "ast",
       "id": "schemas_status_schema_schema",
-      "community": 59,
+      "community": 207,
       "norm_label": "$schema"
     },
     {
@@ -7790,7 +7790,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "schemas_status_schema_title",
-      "community": 59,
+      "community": 207,
       "norm_label": "title"
     },
     {
@@ -7800,7 +7800,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "schemas_status_schema_type",
-      "community": 59,
+      "community": 207,
       "norm_label": "type"
     },
     {
@@ -7810,7 +7810,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "schemas_status_schema_additionalproperties",
-      "community": 59,
+      "community": 207,
       "norm_label": "additionalproperties"
     },
     {
@@ -7820,7 +7820,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "schemas_status_schema_required",
-      "community": 59,
+      "community": 207,
       "norm_label": "required"
     },
     {
@@ -8060,7 +8060,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "schemas_status_schema_properties_uptime_seconds",
-      "community": 219,
+      "community": 27,
       "norm_label": "uptime_seconds"
     },
     {
@@ -8070,7 +8070,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "schemas_status_schema_uptime_seconds_type",
-      "community": 219,
+      "community": 27,
       "norm_label": "type"
     },
     {
@@ -8080,7 +8080,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "schemas_status_schema_uptime_seconds_minimum",
-      "community": 219,
+      "community": 27,
       "norm_label": "minimum"
     },
     {
@@ -8320,7 +8320,7 @@
       "source_location": "L62",
       "_origin": "ast",
       "id": "schemas_status_schema_properties_discord_audio_bridges",
-      "community": 59,
+      "community": 43,
       "norm_label": "discord_audio_bridges"
     },
     {
@@ -8330,7 +8330,7 @@
       "source_location": "L63",
       "_origin": "ast",
       "id": "schemas_status_schema_discord_audio_bridges_type",
-      "community": 59,
+      "community": 43,
       "norm_label": "type"
     },
     {
@@ -8390,7 +8390,7 @@
       "source_location": "L82",
       "_origin": "ast",
       "id": "schemas_status_schema_properties_active_mix_count",
-      "community": 213,
+      "community": 27,
       "norm_label": "active_mix_count"
     },
     {
@@ -8400,7 +8400,7 @@
       "source_location": "L82",
       "_origin": "ast",
       "id": "schemas_status_schema_active_mix_count_type",
-      "community": 213,
+      "community": 27,
       "norm_label": "type"
     },
     {
@@ -8410,7 +8410,7 @@
       "source_location": "L82",
       "_origin": "ast",
       "id": "schemas_status_schema_active_mix_count_minimum",
-      "community": 213,
+      "community": 27,
       "norm_label": "minimum"
     },
     {
@@ -8600,7 +8600,7 @@
       "source_location": "L103",
       "_origin": "ast",
       "id": "schemas_status_schema_properties_engine_health",
-      "community": 27,
+      "community": 221,
       "norm_label": "engine_health"
     },
     {
@@ -8610,7 +8610,7 @@
       "source_location": "L103",
       "_origin": "ast",
       "id": "schemas_status_schema_engine_health_type",
-      "community": 27,
+      "community": 221,
       "norm_label": "type"
     },
     {
@@ -8620,7 +8620,7 @@
       "source_location": "L103",
       "_origin": "ast",
       "id": "schemas_status_schema_engine_health_enum",
-      "community": 27,
+      "community": 221,
       "norm_label": "enum"
     },
     {
@@ -8840,7 +8840,7 @@
       "source_location": "L125",
       "_origin": "ast",
       "id": "schemas_status_schema_properties_level",
-      "community": 27,
+      "community": 223,
       "norm_label": "level"
     },
     {
@@ -8850,7 +8850,7 @@
       "source_location": "L125",
       "_origin": "ast",
       "id": "schemas_status_schema_level_type",
-      "community": 27,
+      "community": 223,
       "norm_label": "type"
     },
     {
@@ -8860,7 +8860,7 @@
       "source_location": "L125",
       "_origin": "ast",
       "id": "schemas_status_schema_level_enum",
-      "community": 27,
+      "community": 223,
       "norm_label": "enum"
     },
     {
@@ -9150,7 +9150,7 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "schemas_today_state_schema_properties_current_filename",
-      "community": 84,
+      "community": 310,
       "norm_label": "current_filename"
     },
     {
@@ -9160,7 +9160,7 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "schemas_today_state_schema_current_filename_type",
-      "community": 84,
+      "community": 310,
       "norm_label": "type"
     },
     {
@@ -9440,7 +9440,7 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "schemas_today_state_schema_properties_show_exif",
-      "community": 276,
+      "community": 84,
       "norm_label": "show_exif"
     },
     {
@@ -9450,7 +9450,7 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "schemas_today_state_schema_show_exif_type",
-      "community": 276,
+      "community": 84,
       "norm_label": "type"
     },
     {
@@ -13880,7 +13880,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "voice_mixer_pcmaudioframe",
-      "community": 128,
+      "community": 272,
       "norm_label": "pcmaudioframe"
     },
     {
@@ -14360,7 +14360,7 @@
       "source_location": "L258",
       "_origin": "ast",
       "id": "voice_voicemanager_voicemanager_handleaudioframe",
-      "community": 128,
+      "community": 272,
       "norm_label": ".handleaudioframe()"
     },
     {
@@ -14410,7 +14410,7 @@
       "source_location": "L454",
       "_origin": "ast",
       "id": "voice_voicemanager_voicemanager_calculateaudiolevel",
-      "community": 128,
+      "community": 272,
       "norm_label": ".calculateaudiolevel()"
     },
     {
@@ -14500,7 +14500,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "web_routes_registerroutes",
-      "community": 111,
+      "community": 46,
       "norm_label": "registerroutes()"
     },
     {
@@ -14550,7 +14550,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "web_server",
-      "community": 24,
+      "community": 46,
       "norm_label": "server.ts"
     },
     {
@@ -14560,7 +14560,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "web_server_webserverhandle",
-      "community": 24,
+      "community": 46,
       "norm_label": "webserverhandle"
     },
     {
@@ -14580,7 +14580,7 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "web_server_closeserver",
-      "community": 24,
+      "community": 46,
       "norm_label": "closeserver()"
     },
     {
@@ -15734,10 +15734,40 @@
       "norm_label": "dialog"
     },
     {
-      "label": "themeToggle",
+      "label": "dialogNotice",
       "file_type": "code",
       "source_file": "services/frame-audio/public/admin.js",
       "source_location": "L5",
+      "_origin": "ast",
+      "id": "public_admin_dialognotice",
+      "community": 31,
+      "norm_label": "dialognotice"
+    },
+    {
+      "label": "streamForm",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/admin.js",
+      "source_location": "L6",
+      "_origin": "ast",
+      "id": "public_admin_streamform",
+      "community": 31,
+      "norm_label": "streamform"
+    },
+    {
+      "label": "streamIdInput",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/admin.js",
+      "source_location": "L7",
+      "_origin": "ast",
+      "id": "public_admin_streamidinput",
+      "community": 31,
+      "norm_label": "streamidinput"
+    },
+    {
+      "label": "themeToggle",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/admin.js",
+      "source_location": "L8",
       "_origin": "ast",
       "id": "public_admin_themetoggle",
       "community": 31,
@@ -15747,7 +15777,7 @@
       "label": "setThemeMode()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/admin.js",
-      "source_location": "L25",
+      "source_location": "L36",
       "_origin": "ast",
       "id": "public_admin_setthememode",
       "community": 31,
@@ -15757,7 +15787,7 @@
       "label": "readStoredTheme()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/admin.js",
-      "source_location": "L40",
+      "source_location": "L51",
       "_origin": "ast",
       "id": "services_frame_audio_public_admin_js_public_admin_readstoredtheme",
       "community": 31,
@@ -15767,7 +15797,7 @@
       "label": "load()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/admin.js",
-      "source_location": "L48",
+      "source_location": "L59",
       "_origin": "ast",
       "id": "public_admin_load",
       "community": 31,
@@ -15777,7 +15807,7 @@
       "label": "render()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/admin.js",
-      "source_location": "L62",
+      "source_location": "L73",
       "_origin": "ast",
       "id": "services_frame_audio_public_admin_js_public_admin_render",
       "community": 31,
@@ -15787,7 +15817,7 @@
       "label": "openAdd()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/admin.js",
-      "source_location": "L95",
+      "source_location": "L106",
       "_origin": "ast",
       "id": "public_admin_openadd",
       "community": 31,
@@ -15797,7 +15827,7 @@
       "label": "openEdit()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/admin.js",
-      "source_location": "L107",
+      "source_location": "L120",
       "_origin": "ast",
       "id": "public_admin_openedit",
       "community": 31,
@@ -15807,7 +15837,7 @@
       "label": "generateId()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/admin.js",
-      "source_location": "L120",
+      "source_location": "L134",
       "_origin": "ast",
       "id": "public_admin_generateid",
       "community": 31,
@@ -15817,7 +15847,7 @@
       "label": "save()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/admin.js",
-      "source_location": "L130",
+      "source_location": "L146",
       "_origin": "ast",
       "id": "public_admin_save",
       "community": 31,
@@ -15827,7 +15857,7 @@
       "label": "remove()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/admin.js",
-      "source_location": "L153",
+      "source_location": "L179",
       "_origin": "ast",
       "id": "public_admin_remove",
       "community": 31,
@@ -15837,7 +15867,7 @@
       "label": "clearLocalCaptureSettings()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/admin.js",
-      "source_location": "L166",
+      "source_location": "L192",
       "_origin": "ast",
       "id": "public_admin_clearlocalcapturesettings",
       "community": 31,
@@ -15847,7 +15877,7 @@
       "label": "stat()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/admin.js",
-      "source_location": "L174",
+      "source_location": "L200",
       "_origin": "ast",
       "id": "public_admin_stat",
       "community": 31,
@@ -15857,17 +15887,67 @@
       "label": "modeLabel()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/admin.js",
-      "source_location": "L175",
+      "source_location": "L201",
       "_origin": "ast",
       "id": "public_admin_modelabel",
       "community": 31,
       "norm_label": "modelabel()"
     },
     {
+      "label": "sanitizeStreamId()",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/admin.js",
+      "source_location": "L202",
+      "_origin": "ast",
+      "id": "public_admin_sanitizestreamid",
+      "community": 31,
+      "norm_label": "sanitizestreamid()"
+    },
+    {
+      "label": "validateStreamIdInput()",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/admin.js",
+      "source_location": "L203",
+      "_origin": "ast",
+      "id": "public_admin_validatestreamidinput",
+      "community": 31,
+      "norm_label": "validatestreamidinput()"
+    },
+    {
+      "label": "validationMessage()",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/admin.js",
+      "source_location": "L213",
+      "_origin": "ast",
+      "id": "public_admin_validationmessage",
+      "community": 31,
+      "norm_label": "validationmessage()"
+    },
+    {
+      "label": "hideDialogNotice()",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/admin.js",
+      "source_location": "L216",
+      "_origin": "ast",
+      "id": "public_admin_hidedialognotice",
+      "community": 31,
+      "norm_label": "hidedialognotice()"
+    },
+    {
+      "label": "showDialogNotice()",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/admin.js",
+      "source_location": "L217",
+      "_origin": "ast",
+      "id": "public_admin_showdialognotice",
+      "community": 31,
+      "norm_label": "showdialognotice()"
+    },
+    {
       "label": "showNotice()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/admin.js",
-      "source_location": "L176",
+      "source_location": "L218",
       "_origin": "ast",
       "id": "public_admin_shownotice",
       "community": 31,
@@ -15877,7 +15957,7 @@
       "label": "api()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/admin.js",
-      "source_location": "L177",
+      "source_location": "L219",
       "_origin": "ast",
       "id": "public_admin_api",
       "community": 31,
@@ -15887,7 +15967,7 @@
       "label": "escapeHtml()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/admin.js",
-      "source_location": "L178",
+      "source_location": "L220",
       "_origin": "ast",
       "id": "public_admin_escapehtml",
       "community": 31,
@@ -15897,7 +15977,7 @@
       "label": "escapeAttr()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/admin.js",
-      "source_location": "L179",
+      "source_location": "L221",
       "_origin": "ast",
       "id": "public_admin_escapeattr",
       "community": 31,
@@ -15934,10 +16014,40 @@
       "norm_label": "profiles"
     },
     {
-      "label": "elementIds",
+      "label": "captureSettings",
       "file_type": "code",
       "source_file": "services/frame-audio/public/capture.js",
       "source_location": "L37",
+      "_origin": "ast",
+      "id": "public_capture_capturesettings",
+      "community": 17,
+      "norm_label": "capturesettings"
+    },
+    {
+      "label": "availableDevices",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L38",
+      "_origin": "ast",
+      "id": "public_capture_availabledevices",
+      "community": 17,
+      "norm_label": "availabledevices"
+    },
+    {
+      "label": "lastDeviceSelection",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L39",
+      "_origin": "ast",
+      "id": "public_capture_lastdeviceselection",
+      "community": 17,
+      "norm_label": "lastdeviceselection"
+    },
+    {
+      "label": "elementIds",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L42",
       "_origin": "ast",
       "id": "public_capture_elementids",
       "community": 17,
@@ -15947,7 +16057,7 @@
       "label": "elements",
       "file_type": "code",
       "source_file": "services/frame-audio/public/capture.js",
-      "source_location": "L44",
+      "source_location": "L50",
       "_origin": "ast",
       "id": "public_capture_elements",
       "community": 17,
@@ -15957,7 +16067,7 @@
       "label": "qualityControls",
       "file_type": "code",
       "source_file": "services/frame-audio/public/capture.js",
-      "source_location": "L45",
+      "source_location": "L51",
       "_origin": "ast",
       "id": "public_capture_qualitycontrols",
       "community": 17,
@@ -15967,7 +16077,7 @@
       "label": "themeToggle",
       "file_type": "code",
       "source_file": "services/frame-audio/public/capture.js",
-      "source_location": "L53",
+      "source_location": "L59",
       "_origin": "ast",
       "id": "public_capture_themetoggle",
       "community": 17,
@@ -15977,7 +16087,7 @@
       "label": "loadDevices()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/capture.js",
-      "source_location": "L83",
+      "source_location": "L102",
       "_origin": "ast",
       "id": "public_capture_loaddevices",
       "community": 17,
@@ -15987,7 +16097,7 @@
       "label": "startCapture()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/capture.js",
-      "source_location": "L100",
+      "source_location": "L160",
       "_origin": "ast",
       "id": "public_capture_startcapture",
       "community": 17,
@@ -15997,7 +16107,7 @@
       "label": "stopCapture()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/capture.js",
-      "source_location": "L153",
+      "source_location": "L255",
       "_origin": "ast",
       "id": "public_capture_stopcapture",
       "community": 17,
@@ -16007,7 +16117,7 @@
       "label": "startMeter()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/capture.js",
-      "source_location": "L174",
+      "source_location": "L281",
       "_origin": "ast",
       "id": "public_capture_startmeter",
       "community": 17,
@@ -16017,7 +16127,7 @@
       "label": "loadStatus()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/capture.js",
-      "source_location": "L193",
+      "source_location": "L300",
       "_origin": "ast",
       "id": "public_capture_loadstatus",
       "community": 17,
@@ -16027,7 +16137,7 @@
       "label": "applyProfile()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/capture.js",
-      "source_location": "L211",
+      "source_location": "L325",
       "_origin": "ast",
       "id": "public_capture_applyprofile",
       "community": 17,
@@ -16037,7 +16147,7 @@
       "label": "updateProfileDescription()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/capture.js",
-      "source_location": "L223",
+      "source_location": "L337",
       "_origin": "ast",
       "id": "public_capture_updateprofiledescription",
       "community": 17,
@@ -16047,7 +16157,7 @@
       "label": "updateConfiguredQuality()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/capture.js",
-      "source_location": "L228",
+      "source_location": "L342",
       "_origin": "ast",
       "id": "public_capture_updateconfiguredquality",
       "community": 17,
@@ -16057,7 +16167,7 @@
       "label": "updateActualCaptureFormat()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/capture.js",
-      "source_location": "L235",
+      "source_location": "L349",
       "_origin": "ast",
       "id": "public_capture_updateactualcaptureformat",
       "community": 17,
@@ -16067,7 +16177,7 @@
       "label": "configuredProcessingLabel()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/capture.js",
-      "source_location": "L248",
+      "source_location": "L362",
       "_origin": "ast",
       "id": "public_capture_configuredprocessinglabel",
       "community": 17,
@@ -16077,17 +16187,27 @@
       "label": "setCaptureControlsDisabled()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/capture.js",
-      "source_location": "L257",
+      "source_location": "L371",
       "_origin": "ast",
       "id": "public_capture_setcapturecontrolsdisabled",
       "community": 17,
       "norm_label": "setcapturecontrolsdisabled()"
     },
     {
+      "label": "setCaptureMonitorVisible()",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L377",
+      "_origin": "ast",
+      "id": "public_capture_setcapturemonitorvisible",
+      "community": 17,
+      "norm_label": "setcapturemonitorvisible()"
+    },
+    {
       "label": "loadSettings()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/capture.js",
-      "source_location": "L263",
+      "source_location": "L382",
       "_origin": "ast",
       "id": "public_capture_loadsettings",
       "community": 17,
@@ -16097,7 +16217,7 @@
       "label": "saveSettings()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/capture.js",
-      "source_location": "L285",
+      "source_location": "L404",
       "_origin": "ast",
       "id": "public_capture_savesettings",
       "community": 17,
@@ -16107,17 +16227,117 @@
       "label": "initializeSettings()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/capture.js",
-      "source_location": "L297",
+      "source_location": "L422",
       "_origin": "ast",
       "id": "public_capture_initializesettings",
       "community": 17,
       "norm_label": "initializesettings()"
     },
     {
+      "label": "renderDeviceOptions()",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L428",
+      "_origin": "ast",
+      "id": "public_capture_renderdeviceoptions",
+      "community": 17,
+      "norm_label": "renderdeviceoptions()"
+    },
+    {
+      "label": "selectedDevice()",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L466",
+      "_origin": "ast",
+      "id": "public_capture_selecteddevice",
+      "community": 17,
+      "norm_label": "selecteddevice()"
+    },
+    {
+      "label": "selectedDeviceLabel()",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L471",
+      "_origin": "ast",
+      "id": "public_capture_selecteddevicelabel",
+      "community": 17,
+      "norm_label": "selecteddevicelabel()"
+    },
+    {
+      "label": "sortAudioDevices()",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L476",
+      "_origin": "ast",
+      "id": "public_capture_sortaudiodevices",
+      "community": 17,
+      "norm_label": "sortaudiodevices()"
+    },
+    {
+      "label": "deviceDisplayLabel()",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L483",
+      "_origin": "ast",
+      "id": "public_capture_devicedisplaylabel",
+      "community": 17,
+      "norm_label": "devicedisplaylabel()"
+    },
+    {
+      "label": "normalizeDeviceLabel()",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L487",
+      "_origin": "ast",
+      "id": "public_capture_normalizedevicelabel",
+      "community": 17,
+      "norm_label": "normalizedevicelabel()"
+    },
+    {
+      "label": "isLocalCaptureActive()",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L491",
+      "_origin": "ast",
+      "id": "public_capture_islocalcaptureactive",
+      "community": 17,
+      "norm_label": "islocalcaptureactive()"
+    },
+    {
+      "label": "setRemotePublisherActive()",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L495",
+      "_origin": "ast",
+      "id": "public_capture_setremotepublisheractive",
+      "community": 17,
+      "norm_label": "setremotepublisheractive()"
+    },
+    {
+      "label": "setLiveButton()",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L519",
+      "_origin": "ast",
+      "id": "public_capture_setlivebutton",
+      "community": 17,
+      "norm_label": "setlivebutton()"
+    },
+    {
+      "label": "maybeResumeCaptureOnLaunch()",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L524",
+      "_origin": "ast",
+      "id": "public_capture_mayberesumecaptureonlaunch",
+      "community": 17,
+      "norm_label": "mayberesumecaptureonlaunch()"
+    },
+    {
       "label": "toggleTheme()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/capture.js",
-      "source_location": "L303",
+      "source_location": "L542",
       "_origin": "ast",
       "id": "public_capture_toggletheme",
       "community": 17,
@@ -16127,7 +16347,7 @@
       "label": "setThemeMode()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/capture.js",
-      "source_location": "L307",
+      "source_location": "L546",
       "_origin": "ast",
       "id": "public_capture_setthememode",
       "community": 17,
@@ -16137,17 +16357,57 @@
       "label": "readStoredTheme()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/capture.js",
-      "source_location": "L322",
+      "source_location": "L561",
       "_origin": "ast",
       "id": "public_capture_readstoredtheme",
       "community": 17,
       "norm_label": "readstoredtheme()"
     },
     {
+      "label": "describeMediaError()",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L569",
+      "_origin": "ast",
+      "id": "public_capture_describemediaerror",
+      "community": 17,
+      "norm_label": "describemediaerror()"
+    },
+    {
+      "label": "mediaErrorDetail()",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L589",
+      "_origin": "ast",
+      "id": "public_capture_mediaerrordetail",
+      "community": 17,
+      "norm_label": "mediaerrordetail()"
+    },
+    {
+      "label": "isMissingSelectedDeviceError()",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L599",
+      "_origin": "ast",
+      "id": "public_capture_ismissingselecteddeviceerror",
+      "community": 17,
+      "norm_label": "ismissingselecteddeviceerror()"
+    },
+    {
+      "label": "logClientEvent()",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L603",
+      "_origin": "ast",
+      "id": "public_capture_logclientevent",
+      "community": 17,
+      "norm_label": "logclientevent()"
+    },
+    {
       "label": "showNotice()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/capture.js",
-      "source_location": "L329",
+      "source_location": "L615",
       "_origin": "ast",
       "id": "public_capture_shownotice",
       "community": 17,
@@ -16157,7 +16417,7 @@
       "label": "api()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/capture.js",
-      "source_location": "L330",
+      "source_location": "L616",
       "_origin": "ast",
       "id": "public_capture_api",
       "community": 17,
@@ -16167,7 +16427,7 @@
       "label": "escapeHtml()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/capture.js",
-      "source_location": "L331",
+      "source_location": "L617",
       "_origin": "ast",
       "id": "public_capture_escapehtml",
       "community": 17,
@@ -16177,11 +16437,21 @@
       "label": "escapeAttr()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/capture.js",
-      "source_location": "L332",
+      "source_location": "L618",
       "_origin": "ast",
       "id": "public_capture_escapeattr",
       "community": 17,
       "norm_label": "escapeattr()"
+    },
+    {
+      "label": "initializeCapturePage()",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L620",
+      "_origin": "ast",
+      "id": "public_capture_initializecapturepage",
+      "community": 17,
+      "norm_label": "initializecapturepage()"
     },
     {
       "label": "listen.js",
@@ -16377,7 +16647,7 @@
       "label": "update()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L151",
+      "source_location": "L159",
       "_origin": "ast",
       "id": "public_listen_update",
       "community": 35,
@@ -16387,7 +16657,7 @@
       "label": "attach()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L175",
+      "source_location": "L183",
       "_origin": "ast",
       "id": "public_listen_attach",
       "community": 35,
@@ -16397,7 +16667,7 @@
       "label": "resumePlayback()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L227",
+      "source_location": "L235",
       "_origin": "ast",
       "id": "public_listen_resumeplayback",
       "community": 35,
@@ -16407,7 +16677,7 @@
       "label": "pausePlayback()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L254",
+      "source_location": "L262",
       "_origin": "ast",
       "id": "public_listen_pauseplayback",
       "community": 35,
@@ -16417,7 +16687,7 @@
       "label": "stopLoading()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L264",
+      "source_location": "L272",
       "_origin": "ast",
       "id": "public_listen_stoploading",
       "community": 35,
@@ -16427,7 +16697,7 @@
       "label": "attachNativeSource()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L276",
+      "source_location": "L284",
       "_origin": "ast",
       "id": "public_listen_attachnativesource",
       "community": 35,
@@ -16437,7 +16707,7 @@
       "label": "ensureVolumePipeline()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L285",
+      "source_location": "L293",
       "_origin": "ast",
       "id": "public_listen_ensurevolumepipeline",
       "community": 35,
@@ -16447,7 +16717,7 @@
       "label": "applyVolume()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L313",
+      "source_location": "L321",
       "_origin": "ast",
       "id": "public_listen_applyvolume",
       "community": 35,
@@ -16457,7 +16727,7 @@
       "label": "updateBufferReadout()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L335",
+      "source_location": "L343",
       "_origin": "ast",
       "id": "public_listen_updatebufferreadout",
       "community": 35,
@@ -16467,7 +16737,7 @@
       "label": "readLiveMetrics()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L353",
+      "source_location": "L361",
       "_origin": "ast",
       "id": "public_listen_readlivemetrics",
       "community": 35,
@@ -16477,7 +16747,7 @@
       "label": "renderTimeline()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L372",
+      "source_location": "L380",
       "_origin": "ast",
       "id": "public_listen_rendertimeline",
       "community": 35,
@@ -16487,7 +16757,7 @@
       "label": "placeRange()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L393",
+      "source_location": "L401",
       "_origin": "ast",
       "id": "public_listen_placerange",
       "community": 35,
@@ -16497,7 +16767,7 @@
       "label": "correctDrift()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L407",
+      "source_location": "L415",
       "_origin": "ast",
       "id": "public_listen_correctdrift",
       "community": 35,
@@ -16507,7 +16777,7 @@
       "label": "snapToLiveTail()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L425",
+      "source_location": "L433",
       "_origin": "ast",
       "id": "public_listen_snaptolivetail",
       "community": 35,
@@ -16517,7 +16787,7 @@
       "label": "liveTargetTime()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L437",
+      "source_location": "L445",
       "_origin": "ast",
       "id": "public_listen_livetargettime",
       "community": 35,
@@ -16527,7 +16797,7 @@
       "label": "safeTargetTime()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L443",
+      "source_location": "L451",
       "_origin": "ast",
       "id": "public_listen_safetargettime",
       "community": 35,
@@ -16537,7 +16807,7 @@
       "label": "liveEdgeTime()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L447",
+      "source_location": "L455",
       "_origin": "ast",
       "id": "public_listen_liveedgetime",
       "community": 35,
@@ -16547,7 +16817,7 @@
       "label": "clampToSeekable()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L455",
+      "source_location": "L463",
       "_origin": "ast",
       "id": "public_listen_clamptoseekable",
       "community": 35,
@@ -16557,7 +16827,7 @@
       "label": "lastRange()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L461",
+      "source_location": "L469",
       "_origin": "ast",
       "id": "public_listen_lastrange",
       "community": 35,
@@ -16567,7 +16837,7 @@
       "label": "secondsBehindToPercent()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L467",
+      "source_location": "L475",
       "_origin": "ast",
       "id": "public_listen_secondsbehindtopercent",
       "community": 35,
@@ -16577,7 +16847,7 @@
       "label": "timeToPercent()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L471",
+      "source_location": "L479",
       "_origin": "ast",
       "id": "public_listen_timetopercent",
       "community": 35,
@@ -16587,7 +16857,7 @@
       "label": "hlsConfigForSelectedProfile()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L475",
+      "source_location": "L483",
       "_origin": "ast",
       "id": "public_listen_hlsconfigforselectedprofile",
       "community": 35,
@@ -16597,7 +16867,7 @@
       "label": "targetDelaySeconds()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L480",
+      "source_location": "L488",
       "_origin": "ast",
       "id": "public_listen_targetdelayseconds",
       "community": 35,
@@ -16607,17 +16877,27 @@
       "label": "updateSafeTargetLabel()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L484",
+      "source_location": "L492",
       "_origin": "ast",
       "id": "public_listen_updatesafetargetlabel",
       "community": 35,
       "norm_label": "updatesafetargetlabel()"
     },
     {
+      "label": "formatDelaySeconds()",
+      "file_type": "code",
+      "source_file": "services/frame-audio/public/listen.js",
+      "source_location": "L499",
+      "_origin": "ast",
+      "id": "public_listen_formatdelayseconds",
+      "community": 35,
+      "norm_label": "formatdelayseconds()"
+    },
+    {
       "label": "updatePlaybackButton()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L490",
+      "source_location": "L503",
       "_origin": "ast",
       "id": "public_listen_updateplaybackbutton",
       "community": 35,
@@ -16627,7 +16907,7 @@
       "label": "setThemeMode()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L510",
+      "source_location": "L523",
       "_origin": "ast",
       "id": "public_listen_setthememode",
       "community": 35,
@@ -16637,7 +16917,7 @@
       "label": "createListenerId()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L520",
+      "source_location": "L533",
       "_origin": "ast",
       "id": "public_listen_createlistenerid",
       "community": 35,
@@ -16647,7 +16927,7 @@
       "label": "setPlaybackState()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L531",
+      "source_location": "L544",
       "_origin": "ast",
       "id": "public_listen_setplaybackstate",
       "community": 35,
@@ -16657,7 +16937,7 @@
       "label": "showPlaybackError()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L535",
+      "source_location": "L548",
       "_origin": "ast",
       "id": "public_listen_showplaybackerror",
       "community": 35,
@@ -16667,7 +16947,7 @@
       "label": "clearPlaybackError()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L541",
+      "source_location": "L554",
       "_origin": "ast",
       "id": "public_listen_clearplaybackerror",
       "community": 35,
@@ -16677,7 +16957,7 @@
       "label": "modeLabel()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L546",
+      "source_location": "L559",
       "_origin": "ast",
       "id": "public_listen_modelabel",
       "community": 35,
@@ -16687,7 +16967,7 @@
       "label": "clamp()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L547",
+      "source_location": "L560",
       "_origin": "ast",
       "id": "public_listen_clamp",
       "community": 35,
@@ -16697,7 +16977,7 @@
       "label": "api()",
       "file_type": "code",
       "source_file": "services/frame-audio/public/listen.js",
-      "source_location": "L548",
+      "source_location": "L561",
       "_origin": "ast",
       "id": "public_listen_api",
       "community": 35,
@@ -16767,7 +17047,7 @@
       "label": "execFileAsync",
       "file_type": "code",
       "source_file": "services/frame-audio/src/index.ts",
-      "source_location": "L11",
+      "source_location": "L12",
       "_origin": "ast",
       "id": "src_index_execfileasync",
       "community": 2,
@@ -16777,7 +17057,7 @@
       "label": "config",
       "file_type": "code",
       "source_file": "services/frame-audio/src/index.ts",
-      "source_location": "L12",
+      "source_location": "L13",
       "_origin": "ast",
       "id": "services_frame_audio_src_index_ts_src_index_config",
       "community": 2,
@@ -16787,7 +17067,7 @@
       "label": "store",
       "file_type": "code",
       "source_file": "services/frame-audio/src/index.ts",
-      "source_location": "L13",
+      "source_location": "L14",
       "_origin": "ast",
       "id": "services_frame_audio_src_index_ts_src_index_store",
       "community": 2,
@@ -16797,7 +17077,7 @@
       "label": "relays",
       "file_type": "code",
       "source_file": "services/frame-audio/src/index.ts",
-      "source_location": "L15",
+      "source_location": "L16",
       "_origin": "ast",
       "id": "src_index_relays",
       "community": 2,
@@ -16807,7 +17087,7 @@
       "label": "app",
       "file_type": "code",
       "source_file": "services/frame-audio/src/index.ts",
-      "source_location": "L18",
+      "source_location": "L19",
       "_origin": "ast",
       "id": "services_frame_audio_src_index_ts_src_index_app",
       "community": 2,
@@ -16817,7 +17097,7 @@
       "label": "server",
       "file_type": "code",
       "source_file": "services/frame-audio/src/index.ts",
-      "source_location": "L19",
+      "source_location": "L20",
       "_origin": "ast",
       "id": "services_frame_audio_src_index_ts_src_index_server",
       "community": 2,
@@ -16827,7 +17107,7 @@
       "label": "captureSockets",
       "file_type": "code",
       "source_file": "services/frame-audio/src/index.ts",
-      "source_location": "L20",
+      "source_location": "L21",
       "_origin": "ast",
       "id": "src_index_capturesockets",
       "community": 2,
@@ -16837,7 +17117,7 @@
       "label": "publicDir",
       "file_type": "code",
       "source_file": "services/frame-audio/src/index.ts",
-      "source_location": "L21",
+      "source_location": "L22",
       "_origin": "ast",
       "id": "services_frame_audio_src_index_ts_src_index_publicdir",
       "community": 2,
@@ -16847,7 +17127,7 @@
       "label": "hlsDir",
       "file_type": "code",
       "source_file": "services/frame-audio/src/index.ts",
-      "source_location": "L22",
+      "source_location": "L23",
       "_origin": "ast",
       "id": "src_index_hlsdir",
       "community": 2,
@@ -16857,7 +17137,7 @@
       "label": "shutdown()",
       "file_type": "code",
       "source_file": "services/frame-audio/src/index.ts",
-      "source_location": "L179",
+      "source_location": "L202",
       "_origin": "ast",
       "id": "services_frame_audio_src_index_ts_src_index_shutdown",
       "community": 2,
@@ -16867,7 +17147,7 @@
       "label": "validStreamId()",
       "file_type": "code",
       "source_file": "services/frame-audio/src/index.ts",
-      "source_location": "L186",
+      "source_location": "L210",
       "_origin": "ast",
       "id": "src_index_validstreamid",
       "community": 2,
@@ -16877,11 +17157,81 @@
       "label": "requireStream()",
       "file_type": "code",
       "source_file": "services/frame-audio/src/index.ts",
-      "source_location": "L193",
+      "source_location": "L217",
       "_origin": "ast",
       "id": "src_index_requirestream",
       "community": 2,
       "norm_label": "requirestream()"
+    },
+    {
+      "label": "logger.ts",
+      "file_type": "code",
+      "source_file": "services/frame-audio/src/logger.ts",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "src_logger",
+      "community": 2,
+      "norm_label": "logger.ts"
+    },
+    {
+      "label": "LogLevel",
+      "file_type": "code",
+      "source_file": "services/frame-audio/src/logger.ts",
+      "source_location": "L1",
+      "_origin": "ast",
+      "id": "src_logger_loglevel",
+      "community": 2,
+      "norm_label": "loglevel"
+    },
+    {
+      "label": "LogContext",
+      "file_type": "code",
+      "source_file": "services/frame-audio/src/logger.ts",
+      "source_location": "L3",
+      "_origin": "ast",
+      "id": "src_logger_logcontext",
+      "community": 2,
+      "norm_label": "logcontext"
+    },
+    {
+      "label": "logAudio()",
+      "file_type": "code",
+      "source_file": "services/frame-audio/src/logger.ts",
+      "source_location": "L5",
+      "_origin": "ast",
+      "id": "src_logger_logaudio",
+      "community": 2,
+      "norm_label": "logaudio()"
+    },
+    {
+      "label": "errorContext()",
+      "file_type": "code",
+      "source_file": "services/frame-audio/src/logger.ts",
+      "source_location": "L19",
+      "_origin": "ast",
+      "id": "src_logger_errorcontext",
+      "community": 2,
+      "norm_label": "errorcontext()"
+    },
+    {
+      "label": "sanitizeContext()",
+      "file_type": "code",
+      "source_file": "services/frame-audio/src/logger.ts",
+      "source_location": "L30",
+      "_origin": "ast",
+      "id": "src_logger_sanitizecontext",
+      "community": 2,
+      "norm_label": "sanitizecontext()"
+    },
+    {
+      "label": "sanitizeValue()",
+      "file_type": "code",
+      "source_file": "services/frame-audio/src/logger.ts",
+      "source_location": "L38",
+      "_origin": "ast",
+      "id": "src_logger_sanitizevalue",
+      "community": 2,
+      "norm_label": "sanitizevalue()"
     },
     {
       "label": "relayManager.ts",
@@ -16897,7 +17247,7 @@
       "label": "RelayMode",
       "file_type": "code",
       "source_file": "services/frame-audio/src/relayManager.ts",
-      "source_location": "L8",
+      "source_location": "L9",
       "_origin": "ast",
       "id": "src_relaymanager_relaymode",
       "community": 2,
@@ -16907,7 +17257,7 @@
       "label": "RelayRuntime",
       "file_type": "code",
       "source_file": "services/frame-audio/src/relayManager.ts",
-      "source_location": "L10",
+      "source_location": "L11",
       "_origin": "ast",
       "id": "src_relaymanager_relayruntime",
       "community": 2,
@@ -16917,7 +17267,7 @@
       "label": "RelayStatus",
       "file_type": "code",
       "source_file": "services/frame-audio/src/relayManager.ts",
-      "source_location": "L25",
+      "source_location": "L26",
       "_origin": "ast",
       "id": "src_relaymanager_relaystatus",
       "community": 2,
@@ -16927,7 +17277,7 @@
       "label": "RelayManager",
       "file_type": "code",
       "source_file": "services/frame-audio/src/relayManager.ts",
-      "source_location": "L46",
+      "source_location": "L47",
       "_origin": "ast",
       "id": "src_relaymanager_relaymanager",
       "community": 2,
@@ -16937,7 +17287,7 @@
       "label": ".constructor()",
       "file_type": "code",
       "source_file": "services/frame-audio/src/relayManager.ts",
-      "source_location": "L51",
+      "source_location": "L52",
       "_origin": "ast",
       "id": "src_relaymanager_relaymanager_constructor",
       "community": 2,
@@ -16947,7 +17297,7 @@
       "label": ".init()",
       "file_type": "code",
       "source_file": "services/frame-audio/src/relayManager.ts",
-      "source_location": "L59",
+      "source_location": "L60",
       "_origin": "ast",
       "id": "src_relaymanager_relaymanager_init",
       "community": 2,
@@ -16957,7 +17307,7 @@
       "label": ".close()",
       "file_type": "code",
       "source_file": "services/frame-audio/src/relayManager.ts",
-      "source_location": "L73",
+      "source_location": "L75",
       "_origin": "ast",
       "id": "src_relaymanager_relaymanager_close",
       "community": 2,
@@ -16967,7 +17317,7 @@
       "label": ".reconcile()",
       "file_type": "code",
       "source_file": "services/frame-audio/src/relayManager.ts",
-      "source_location": "L82",
+      "source_location": "L85",
       "_origin": "ast",
       "id": "src_relaymanager_relaymanager_reconcile",
       "community": 2,
@@ -16977,7 +17327,7 @@
       "label": ".attachPublisher()",
       "file_type": "code",
       "source_file": "services/frame-audio/src/relayManager.ts",
-      "source_location": "L93",
+      "source_location": "L96",
       "_origin": "ast",
       "id": "src_relaymanager_relaymanager_attachpublisher",
       "community": 2,
@@ -16987,7 +17337,7 @@
       "label": ".deleteStream()",
       "file_type": "code",
       "source_file": "services/frame-audio/src/relayManager.ts",
-      "source_location": "L126",
+      "source_location": "L135",
       "_origin": "ast",
       "id": "src_relaymanager_relaymanager_deletestream",
       "community": 2,
@@ -16997,7 +17347,7 @@
       "label": ".heartbeat()",
       "file_type": "code",
       "source_file": "services/frame-audio/src/relayManager.ts",
-      "source_location": "L138",
+      "source_location": "L148",
       "_origin": "ast",
       "id": "src_relaymanager_relaymanager_heartbeat",
       "community": 2,
@@ -17007,7 +17357,7 @@
       "label": ".status()",
       "file_type": "code",
       "source_file": "services/frame-audio/src/relayManager.ts",
-      "source_location": "L151",
+      "source_location": "L161",
       "_origin": "ast",
       "id": "src_relaymanager_relaymanager_status",
       "community": 2,
@@ -17017,7 +17367,7 @@
       "label": ".publisherClosed()",
       "file_type": "code",
       "source_file": "services/frame-audio/src/relayManager.ts",
-      "source_location": "L177",
+      "source_location": "L187",
       "_origin": "ast",
       "id": "src_relaymanager_relaymanager_publisherclosed",
       "community": 2,
@@ -17027,7 +17377,7 @@
       "label": ".startRelay()",
       "file_type": "code",
       "source_file": "services/frame-audio/src/relayManager.ts",
-      "source_location": "L186",
+      "source_location": "L197",
       "_origin": "ast",
       "id": "src_relaymanager_relaymanager_startrelay",
       "community": 2,
@@ -17037,7 +17387,7 @@
       "label": ".stopRuntime()",
       "file_type": "code",
       "source_file": "services/frame-audio/src/relayManager.ts",
-      "source_location": "L256",
+      "source_location": "L285",
       "_origin": "ast",
       "id": "src_relaymanager_relaymanager_stopruntime",
       "community": 2,
@@ -17047,7 +17397,7 @@
       "label": ".stopRuntimeAndWait()",
       "file_type": "code",
       "source_file": "services/frame-audio/src/relayManager.ts",
-      "source_location": "L272",
+      "source_location": "L301",
       "_origin": "ast",
       "id": "src_relaymanager_relaymanager_stopruntimeandwait",
       "community": 2,
@@ -17057,7 +17407,7 @@
       "label": ".scheduleRestart()",
       "file_type": "code",
       "source_file": "services/frame-audio/src/relayManager.ts",
-      "source_location": "L294",
+      "source_location": "L323",
       "_origin": "ast",
       "id": "src_relaymanager_relaymanager_schedulerestart",
       "community": 2,
@@ -17067,7 +17417,7 @@
       "label": ".runtime()",
       "file_type": "code",
       "source_file": "services/frame-audio/src/relayManager.ts",
-      "source_location": "L309",
+      "source_location": "L339",
       "_origin": "ast",
       "id": "src_relaymanager_relaymanager_runtime",
       "community": 2,
@@ -17077,7 +17427,7 @@
       "label": ".generationPath()",
       "file_type": "code",
       "source_file": "services/frame-audio/src/relayManager.ts",
-      "source_location": "L320",
+      "source_location": "L350",
       "_origin": "ast",
       "id": "src_relaymanager_relaymanager_generationpath",
       "community": 2,
@@ -17087,7 +17437,7 @@
       "label": ".cleanupGenerations()",
       "file_type": "code",
       "source_file": "services/frame-audio/src/relayManager.ts",
-      "source_location": "L324",
+      "source_location": "L354",
       "_origin": "ast",
       "id": "src_relaymanager_relaymanager_cleanupgenerations",
       "community": 2,
@@ -17097,7 +17447,7 @@
       "label": ".cleanupListeners()",
       "file_type": "code",
       "source_file": "services/frame-audio/src/relayManager.ts",
-      "source_location": "L334",
+      "source_location": "L364",
       "_origin": "ast",
       "id": "src_relaymanager_relaymanager_cleanuplisteners",
       "community": 2,
@@ -21108,7 +21458,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "config_overlay_presets_schema",
-      "community": 21,
+      "community": 184,
       "norm_label": "overlay-presets.schema.json"
     },
     {
@@ -21118,7 +21468,7 @@
       "source_location": "L2",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_schema",
-      "community": 21,
+      "community": 184,
       "norm_label": "$schema"
     },
     {
@@ -21128,7 +21478,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_id",
-      "community": 21,
+      "community": 184,
       "norm_label": "$id"
     },
     {
@@ -21138,7 +21488,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_title",
-      "community": 21,
+      "community": 184,
       "norm_label": "title"
     },
     {
@@ -21148,7 +21498,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_type",
-      "community": 21,
+      "community": 184,
       "norm_label": "type"
     },
     {
@@ -21158,7 +21508,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_additionalproperties",
-      "community": 21,
+      "community": 184,
       "norm_label": "additionalproperties"
     },
     {
@@ -21168,7 +21518,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_required",
-      "community": 21,
+      "community": 184,
       "norm_label": "required"
     },
     {
@@ -21258,7 +21608,7 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_default_template_ids",
-      "community": 21,
+      "community": 141,
       "norm_label": "default_template_ids"
     },
     {
@@ -21268,7 +21618,7 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_default_template_ids_type",
-      "community": 21,
+      "community": 141,
       "norm_label": "type"
     },
     {
@@ -21278,7 +21628,7 @@
       "source_location": "L14",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_default_template_ids_additionalproperties",
-      "community": 21,
+      "community": 141,
       "norm_label": "additionalproperties"
     },
     {
@@ -21288,7 +21638,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_default_template_ids_properties",
-      "community": 21,
+      "community": 141,
       "norm_label": "properties"
     },
     {
@@ -21298,7 +21648,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_connectivity",
-      "community": 21,
+      "community": 141,
       "norm_label": "connectivity"
     },
     {
@@ -21308,7 +21658,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_connectivity_ref",
-      "community": 21,
+      "community": 141,
       "norm_label": "$ref"
     },
     {
@@ -21318,7 +21668,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_upload_progress",
-      "community": 21,
+      "community": 141,
       "norm_label": "upload_progress"
     },
     {
@@ -21328,7 +21678,7 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_upload_progress_ref",
-      "community": 21,
+      "community": 141,
       "norm_label": "$ref"
     },
     {
@@ -21338,7 +21688,7 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_latest_photo",
-      "community": 21,
+      "community": 141,
       "norm_label": "latest_photo"
     },
     {
@@ -21348,7 +21698,7 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_latest_photo_ref",
-      "community": 21,
+      "community": 141,
       "norm_label": "$ref"
     },
     {
@@ -21468,7 +21818,7 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_legacy_aliases",
-      "community": 21,
+      "community": 199,
       "norm_label": "legacy_aliases"
     },
     {
@@ -21478,7 +21828,7 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_legacy_aliases_type",
-      "community": 21,
+      "community": 199,
       "norm_label": "type"
     },
     {
@@ -21488,7 +21838,7 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_legacy_aliases_propertynames",
-      "community": 21,
+      "community": 199,
       "norm_label": "propertynames"
     },
     {
@@ -21498,7 +21848,7 @@
       "source_location": "L36",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_propertynames_ref",
-      "community": 21,
+      "community": 199,
       "norm_label": "$ref"
     },
     {
@@ -21508,7 +21858,7 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_legacy_aliases_additionalproperties",
-      "community": 21,
+      "community": 199,
       "norm_label": "additionalproperties"
     },
     {
@@ -21518,7 +21868,7 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_additionalproperties_ref",
-      "community": 21,
+      "community": 199,
       "norm_label": "$ref"
     },
     {
@@ -21908,7 +22258,7 @@
       "source_location": "L69",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_text_color",
-      "community": 294,
+      "community": 86,
       "norm_label": "text_color"
     },
     {
@@ -21918,7 +22268,7 @@
       "source_location": "L69",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_text_color_type",
-      "community": 294,
+      "community": 86,
       "norm_label": "type"
     },
     {
@@ -21928,7 +22278,7 @@
       "source_location": "L69",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_text_color_maxlength",
-      "community": 294,
+      "community": 86,
       "norm_label": "maxlength"
     },
     {
@@ -22118,7 +22468,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_bg_opacity_good",
-      "community": 198,
+      "community": 86,
       "norm_label": "bg_opacity_good"
     },
     {
@@ -22128,7 +22478,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_bg_opacity_good_type",
-      "community": 198,
+      "community": 86,
       "norm_label": "type"
     },
     {
@@ -22138,7 +22488,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_bg_opacity_good_minimum",
-      "community": 198,
+      "community": 86,
       "norm_label": "minimum"
     },
     {
@@ -22148,7 +22498,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_bg_opacity_good_maximum",
-      "community": 198,
+      "community": 86,
       "norm_label": "maximum"
     },
     {
@@ -22158,7 +22508,7 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_bg_opacity_warn",
-      "community": 199,
+      "community": 86,
       "norm_label": "bg_opacity_warn"
     },
     {
@@ -22168,7 +22518,7 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_bg_opacity_warn_type",
-      "community": 199,
+      "community": 86,
       "norm_label": "type"
     },
     {
@@ -22178,7 +22528,7 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_bg_opacity_warn_minimum",
-      "community": 199,
+      "community": 86,
       "norm_label": "minimum"
     },
     {
@@ -22188,7 +22538,7 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_bg_opacity_warn_maximum",
-      "community": 199,
+      "community": 86,
       "norm_label": "maximum"
     },
     {
@@ -22198,7 +22548,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_bg_opacity_bad",
-      "community": 184,
+      "community": 86,
       "norm_label": "bg_opacity_bad"
     },
     {
@@ -22208,7 +22558,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_bg_opacity_bad_type",
-      "community": 184,
+      "community": 86,
       "norm_label": "type"
     },
     {
@@ -22218,7 +22568,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_bg_opacity_bad_minimum",
-      "community": 184,
+      "community": 86,
       "norm_label": "minimum"
     },
     {
@@ -22228,7 +22578,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_bg_opacity_bad_maximum",
-      "community": 184,
+      "community": 86,
       "norm_label": "maximum"
     },
     {
@@ -22238,7 +22588,7 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_border_radius_px",
-      "community": 201,
+      "community": 86,
       "norm_label": "border_radius_px"
     },
     {
@@ -22248,7 +22598,7 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_border_radius_px_type",
-      "community": 201,
+      "community": 86,
       "norm_label": "type"
     },
     {
@@ -22258,7 +22608,7 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_border_radius_px_minimum",
-      "community": 201,
+      "community": 86,
       "norm_label": "minimum"
     },
     {
@@ -22268,7 +22618,7 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_border_radius_px_maximum",
-      "community": 201,
+      "community": 86,
       "norm_label": "maximum"
     },
     {
@@ -22318,7 +22668,7 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_font_size_base_px",
-      "community": 206,
+      "community": 86,
       "norm_label": "font_size_base_px"
     },
     {
@@ -22328,7 +22678,7 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_font_size_base_px_type",
-      "community": 206,
+      "community": 86,
       "norm_label": "type"
     },
     {
@@ -22338,7 +22688,7 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_font_size_base_px_minimum",
-      "community": 206,
+      "community": 86,
       "norm_label": "minimum"
     },
     {
@@ -22348,7 +22698,7 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_font_size_base_px_maximum",
-      "community": 206,
+      "community": 86,
       "norm_label": "maximum"
     },
     {
@@ -22588,7 +22938,7 @@
       "source_location": "L94",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_chart_bitrate_max",
-      "community": 47,
+      "community": 213,
       "norm_label": "chart_bitrate_max"
     },
     {
@@ -22598,7 +22948,7 @@
       "source_location": "L94",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_chart_bitrate_max_type",
-      "community": 47,
+      "community": 213,
       "norm_label": "type"
     },
     {
@@ -22608,7 +22958,7 @@
       "source_location": "L94",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_chart_bitrate_max_minimum",
-      "community": 47,
+      "community": 213,
       "norm_label": "minimum"
     },
     {
@@ -22618,7 +22968,7 @@
       "source_location": "L95",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_chart_rtt_max",
-      "community": 170,
+      "community": 47,
       "norm_label": "chart_rtt_max"
     },
     {
@@ -22628,7 +22978,7 @@
       "source_location": "L95",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_chart_rtt_max_type",
-      "community": 170,
+      "community": 47,
       "norm_label": "type"
     },
     {
@@ -22638,7 +22988,7 @@
       "source_location": "L95",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_chart_rtt_max_minimum",
-      "community": 170,
+      "community": 47,
       "norm_label": "minimum"
     },
     {
@@ -22848,7 +23198,7 @@
       "source_location": "L101",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_use_rtt_in_good",
-      "community": 47,
+      "community": 294,
       "norm_label": "use_rtt_in_good"
     },
     {
@@ -22858,7 +23208,7 @@
       "source_location": "L101",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_use_rtt_in_good_type",
-      "community": 47,
+      "community": 294,
       "norm_label": "type"
     },
     {
@@ -22908,7 +23258,7 @@
       "source_location": "L104",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_show_status",
-      "community": 47,
+      "community": 281,
       "norm_label": "show_status"
     },
     {
@@ -22918,7 +23268,7 @@
       "source_location": "L104",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_show_status_type",
-      "community": 47,
+      "community": 281,
       "norm_label": "type"
     },
     {
@@ -22928,7 +23278,7 @@
       "source_location": "L105",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_show_bitrate",
-      "community": 307,
+      "community": 47,
       "norm_label": "show_bitrate"
     },
     {
@@ -22938,7 +23288,7 @@
       "source_location": "L105",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_show_bitrate_type",
-      "community": 307,
+      "community": 47,
       "norm_label": "type"
     },
     {
@@ -22948,7 +23298,7 @@
       "source_location": "L106",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_show_bitrate_in_good",
-      "community": 47,
+      "community": 254,
       "norm_label": "show_bitrate_in_good"
     },
     {
@@ -22958,7 +23308,7 @@
       "source_location": "L106",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_show_bitrate_in_good_type",
-      "community": 47,
+      "community": 254,
       "norm_label": "type"
     },
     {
@@ -23008,7 +23358,7 @@
       "source_location": "L109",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_show_buffer",
-      "community": 221,
+      "community": 47,
       "norm_label": "show_buffer"
     },
     {
@@ -23018,7 +23368,7 @@
       "source_location": "L109",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_show_buffer_type",
-      "community": 221,
+      "community": 47,
       "norm_label": "type"
     },
     {
@@ -23028,7 +23378,7 @@
       "source_location": "L110",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_show_chart",
-      "community": 47,
+      "community": 276,
       "norm_label": "show_chart"
     },
     {
@@ -23038,7 +23388,7 @@
       "source_location": "L110",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_show_chart_type",
-      "community": 47,
+      "community": 276,
       "norm_label": "type"
     },
     {
@@ -23068,7 +23418,7 @@
       "source_location": "L112",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_show_server",
-      "community": 47,
+      "community": 278,
       "norm_label": "show_server"
     },
     {
@@ -23078,7 +23428,7 @@
       "source_location": "L112",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_show_server_type",
-      "community": 47,
+      "community": 278,
       "norm_label": "type"
     },
     {
@@ -23108,7 +23458,7 @@
       "source_location": "L114",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_show_uptime",
-      "community": 47,
+      "community": 282,
       "norm_label": "show_uptime"
     },
     {
@@ -23118,7 +23468,7 @@
       "source_location": "L114",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_show_uptime_type",
-      "community": 47,
+      "community": 282,
       "norm_label": "type"
     },
     {
@@ -23278,7 +23628,7 @@
       "source_location": "L123",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_no_signal_behavior",
-      "community": 47,
+      "community": 248,
       "norm_label": "no_signal_behavior"
     },
     {
@@ -23288,7 +23638,7 @@
       "source_location": "L123",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_no_signal_behavior_enum",
-      "community": 47,
+      "community": 248,
       "norm_label": "enum"
     },
     {
@@ -23878,7 +24228,7 @@
       "source_location": "L159",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_defs_design",
-      "community": 141,
+      "community": 66,
       "norm_label": "design"
     },
     {
@@ -23888,7 +24238,7 @@
       "source_location": "L160",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_design_type",
-      "community": 141,
+      "community": 66,
       "norm_label": "type"
     },
     {
@@ -23898,7 +24248,7 @@
       "source_location": "L161",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_design_required",
-      "community": 141,
+      "community": 66,
       "norm_label": "required"
     },
     {
@@ -24188,7 +24538,7 @@
       "source_location": "L178",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_design_allof",
-      "community": 141,
+      "community": 66,
       "norm_label": "allof"
     },
     {
@@ -24278,7 +24628,7 @@
       "source_location": "L264",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_defs_source",
-      "community": 162,
+      "community": 191,
       "norm_label": "source"
     },
     {
@@ -24288,7 +24638,7 @@
       "source_location": "L265",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_source_type",
-      "community": 162,
+      "community": 191,
       "norm_label": "type"
     },
     {
@@ -24298,7 +24648,7 @@
       "source_location": "L266",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_source_additionalproperties",
-      "community": 162,
+      "community": 191,
       "norm_label": "additionalproperties"
     },
     {
@@ -24308,7 +24658,7 @@
       "source_location": "L267",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_source_required",
-      "community": 162,
+      "community": 191,
       "norm_label": "required"
     },
     {
@@ -26618,7 +26968,7 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "src_app_createframeoverlaysoptions",
-      "community": 90,
+      "community": 77,
       "norm_label": "createframeoverlaysoptions"
     },
     {
@@ -26678,7 +27028,7 @@
       "source_location": "L594",
       "_origin": "ast",
       "id": "src_app_sourceconfigevents",
-      "community": 39,
+      "community": 247,
       "norm_label": "sourceconfigevents"
     },
     {
@@ -26688,7 +27038,7 @@
       "source_location": "L597",
       "_origin": "ast",
       "id": "src_app_sourceconfigevents_subscribe",
-      "community": 39,
+      "community": 247,
       "norm_label": ".subscribe()"
     },
     {
@@ -26698,7 +27048,7 @@
       "source_location": "L607",
       "_origin": "ast",
       "id": "src_app_sourceconfigevents_publish",
-      "community": 39,
+      "community": 247,
       "norm_label": ".publish()"
     },
     {
@@ -28188,7 +28538,7 @@
       "source_location": "L72",
       "_origin": "ast",
       "id": "test_api_test_json",
-      "community": 147,
+      "community": 96,
       "norm_label": "json()"
     },
     {
@@ -32676,7 +33026,7 @@
       "source_location": "L221",
       "_origin": "ast",
       "id": "src_statuscollector_fetchwithtimeout",
-      "community": 3,
+      "community": 96,
       "norm_label": "fetchwithtimeout()"
     },
     {
@@ -33526,7 +33876,7 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "src_index_publisherstats",
-      "community": 138,
+      "community": 4,
       "norm_label": "publisherstats"
     },
     {
@@ -33596,7 +33946,7 @@
       "source_location": "L318",
       "_origin": "ast",
       "id": "src_index_readprofiles",
-      "community": 4,
+      "community": 53,
       "norm_label": "readprofiles()"
     },
     {
@@ -33606,7 +33956,7 @@
       "source_location": "L330",
       "_origin": "ast",
       "id": "src_index_readprofile",
-      "community": 4,
+      "community": 53,
       "norm_label": "readprofile()"
     },
     {
@@ -33616,7 +33966,7 @@
       "source_location": "L334",
       "_origin": "ast",
       "id": "src_index_readslsprofiles",
-      "community": 4,
+      "community": 53,
       "norm_label": "readslsprofiles()"
     },
     {
@@ -33636,7 +33986,7 @@
       "source_location": "L348",
       "_origin": "ast",
       "id": "src_index_readslsstats",
-      "community": 53,
+      "community": 170,
       "norm_label": "readslsstats()"
     },
     {
@@ -33646,7 +33996,7 @@
       "source_location": "L369",
       "_origin": "ast",
       "id": "src_index_readbelaboxstats",
-      "community": 53,
+      "community": 170,
       "norm_label": "readbelaboxstats()"
     },
     {
@@ -33656,7 +34006,7 @@
       "source_location": "L407",
       "_origin": "ast",
       "id": "src_index_externalfetch",
-      "community": 96,
+      "community": 170,
       "norm_label": "externalfetch()"
     },
     {
@@ -33736,7 +34086,7 @@
       "source_location": "L492",
       "_origin": "ast",
       "id": "src_index_upstreamjson",
-      "community": 96,
+      "community": 170,
       "norm_label": "upstreamjson()"
     },
     {
@@ -33746,7 +34096,7 @@
       "source_location": "L500",
       "_origin": "ast",
       "id": "src_index_upstreamfetch",
-      "community": 96,
+      "community": 170,
       "norm_label": "upstreamfetch()"
     },
     {
@@ -33886,7 +34236,7 @@
       "source_location": "L700",
       "_origin": "ast",
       "id": "src_index_finitenumber",
-      "community": 53,
+      "community": 170,
       "norm_label": "finitenumber()"
     },
     {
@@ -33896,7 +34246,7 @@
       "source_location": "L705",
       "_origin": "ast",
       "id": "src_index_nullablenumber",
-      "community": 53,
+      "community": 170,
       "norm_label": "nullablenumber()"
     },
     {
@@ -33906,7 +34256,7 @@
       "source_location": "L713",
       "_origin": "ast",
       "id": "src_index_parserecoveryrate",
-      "community": 53,
+      "community": 170,
       "norm_label": "parserecoveryrate()"
     },
     {
@@ -34056,7 +34406,7 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "src_statsoutput_normalizedstats",
-      "community": 138,
+      "community": 4,
       "norm_label": "normalizedstats"
     },
     {
@@ -52646,6 +52996,17 @@
       "context": "call",
       "confidence": "INFERRED",
       "confidence_score": 0.8,
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L605",
+      "weight": 1.0,
+      "source": "public_capture_logclientevent",
+      "target": "frame_audio_bridge_cloudflare_worker_fetch"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
       "source_file": "services/frame-today/public/dashboard.js",
       "source_location": "L36",
       "weight": 1.0,
@@ -62184,6 +62545,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "services/frame-audio/public/admin.js",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "services_frame_audio_public_admin_js_public_admin",
+      "target": "public_admin_dialognotice",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/admin.js",
       "source_location": "L149",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -62209,6 +62580,16 @@
       "confidence_score": 1.0,
       "source": "services_frame_audio_public_admin_js_public_admin",
       "target": "public_admin_generateid"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/admin.js",
+      "source_location": "L216",
+      "weight": 1.0,
+      "source": "services_frame_audio_public_admin_js_public_admin",
+      "target": "public_admin_hidedialognotice",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -62284,6 +62665,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "services/frame-audio/public/admin.js",
+      "source_location": "L202",
+      "weight": 1.0,
+      "source": "services_frame_audio_public_admin_js_public_admin",
+      "target": "public_admin_sanitizestreamid",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/admin.js",
       "source_location": "L100",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -62299,6 +62690,16 @@
       "confidence_score": 1.0,
       "source": "services_frame_audio_public_admin_js_public_admin",
       "target": "public_admin_setthememode"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/admin.js",
+      "source_location": "L217",
+      "weight": 1.0,
+      "source": "services_frame_audio_public_admin_js_public_admin",
+      "target": "public_admin_showdialognotice",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -62324,11 +62725,51 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "services/frame-audio/public/admin.js",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "services_frame_audio_public_admin_js_public_admin",
+      "target": "public_admin_streamform",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/admin.js",
+      "source_location": "L7",
+      "weight": 1.0,
+      "source": "services_frame_audio_public_admin_js_public_admin",
+      "target": "public_admin_streamidinput",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/admin.js",
       "source_location": "L5",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "services_frame_audio_public_admin_js_public_admin",
       "target": "public_admin_themetoggle"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/admin.js",
+      "source_location": "L203",
+      "weight": 1.0,
+      "source": "services_frame_audio_public_admin_js_public_admin",
+      "target": "public_admin_validatestreamidinput",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/admin.js",
+      "source_location": "L213",
+      "weight": 1.0,
+      "source": "services_frame_audio_public_admin_js_public_admin",
+      "target": "public_admin_validationmessage",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -62431,6 +62872,50 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "services/frame-audio/public/admin.js",
+      "source_location": "L108",
+      "weight": 1.0,
+      "source": "public_admin_openadd",
+      "target": "public_admin_hidedialognotice",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/admin.js",
+      "source_location": "L116",
+      "weight": 1.0,
+      "source": "public_admin_openadd",
+      "target": "public_admin_validatestreamidinput",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/admin.js",
+      "source_location": "L123",
+      "weight": 1.0,
+      "source": "public_admin_openedit",
+      "target": "public_admin_hidedialognotice",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/admin.js",
+      "source_location": "L139",
+      "weight": 1.0,
+      "source": "public_admin_generateid",
+      "target": "public_admin_validatestreamidinput",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/admin.js",
       "source_location": "L110",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -62442,11 +62927,66 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "services/frame-audio/public/admin.js",
+      "source_location": "L170",
+      "weight": 1.0,
+      "source": "public_admin_save",
+      "target": "public_admin_hidedialognotice",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/admin.js",
+      "source_location": "L150",
+      "weight": 1.0,
+      "source": "public_admin_save",
+      "target": "public_admin_sanitizestreamid",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/admin.js",
+      "source_location": "L154",
+      "weight": 1.0,
+      "source": "public_admin_save",
+      "target": "public_admin_showdialognotice",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/admin.js",
       "source_location": "L116",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "public_admin_save",
       "target": "public_admin_shownotice"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/admin.js",
+      "source_location": "L151",
+      "weight": 1.0,
+      "source": "public_admin_save",
+      "target": "public_admin_validatestreamidinput",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/admin.js",
+      "source_location": "L154",
+      "weight": 1.0,
+      "source": "public_admin_save",
+      "target": "public_admin_validationmessage",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -62527,11 +63067,51 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L38",
+      "weight": 1.0,
+      "source": "public_capture",
+      "target": "public_capture_availabledevices",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L37",
+      "weight": 1.0,
+      "source": "public_capture",
+      "target": "public_capture_capturesettings",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
       "source_location": "L238",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "public_capture",
       "target": "public_capture_configuredprocessinglabel"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L569",
+      "weight": 1.0,
+      "source": "public_capture",
+      "target": "public_capture_describemediaerror",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L483",
+      "weight": 1.0,
+      "source": "public_capture",
+      "target": "public_capture_devicedisplaylabel",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -62577,11 +63157,51 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L620",
+      "weight": 1.0,
+      "source": "public_capture",
+      "target": "public_capture_initializecapturepage",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
       "source_location": "L287",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "public_capture",
       "target": "public_capture_initializesettings"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L491",
+      "weight": 1.0,
+      "source": "public_capture",
+      "target": "public_capture_islocalcaptureactive",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L599",
+      "weight": 1.0,
+      "source": "public_capture",
+      "target": "public_capture_ismissingselecteddeviceerror",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L39",
+      "weight": 1.0,
+      "source": "public_capture",
+      "target": "public_capture_lastdeviceselection",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -62617,6 +63237,46 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L603",
+      "weight": 1.0,
+      "source": "public_capture",
+      "target": "public_capture_logclientevent",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L524",
+      "weight": 1.0,
+      "source": "public_capture",
+      "target": "public_capture_mayberesumecaptureonlaunch",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L589",
+      "weight": 1.0,
+      "source": "public_capture",
+      "target": "public_capture_mediaerrordetail",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L487",
+      "weight": 1.0,
+      "source": "public_capture",
+      "target": "public_capture_normalizedevicelabel",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
       "source_location": "L3",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -62647,6 +63307,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L428",
+      "weight": 1.0,
+      "source": "public_capture",
+      "target": "public_capture_renderdeviceoptions",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
       "source_location": "L275",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -62657,11 +63327,61 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L466",
+      "weight": 1.0,
+      "source": "public_capture",
+      "target": "public_capture_selecteddevice",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L471",
+      "weight": 1.0,
+      "source": "public_capture",
+      "target": "public_capture_selecteddevicelabel",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
       "source_location": "L247",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "public_capture",
       "target": "public_capture_setcapturecontrolsdisabled"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L377",
+      "weight": 1.0,
+      "source": "public_capture",
+      "target": "public_capture_setcapturemonitorvisible",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L519",
+      "weight": 1.0,
+      "source": "public_capture",
+      "target": "public_capture_setlivebutton",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L495",
+      "weight": 1.0,
+      "source": "public_capture",
+      "target": "public_capture_setremotepublisheractive",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -62682,6 +63402,16 @@
       "confidence_score": 1.0,
       "source": "public_capture",
       "target": "public_capture_shownotice"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L476",
+      "weight": 1.0,
+      "source": "public_capture",
+      "target": "public_capture_sortaudiodevices",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -62778,6 +63508,61 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L623",
+      "weight": 1.0,
+      "source": "public_capture_initializecapturepage",
+      "target": "public_capture_loaddevices",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L131",
+      "weight": 1.0,
+      "source": "public_capture_loaddevices",
+      "target": "public_capture_describemediaerror",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L109",
+      "weight": 1.0,
+      "source": "public_capture_loaddevices",
+      "target": "public_capture_logclientevent",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L121",
+      "weight": 1.0,
+      "source": "public_capture_loaddevices",
+      "target": "public_capture_mediaerrordetail",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L107",
+      "weight": 1.0,
+      "source": "public_capture_loaddevices",
+      "target": "public_capture_renderdeviceoptions",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
       "source_location": "L84",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -62789,11 +63574,121 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L126",
+      "weight": 1.0,
+      "source": "public_capture_loaddevices",
+      "target": "public_capture_sortaudiodevices",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L539",
+      "weight": 1.0,
+      "source": "public_capture_mayberesumecaptureonlaunch",
+      "target": "public_capture_startcapture",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L250",
+      "weight": 1.0,
+      "source": "public_capture_startcapture",
+      "target": "public_capture_describemediaerror",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L163",
+      "weight": 1.0,
+      "source": "public_capture_startcapture",
+      "target": "public_capture_islocalcaptureactive",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L243",
+      "weight": 1.0,
+      "source": "public_capture_startcapture",
+      "target": "public_capture_ismissingselecteddeviceerror",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L162",
+      "weight": 1.0,
+      "source": "public_capture_startcapture",
+      "target": "public_capture_loadstatus",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L247",
+      "weight": 1.0,
+      "source": "public_capture_startcapture",
+      "target": "public_capture_logclientevent",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L247",
+      "weight": 1.0,
+      "source": "public_capture_startcapture",
+      "target": "public_capture_mediaerrordetail",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L182",
+      "weight": 1.0,
+      "source": "public_capture_startcapture",
+      "target": "public_capture_savesettings",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
       "source_location": "L105",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "public_capture_startcapture",
       "target": "public_capture_setcapturecontrolsdisabled"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L164",
+      "weight": 1.0,
+      "source": "public_capture_startcapture",
+      "target": "public_capture_setremotepublisheractive",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -62844,6 +63739,17 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L278",
+      "weight": 1.0,
+      "source": "public_capture_stopcapture",
+      "target": "public_capture_loadstatus",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
       "source_location": "L153",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -62855,11 +63761,44 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L266",
+      "weight": 1.0,
+      "source": "public_capture_stopcapture",
+      "target": "public_capture_setcapturemonitorvisible",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L271",
+      "weight": 1.0,
+      "source": "public_capture_stopcapture",
+      "target": "public_capture_setlivebutton",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
       "source_location": "L161",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "public_capture_stopcapture",
       "target": "public_capture_updateconfiguredquality"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L621",
+      "weight": 1.0,
+      "source": "public_capture_initializecapturepage",
+      "target": "public_capture_loadstatus",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -62882,6 +63821,50 @@
       "confidence_score": 1.0,
       "source": "public_capture_loadstatus",
       "target": "public_capture_initializesettings"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L313",
+      "weight": 1.0,
+      "source": "public_capture_loadstatus",
+      "target": "public_capture_islocalcaptureactive",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L320",
+      "weight": 1.0,
+      "source": "public_capture_loadstatus",
+      "target": "public_capture_logclientevent",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L320",
+      "weight": 1.0,
+      "source": "public_capture_loadstatus",
+      "target": "public_capture_mediaerrordetail",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L313",
+      "weight": 1.0,
+      "source": "public_capture_loadstatus",
+      "target": "public_capture_setremotepublisheractive",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -62970,6 +63953,94 @@
       "confidence_score": 1.0,
       "source": "public_capture_initializesettings",
       "target": "public_capture_loadsettings"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L406",
+      "weight": 1.0,
+      "source": "public_capture_savesettings",
+      "target": "public_capture_selecteddevice",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L416",
+      "weight": 1.0,
+      "source": "public_capture_savesettings",
+      "target": "public_capture_selecteddevicelabel",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L453",
+      "weight": 1.0,
+      "source": "public_capture_renderdeviceoptions",
+      "target": "public_capture_normalizedevicelabel",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L500",
+      "weight": 1.0,
+      "source": "public_capture_setremotepublisheractive",
+      "target": "public_capture_islocalcaptureactive",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L503",
+      "weight": 1.0,
+      "source": "public_capture_setremotepublisheractive",
+      "target": "public_capture_setlivebutton",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L624",
+      "weight": 1.0,
+      "source": "public_capture_initializecapturepage",
+      "target": "public_capture_mayberesumecaptureonlaunch",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L528",
+      "weight": 1.0,
+      "source": "public_capture_mayberesumecaptureonlaunch",
+      "target": "public_capture_logclientevent",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/capture.js",
+      "source_location": "L532",
+      "weight": 1.0,
+      "source": "public_capture_mayberesumecaptureonlaunch",
+      "target": "public_capture_shownotice",
+      "confidence_score": 1.0
     },
     {
       "relation": "calls",
@@ -63122,6 +64193,16 @@
       "confidence_score": 1.0,
       "source": "public_listen",
       "target": "public_listen_ensurevolumepipeline"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/listen.js",
+      "source_location": "L499",
+      "weight": 1.0,
+      "source": "public_listen",
+      "target": "public_listen_formatdelayseconds",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -64080,6 +65161,17 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "services/frame-audio/public/listen.js",
+      "source_location": "L494",
+      "weight": 1.0,
+      "source": "public_listen_updatesafetargetlabel",
+      "target": "public_listen_formatdelayseconds",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/public/listen.js",
       "source_location": "L509",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -64275,6 +65367,39 @@
       "source_file": "services/frame-audio/src/index.ts",
       "source_location": "L8",
       "weight": 1.0,
+      "source": "services_frame_audio_src_index_ts_src_index",
+      "target": "src_logger",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/src/index.ts",
+      "source_location": "L8",
+      "weight": 1.0,
+      "source": "services_frame_audio_src_index_ts_src_index",
+      "target": "src_logger_errorcontext",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/src/index.ts",
+      "source_location": "L8",
+      "weight": 1.0,
+      "source": "services_frame_audio_src_index_ts_src_index",
+      "target": "src_logger_logaudio",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/src/index.ts",
+      "source_location": "L8",
+      "weight": 1.0,
       "confidence_score": 1.0,
       "source": "services_frame_audio_src_index_ts_src_index",
       "target": "src_relaymanager"
@@ -64339,11 +65464,214 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "services/frame-audio/src/index.ts",
+      "source_location": "L203",
+      "weight": 1.0,
+      "source": "services_frame_audio_src_index_ts_src_index_shutdown",
+      "target": "src_logger_logaudio",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/src/index.ts",
       "source_location": "L194",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "src_index_requirestream",
       "target": "src_index_validstreamid"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/src/logger.ts",
+      "source_location": "L19",
+      "weight": 1.0,
+      "source": "src_logger",
+      "target": "src_logger_errorcontext",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/src/logger.ts",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "src_logger",
+      "target": "src_logger_logaudio",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/src/logger.ts",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "src_logger",
+      "target": "src_logger_logcontext",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/src/logger.ts",
+      "source_location": "L1",
+      "weight": 1.0,
+      "source": "src_logger",
+      "target": "src_logger_loglevel",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/src/logger.ts",
+      "source_location": "L30",
+      "weight": 1.0,
+      "source": "src_logger",
+      "target": "src_logger_sanitizecontext",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/src/logger.ts",
+      "source_location": "L38",
+      "weight": 1.0,
+      "source": "src_logger",
+      "target": "src_logger_sanitizevalue",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/src/relayManager.ts",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "src_relaymanager",
+      "target": "src_logger",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/src/logger.ts",
+      "source_location": "L11",
+      "weight": 1.0,
+      "source": "src_logger_logaudio",
+      "target": "src_logger_sanitizecontext",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/src/relayManager.ts",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "src_relaymanager",
+      "target": "src_logger_logaudio",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "services/frame-audio/src/relayManager.ts",
+      "source_location": "L102",
+      "weight": 1.0,
+      "source": "src_relaymanager_relaymanager_attachpublisher",
+      "target": "src_logger_logaudio"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "services/frame-audio/src/relayManager.ts",
+      "source_location": "L77",
+      "weight": 1.0,
+      "source": "src_relaymanager_relaymanager_close",
+      "target": "src_logger_logaudio"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "services/frame-audio/src/relayManager.ts",
+      "source_location": "L139",
+      "weight": 1.0,
+      "source": "src_relaymanager_relaymanager_deletestream",
+      "target": "src_logger_logaudio"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "services/frame-audio/src/relayManager.ts",
+      "source_location": "L64",
+      "weight": 1.0,
+      "source": "src_relaymanager_relaymanager_init",
+      "target": "src_logger_logaudio"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "services/frame-audio/src/relayManager.ts",
+      "source_location": "L192",
+      "weight": 1.0,
+      "source": "src_relaymanager_relaymanager_publisherclosed",
+      "target": "src_logger_logaudio"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "services/frame-audio/src/relayManager.ts",
+      "source_location": "L328",
+      "weight": 1.0,
+      "source": "src_relaymanager_relaymanager_schedulerestart",
+      "target": "src_logger_logaudio"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "services/frame-audio/src/relayManager.ts",
+      "source_location": "L203",
+      "weight": 1.0,
+      "source": "src_relaymanager_relaymanager_startrelay",
+      "target": "src_logger_logaudio"
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/src/relayManager.ts",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "src_relaymanager",
+      "target": "src_logger_errorcontext",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "services/frame-audio/src/relayManager.ts",
+      "source_location": "L130",
+      "weight": 1.0,
+      "source": "src_relaymanager_relaymanager_attachpublisher",
+      "target": "src_logger_errorcontext"
     },
     {
       "relation": "contains",
@@ -67275,9 +68603,9 @@
       "source_file": "services/frame-gallery/public/admin.js",
       "source_location": "L934",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "services_frame_gallery_public_admin_js_public_admin",
-      "target": "public_admin_snaptotargets",
-      "confidence_score": 1.0
+      "target": "public_admin_snaptotargets"
     },
     {
       "relation": "contains",
@@ -68389,9 +69717,9 @@
       "source_file": "services/frame-gallery/public/admin.js",
       "source_location": "L687",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "public_admin_resizelogocropframe",
-      "target": "public_admin_logocropmetrics",
-      "confidence_score": 1.0
+      "target": "public_admin_logocropmetrics"
     },
     {
       "relation": "calls",
@@ -68411,9 +69739,9 @@
       "source_file": "services/frame-gallery/public/admin.js",
       "source_location": "L709",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "public_admin_resizelogocropframe",
-      "target": "public_admin_snaptotargets",
-      "confidence_score": 1.0
+      "target": "public_admin_snaptotargets"
     },
     {
       "relation": "calls",
@@ -68477,9 +69805,9 @@
       "source_file": "services/frame-gallery/public/admin.js",
       "source_location": "L774",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "public_admin_logocropmetrics",
-      "target": "public_admin_snaptotargets",
-      "confidence_score": 1.0
+      "target": "public_admin_snaptotargets"
     },
     {
       "relation": "calls",
@@ -96879,5 +98207,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "21080f6a5661b77fd44940bc831a4a11657c7af0"
+  "built_at_commit": "c50d3ccc6a2455c50a1982e90d8f499fbf0aa7d3"
 }

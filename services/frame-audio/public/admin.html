@@ -51,16 +51,17 @@
     <dialog id="stream-dialog">
       <form id="stream-form">
         <div class="dialog-head"><div><strong id="dialog-title">Add audio source</strong><span>Stream IDs become part of stable capture and listen URLs.</span></div><button type="button" class="secondary" id="close-dialog">Close</button></div>
+        <div id="dialog-notice" class="notice hidden"></div>
         <div class="form-grid">
           <label class="wide">Source name<input id="name-input" required maxlength="80" placeholder="Main IRL program audio"></label>
-          <label class="wide">Stream ID<input id="stream-id-input" required pattern="[a-z0-9][a-z0-9-]{6,63}"><small>Create a new source to change this permanent URL ID.</small></label>
+          <label class="wide">Stream ID<input id="stream-id-input" required minlength="7" maxlength="64" pattern="[a-z0-9][a-z0-9-]{6,63}" inputmode="text" autocapitalize="none" autocomplete="off" spellcheck="false"><small>Use 7-64 lowercase letters, numbers, or hyphens. Create a new source to change this permanent URL ID.</small></label>
           <label>Listener AAC quality<select id="bitrate-input"><option value="64">64 kbps - Data saver</option><option value="96">96 kbps - Voice</option><option value="128">128 kbps - Balanced</option><option value="160">160 kbps - Good</option><option value="192" selected>192 kbps - High</option><option value="256">256 kbps - Very high</option><option value="320">320 kbps - Maximum</option></select><small>Higher values improve the final encode while increasing bandwidth for every listener.</small></label>
-          <label>Listener limit<input id="listener-limit-input" type="number" min="1" max="100" value="10" required></label>
+          <label>Listener limit<select id="listener-limit-input" required><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10" selected>10</option></select></label>
           <label class="wide toggle-label"><input id="always-on-input" type="checkbox" checked> Keep listen link alive with silence while capture is offline</label>
         </div>
         <div class="dialog-actions"><button type="button" id="regenerate-button" class="secondary">Regenerate ID</button><button type="submit">Save source</button></div>
       </form>
     </dialog>
-    <script src="/audio/assets/admin.js?v=refresh-cleanup" defer></script>
+    <script src="/audio/assets/admin.js?v=form-polish" defer></script>
   </body>
 </html>

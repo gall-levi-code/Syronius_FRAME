@@ -21,6 +21,14 @@ const DRIFT_SNAP_TOLERANCE_SECONDS = 4;
 const AUTO_RESYNC_COOLDOWN_MS = 4_000;
 const SEEK_EPSILON_SECONDS = 0.25;
 const BUFFER_PROFILES = {
+  near: {
+    targetDelaySeconds: 1.5,
+    liveSyncDurationCount: 1,
+    liveMaxLatencyDurationCount: 4,
+    maxBufferLength: 6,
+    maxMaxBufferLength: 10,
+    backBufferLength: 3,
+  },
   low: {
     targetDelaySeconds: 3,
     liveSyncDurationCount: 3,
@@ -161,7 +169,7 @@ async function update() {
     document.querySelector("#relay-mode").textContent = modeLabel(stream.mode);
     document.querySelector("#bitrate").textContent = `${stream.activeBitrateKbps} kbps AAC`;
     document.querySelector("#listeners").textContent = `${stream.listenerCount} / ${stream.listenerLimit}`;
-    document.querySelector("#source-state").textContent = stream.publisherActive ? "Live browser capture" : stream.alwaysOn ? "Capture offline; monitoring silence" : "Capture offline";
+    document.querySelector("#source-state").textContent = stream.publisherActive ? "Live browser capture" : stream.alwaysOn ? "Sending silence" : "Capture offline";
     document.querySelector("#status-pill").textContent = stream.playlistReady ? "Ready" : "Waiting";
     document.querySelector("#status-pill").className = `status-pill ${stream.publisherActive ? "good" : stream.playlistReady ? "warn" : "bad"}`;
     if (stream.playlistReady && playlistUrl !== stream.playlistUrl) attach(stream.playlistUrl);
@@ -483,8 +491,13 @@ function targetDelaySeconds() {
 
 function updateSafeTargetLabel() {
   const delay = targetDelaySeconds();
-  safeTargetLabel.textContent = `${delay.toFixed(0)} s safe`;
-  document.querySelector("#safe-delay").textContent = `${delay.toFixed(0)} s`;
+  const label = formatDelaySeconds(delay);
+  safeTargetLabel.textContent = `${label} safe`;
+  document.querySelector("#safe-delay").textContent = label;
+}
+
+function formatDelaySeconds(delay) {
+  return `${Number.isInteger(delay) ? delay.toFixed(0) : delay.toFixed(1)} s`;
 }
 
 function updatePlaybackButton() {
@@ -543,7 +556,7 @@ function clearPlaybackError() {
   playbackError.classList.add("hidden");
 }
 
-function modeLabel(mode) { return mode === "publisher" ? "Live capture" : mode === "silence" ? "Always-on silence" : "Offline"; }
+function modeLabel(mode) { return mode === "publisher" ? "Live capture" : mode === "silence" ? "Sending silence" : "Offline"; }
 function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
 async function api(url, init) { const response = await fetch(url, init); const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`); return body; }
 
@@ -551,3 +564,4 @@ update();
 updateBufferReadout();
 setInterval(update, 3_000);
 setInterval(updateBufferReadout, 500);
+

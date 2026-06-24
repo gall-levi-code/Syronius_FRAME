@@ -5,6 +5,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { WebSocketServer } from "ws";
 import { loadConfig } from "./config.js";
+import { errorContext, logAudio } from "./logger.js";
 import { RelayManager } from "./relayManager.js";
 import { AudioStreamStore, BITRATE_PRESETS, StoreError, validateStreamInput } from "./store.js";
 
@@ -106,6 +107,21 @@ app.post(["/audio/api/streams/:streamId/listener-heartbeat", "/audio/public/stre
   }
 });
 
+app.post("/audio/api/streams/:streamId/client-events", (request, response, next) => {
+  try {
+    const stream = requireStream(request.params.streamId);
+    const level = request.body?.level === "error" ? "error" : request.body?.level === "warn" ? "warn" : "info";
+    const event = typeof request.body?.event === "string" ? request.body.event.slice(0, 80) : "capture-client-event";
+    const detail = request.body?.detail && typeof request.body.detail === "object"
+      ? request.body.detail as Record<string, unknown>
+      : {};
+    logAudio(level, "capture client event", { streamId: stream.streamId, event, detail });
+    response.status(204).end();
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.use("/audio/hls", express.static(hlsDir, {
   fallthrough: false,
   setHeaders: (response) => {
@@ -147,7 +163,14 @@ app.use((
     : Number.isInteger(reportedStatus) && reportedStatus >= 400 && reportedStatus <= 599
       ? reportedStatus
       : 500;
-  if (status >= 500) console.error("[audio]", error);
+  if (status >= 500) {
+    logAudio("error", "request failed", {
+      method: _request.method,
+      path: _request.path,
+      status,
+      ...errorContext(error),
+    });
+  }
   response.status(status).json({ error: error instanceof Error ? error.message : String(error) });
 });
 
@@ -166,17 +189,18 @@ server.on("upgrade", (request, socket, head) => {
   captureSockets.handleUpgrade(request, socket, head, (webSocket) => {
     void relays.attachPublisher(streamId, webSocket).catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
-      console.warn(`[audio] Publisher rejected for ${streamId}: ${message}`);
+      logAudio("warn", "publisher rejected", { streamId, message });
       webSocket.close(1008, message.slice(0, 120));
     });
   });
 });
 
 server.listen(config.port, () => {
-  console.log(`[audio] FRAME Audio Monitor listening on port ${config.port}`);
+  logAudio("info", "FRAME Audio Monitor listening", { port: config.port });
 });
 
 async function shutdown(): Promise<void> {
+  logAudio("info", "shutdown requested");
   await relays.close();
   server.close(() => process.exit(0));
 }
