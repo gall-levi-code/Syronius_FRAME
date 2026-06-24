@@ -67,6 +67,7 @@
       "required": [
         "dashboard",
         "status",
+        "theme",
         "video_relay_ui",
         "video_relay_stats",
         "overlays_root",
@@ -89,6 +90,10 @@
           "pattern": "^/"
         },
         "status": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "theme": {
           "type": "string",
           "pattern": "^/"
         },

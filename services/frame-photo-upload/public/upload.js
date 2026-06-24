@@ -5,9 +5,22 @@ const status = document.querySelector("#status");
 const button = document.querySelector("#upload-button");
 const queue = document.querySelector("#queue");
 const template = document.querySelector("#queue-template");
+const themeToggle = document.querySelector("#theme-toggle");
 
 let entries = [];
 let uploading = false;
+
+initializeTheme();
+themeToggle.addEventListener("click", toggleTheme);
+window.addEventListener("storage", (event) => {
+  if (event.key === "frame-theme-profile") {
+    setThemeMode(readStoredTheme(), false);
+    return;
+  }
+  if (event.key === "frame-theme" && (event.newValue === "day" || event.newValue === "night")) {
+    setThemeMode(event.newValue, false);
+  }
+});
 
 input.addEventListener("change", () => {
   entries = [...(input.files || [])].map((file) => ({ file, element: createQueueItem(file), state: "ready" }));
@@ -121,3 +134,36 @@ function formatBytes(bytes) {
 }
 
 button.disabled = true;
+
+function initializeTheme() {
+  setThemeMode(readStoredTheme(), false);
+}
+
+function toggleTheme() {
+  setThemeMode(document.documentElement.dataset.theme === "day" ? "night" : "day", true);
+}
+
+function setThemeMode(nextMode, persist) {
+  const mode = nextMode === "day" ? "day" : "night";
+  document.documentElement.dataset.theme = mode;
+  window.FrameTheme?.apply(mode);
+  const nextLabel = mode === "day" ? "Switch to night mode" : "Switch to day mode";
+  themeToggle.setAttribute("aria-label", nextLabel);
+  themeToggle.title = nextLabel;
+  themeToggle.setAttribute("aria-pressed", String(mode === "day"));
+  if (persist) writeStoredTheme(mode);
+}
+
+function readStoredTheme() {
+  try {
+    const stored = localStorage.getItem("frame-theme");
+    if (stored === "day" || stored === "night") return stored;
+  } catch {}
+  return "night";
+}
+
+function writeStoredTheme(mode) {
+  try {
+    localStorage.setItem("frame-theme", mode);
+  } catch {}
+}

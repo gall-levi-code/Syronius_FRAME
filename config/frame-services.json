@@ -84,6 +84,7 @@
   "routes": {
     "dashboard": "/dashboard",
     "status": "/status",
+    "theme": "/theme",
     "video_relay_ui": "/slsui",
     "video_relay_stats": "/stats",
     "overlays_root": "/overlays",
@@ -104,6 +105,7 @@
     { "prefix": "/auth", "capability": null },
     { "prefix": "/dashboard", "capability": null },
     { "prefix": "/status", "capability": null },
+    { "prefix": "/theme", "capability": null },
     { "prefix": "/assets", "capability": null },
     { "prefix": "/api/portal", "capability": null },
     { "prefix": "/stats", "capability": "frame-video-relay" },

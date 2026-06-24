@@ -40,6 +40,98 @@
         "processed_at": { "type": "string", "format": "date-time" },
         "camera_text": { "type": "string" }
       }
+    },
+    "palette": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "background",
+        "topbar",
+        "text",
+        "controlText",
+        "accent",
+        "secondary",
+        "surface",
+        "surfaceStrong",
+        "border",
+        "muted",
+        "danger",
+        "good",
+        "lightboxBackground",
+        "lightboxText"
+      ],
+      "properties": {
+        "background": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
+        "topbar": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
+        "text": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
+        "controlText": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
+        "accent": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
+        "secondary": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
+        "surface": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
+        "surfaceStrong": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
+        "border": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
+        "muted": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
+        "danger": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
+        "good": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
+        "lightboxBackground": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
+        "lightboxText": { "type": "string", "pattern": "^#[0-9a-f]{6}$" }
+      }
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "theme_color", "palettes"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "theme_color": { "type": "string", "pattern": "^#[0-9a-f]{6}$" },
+        "palettes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["day", "night"],
+          "properties": {
+            "day": { "$ref": "#/$defs/palette" },
+            "night": { "$ref": "#/$defs/palette" }
+          }
+        }
+      }
+    },
+    "logo": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["url", "width", "height", "updated_at"],
+      "properties": {
+        "url": { "type": "string", "pattern": "^/gallery/branding/logo\\.webp\\?v=" },
+        "width": { "type": "integer", "minimum": 1, "maximum": 360 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 120 },
+        "updated_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "branding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "brand_name",
+        "gallery_title",
+        "mode",
+        "profile_id",
+        "custom_profiles",
+        "logo",
+        "updated_at",
+        "active_profile",
+        "presets"
+      ],
+      "properties": {
+        "brand_name": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "gallery_title": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "mode": { "type": "string", "enum": ["system", "day", "night"] },
+        "profile_id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+        "custom_profiles": { "type": "array", "items": { "$ref": "#/$defs/profile" } },
+        "logo": { "$ref": "#/$defs/logo" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "active_profile": { "$ref": "#/$defs/profile" },
+        "presets": { "type": "array", "minItems": 5, "items": { "$ref": "#/$defs/profile" } }
+      }
     }
   },
   "oneOf": [
@@ -58,6 +150,14 @@
       "properties": {
         "date_folder": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
         "photos": { "type": "array", "items": { "$ref": "#/$defs/photo" } }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["branding"],
+      "properties": {
+        "branding": { "$ref": "#/$defs/branding" }
       }
     }
   ]

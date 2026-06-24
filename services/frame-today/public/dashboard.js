@@ -16,7 +16,20 @@ const elements = {
   latestUpdated: document.querySelector("#latest-updated"),
   copyViewer: document.querySelector("#copy-viewer"),
   message: document.querySelector("#dashboard-message"),
+  themeToggle: document.querySelector("#theme-toggle"),
 };
+
+initializeTheme();
+elements.themeToggle.addEventListener("click", toggleTheme);
+window.addEventListener("storage", (event) => {
+  if (event.key === "frame-theme-profile") {
+    setThemeMode(readStoredTheme(), false);
+    return;
+  }
+  if (event.key === "frame-theme" && (event.newValue === "day" || event.newValue === "night")) {
+    setThemeMode(event.newValue, false);
+  }
+});
 
 elements.copyViewer.addEventListener("click", async () => {
   try {
@@ -30,6 +43,39 @@ elements.copyViewer.addEventListener("click", async () => {
 
 refresh();
 setInterval(refresh, 5000);
+
+function initializeTheme() {
+  setThemeMode(readStoredTheme(), false);
+}
+
+function toggleTheme() {
+  setThemeMode(document.documentElement.dataset.theme === "day" ? "night" : "day", true);
+}
+
+function setThemeMode(nextMode, persist) {
+  const mode = nextMode === "day" ? "day" : "night";
+  document.documentElement.dataset.theme = mode;
+  window.FrameTheme?.apply(mode);
+  const nextLabel = mode === "day" ? "Switch to night mode" : "Switch to day mode";
+  elements.themeToggle.setAttribute("aria-label", nextLabel);
+  elements.themeToggle.title = nextLabel;
+  elements.themeToggle.setAttribute("aria-pressed", String(mode === "day"));
+  if (persist) writeStoredTheme(mode);
+}
+
+function readStoredTheme() {
+  try {
+    const stored = localStorage.getItem("frame-theme");
+    if (stored === "day" || stored === "night") return stored;
+  } catch {}
+  return "night";
+}
+
+function writeStoredTheme(mode) {
+  try {
+    localStorage.setItem("frame-theme", mode);
+  } catch {}
+}
 
 async function refresh() {
   try {
