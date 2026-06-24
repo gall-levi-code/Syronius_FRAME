@@ -2,6 +2,9 @@ const state = { streams: [], editingId: null };
 const list = document.querySelector("#stream-list");
 const notice = document.querySelector("#notice");
 const dialog = document.querySelector("#stream-dialog");
+const dialogNotice = document.querySelector("#dialog-notice");
+const streamForm = document.querySelector("#stream-form");
+const streamIdInput = document.querySelector("#stream-id-input");
 const themeToggle = document.querySelector("#theme-toggle");
 
 setThemeMode(readStoredTheme(), false);
@@ -20,7 +23,15 @@ window.addEventListener("storage", (event) => {
 document.querySelector("#add-button").addEventListener("click", openAdd);
 document.querySelector("#close-dialog").addEventListener("click", () => dialog.close());
 document.querySelector("#regenerate-button").addEventListener("click", generateId);
-document.querySelector("#stream-form").addEventListener("submit", save);
+streamForm.addEventListener("submit", save);
+streamIdInput.addEventListener("input", () => {
+  const cursor = streamIdInput.selectionStart;
+  const sanitized = sanitizeStreamId(streamIdInput.value);
+  const delta = streamIdInput.value.length - sanitized.length;
+  streamIdInput.value = sanitized;
+  if (cursor !== null) streamIdInput.setSelectionRange(Math.max(0, cursor - delta), Math.max(0, cursor - delta));
+  validateStreamIdInput();
+});
 
 function setThemeMode(nextMode, persist) {
   const mode = nextMode === "day" ? "day" : "night";
@@ -94,25 +105,28 @@ function render() {
 
 function openAdd() {
   state.editingId = null;
+  hideDialogNotice();
   document.querySelector("#dialog-title").textContent = "Add audio source";
   document.querySelector("#name-input").value = "";
   document.querySelector("#bitrate-input").value = "192";
   document.querySelector("#listener-limit-input").value = "10";
   document.querySelector("#always-on-input").checked = true;
-  document.querySelector("#stream-id-input").disabled = false;
+  streamIdInput.disabled = false;
   generateId();
+  validateStreamIdInput();
   dialog.showModal();
 }
 
 function openEdit(streamId) {
   const stream = state.streams.find((candidate) => candidate.streamId === streamId);
   state.editingId = streamId;
+  hideDialogNotice();
   document.querySelector("#dialog-title").textContent = "Edit audio source";
   document.querySelector("#name-input").value = stream.name;
-  document.querySelector("#stream-id-input").value = stream.streamId;
-  document.querySelector("#stream-id-input").disabled = true;
+  streamIdInput.value = stream.streamId;
+  streamIdInput.disabled = true;
   document.querySelector("#bitrate-input").value = String(stream.bitrateKbps);
-  document.querySelector("#listener-limit-input").value = String(stream.listenerLimit);
+  document.querySelector("#listener-limit-input").value = String(Math.min(10, Math.max(1, Number(stream.listenerLimit) || 10)));
   document.querySelector("#always-on-input").checked = stream.alwaysOn;
   dialog.showModal();
 }
@@ -121,17 +135,27 @@ function generateId() {
   const bytes = new Uint8Array(12);
   if (window.crypto?.getRandomValues) {
     window.crypto.getRandomValues(bytes);
-    document.querySelector("#stream-id-input").value = `audio-${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+    streamIdInput.value = `audio-${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+    validateStreamIdInput();
     return;
   }
-  document.querySelector("#stream-id-input").value = `audio-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
+  streamIdInput.value = `audio-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
+  validateStreamIdInput();
 }
 
 async function save(event) {
   event.preventDefault();
   try {
+    if (!state.editingId) {
+      streamIdInput.value = sanitizeStreamId(streamIdInput.value);
+      validateStreamIdInput();
+    }
+    if (!streamForm.reportValidity()) {
+      showDialogNotice(validationMessage());
+      return;
+    }
     const body = {
-      streamId: state.editingId || document.querySelector("#stream-id-input").value,
+      streamId: state.editingId || streamIdInput.value,
       name: document.querySelector("#name-input").value,
       bitrateKbps: Number(document.querySelector("#bitrate-input").value),
       listenerLimit: Number(document.querySelector("#listener-limit-input").value),
@@ -143,10 +167,12 @@ async function save(event) {
       body: JSON.stringify(body),
     });
     dialog.close();
+    hideDialogNotice();
     showNotice("Audio source saved.", "ok");
     await load();
   } catch (error) {
-    showNotice(error.message);
+    if (dialog.open) showDialogNotice(error.message);
+    else showNotice(error.message);
   }
 }
 
@@ -172,7 +198,23 @@ function clearLocalCaptureSettings(streamId) {
 }
 
 function stat(label, value) { return `<div class="stat"><span>${label}</span><strong>${escapeHtml(String(value))}</strong></div>`; }
-function modeLabel(mode) { return mode === "publisher" ? "Live capture" : mode === "silence" ? "Always-on silence" : "Offline"; }
+function modeLabel(mode) { return mode === "publisher" ? "Live capture" : mode === "silence" ? "Sending silence" : "Offline"; }
+function sanitizeStreamId(value) { return String(value).toLowerCase().replace(/[^a-z0-9-]/g, "").replace(/^-+/g, "").slice(0, 64); }
+function validateStreamIdInput() {
+  if (streamIdInput.disabled) {
+    streamIdInput.setCustomValidity("");
+    return true;
+  }
+  const value = streamIdInput.value;
+  const ok = /^[a-z0-9][a-z0-9-]{6,63}$/.test(value);
+  streamIdInput.setCustomValidity(ok || !value ? "" : "Stream ID must be 7-64 lowercase letters, numbers, or hyphens, and start with a letter or number.");
+  return ok;
+}
+function validationMessage() {
+  return streamIdInput.validationMessage || "Check the highlighted fields and try again.";
+}
+function hideDialogNotice() { dialogNotice.textContent = ""; dialogNotice.className = "notice hidden"; }
+function showDialogNotice(message, kind = "error") { dialogNotice.textContent = message; dialogNotice.className = `notice ${kind === "ok" ? "ok" : ""}`; }
 function showNotice(message, kind = "error") { notice.textContent = message; notice.className = `notice ${kind === "ok" ? "ok" : ""}`; }
 async function api(url, init) { const response = await fetch(url, init); const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`); return body; }
 function escapeHtml(value) { const div = document.createElement("div"); div.textContent = value; return div.innerHTML; }

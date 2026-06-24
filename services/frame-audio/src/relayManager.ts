@@ -3,6 +3,7 @@ import { access, mkdir, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import type { WebSocket } from "ws";
 import type { AppConfig } from "./config.js";
+import { errorContext, logAudio } from "./logger.js";
 import { AudioStreamStore, type AudioStreamConfig, StoreError } from "./store.js";
 
 type RelayMode = "offline" | "silence" | "publisher";
@@ -60,6 +61,7 @@ export class RelayManager {
     const hlsRoot = path.join(this.config.dataRoot, "hls");
     await mkdir(hlsRoot, { recursive: true });
     const streams = this.store.list();
+    logAudio("info", "initializing audio relays", { streamCount: streams.length, hlsRoot });
     const streamIds = new Set(streams.map((stream) => stream.streamId));
     const entries = await readdir(hlsRoot, { withFileTypes: true });
     await Promise.all(entries
@@ -72,6 +74,7 @@ export class RelayManager {
 
   public async close(): Promise<void> {
     clearInterval(this.listenerCleanupTimer);
+    logAudio("info", "closing audio relays", { runtimeCount: this.runtimes.size });
     for (const runtime of this.runtimes.values()) {
       this.stopRuntime(runtime);
       runtime.publisherSocket?.close(1001, "Service stopping");
@@ -95,10 +98,14 @@ export class RelayManager {
     if (!stream) throw new StoreError(404, "Audio source not found.");
     const runtime = this.runtime(streamId);
     if (runtime.deleting) throw new StoreError(409, "This audio source is being deleted.");
-    if (runtime.publisherSocket) throw new StoreError(409, "This audio source already has an active publisher.");
+    if (runtime.publisherSocket) {
+      logAudio("warn", "publisher rejected because one is already active", { streamId });
+      throw new StoreError(409, "This audio source already has an active publisher.");
+    }
 
     runtime.publisherSocket = socket;
     runtime.pendingChunks = [];
+    logAudio("info", "publisher connected", { streamId, previousMode: runtime.mode });
     socket.on("message", (data, isBinary) => {
       if (!isBinary) return;
       const chunk = Buffer.isBuffer(data) ? data : Buffer.from(data as ArrayBuffer);
@@ -109,6 +116,7 @@ export class RelayManager {
     socket.once("close", () => void this.publisherClosed(streamId, socket));
     socket.once("error", (error) => {
       runtime.lastError = `Publisher WebSocket: ${error.message}`;
+      logAudio("warn", "publisher websocket error", { streamId, ...errorContext(error) });
     });
 
     try {
@@ -119,6 +127,7 @@ export class RelayManager {
     } catch (error) {
       runtime.publisherSocket = undefined;
       socket.close(1011, error instanceof Error ? error.message : "Unable to start relay");
+      logAudio("error", "publisher relay start failed", { streamId, ...errorContext(error) });
       throw error;
     }
   }
@@ -127,6 +136,7 @@ export class RelayManager {
     const runtime = this.runtimes.get(streamId);
     if (runtime) {
       runtime.deleting = true;
+      logAudio("info", "deleting audio source runtime", { streamId });
       runtime.publisherSocket?.close(1001, "Audio source deleted");
       await this.stopRuntimeAndWait(runtime);
       this.runtimes.delete(streamId);
@@ -179,6 +189,7 @@ export class RelayManager {
     if (!runtime || runtime.deleting || runtime.publisherSocket !== socket) return;
     runtime.publisherSocket = undefined;
     this.stopRuntime(runtime);
+    logAudio("info", "publisher disconnected", { streamId });
     const stream = this.store.get(streamId);
     if (stream?.alwaysOn) await this.startRelay(stream, runtime, "silence").catch((error) => this.scheduleRestart(streamId, error));
   }
@@ -189,6 +200,13 @@ export class RelayManager {
     const outputDirectory = this.generationPath(current);
     await mkdir(outputDirectory, { recursive: true });
     await this.cleanupGenerations(current);
+    logAudio("info", "starting audio relay", {
+      streamId: stream.streamId,
+      mode,
+      bitrateKbps: current.bitrateKbps,
+      generation: current.generation,
+      outputDirectory,
+    });
 
     const inputArgs = mode === "silence"
       ? ["-re", "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=48000"]
@@ -233,10 +251,14 @@ export class RelayManager {
 
     child.stderr.on("data", (data: Buffer) => {
       const text = data.toString("utf8").trim();
-      if (text) runtime.lastError = text.slice(-500);
+      if (text) {
+        runtime.lastError = text.slice(-500);
+        logAudio("error", "ffmpeg stderr", { streamId: stream.streamId, mode, stderr: runtime.lastError });
+      }
     });
     child.once("error", (error) => {
       runtime.lastError = `ffmpeg: ${error.message}`;
+      logAudio("error", "ffmpeg process error", { streamId: stream.streamId, mode, ...errorContext(error) });
     });
     child.once("exit", (code, signal) => {
       if (runtime.process !== child) return;
@@ -248,6 +270,13 @@ export class RelayManager {
         runtime.publisherSocket.close(1011, "Audio encoder stopped");
         runtime.publisherSocket = undefined;
       }
+      logAudio(code === 0 ? "info" : "error", "audio relay exited", {
+        streamId: stream.streamId,
+        mode,
+        code,
+        signal,
+        lastError: runtime.lastError,
+      });
       const latest = this.store.get(stream.streamId);
       if (!runtime.deleting && latest?.alwaysOn) this.scheduleRestart(stream.streamId, runtime.lastError);
     });
@@ -296,6 +325,7 @@ export class RelayManager {
     if (runtime.deleting) return;
     runtime.lastError = error instanceof Error ? error.message : String(error);
     if (runtime.restartTimer) return;
+    logAudio("warn", "scheduling audio relay restart", { streamId, error: runtime.lastError, delayMs: 2_000 });
     runtime.restartTimer = setTimeout(() => {
       runtime.restartTimer = undefined;
       const stream = this.store.get(streamId);

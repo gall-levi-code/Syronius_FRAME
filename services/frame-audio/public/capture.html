@@ -43,9 +43,18 @@
     <main>
       <section class="panel">
         <div class="panel-head"><div><h1 id="source-name">Audio Source</h1><p id="source-id"></p></div><button id="popout-button" class="secondary">Pop out</button></div>
+        <div class="capture-actions">
+          <button id="live-button" class="play-button capture-live-button" type="button" data-action="play">
+            <span id="live-button-label">Go live</span>
+          </button>
+        </div>
         <div id="notice" class="notice hidden"></div>
-        <div class="form-grid">
-          <label class="wide">Capture device<select id="device-select"></select><small>Select a virtual audio cable, VoiceMeeter output, microphone, or other browser-visible input.</small></label>
+        <div id="capture-config" class="capture-config form-grid">
+          <div class="device-control wide">
+            <label>Capture device<select id="device-select"></select></label>
+            <button id="refresh-devices-button" class="secondary" type="button">Refresh devices</button>
+            <small>Select a virtual audio cable, VoiceMeeter output, microphone, or other browser-visible input.</small>
+          </div>
           <label>Capture profile
             <select id="profile-select">
               <option value="voice">Voice</option>
@@ -74,27 +83,27 @@
             <label class="toggle-label"><input id="echo-cancellation-input" type="checkbox"> Echo cancellation</label>
             <label class="toggle-label"><input id="noise-suppression-input" type="checkbox"> Noise suppression</label>
             <label class="toggle-label"><input id="auto-gain-input" type="checkbox"> Automatic gain</label>
+            <label class="toggle-label"><input id="resume-on-launch-input" type="checkbox"> Resume capture on launch</label>
           </div>
           <small id="profile-description" class="wide quality-description">Full-range stereo with browser voice processing disabled. Recommended for stream mixes and virtual audio cables.</small>
         </div>
-        <div class="capture-actions"><button id="live-button">Go live</button><button id="refresh-devices-button" class="secondary">Refresh devices</button></div>
-      </section>
-      <section class="panel">
-        <div class="panel-head"><div><h2>Input Meter</h2><p>Measured locally before MediaRecorder encoding.</p></div><strong id="level-readout">-60 dB</strong></div>
-        <div class="meter"><div id="meter-fill" class="meter-fill"></div></div>
-        <div class="capture-grid">
-          <div class="capture-stat"><span>Capture</span><strong id="capture-state">Stopped</strong></div>
-          <div class="capture-stat"><span>Publish socket</span><strong id="socket-state">Disconnected</strong></div>
-          <div class="capture-stat"><span>Relay</span><strong id="relay-state">Offline</strong></div>
-          <div class="capture-stat"><span>Target bitrate</span><strong id="target-bitrate">--</strong></div>
-          <div class="capture-stat"><span>Incoming bitrate</span><strong id="input-bitrate">--</strong></div>
-          <div class="capture-stat"><span>Capture format</span><strong id="capture-format">--</strong></div>
-          <div class="capture-stat"><span>Browser processing</span><strong id="browser-processing">--</strong></div>
-          <div class="capture-stat"><span>Upload target</span><strong id="upload-bitrate">--</strong></div>
-          <div class="capture-stat"><span>Listeners</span><strong id="listener-count">0</strong></div>
+        <div id="capture-monitor" class="capture-monitor hidden">
+          <div class="meter-head"><div><h2>Input Meter</h2><p>Measured locally before MediaRecorder encoding.</p></div><strong id="level-readout">-60 dB</strong></div>
+          <div class="meter"><div id="meter-fill" class="meter-fill"></div></div>
+          <div class="capture-grid">
+            <div class="capture-stat"><span>Capture</span><strong id="capture-state">Stopped</strong></div>
+            <div class="capture-stat"><span>Publish socket</span><strong id="socket-state">Disconnected</strong></div>
+            <div class="capture-stat"><span>Relay</span><strong id="relay-state">Offline</strong></div>
+            <div class="capture-stat"><span>Target bitrate</span><strong id="target-bitrate">--</strong></div>
+            <div class="capture-stat"><span>Incoming bitrate</span><strong id="input-bitrate">--</strong></div>
+            <div class="capture-stat"><span>Capture format</span><strong id="capture-format">--</strong></div>
+            <div class="capture-stat"><span>Browser processing</span><strong id="browser-processing">--</strong></div>
+            <div class="capture-stat"><span>Upload target</span><strong id="upload-bitrate">--</strong></div>
+            <div class="capture-stat"><span>Listeners</span><strong id="listener-count">0</strong></div>
+          </div>
         </div>
       </section>
     </main>
-    <script src="/audio/assets/capture.js?v=frame-theme-tab" defer></script>
+    <script src="/audio/assets/capture.js?v=capture-control-polish" defer></script>
   </body>
 </html>

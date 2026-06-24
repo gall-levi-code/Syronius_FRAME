@@ -74,6 +74,7 @@
         <p id="playback-error" class="notice hidden"></p>
         <label>Playback stability
           <select id="buffer-profile">
+            <option value="near">Near realtime - about 1.5 seconds</option>
             <option value="low">Low latency - about 3 seconds</option>
             <option value="balanced" selected>Balanced - about 6 seconds</option>
             <option value="stable">Stable - about 12 seconds</option>
@@ -91,6 +92,6 @@
       </main>
     </div>
     <script src="/audio/assets/hls.min.js"></script>
-    <script src="/audio/assets/listen.js?v=frame-theme-tab" defer></script>
+    <script src="/audio/assets/listen.js?v=near-realtime" defer></script>
   </body>
 </html>
