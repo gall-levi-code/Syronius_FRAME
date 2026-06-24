@@ -1,14 +1,21 @@
 {
-  "schema_version": "1.0",
-  "default_preset_id": "default-connectivity",
-  "presets": [
+  "schema_version": "2.0",
+  "revision": 0,
+  "default_template_id": "default-connectivity",
+  "default_template_ids": {
+    "connectivity": "default-connectivity",
+    "upload_progress": "default-upload-progress"
+  },
+  "templates": [
     {
       "id": "default-connectivity",
+      "builtin": true,
+      "readonly": true,
       "name": "Default Connectivity",
-      "description": "Stock FRAME connectivity profile. Keeps the most useful live relay fields visible and clearly marks degraded stream quality.",
+      "description": "Stock FRAME connectivity design. Create a reusable preset or OBS source from this read-only template.",
       "tags": ["connectivity", "stock", "default", "full-stats"],
       "enabled": true,
-      "window_title": "FRAME: Default Connectivity",
+      "window_title": "FRAME: Connectivity",
       "type": "connectivity",
       "layout": {
         "dock": "br",
@@ -33,7 +40,6 @@
         "font_size_base_px": 16
       },
       "config": {
-        "stream_profile_id": null,
         "poll_ms": 1000,
         "bitrate_good_min": 5000,
         "bitrate_warn_min": 2500,
@@ -41,8 +47,8 @@
         "rtt_bad_max": 3500,
         "bitrate_meter_max": 12000,
         "chart_bitrate_max": 12000,
-        "chart_rtt_max": 6000,
-        "history_len": 10,
+        "chart_rtt_max": 5000,
+        "history_len": 20,
         "bitrate_streak_warn": 2,
         "bitrate_streak_bad": 2,
         "rtt_streak_warn": 2,
@@ -52,6 +58,7 @@
         "show_name": true,
         "show_status": true,
         "show_bitrate": true,
+        "show_bitrate_in_good": true,
         "show_rtt": true,
         "show_latency": false,
         "show_buffer": false,
@@ -69,6 +76,55 @@
         "label_style": "svg",
         "transition_ms": 250
       }
+    },
+    {
+      "id": "default-upload-progress",
+      "builtin": true,
+      "readonly": true,
+      "name": "Default Upload Progress",
+      "description": "Adaptive multi-file ingest progress for FRAME web uploads, with future FTP and BELABOX adapters.",
+      "tags": ["upload-progress", "stock", "default", "multi-file"],
+      "enabled": true,
+      "window_title": "FRAME: Upload Progress",
+      "type": "upload_progress",
+      "layout": {
+        "dock": "bl",
+        "pad": 20,
+        "scale": 1.0,
+        "width_px": 520,
+        "height_px": 0
+      },
+      "theme": {
+        "text_color": "#eef8ff",
+        "muted_color": "#9fc6dc",
+        "good_color": "#2cb4fb",
+        "warn_color": "#ffd166",
+        "bad_color": "#ff5f6d",
+        "plot_primary": "rgba(44, 180, 251, 0.95)",
+        "plot_secondary": "#8de7ff",
+        "bg_opacity_good": 0.34,
+        "bg_opacity_warn": 0.52,
+        "bg_opacity_bad": 0.72,
+        "border_radius_px": 10,
+        "backdrop_blur_px": 4,
+        "font_size_base_px": 16
+      },
+      "config": {
+        "active_poll_ms": 200,
+        "idle_poll_ms": 1000,
+        "complete_poll_ms": 500,
+        "complete_hide_ms": 5000,
+        "fetch_timeout_ms": 2000,
+        "show_speed": true,
+        "show_elapsed": true,
+        "show_sent": true,
+        "width_px": 520,
+        "idle_behavior": "hide",
+        "idle_label": "WAITING FOR UPLOAD"
+      }
     }
-  ]
+  ],
+  "presets": [],
+  "sources": [],
+  "legacy_aliases": {}
 }

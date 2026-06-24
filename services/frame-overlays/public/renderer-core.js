@@ -1,0 +1,87 @@
+export const QUALITY = Object.freeze({ UNKNOWN: "unknown", GOOD: "good", WARN: "warn", BAD: "bad" });
+
+export function qualityCandidate(stats, config) {
+  const bitrate = Number(stats?.bitrate || 0);
+  const rtt = Number(stats?.rtt);
+  const hasRtt = stats?.rtt !== null && stats?.rtt !== undefined && Number.isFinite(rtt);
+  const bitrateState = bitrate >= (config.bitrate_good_min ?? 5000) ? QUALITY.GOOD : bitrate >= (config.bitrate_warn_min ?? 2500) ? QUALITY.WARN : QUALITY.BAD;
+  const rttState = !hasRtt || rtt <= (config.rtt_warn_max ?? 1500) ? QUALITY.GOOD : rtt <= (config.rtt_bad_max ?? 3500) ? QUALITY.WARN : QUALITY.BAD;
+  if (!config.use_rtt_in_good || !hasRtt) return bitrateState;
+  if (bitrateState === QUALITY.BAD || rttState === QUALITY.BAD) return QUALITY.BAD;
+  if (bitrateState === QUALITY.WARN || rttState === QUALITY.WARN) return QUALITY.WARN;
+  return QUALITY.GOOD;
+}
+
+export function qualityStatusText(stable, stats, config, compact) {
+  const label = stable === QUALITY.UNKNOWN ? "CHECKING" : stable.toUpperCase();
+  const bitrate = Number(stats?.bitrate);
+  if (
+    compact
+    && stable === QUALITY.GOOD
+    && config.show_bitrate !== false
+    && config.show_bitrate_in_good !== false
+    && stats?.bitrate !== null
+    && stats?.bitrate !== undefined
+    && Number.isFinite(bitrate)
+  ) {
+    const formatted = bitrate >= 1000 ? `${(bitrate / 1000).toFixed(2)} Mbps` : `${bitrate} kbps`;
+    return `${label} · ${formatted}`;
+  }
+  return label;
+}
+
+export class QualityStabilizer {
+  constructor(initial = QUALITY.UNKNOWN) {
+    this.stable = initial;
+    this.warnStreak = 0;
+    this.badStreak = 0;
+  }
+  update(stats, config) {
+    const candidate = qualityCandidate(stats, config);
+    this.warnStreak = candidate === QUALITY.WARN ? this.warnStreak + 1 : 0;
+    this.badStreak = candidate === QUALITY.BAD ? this.badStreak + 1 : 0;
+    if (candidate === QUALITY.GOOD) this.stable = QUALITY.GOOD;
+    if (candidate === QUALITY.WARN && this.warnStreak >= Math.max(config.bitrate_streak_warn || 1, config.rtt_streak_warn || 1)) this.stable = QUALITY.WARN;
+    if (candidate === QUALITY.BAD && this.badStreak >= Math.max(config.bitrate_streak_bad || 1, config.rtt_streak_bad || 1)) this.stable = QUALITY.BAD;
+    return this.stable;
+  }
+}
+
+export function shouldResetRuntimeState(previousPayload, nextPayload) {
+  return Boolean(previousPayload && previousPayload.telemetry_identity !== nextPayload?.telemetry_identity);
+}
+
+export function telemetryIsStale(snapshot, pollMs, now = Date.now()) {
+  if (!snapshot?.received_at) return true;
+  return snapshot.stale || now - Date.parse(snapshot.received_at) > Math.max(5000, (pollMs || 1000) * 3);
+}
+
+export function canvasPixelSize(cssWidth, cssHeight, devicePixelRatio = 1) {
+  const ratio = Math.max(1, Number(devicePixelRatio) || 1);
+  return { width: Math.max(1, Math.round(cssWidth * ratio)), height: Math.max(1, Math.round(cssHeight * ratio)), ratio };
+}
+
+export function telemetryAvailability(stats) {
+  const available = (field) => stats?.[field] !== null
+    && stats?.[field] !== undefined
+    && Number.isFinite(Number(stats[field]));
+  const bitrate = available("bitrate");
+  const rtt = available("rtt");
+  return {
+    bitrate,
+    rtt,
+    latency: available("latency"),
+    buffer: available("buffer"),
+    server: true,
+    dropped: available("dropped_pkts"),
+    uptime: available("uptime"),
+    recovery: available("recovery_rate"),
+    meter: bitrate,
+    chart: bitrate || rtt,
+  };
+}
+
+export function normalizedTelemetryOrder(value, defaults) {
+  const supplied = Array.isArray(value) ? value.filter((id) => defaults.includes(id)) : [];
+  return [...new Set([...supplied, ...defaults])];
+}

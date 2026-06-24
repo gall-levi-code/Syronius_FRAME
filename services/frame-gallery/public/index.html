@@ -6,17 +6,42 @@
     <meta name="theme-color" content="#071923">
     <title>FRAME Photo Gallery</title>
     <link rel="icon" href="/gallery/assets/frame-logo-square.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="/gallery/assets/styles.css">
+    <script>
+      (() => {
+        try {
+          const root = document.documentElement;
+          const key = (value) => String(value).replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+          const aliases = { page: ["page", "bg", "background"], panel: ["panel", "topbar"], panelStrong: ["panel-2", "surface", "surface-strong", "control"], panelMuted: ["panel-muted", "queue"], border: ["border", "line"], borderSoft: ["border-soft"], label: ["label", "muted"], text: ["text", "control-text"], accent: ["accent"], accentStrong: ["accent-strong"], accentSoft: ["accent-soft"], accentBorder: ["accent-border"], accentContrast: ["accent-contrast", "action-text"], danger: ["danger", "bad"], warning: ["warning", "warn"], good: ["good"], toggleNightBg: ["toggle-night-bg"], toggleNightText: ["toggle-night-text"], toggleDayBg: ["toggle-day-bg"], toggleDayText: ["toggle-day-text"] };
+          window.FrameTheme = { apply(mode) {
+            const stored = mode || localStorage.getItem("frame-theme") || localStorage.getItem("frame-gallery-theme-mode") || localStorage.getItem("frame-audio-bridge-color-mode");
+            const theme = stored === "day" || stored === "night" ? stored : "night";
+            root.dataset.theme = theme;
+            root.dataset.themeMode = theme;
+            const palette = JSON.parse(localStorage.getItem("frame-theme-profile") || "null")?.palettes?.[theme];
+            if (!palette) return;
+            Object.entries(palette).forEach(([name, color]) => {
+              root.style.setProperty(`--frame-${key(name)}`, color);
+              (aliases[name] || []).forEach((alias) => root.style.setProperty(`--${alias}`, color));
+            });
+          } };
+          window.FrameTheme.apply();
+        } catch {}
+      })();
+    </script>
+    <link rel="stylesheet" href="/gallery/assets/styles.css?v=gallery-zoom-slider-5">
   </head>
   <body>
     <header class="topbar">
       <a class="brand" id="gallery-home" href="/today/gallery" aria-label="FRAME Photo Gallery">
-        <img src="/gallery/assets/frame-logo-square.svg" alt="">
-        <span><small>Syronius FRAME</small><strong>Photo Gallery</strong></span>
+        <img id="brand-logo" src="/gallery/assets/frame-logo-square.svg" alt="">
+        <span><small id="brand-name">Syronius FRAME</small><strong id="gallery-title">Photo Gallery</strong></span>
       </a>
-      <div class="summary">
-        <strong id="photo-count">0 photos</strong>
-        <span id="refresh-state">Checking gallery...</span>
+      <div class="topbar-actions">
+        <div class="summary">
+          <strong id="photo-count">0 photos</strong>
+          <span id="refresh-state">Checking gallery...</span>
+        </div>
+        <button id="theme-toggle" class="icon-toggle theme-toggle" type="button" aria-label="Switch to day mode" title="Switch to day mode"></button>
       </div>
     </header>
 
@@ -30,7 +55,6 @@
         <div class="heading-actions">
           <a class="secondary-button" href="/today/gallery/admin">Manage</a>
           <a id="all-galleries" class="secondary-button" href="/today/gallery" hidden>All galleries</a>
-          <button id="refresh" class="secondary-button" type="button">Refresh</button>
         </div>
       </section>
 
@@ -53,14 +77,11 @@
           <span id="lightbox-position"></span>
         </div>
         <div class="zoom-controls" aria-label="Image zoom">
-          <label for="zoom-select">Zoom</label>
-          <select id="zoom-select">
-            <option value="fit">Fit image</option>
-            <option value="25">25%</option>
-            <option value="50">50%</option>
-            <option value="75">75%</option>
-            <option value="100">100%</option>
-          </select>
+          <label for="zoom-slider">Zoom</label>
+          <span class="zoom-slider-shell">
+            <input id="zoom-slider" type="range" min="25" max="200" step="5" value="100" aria-label="Zoom percentage">
+            <output id="zoom-value" for="zoom-slider">Fit</output>
+          </span>
           <button id="zoom-fit" class="lightbox-control" type="button">Fit</button>
           <button id="lightbox-close" class="lightbox-control" type="button">Close</button>
         </div>
@@ -88,6 +109,6 @@
         </button>
       </article>
     </template>
-    <script type="module" src="/gallery/assets/gallery.js"></script>
+    <script type="module" src="/gallery/assets/gallery.js?v=gallery-zoom-slider-8"></script>
   </body>
 </html>

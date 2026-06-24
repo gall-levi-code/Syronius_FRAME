@@ -8,9 +8,9 @@ The pipeline also owns reversible Gallery Admin changes. Trashing writes `<base>
 without touching `.ready`; restoring removes only that marker. Every publish or management change
 atomically advances `latest.json.updated_at` and recalculates the visible latest photo and count.
 
-The pipeline keeps `/data/today` pointed at the current local-date gallery with an atomic relative
-symlink swap. The relative target remains traversable through Docker Desktop's Windows bind mount,
-so a host-side folder watcher can watch `<FRAME_HOST_DATA_ROOT>\today\*.ready`.
+Published manifests live under `/data/galleries/YYYY-MM-DD/`. For host-side StreamerBot, watch
+`<FRAME_HOST_DATA_ROOT>\galleries` with subfolders included and process only files whose names end
+exactly in `.ready`.
 
 `.ready` is published by atomically renaming a neutral `.frame-write-<uuid>.tmp` file. StreamerBot
 will report this as a `Renamed` event: use `fullPath`, not `oldFullPath`, and require `fileName` to

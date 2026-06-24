@@ -1,266 +1,200 @@
-# Syronius’ Frame (F.R.A.M.E.)
+# FRAME
 
-**Source of Truth:** [`docs/spec/v1.1.md`](docs/spec/v1.1.md)
+<p align="center">
+  <img src="services/frame-portal/public/frame-logo-square.svg" alt="FRAME logo" width="180">
+</p>
 
-**Running Backlog:** [`docs/TODO.md`](docs/TODO.md)
+FRAME is a modular, Docker-based streaming appliance for IRL and live production workflows.
+The official project name is FRAME; the full styled name is Syronius' F.R.A.M.E.
 
-Syronius’ Frame (F.R.A.M.E.) is a modular, containerized IRL streamer appliance stack. This repo is organized so the spec is the canonical contract, with schemas and decisions tracked alongside it.
+This repository is the platform stack: a shared portal, routing edge, video relay, OBS overlays,
+photo upload and gallery tools, Today viewer controls, audio tools, and optional Discord audio
+bridge. Each service has its own README under `services/` for deeper setup and operating details.
 
-## What’s in this repo
+Current release target: `v1.0.0-Alpha`.
 
-- `docs/spec/v1.1.md` — The V1 spec + V1.1 refinements (the canonical contract).
-- `docs/schemas/` — JSON Schemas for on-disk and API contracts (validation at startup / install-time).
-- `docs/adr/` — Architecture Decision Records (why we chose a behavior/contract).
-- `services/frame-portal/` — Implemented FRAME dashboard, status API, container health, logs, and alerts.
-- `services/frame-audio-bridge/` — Implemented Discord voice-to-OBS bridge service, control page, overlays, and Docker deployment.
-- `services/frame-audio/` — Implemented browser-capture audio monitor, AAC/HLS relay, and remote listener pages.
-- `services/frame-ingest-video/` — Pinned OpenIRL SRTLA receiver wrapper with deterministic FRAME API-key seeding.
-- `services/frame-streams/` — FRAME-owned stream profile management and live relay telemetry UI.
-- `services/frame-overlays/` — Stable OBS connectivity overlays and mobile-friendly preset wizard.
-- `services/frame-pipeline-photos/` — Internal photo validation, normalization, and publication pipeline.
-- `services/frame-photo-upload/` — Portal-authenticated mobile and browser photo upload input.
-- `services/frame-photo-ftp/` — Camera FTP input with a completed-upload stability gate.
-- `services/frame-gallery/` — Published photo gallery with cached thumbnails and protected Gallery Admin.
-- `services/frame-today/` — OBS photo viewer, live camera information, and authenticated mobile remote.
-- `apps/frame-setup/` — Tauri-based native setup and launcher prototype for host checks, storage
-  selection, and the future GUI-first installer flow.
-- `docker_container_samples/` — Reference container examples that are not yet first-class FRAME services.
+## Get The Code
 
-## Implemented Services
+From GitHub, open **Code** and choose **Download ZIP**, or use this direct link:
 
-### FRAME Edge
+https://github.com/gall-levi-code/Syronius_FRAME/archive/refs/heads/main.zip
 
-`services/frame-edge/` is the shared Traefik LAN HTTP entry point. It routes Portal, Stream
-Management, and Overlay paths through one address while direct service ports remain available for
-development and migration.
+Extract the ZIP somewhere with a simple path, for example:
 
-### FRAME Tunnel
-
-`services/frame-tunnel/` documents the optional staged Hybrid connector. Cloudflare traffic reaches
-an internal-only generated public gateway before FRAME Edge, keeping LAN-only routes unavailable.
-
-### FRAME Portal
-
-`services/frame-portal/` is the shared FRAME dashboard and observability service. It builds navigation
-from `stack-config.json`, reports container and disk health, and streams container logs.
-
-Protected tools reached through FRAME Edge redirect to the shared `/auth/login` page. One successful
-Portal login unlocks protected FRAME panels on the same hostname for seven days by default, then
-returns the browser to the originally requested page. Public OBS, listener, gallery, viewer, and
-tokenized routes remain login-free.
-
-```bash
-cd services/frame-portal
-docker compose up --build -d
+```text
+C:\FRAME\Syronius_FRAME
 ```
 
-Open `http://localhost/dashboard` through FRAME Edge. The direct development fallback remains
-`http://localhost:3730/dashboard`. See
-[`services/frame-portal/README.md`](services/frame-portal/README.md) for Docker access and security
-details.
+## Requirements
 
-### FRAME Audio Bridge
+FRAME runs through Docker Compose.
 
-`services/frame-audio-bridge/` is a working optional FRAME service. It joins Discord voice channels,
-creates separate per-streamer mixes, and serves permanent OBS audio/overlay URLs plus a mobile-first
-control page.
+- Install Docker Desktop for Windows: https://www.docker.com/get-started/
+- Docker Compose v2 is included with Docker Desktop.
+- Docker's Compose install notes are here: https://docs.docker.com/compose/install/
 
-It can still run standalone, or be managed by the root FRAME installer:
+After installing Docker Desktop, open PowerShell and check:
 
-```bash
-cd services/frame-audio-bridge
-cp .env.example .env
-docker compose up --build -d
+```powershell
+docker --version
+docker compose version
 ```
 
-See [`services/frame-audio-bridge/README.md`](services/frame-audio-bridge/README.md) for Discord,
-OBS, Cloudflare, security, and operating instructions.
+Linux and macOS use the same command center through `./stack.sh`; the walkthrough below is
+Windows-first because double-clicking `stack.cmd` is the easiest path for most FRAME users.
 
-### FRAME Audio Monitor
+## Quick Start On Windows
 
-`services/frame-audio/` captures a LAN browser audio input such as a virtual audio cable or
-VoiceMeeter output, relays it through ffmpeg as AAC/HLS, and serves stable remote listen pages.
-It is separate from FRAME Audio Bridge and does not require a Discord bot.
+Open the extracted FRAME folder in File Explorer, then double-click:
 
-```bash
-stack.cmd install --enable frame-audio-relay
-stack.cmd start
+```text
+stack.cmd
 ```
 
-Open Audio Monitor at `http://localhost/audio/admin` through FRAME Edge. The direct development
-fallback remains `http://localhost:3734/audio/admin`. See
-[`services/frame-audio/README.md`](services/frame-audio/README.md) for capture and listener details.
+FRAME opens a Command Prompt menu with numbered options.
 
-### FRAME Video Relay And Overlays
+For a first install:
 
-The video relay module wraps OpenIRL's SRTLA receiver, adds a FRAME-owned stream management UI, and
-serves stable OBS connectivity overlay URLs from a preset wizard.
+1. Choose **Guided setup**.
+2. Use the default LAN/local settings unless you already know you need something else.
+3. When asked which services to enable, turn on:
+   - Video Relay
+   - Overlays
+   - Browser Photo Upload
+   - Photo Gallery
+   - Today Tools
+4. Leave the other optional services disabled for now.
+5. Let the installer validate and verify the setup.
+6. When it offers to reconcile the Docker Compose stack, choose yes.
 
-```bash
-stack.cmd install --enable frame-video-relay --enable frame-overlays
-stack.cmd start
+If you return to the main menu before starting containers, choose **Start or update stack**.
+
+Open the Portal:
+
+```text
+http://localhost/dashboard
 ```
 
-Open Stream Management at `http://localhost/slsui` and the Overlay Wizard at
-`http://localhost/overlays/setup`. Direct development ports `3732` and `3733` remain available.
-The relay exposes SRTLA on `5000/udp`, SRT player output on
-`4000/udp`, direct SRT publisher ingest on `4001/udp`, and receiver statistics on `8080/tcp`.
+Useful first pages:
 
-### FRAME Photo Inputs And Pipeline
+- Portal: `http://localhost/dashboard`
+- Stream Management: `http://localhost/slsui`
+- Stream Statistics: `http://localhost/stats/<stream-id>`
+- Overlay Wizard: `http://localhost/overlays/setup`
+- Browser Photo Upload: `http://localhost/photos/upload`
+- Photo Gallery: `http://localhost/today/gallery`
+- OBS Today Viewer: `http://localhost/today/viewer`
+- Phone Today Remote: `http://localhost/today/remote`
 
-The internal Photo Pipeline is activated automatically when either photo input is enabled. Manual
-uploads stream to disk before entering staging; FTP uploads remain in the inbox until unchanged for
-three seconds. FTP remains LAN-only; browser upload can be exposed in Hybrid mode behind Portal authentication.
+Check status or logs:
 
-```bash
-stack.cmd install --enable frame-photo-webupload --enable frame-photo-ftp
-stack.cmd start
+- Choose **Status and logs** from the menu.
+
+Stop the stack:
+
+- Choose **Stop stack** from the menu.
+
+On Linux/macOS, run `chmod +x stack.sh` once, then run `./stack.sh` without arguments to open the
+same menu.
+
+## Optional Setup
+
+Set a shared Portal login for protected tools:
+
+- Open `stack.cmd`.
+- Choose **Credentials and security**.
+- Set the Portal username and password.
+
+Use a host-visible data path for StreamerBot `.ready` watchers:
+
+- Open `stack.cmd`.
+- Choose **Configure network/storage**.
+- Set the host data root to the Windows path that backs FRAME's `data` folder.
+
+Then watch:
+
+```text
+<host-data-root>\galleries
 ```
 
-Open the Portal-authenticated manual upload queue at `http://localhost/photos/upload`. Configure cameras with the generated
-`PHOTO_FTP_USERNAME`, `PHOTO_FTP_PASSWORD`, FTP port, and passive port range from `.env`.
-Photo Upload defaults to 10 selected files and 10 concurrent upload sessions; tune
+Include subfolders and process only files whose names end exactly in `.ready`.
+
+Photo Upload defaults to 10 selected files and 10 concurrent upload sessions. Tune
 `PHOTO_UPLOAD_MAX_FILES` and `PHOTO_UPLOAD_MAX_SESSIONS` from Advanced setup or `.env`.
 Photo FTP passwords default to a 5-character minimum through `PHOTO_FTP_MIN_PASSWORD_LENGTH`.
 
-Enable the gallery alongside either photo input:
+Run verification:
 
-```bash
-stack.cmd install --enable frame-photo-webupload --enable frame-photo-gallery
-stack.cmd start
-```
+- Choose **Validate and verify** from the menu.
 
-Open the multi-day gallery at `http://localhost/today/gallery`.
-Manage individual photos, complete albums, and the reversible trash at
-`http://localhost/today/gallery/admin`. Restoring a photo preserves its original `.ready` receipt,
-so it does not create a second StreamerBot event.
+## Native Setup App
 
-Enable Today Tools with the Gallery and either photo input:
+The native [`apps/frame-setup`](apps/frame-setup) prototype explores the GUI-first installer path.
+It uses the FRAME theme, offers Quick Start, Guided Setup, and Advanced flows, detects Docker
+readiness and previous installs, plans host storage, checks exposed ports, and opens the local
+`/setup` handoff.
 
-```bash
-stack.cmd install --enable frame-photo-webupload --enable frame-photo-gallery --enable frame-photo-todaytools
-stack.cmd start
-```
-
-Open the OBS viewer at `http://localhost/today/viewer`, its phone controller at
-`http://localhost/today/remote`, and the multi-day gallery at `http://localhost/today/gallery`.
-The upload page and remote controller use the configured Portal login.
-The viewer displays camera and exposure information extracted by the Photo Pipeline when EXIF is
-available.
-
-For a host-side StreamerBot folder watcher, configure the absolute host path once and watch its
-current-day convenience link:
+For development:
 
 ```powershell
-stack.cmd install --host-data-root "D:\path\to\Syronius_FRAME\data"
+npm run setup:dev
 ```
 
-Then watch `D:\path\to\Syronius_FRAME\data\today\*.ready`. The pipeline atomically keeps `today`
-pointed at the current local-date gallery. Existing `.ready` manifests are never rewritten, which
-prevents duplicate StreamerBot events.
+## What Is Included
 
-The final publish appears to StreamerBot as a `Renamed` event. Process `fullPath` only when
-`fileName` ends exactly in `.ready`; ignore `oldFullPath`, which identifies the neutral
-`.frame-write-<uuid>.tmp` source used to guarantee the manifest is complete before it appears.
+Start with the service README when you want to understand, operate, or customize a part of FRAME.
 
-## Unified installer
+| Area | Service |
+| --- | --- |
+| Native setup prototype | [`apps/frame-setup/`](apps/frame-setup/README.md) |
+| Routing | [`services/frame-edge/`](services/frame-edge/README.md) |
+| Shared login | [`services/frame-auth/`](services/frame-auth/README.md) |
+| Portal and status | [`services/frame-portal/`](services/frame-portal/README.md) |
+| Hybrid tunnel notes | [`services/frame-tunnel/`](services/frame-tunnel/README.md) |
+| Video relay wrapper | [`services/frame-ingest-video/`](services/frame-ingest-video/README.md) |
+| Stream management | [`services/frame-streams/`](services/frame-streams/README.md) |
+| OBS overlays | [`services/frame-overlays/`](services/frame-overlays/README.md) |
+| Browser photo upload | [`services/frame-photo-upload/`](services/frame-photo-upload/README.md) |
+| Camera FTP upload | [`services/frame-photo-ftp/`](services/frame-photo-ftp/README.md) |
+| Photo processing | [`services/frame-pipeline-photos/`](services/frame-pipeline-photos/README.md) |
+| Gallery | [`services/frame-gallery/`](services/frame-gallery/README.md) |
+| Today viewer and remote | [`services/frame-today/`](services/frame-today/README.md) |
+| Audio monitor | [`services/frame-audio/`](services/frame-audio/README.md) |
+| Discord audio bridge | [`services/frame-audio-bridge/`](services/frame-audio-bridge/README.md) |
 
-The implemented installer entrypoints own configuration, data layout, shared secrets, generated
-Compose, and lifecycle for deployable FRAME services:
+The canonical spec is [`docs/spec/v1.1.md`](docs/spec/v1.1.md). Installer details live in
+[`installer/README.md`](installer/README.md).
 
-- **Linux/macOS:** `stack.sh`
-- **Windows:** `stack.cmd`
+## Current TODO
 
-The installer is responsible for:
-- creating/updating `.env`
-- creating/updating the repo-local `./data/` directory (bind-mounted into containers as `/data`)
-- generating/updating `docker-compose.yml` and `/data/state/stack-config.json`
-- validating prerequisites, canonical configuration, and startup requirements
-- deploying the stack via `docker compose up -d`
+The public-facing backlog for the alpha release line:
 
-Fresh installations enable only FRAME Edge and Portal. All media, integration, and Discord services
-are opt-in so a new deployment never starts a bot or claims their network ports without an explicit
-capability choice.
+**Overlay System**
 
-### Commands
-> Docker and Docker Compose v2 are the only host runtime prerequisites. Both entrypoints use the
-> same shared installer runtime, preventing Windows and Unix behavior from drifting.
+- Add FTP/BELABOX upload-progress adapters and photo-pipeline correlation.
+- Add latest-photo overlay and Today Tools integration.
 
-Running `stack.cmd` or `./stack.sh` without arguments in an interactive terminal opens the numbered
-FRAME command center. It shows setup issues first, supports Standard and Advanced configuration,
-walks through hidden credential prompts, validates and verifies the result, then offers to reconcile
-the complete Compose stack. Direct commands remain available for scripts and automation.
+**Audio Monitor**
 
-The native [`apps/frame-setup`](apps/frame-setup) prototype explores the GUI-first installer path. It
-uses the same dark FRAME theme, offers Quick Start, Guided Setup, and Advanced flows, detects Docker
-readiness and previous installs, plans host storage, checks the small set of exposed ports, and opens
-the local `/setup` handoff.
+- Add relay retention controls and long-session soak tests.
+- Remember recently seen browser audio devices so users do not have to refresh or reselect as often.
 
-**Install / reconfigure**
-- Windows:
-  ```bat
-  stack.cmd
-  stack.cmd install
-  ```
-- Linux/macOS:
-  ```bash
-  chmod +x stack.sh
-  ./stack.sh
-  ./stack.sh install
-  ```
+**Installer / Platform**
 
-Import an existing ignored Audio Bridge environment when moving to the unified stack:
+- Add host-port conflict preflight detection.
+- Add LAN HTTPS and optional Cloudflare Access policy automation.
+- Define cross-platform external data-root mounting and reset boundaries.
 
-```bat
-stack.cmd install --import-env services/frame-audio-bridge/.env
-```
+**Photo Workflow**
 
-Existing standalone service containers and Audio Bridge data require a one-time handoff before the
-unified first start. Follow the migration steps in [`installer/README.md`](installer/README.md).
+- Build the Discord delivery outbox.
+- Add archive retention controls and disk-pressure policy.
+- Add reliable HEIC decoding when the production image runtime supports it.
+- Add camera and long-running FTP soak tests.
 
-Re-running `install` is the supported way to:
-- enable/disable capabilities
-- change direct host ports or the repository-relative data root
-- import an existing Audio Bridge `.env`
-
-**Lifecycle**
-- Start:
-  - `stack.* start` → `docker compose up -d`
-- Stop:
-  - `stack.* stop` → `docker compose down`
-- Status:
-  - `stack.* status` → prints service status + enabled capabilities (with secrets redacted)
-- Reset (destructive):
-  - `stack.* reset` → removes containers/volumes as applicable, deletes `./data/`, then re-runs `install` (requires confirmation)
-
-The installer supports LAN deployment and staged Hybrid deployment through a remotely managed
-Cloudflare Tunnel. Run `stack.cmd hybrid-stage` to generate the public allowlist and required
-configuration without launching the tunnel. Hybrid startup remains blocked until the tunnel token
-and Portal credentials are supplied. See [`installer/README.md`](installer/README.md).
-
-### Verification
-
-Run the deterministic contract and syntax checks before committing or deploying changes:
-
-```bat
-stack.cmd verify
-```
-
-```bash
-./stack.sh verify
-```
-
-GitHub pull requests also run service typechecks and builds through
-`.github/workflows/verify.yml`. The canonical capability, route, dependency, Compose-profile, and
-Hybrid-exposure registry is [`config/frame-services.json`](config/frame-services.json). See
-[`docs/STABILIZATION.md`](docs/STABILIZATION.md) for the current maintenance boundaries.
-
-### After install
-Once running, open the Portal:
-- `http://<frame-host>/dashboard`
-- If a change modifies a contract (file format / endpoint), update or add a schema in `docs/schemas/`.
-- Record non-trivial decisions in `docs/adr/` (one decision per file).
+The fuller engineering backlog remains in [`docs/TODO.md`](docs/TODO.md).
 
 ## License
 
-See [`LICENSE`](LICENSE) (if/when added).
+FRAME is released under the MIT License. See
+[`LICENSE`](https://github.com/gall-levi-code/Syronius_FRAME/blob/main/LICENSE).

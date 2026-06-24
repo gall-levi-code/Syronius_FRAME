@@ -11,24 +11,21 @@ removed.
 - [x] Build `frame-ingest-video` around the OpenIRL SRTLA Receiver.
 - [x] Build a FRAME-owned, themed `frame-streams` management UI against the receiver API.
 - [x] Build the `frame-overlays` connectivity renderer and wizard.
-- [x] Seed `default-connectivity` as the stock preset on first run.
-- [x] Let users restore or duplicate the stock default without overwriting their custom presets.
-- [x] Validate that `default_preset_id` resolves to an existing preset.
-- [x] Allow stock connectivity presets to remain unbound until selected in the wizard.
+- [x] Ship `default-connectivity` as an immutable built-in template.
+- [x] Separate reusable presets from bound OBS sources and permanent source URLs.
+- [x] Migrate V1 state with backups and preserve every legacy `/overlays/view/<preset-id>` URL.
+- [x] Deduplicate telemetry polling and fan out live telemetry/config revisions over SSE.
 - [x] Warn when visibility toggles would make an overlay completely blank.
-- [x] Provide stable `/overlays/view/<preset-id>` OBS URLs.
-- [x] Add stream-card actions for Create Overlay, Manage Overlays, and Open Statistics.
-- Add preset import/export to the wizard.
+- [x] Provide keyed `/overlays/view/<slug>/<source-key>` URLs while preserving V1 aliases.
+- [x] Add a top-level Manage Overlays action and per-stream bound-source counts/listing.
+- [x] Add the immutable upload-progress template, type-isolated presets, web-upload telemetry adapter, and multi-file renderer foundation.
 - Add live SRT publisher integration tests so renderer quality states are exercised with real traffic.
 
 ### Keep Separate For Later
 
-- Upload progress overlay and photo-pipeline telemetry integration.
+- FTP/BELABOX upload-progress adapters and photo-pipeline queued/processing/published correlation.
 - Latest-photo overlay and Today Tools integration.
 - General-purpose freeform overlay editor.
-- Cross-service overlay composition and scene bundles.
-- Import/export preset packs.
-- Per-preset access tokens for publicly exposed OBS URLs.
 
 ## Audio Monitor
 
@@ -36,10 +33,8 @@ removed.
 - [x] Relay browser audio through ffmpeg as AAC/HLS with stable listener pages.
 - [x] Add always-on silence generation for uninterrupted listener URLs.
 - [x] Integrate Audio Monitor with FRAME Edge, the installer, and the unified data root.
-- Add authenticated Hybrid routing before exposing capture or admin routes publicly.
-- Add listener-generation invalidation controls for forcibly disconnecting old listener sessions.
 - Add relay retention controls and long-session soak tests.
-- Add automated browser capture integration tests with a deterministic audio input.
+- Remember recently seen browser audio devices so users do not have to refresh or reselect as often.
 
 ## Installer / Platform
 
@@ -47,7 +42,8 @@ removed.
 - [x] Add a root `stack verify` command and GitHub verification workflow.
 - [x] Decide that `frame-pipeline-photos` is an internal service activated by photo capabilities.
 - Add API integration tests for implemented HTTP services.
-- Add Audio Bridge session, profile, and control mutation tests before splitting `SessionManager`.
+- [x] Add Audio Bridge session, profile, and control mutation tests before splitting `SessionManager`.
+- [x] Add Audio Bridge HTTP route tests for portal status, bridge pages, and token gates.
 - Split installer environment/state responsibilities out of `frame-installer.mjs`.
 - [x] Add a numbered interactive command center with issue-first Standard/Advanced guided setup.
 - Add host-port conflict preflight detection.

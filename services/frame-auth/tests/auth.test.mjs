@@ -63,6 +63,12 @@ test("protected requests redirect to login and one session unlocks multiple pane
     });
     assert.equal(streams.status, 200);
     assert.equal(streams.headers.get("authorization"), `Basic ${Buffer.from("streams:streams-secret").toString("base64")}`);
+
+    const statsFallback = await fetch(`${base}/auth/check`, {
+      headers: { cookie: cookie || "", "x-forwarded-uri": "/stats/play_test" },
+    });
+    assert.equal(statsFallback.status, 200);
+    assert.equal(statsFallback.headers.get("authorization"), `Basic ${Buffer.from("frame:secret").toString("base64")}`);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
@@ -86,7 +92,7 @@ test("unconfigured installs pass through without a login wall", async () => {
   }
 });
 
-test("public deny endpoint returns an unbranded not-found response", async () => {
+test("public deny and explicit error endpoints return branded HTML pages", async () => {
   const app = createApp({
     portal: { username: "frame", password: "secret" },
     streams: { username: "", password: "" },
@@ -98,9 +104,30 @@ test("public deny endpoint returns an unbranded not-found response", async () =>
   const address = server.address();
   assert.ok(address && typeof address === "object");
   try {
-    const response = await fetch(`http://127.0.0.1:${address.port}/auth/public-denied`);
-    assert.equal(response.status, 404);
-    assert.equal(await response.text(), "Not found.");
+    const denied = await fetch(`http://127.0.0.1:${address.port}/auth/public-denied`);
+    assert.equal(denied.status, 404);
+    assert.match(denied.headers.get("content-type") ?? "", /text\/html/);
+    const deniedHtml = await denied.text();
+    assert.match(deniedHtml, /Syronius FRAME/);
+    assert.match(deniedHtml, /Page not found/);
+    assert.doesNotMatch(deniedHtml, /Return to FRAME/);
+
+    const forbidden = await fetch(`http://127.0.0.1:${address.port}/auth/error/403`);
+    assert.equal(forbidden.status, 403);
+    const forbiddenHtml = await forbidden.text();
+    assert.match(forbiddenHtml, /Access not available/);
+    assert.match(forbiddenHtml, /data:image\/svg\+xml/);
+    assert.doesNotMatch(forbiddenHtml, /\/assets\/frame-logo-square\.svg/);
+
+    const unavailable = await fetch(`http://127.0.0.1:${address.port}/auth/error/502`);
+    assert.equal(unavailable.status, 502);
+    const unavailableHtml = await unavailable.text();
+    assert.match(unavailableHtml, /Service did not answer/);
+    assert.match(unavailableHtml, /FRAME could not reach this service\.<br>It may still be starting\./);
+
+    const logo = await fetch(`http://127.0.0.1:${address.port}/assets/frame-logo-square.svg`);
+    assert.equal(logo.status, 200);
+    assert.match(logo.headers.get("content-type") ?? "", /image\/svg\+xml/);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

@@ -67,7 +67,9 @@
       "required": [
         "dashboard",
         "status",
+        "theme",
         "video_relay_ui",
+        "video_relay_stats",
         "overlays_root",
         "overlays_wizard",
         "photo_upload",
@@ -91,7 +93,15 @@
           "type": "string",
           "pattern": "^/"
         },
+        "theme": {
+          "type": "string",
+          "pattern": "^/"
+        },
         "video_relay_ui": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "video_relay_stats": {
           "type": "string",
           "pattern": "^/"
         },

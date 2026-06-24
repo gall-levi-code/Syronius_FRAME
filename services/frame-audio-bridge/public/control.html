@@ -5,9 +5,34 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>FRAME Audio Bridge Control</title>
     <link rel="icon" type="image/svg+xml" href="/bridge/assets/frame-logo-square.svg?v=__ASSET_VERSION__" />
+    <script>
+      (() => {
+        try {
+          const root = document.documentElement;
+          const key = (value) => String(value).replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+          const aliases = { page: ["page", "bg", "background"], panel: ["panel", "topbar"], panelStrong: ["panel-2", "surface", "surface-strong", "control"], panelMuted: ["panel-muted", "queue"], border: ["border", "line"], borderSoft: ["border-soft"], label: ["label", "muted"], text: ["text", "control-text"], accent: ["accent"], accentStrong: ["accent-strong"], accentSoft: ["accent-soft"], accentBorder: ["accent-border"], accentContrast: ["accent-contrast", "action-text"], danger: ["danger", "bad"], warning: ["warning", "warn"], good: ["good"], toggleNightBg: ["toggle-night-bg"], toggleNightText: ["toggle-night-text"], toggleDayBg: ["toggle-day-bg"], toggleDayText: ["toggle-day-text"] };
+          window.FrameTheme = { apply(mode) {
+            const stored = mode || localStorage.getItem("frame-theme") || localStorage.getItem("frame-gallery-theme-mode") || localStorage.getItem("frame-audio-bridge-color-mode");
+            const theme = stored === "day" || stored === "night" ? stored : "night";
+            root.dataset.theme = theme;
+            root.dataset.themeMode = theme;
+            const palette = JSON.parse(localStorage.getItem("frame-theme-profile") || "null")?.palettes?.[theme];
+            if (!palette) return;
+            Object.entries(palette).forEach(([name, color]) => {
+              root.style.setProperty(`--frame-${key(name)}`, color);
+              (aliases[name] || []).forEach((alias) => root.style.setProperty(`--${alias}`, color));
+            });
+          } };
+          window.FrameTheme.apply();
+        } catch {}
+      })();
+    </script>
     <link rel="stylesheet" href="/bridge/assets/styles.css?v=__ASSET_VERSION__" />
   </head>
   <body class="control-page">
+    <script>
+      document.body.classList.toggle("theme-day", document.documentElement.dataset.theme === "day");
+    </script>
     <main class="control-shell">
       <header class="control-header">
         <div class="control-brand">

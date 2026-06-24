@@ -3,6 +3,12 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import express from "express";
 import path from "node:path";
+import {
+  STATS_OUTPUTS,
+  parseStatsOutputFormat,
+  renderStatsOutput,
+  type NormalizedStats,
+} from "./statsOutput";
 
 type SourceType = "sls" | "custom";
 
@@ -20,6 +26,19 @@ interface StreamProfile {
   source_type: SourceType;
   source_label: string;
   stats?: PublisherStats | null;
+  bound_overlays?: BoundOverlay[];
+}
+
+interface BoundOverlay {
+  source_id: string;
+  display_name: string;
+  slug: string;
+  preset_name: string;
+  enabled: boolean;
+}
+
+interface InternalOverlayBinding extends BoundOverlay {
+  stream_profile_id: string;
 }
 
 interface CustomStream {
@@ -36,7 +55,7 @@ interface CustomStreamDocument {
   streams: CustomStream[];
 }
 
-interface PublisherStats {
+interface PublisherStats extends NormalizedStats {
   bitrate: number;
   buffer: number | null;
   dropped_pkts: number;
@@ -83,6 +102,7 @@ const config = {
   playerPort: readInt("SRT_PLAYER_PORT", 4000),
   senderPort: readInt("SRT_SENDER_PORT", 4001),
   statsPort: readInt("SLS_STATS_PORT", 8080),
+  publicBaseUrl: stripTrailingSlash(process.env.STREAMS_PUBLIC_BASE_URL?.trim() || "http://localhost"),
   overlayWizardUrl: process.env.OVERLAY_WIZARD_URL?.trim() || "http://localhost:3733/overlays/setup",
   overlaysApiUrl: stripTrailingSlash(process.env.OVERLAYS_API_URL?.trim() || ""),
   requestTimeoutMs: readInt("REQUEST_TIMEOUT_MS", 3000),
@@ -130,6 +150,28 @@ app.get("/internal/streams/:id/stats", requireInternalAuth, async (request, resp
   }
 });
 
+app.get("/stats", (_request, response) => {
+  response.setHeader("Cache-Control", "no-store");
+  response.json({ service: "frame-streams", outputs: STATS_OUTPUTS });
+});
+
+app.get("/stats/:id", async (request, response, next) => {
+  try {
+    const id = validateId(request.params.id, "stream profile ID");
+    const [profile, stats] = await Promise.all([readProfile(id), readStats(id)]);
+    const format = safeStatsOutputFormat(request.query.output);
+    const output = renderStatsOutput(
+      format,
+      profile ?? fallbackProfile(id, stats),
+      stats,
+    );
+    response.setHeader("Cache-Control", "no-store");
+    response.status(output.statusCode).json(output.body);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.use((request, response, next) => {
   if (!config.username || !config.password) {
     next();
@@ -158,12 +200,21 @@ app.get("/slsui/api/config", (_request, response) => {
       stats: config.statsPort,
     },
     overlay_wizard_url: config.overlayWizardUrl,
+    stats_base_url: `${config.publicBaseUrl}/stats`,
+    stats_outputs: STATS_OUTPUTS,
   });
 });
 
 app.get("/slsui/api/streams", async (_request, response, next) => {
   try {
-    response.json({ streams: await readProfiles(true) });
+    const [streams, overlayBindings] = await Promise.all([readProfiles(true), readOverlayBindings()]);
+    response.json({
+      streams: streams.map((stream) => ({
+        ...stream,
+        bound_overlays: overlayBindings.bindings.get(stream.id) ?? [],
+      })),
+      overlay_bindings_available: overlayBindings.available,
+    });
   } catch (error) {
     next(error);
   }
@@ -221,8 +272,11 @@ app.delete("/slsui/api/streams/:id", async (request, response, next) => {
 
 app.get("/slsui/api/stats/:id", async (request, response, next) => {
   try {
-    const stats = await readStats(validateId(request.params.id, "stream profile ID"));
-    response.status(stats ? 200 : 404).json({ stats });
+    const id = validateId(request.params.id, "stream profile ID");
+    const stats = await readStats(id);
+    const output = renderStatsOutput("frame", fallbackProfile(id, stats), stats);
+    response.setHeader("Cache-Control", "no-store");
+    response.status(output.statusCode).json(output.body);
   } catch (error) {
     next(error);
   }
@@ -271,6 +325,10 @@ async function readProfiles(includeStats: boolean): Promise<StreamProfile[]> {
     return profiles;
   }
   return await Promise.all(profiles.map(async (profile) => ({ ...profile, stats: await readStats(profile.id) })));
+}
+
+async function readProfile(id: string): Promise<StreamProfile | null> {
+  return (await readProfiles(false)).find((profile) => profile.id === id) ?? null;
 }
 
 async function readSlsProfiles(): Promise<StreamId[]> {
@@ -407,6 +465,16 @@ function publicCustomProfile(stream: CustomStream): StreamProfile {
   };
 }
 
+function fallbackProfile(id: string, stats: PublisherStats | null): StreamProfile {
+  return {
+    id,
+    player: id,
+    description: id,
+    source_type: stats?.source_type ?? "sls",
+    source_label: stats?.source_type === "custom" ? "Custom telemetry" : "FRAME SRTLA",
+  };
+}
+
 async function withOverlayCleanup(id: string, result: Record<string, unknown>): Promise<Record<string, unknown>> {
   try {
     const unboundOverlays = await unbindOverlays(id);
@@ -467,12 +535,59 @@ async function unbindOverlays(id: string): Promise<string[]> {
     if (!response.ok) {
       throw new Error(`Overlay service returned ${response.status}`);
     }
-    return Array.isArray(result.unbound_presets)
-      ? result.unbound_presets.filter((value): value is string => typeof value === "string")
+    const unbound = result.unbound_sources ?? result.unbound_presets;
+    return Array.isArray(unbound)
+      ? unbound.filter((value): value is string => typeof value === "string")
       : [];
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function readOverlayBindings(): Promise<{ available: boolean; bindings: Map<string, BoundOverlay[]> }> {
+  const bindings = new Map<string, BoundOverlay[]>();
+  if (!config.overlaysApiUrl) return { available: false, bindings };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), config.requestTimeoutMs);
+  try {
+    const response = await fetch(`${config.overlaysApiUrl}/internal/streams/overlay-bindings`, {
+      headers: {
+        Accept: "application/json",
+        Authorization: `Bearer ${config.slsApiKey}`,
+      },
+      signal: controller.signal,
+    });
+    if (!response.ok) return { available: false, bindings };
+    const result = await response.json() as { bindings?: InternalOverlayBinding[] };
+    for (const binding of result.bindings ?? []) {
+      if (!isInternalOverlayBinding(binding)) continue;
+      const existing = bindings.get(binding.stream_profile_id) ?? [];
+      existing.push({
+        source_id: binding.source_id,
+        display_name: binding.display_name,
+        slug: binding.slug,
+        preset_name: binding.preset_name,
+        enabled: binding.enabled,
+      });
+      bindings.set(binding.stream_profile_id, existing);
+    }
+    return { available: true, bindings };
+  } catch {
+    return { available: false, bindings };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function isInternalOverlayBinding(value: unknown): value is InternalOverlayBinding {
+  if (!value || typeof value !== "object") return false;
+  const binding = value as Partial<InternalOverlayBinding>;
+  return typeof binding.stream_profile_id === "string"
+    && typeof binding.source_id === "string"
+    && typeof binding.display_name === "string"
+    && typeof binding.slug === "string"
+    && typeof binding.preset_name === "string"
+    && typeof binding.enabled === "boolean";
 }
 
 async function responseJson(response: Response): Promise<Record<string, unknown>> {
@@ -600,6 +715,14 @@ function parseRecoveryRate(value: unknown): number | null {
     return null;
   }
   return nullableNumber(value);
+}
+
+function safeStatsOutputFormat(value: unknown) {
+  try {
+    return parseStatsOutputFormat(value);
+  } catch (error) {
+    throw new RequestError(400, errorMessage(error));
+  }
 }
 
 function requireInternalAuth(request: express.Request, response: express.Response, next: express.NextFunction): void {

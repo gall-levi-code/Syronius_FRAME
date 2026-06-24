@@ -294,6 +294,11 @@ async function status() {
     }`,
   );
   console.log(
+    `  Stream Statistics: ${
+      config.capabilities["frame-video-relay"] ? `${env.STREAMS_PUBLIC_BASE_URL}/stats/<stream-id>` : "disabled"
+    }`,
+  );
+  console.log(
     `  Overlay Wizard: ${
       config.capabilities["frame-overlays"] ? `${env.EDGE_LAN_BASE_URL}/overlays/setup` : "disabled"
     }`,
@@ -475,6 +480,7 @@ function buildEnvironment(existing, options, mode, capabilities) {
     AUDIO_PUBLIC_BASE_URL: edgePublicBaseUrl,
     AUDIO_CAPTURE_BASE_URL: edgeLanBaseUrl,
     STREAMS_PORT: streamsPort,
+    STREAMS_PUBLIC_BASE_URL: edgePublicBaseUrl,
     OVERLAYS_PORT: overlaysPort,
     PHOTO_UPLOAD_PORT: photoUploadPort,
     PHOTO_FTP_PORT: photoFtpPort,
@@ -617,6 +623,9 @@ function validateEnvironment(env, config, forStart) {
   if (config.capabilities["frame-photo-ftp"] && String(env.PHOTO_FTP_PASSWORD ?? "").length < Number(photoFtpMinPasswordLength)) {
     throw new Error(`PHOTO_FTP_PASSWORD is missing or shorter than ${photoFtpMinPasswordLength} characters. Re-run stack install.`);
   }
+  if (config.capabilities["frame-video-relay"] && env.STREAMS_PUBLIC_BASE_URL !== env.EDGE_PUBLIC_BASE_URL) {
+    throw new Error("STREAMS_PUBLIC_BASE_URL must match EDGE_PUBLIC_BASE_URL. Re-run stack install.");
+  }
   if (config.mode === "HYBRID") {
     const hostname = normalizeHostname(env.CLOUDFLARE_PUBLIC_HOSTNAME, true);
     if (env.EDGE_PUBLIC_BASE_URL !== `https://${hostname}`) {
@@ -713,6 +722,8 @@ function generatePublicRoutes(prefixes) {
         - public
       rule: "Path(\`/\`)"
       priority: 110
+      middlewares:
+        - frame-public-errors
       service: frame-edge
 `
     : "";
@@ -722,6 +733,8 @@ function generatePublicRoutes(prefixes) {
         - public
       rule: "${prefixes.map((prefix) => `(Path(\`${prefix}\`) || PathPrefix(\`${prefix}/\`))`).join(" || ")}"
       priority: 100
+      middlewares:
+        - frame-public-errors
       service: frame-edge
 `
     : "";
@@ -735,7 +748,24 @@ http:
       middlewares:
         - frame-public-gateway-health-path
       service: frame-edge
-${rootRouter}${publicRouter}  middlewares:
+${rootRouter}${publicRouter}    frame-public-not-found:
+      entryPoints:
+        - public
+      rule: "PathPrefix(\`/\`)"
+      priority: 1
+      middlewares:
+        - frame-public-not-found-path
+      service: frame-edge
+  middlewares:
+    frame-public-errors:
+      errors:
+        status:
+          - "400-599"
+        service: frame-edge
+        query: "/auth/error/{status}"
+    frame-public-not-found-path:
+      replacePath:
+        path: /auth/error/404
     frame-public-gateway-health-path:
       replacePath:
         path: /healthz
@@ -795,7 +825,7 @@ async function readStandardInput() {
 }
 
 async function ensureDataDirectories(dataRoot) {
-  for (const directory of ["state", "audio-bridge", "audio-monitor", "video-relay", "overlays", "logs", "inbox", "staging", "processing", "galleries", "gallery-cache", "archive", "quarantine"]) {
+  for (const directory of ["state", "audio-bridge", "audio-monitor", "video-relay", "overlays", "logs", "inbox", "staging", "processing", "galleries", "gallery-cache", "gallery-branding", "archive", "quarantine"]) {
     await mkdir(path.join(dataRoot, directory), { recursive: true });
   }
 }
@@ -1165,6 +1195,7 @@ function serializeEnv(env) {
         "SRT_PLAYER_PORT",
         "SRT_SENDER_PORT",
         "SLS_STATS_PORT",
+        "STREAMS_PUBLIC_BASE_URL",
         "STREAMS_USERNAME",
         "STREAMS_PASSWORD",
       ],

@@ -7,6 +7,7 @@ const queue = document.querySelector("#queue");
 const template = document.querySelector("#queue-template");
 const uploadLimits = document.querySelector("#upload-limits");
 const dropZone = document.querySelector("#drop-zone");
+const themeToggle = document.querySelector("#theme-toggle");
 
 let entries = [];
 let uploading = false;
@@ -15,6 +16,18 @@ let limits = {
   maxSessions: 10,
   maxInputBytes: 50 * 1024 * 1024,
 };
+
+initializeTheme();
+themeToggle.addEventListener("click", toggleTheme);
+window.addEventListener("storage", (event) => {
+  if (event.key === "frame-theme-profile") {
+    setThemeMode(readStoredTheme(), false);
+    return;
+  }
+  if (event.key === "frame-theme" && (event.newValue === "day" || event.newValue === "night")) {
+    setThemeMode(event.newValue, false);
+  }
+});
 
 input.addEventListener("change", () => {
   queueFiles([...(input.files || [])]);
@@ -135,6 +148,9 @@ function uploadEntry(entry) {
     data.append("photo", entry.file, entry.file.name);
     const request = new XMLHttpRequest();
     request.open("POST", "/photos/api/upload");
+    entry.transferId ||= createTransferId();
+    request.setRequestHeader("X-Frame-Transfer-Id", entry.transferId);
+    request.setRequestHeader("X-Frame-File-Size", String(entry.file.size));
     setEntryState(entry, "uploading", "Uploading");
     updateProgress(entry, 0, entry.file.size);
     request.upload.addEventListener("progress", (event) => {
@@ -155,6 +171,13 @@ function uploadEntry(entry) {
     request.addEventListener("abort", () => reject(new Error("Upload cancelled.")));
     request.send(data);
   });
+}
+
+function createTransferId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  const bytes = new Uint8Array(18);
+  globalThis.crypto.getRandomValues(bytes);
+  return [...bytes].map((value) => value.toString(16).padStart(2, "0")).join("");
 }
 
 function createQueueItem(file) {
@@ -198,6 +221,39 @@ async function loadLimits() {
   } catch {
     uploadLimits.textContent = "Select or drop photos to queue them into FRAME.";
   }
+}
+
+function initializeTheme() {
+  setThemeMode(readStoredTheme(), false);
+}
+
+function toggleTheme() {
+  setThemeMode(document.documentElement.dataset.theme === "day" ? "night" : "day", true);
+}
+
+function setThemeMode(nextMode, persist) {
+  const mode = nextMode === "day" ? "day" : "night";
+  document.documentElement.dataset.theme = mode;
+  window.FrameTheme?.apply(mode);
+  const nextLabel = mode === "day" ? "Switch to night mode" : "Switch to day mode";
+  themeToggle.setAttribute("aria-label", nextLabel);
+  themeToggle.title = nextLabel;
+  themeToggle.setAttribute("aria-pressed", String(mode === "day"));
+  if (persist) writeStoredTheme(mode);
+}
+
+function readStoredTheme() {
+  try {
+    const stored = localStorage.getItem("frame-theme");
+    if (stored === "day" || stored === "night") return stored;
+  } catch {}
+  return "night";
+}
+
+function writeStoredTheme(mode) {
+  try {
+    localStorage.setItem("frame-theme", mode);
+  } catch {}
 }
 
 button.disabled = true;

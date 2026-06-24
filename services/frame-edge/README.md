@@ -22,3 +22,6 @@ file-provider route allowlist. `frame-tunnel` connects Cloudflare only to that g
 directly to the full LAN edge. This prevents LAN-only paths such as `/audio/admin`,
 `/audio/capture`, and `/slsui` from being exposed by an overly broad Cloudflare Published
 application route.
+
+External Hybrid requests that miss the allowlist, hit a denied public path, or receive a downstream
+`4xx`/`5xx` response are sent to shared FRAME error pages served by `frame-auth`.

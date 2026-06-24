@@ -13,7 +13,7 @@ export async function createApp(store: GalleryStore, publicDir: string, manageme
   await store.init();
   const app = express();
   app.disable("x-powered-by");
-  app.use(express.json({ limit: "16kb" }));
+  app.use(express.json({ limit: "2mb" }));
 
   app.get("/healthz", async (_request, response, next) => {
     try {
@@ -30,6 +30,22 @@ export async function createApp(store: GalleryStore, publicDir: string, manageme
   });
   app.use("/gallery/assets", express.static(publicDir, { index: false, maxAge: "1h" }));
   app.use("/today/gallery/assets", express.static(publicDir, { index: false, maxAge: "1h" }));
+  app.get("/gallery/api/branding", async (_request, response, next) => {
+    try {
+      response.setHeader("Cache-Control", "no-store");
+      response.json({ branding: await store.getBranding() });
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.get("/gallery/branding/logo.webp", async (_request, response, next) => {
+    try {
+      response.setHeader("Cache-Control", "public, max-age=3600");
+      response.type("image/webp").sendFile(await store.requireLogo());
+    } catch (error) {
+      next(error);
+    }
+  });
   if (management) {
     const protect = requireBasicAuth(management.auth);
     app.get(["/gallery/admin", "/gallery/admin/", "/today/gallery/admin", "/today/gallery/admin/"], protect, (_request, response) => {
@@ -47,6 +63,38 @@ export async function createApp(store: GalleryStore, publicDir: string, manageme
       try {
         response.setHeader("Cache-Control", "no-store");
         response.json(await pipelineRequest(management, "/api/internal/photo-pipeline/manage", request.body));
+      } catch (error) {
+        next(error);
+      }
+    });
+    app.get(["/gallery/admin/api/branding", "/today/gallery/admin/api/branding"], protect, async (_request, response, next) => {
+      try {
+        response.setHeader("Cache-Control", "no-store");
+        response.json({ branding: await store.getBranding() });
+      } catch (error) {
+        next(error);
+      }
+    });
+    app.put(["/gallery/admin/api/branding", "/today/gallery/admin/api/branding"], protect, async (request, response, next) => {
+      try {
+        response.setHeader("Cache-Control", "no-store");
+        response.json({ branding: await store.updateBranding(request.body) });
+      } catch (error) {
+        next(error);
+      }
+    });
+    app.post(["/gallery/admin/api/branding/logo", "/today/gallery/admin/api/branding/logo"], protect, async (request, response, next) => {
+      try {
+        response.setHeader("Cache-Control", "no-store");
+        response.json({ branding: await store.saveLogo(request.body) });
+      } catch (error) {
+        next(error);
+      }
+    });
+    app.delete(["/gallery/admin/api/branding/logo", "/today/gallery/admin/api/branding/logo"], protect, async (_request, response, next) => {
+      try {
+        response.setHeader("Cache-Control", "no-store");
+        response.json({ branding: await store.deleteLogo() });
       } catch (error) {
         next(error);
       }

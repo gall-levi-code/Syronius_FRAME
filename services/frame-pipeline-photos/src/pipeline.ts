@@ -1,15 +1,12 @@
 import { randomUUID } from "node:crypto";
 import {
   access,
-  lstat,
   mkdir,
   readdir,
   readFile,
-  readlink,
   rename,
   rm,
   stat,
-  symlink,
 } from "node:fs/promises";
 import path from "node:path";
 import exifReader from "exif-reader";
@@ -112,7 +109,7 @@ export class PhotoPipeline {
     for (const directory of Object.values(this.directories)) {
       await mkdir(directory, { recursive: true });
     }
-    await this.ensureTodayLink();
+    await this.ensureCurrentGallery();
     await this.reconcileLatest();
   }
 
@@ -134,7 +131,7 @@ export class PhotoPipeline {
     if (this.scanning) return;
     this.scanning = true;
     try {
-      await this.ensureTodayLink();
+      await this.ensureCurrentGallery();
       await this.claimStagedFiles();
       const claims = await this.readClaims();
       this.status.queue_depth = claims.length;
@@ -469,7 +466,7 @@ export class PhotoPipeline {
     latest_photo_at: string | null;
   }> {
     const revision = await this.nextRevisionTimestamp(updatedAt);
-    const dateFolder = await this.ensureTodayLink();
+    const dateFolder = await this.ensureCurrentGallery();
     const directory = path.join(this.directories.galleries, dateFolder);
     const candidates: Array<{ dateFolder: string; base: string; mtimeMs: number; updatedAt: string }> = [];
     const entries = await readdir(directory);
@@ -570,32 +567,10 @@ export class PhotoPipeline {
     await rm(path.join(this.config.dataRoot, "gallery-cache", dateFolder, `${base}.webp`), { force: true });
   }
 
-  private async updateTodayLink(dateFolder: string): Promise<void> {
-    const today = path.join(this.config.dataRoot, "today");
-    const target = path.join(this.directories.galleries, dateFolder);
-    const relativeTarget = path.relative(path.dirname(today), target);
-    try {
-      const current = await readlink(today);
-      if (path.resolve(path.dirname(today), current) === path.resolve(target)) return;
-    } catch {
-      // Missing or non-link paths are replaced below.
-    }
-    const temporary = `${today}.${randomUUID()}.tmp`;
-    await rm(temporary, { recursive: true, force: true });
-    await symlink(relativeTarget, temporary, process.platform === "win32" ? "junction" : "dir");
-    try {
-      await rename(temporary, today);
-    } catch {
-      await rm(today, { recursive: true, force: true });
-      await rename(temporary, today);
-    }
-  }
-
-  private async ensureTodayLink(): Promise<string> {
+  private async ensureCurrentGallery(): Promise<string> {
     const local = localParts(new Date(), this.config.timezone);
     const dateFolder = `${local.year}-${local.month}-${local.day}`;
     await mkdir(path.join(this.directories.galleries, dateFolder), { recursive: true });
-    await this.updateTodayLink(dateFolder);
     return dateFolder;
   }
 

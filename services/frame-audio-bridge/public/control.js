@@ -197,12 +197,15 @@
 
   function readColorMode() {
     try {
-      return localStorage.getItem("frame-audio-bridge-color-mode") === "day"
-        ? "day"
-        : "night";
+      const stored = localStorage.getItem("frame-theme") || localStorage.getItem("frame-audio-bridge-color-mode");
+      if (stored === "day" || stored === "night") {
+        localStorage.setItem("frame-theme", stored);
+        return stored;
+      }
     } catch {
-      return "night";
+      // Local storage can be unavailable in hardened embedded browsers.
     }
+    return "night";
   }
 
   function readGlobalLock() {
@@ -292,6 +295,8 @@
 
   function setColorMode(nextMode) {
     colorMode = nextMode === "day" ? "day" : "night";
+    document.documentElement.dataset.theme = colorMode;
+    window.FrameTheme?.apply(colorMode);
     document.body.classList.toggle("theme-day", colorMode === "day");
     elements.themeToggle.innerHTML = colorMode === "day" ? icons.sun : icons.moon;
     const nextLabel = colorMode === "day" ? "Switch to night mode" : "Switch to day mode";
@@ -300,7 +305,7 @@
     elements.themeToggle.setAttribute("aria-pressed", String(colorMode === "day"));
 
     try {
-      localStorage.setItem("frame-audio-bridge-color-mode", colorMode);
+      localStorage.setItem("frame-theme", colorMode);
     } catch {
       // Local storage can be unavailable in hardened embedded browsers.
     }
@@ -1827,6 +1832,15 @@
 
   elements.themeToggle.addEventListener("click", () => {
     setColorMode(colorMode === "day" ? "night" : "day");
+  });
+  window.addEventListener("storage", (event) => {
+    if (event.key === "frame-theme-profile") {
+      setColorMode(readColorMode());
+      return;
+    }
+    if (event.key === "frame-theme" && (event.newValue === "day" || event.newValue === "night")) {
+      setColorMode(event.newValue);
+    }
   });
 
   elements.enginePill.addEventListener("click", () => {
