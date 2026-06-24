@@ -1,9 +1,24 @@
-import { access, mkdir, readdir, readFile, stat } from "node:fs/promises";
+import { access, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
+import {
+  applyBrandingUpdate,
+  toBrandingResponse,
+  normalizeStoredBranding,
+  withLogo,
+  type GalleryBranding,
+  type GalleryBrandingResponse,
+  type GalleryLogo,
+} from "./theme.js";
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const BASE_PATTERN = /^[A-Za-z0-9_-]+$/;
+const LOGO_DATA_URL_PATTERN = /^data:(image\/(?:png|jpe?g|webp|svg\+xml));base64,([a-z0-9+/=\s]+)$/i;
+const MAX_LOGO_UPLOAD_BYTES = 1_400_000;
+const MAX_LOGO_SOURCE_PIXELS = 16_777_216;
+const MAX_LOGO_ASPECT_RATIO = 8;
+const MIN_LOGO_EDGE_PX = 24;
+const LOGO_BOX = { width: 720, height: 240 };
 
 export interface GalleryPhoto {
   base: string;
@@ -36,18 +51,93 @@ interface PhotoSidecar {
 export class GalleryStore {
   readonly galleriesRoot: string;
   readonly cacheRoot: string;
+  readonly brandingRoot: string;
+  readonly brandingConfigFile: string;
+  readonly logoFile: string;
   private thumbnails = new Map<string, Promise<string>>();
 
   constructor(readonly dataRoot: string, readonly thumbWidth: number, readonly thumbQuality: number) {
     this.galleriesRoot = path.join(dataRoot, "galleries");
     this.cacheRoot = path.join(dataRoot, "gallery-cache");
+    this.brandingRoot = path.join(dataRoot, "gallery-branding");
+    this.brandingConfigFile = path.join(this.brandingRoot, "config.json");
+    this.logoFile = path.join(this.brandingRoot, "logo.webp");
   }
 
   async init(): Promise<void> {
     await Promise.all([
       mkdir(this.galleriesRoot, { recursive: true }),
       mkdir(this.cacheRoot, { recursive: true }),
+      mkdir(this.brandingRoot, { recursive: true }),
     ]);
+  }
+
+  async getBranding(): Promise<GalleryBrandingResponse> {
+    return toBrandingResponse(await this.readBrandingConfig());
+  }
+
+  async updateBranding(input: unknown): Promise<GalleryBrandingResponse> {
+    const current = await this.readBrandingConfig();
+    const next = applyBrandingUpdate(current, input, new Date().toISOString());
+    await this.writeBrandingConfig(next);
+    return toBrandingResponse(next);
+  }
+
+  async saveLogo(input: unknown): Promise<GalleryBrandingResponse> {
+    const upload = parseLogoUpload(input);
+    const image = sharp(upload.buffer, {
+      limitInputPixels: MAX_LOGO_SOURCE_PIXELS,
+      density: upload.mediaType === "image/svg+xml" ? 192 : undefined,
+    });
+    const metadata = await image.metadata();
+    const width = integerOrNull(metadata.width);
+    const height = integerOrNull(metadata.height);
+    if (!width || !height) throw new GalleryRequestError("Logo image dimensions could not be read.", 400);
+    if (width * height > MAX_LOGO_SOURCE_PIXELS) throw new GalleryRequestError("Logo image is too large.", 413);
+    if (Math.min(width, height) < MIN_LOGO_EDGE_PX) throw new GalleryRequestError("Logo image is too small for web display.", 400);
+    const aspectRatio = Math.max(width / height, height / width);
+    if (aspectRatio > MAX_LOGO_ASPECT_RATIO) {
+      throw new GalleryRequestError("Logo image is too wide or tall for the gallery header.", 400);
+    }
+
+    const output = await image
+      .rotate()
+      .resize({ ...LOGO_BOX, fit: "inside", withoutEnlargement: upload.mediaType !== "image/svg+xml" })
+      .webp({ quality: 88 })
+      .toBuffer();
+    const outputMetadata = await sharp(output).metadata();
+    const logoWidth = integerOrNull(outputMetadata.width);
+    const logoHeight = integerOrNull(outputMetadata.height);
+    if (!logoWidth || !logoHeight) throw new GalleryRequestError("Logo image could not be processed.", 400);
+
+    await mkdir(this.brandingRoot, { recursive: true });
+    const temporary = `${this.logoFile}.tmp`;
+    await writeFile(temporary, output);
+    await rename(temporary, this.logoFile);
+
+    const updatedAt = new Date().toISOString();
+    const logo: GalleryLogo = {
+      url: `/gallery/branding/logo.webp?v=${encodeURIComponent(updatedAt)}`,
+      width: logoWidth,
+      height: logoHeight,
+      updated_at: updatedAt,
+    };
+    const next = withLogo(await this.readBrandingConfig(), logo, updatedAt);
+    await this.writeBrandingConfig(next);
+    return toBrandingResponse(next);
+  }
+
+  async deleteLogo(): Promise<GalleryBrandingResponse> {
+    await rm(this.logoFile, { force: true });
+    const updatedAt = new Date().toISOString();
+    const next = withLogo(await this.readBrandingConfig(), null, updatedAt);
+    await this.writeBrandingConfig(next);
+    return toBrandingResponse(next);
+  }
+
+  async requireLogo(): Promise<string> {
+    await access(this.logoFile);
+    return this.logoFile;
   }
 
   async listDates(): Promise<GalleryDate[]> {
@@ -179,6 +269,17 @@ export class GalleryStore {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
   }
+
+  private async readBrandingConfig(): Promise<GalleryBranding> {
+    return normalizeStoredBranding(await readJsonOrNull<unknown>(this.brandingConfigFile));
+  }
+
+  private async writeBrandingConfig(config: GalleryBranding): Promise<void> {
+    await mkdir(path.dirname(this.brandingConfigFile), { recursive: true });
+    const temporary = `${this.brandingConfigFile}.tmp`;
+    await writeFile(temporary, `${JSON.stringify(config, null, 2)}\n`);
+    await rename(temporary, this.brandingConfigFile);
+  }
 }
 
 function assertDate(value: string): void {
@@ -222,4 +323,18 @@ async function statOrNull(file: string): Promise<Awaited<ReturnType<typeof stat>
 
 function integerOrNull(value: unknown): number | null {
   return Number.isInteger(value) && Number(value) > 0 ? Number(value) : null;
+}
+
+function parseLogoUpload(input: unknown): { buffer: Buffer; mediaType: string } {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    throw new GalleryRequestError("Logo upload must include an image data URL.", 400);
+  }
+  const dataUrl = (input as { data_url?: unknown }).data_url;
+  if (typeof dataUrl !== "string") throw new GalleryRequestError("Logo upload must include an image data URL.", 400);
+  const match = dataUrl.match(LOGO_DATA_URL_PATTERN);
+  if (!match) throw new GalleryRequestError("Logo must be a PNG, JPEG, WebP, or SVG image.", 400);
+  const buffer = Buffer.from(match[2].replace(/\s/g, ""), "base64");
+  if (!buffer.length) throw new GalleryRequestError("Logo upload was empty.", 400);
+  if (buffer.length > MAX_LOGO_UPLOAD_BYTES) throw new GalleryRequestError("Processed logo image is too large.", 413);
+  return { buffer, mediaType: match[1].toLowerCase() };
 }

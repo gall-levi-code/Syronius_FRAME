@@ -74,6 +74,15 @@ themeToggle.addEventListener("click", () => {
   setThemeMode(next);
   localStorage.setItem("frame-theme", next);
 });
+window.addEventListener("storage", (event) => {
+  if (event.key === "frame-theme-profile") {
+    setThemeMode(localStorage.getItem("frame-theme") || "night");
+    return;
+  }
+  if (event.key === "frame-theme" && (event.newValue === "day" || event.newValue === "night")) {
+    setThemeMode(event.newValue);
+  }
+});
 
 bufferProfileSelect.addEventListener("change", () => {
   localStorage.setItem(BUFFER_KEY, bufferProfileSelect.value);
@@ -501,6 +510,7 @@ function updatePlaybackButton() {
 function setThemeMode(nextMode) {
   const mode = nextMode === "day" ? "day" : "night";
   document.documentElement.dataset.theme = mode;
+  window.FrameTheme?.apply(mode);
   const nextLabel = mode === "day" ? "Switch to night mode" : "Switch to day mode";
   themeToggle.setAttribute("aria-label", nextLabel);
   themeToggle.title = nextLabel;

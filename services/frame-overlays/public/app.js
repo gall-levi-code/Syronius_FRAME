@@ -27,12 +27,24 @@ const preview = document.querySelector("#preview-frame");
 const notice = document.querySelector("#notice");
 const dirtyStatus = document.querySelector("#dirty-status");
 const receiverStatus = document.querySelector("#receiver-status");
+const themeToggle = document.querySelector("#theme-toggle");
 const sourceDialog = document.querySelector("#source-dialog");
 const workspaceType = document.querySelector("#workspace-type");
 const createType = document.querySelector("#create-type");
 
 void load();
+initializeTheme();
 window.addEventListener("beforeunload", (event) => { if (state.dirty) event.preventDefault(); });
+themeToggle.addEventListener("click", toggleTheme);
+window.addEventListener("storage", (event) => {
+  if (event.key === "frame-theme-profile") {
+    setThemeMode(readStoredTheme(), false);
+    return;
+  }
+  if (event.key === "frame-theme" && (event.newValue === "day" || event.newValue === "night")) {
+    setThemeMode(event.newValue, false);
+  }
+});
 document.querySelectorAll("[data-tab]").forEach((button) => button.addEventListener("click", () => switchTab(button.dataset.tab)));
 document.querySelector("#create-source-button").addEventListener("click", () => openCreateSource());
 workspaceType.addEventListener("change", () => switchOverlayType(workspaceType.value));
@@ -44,6 +56,39 @@ document.querySelector("#create-name").addEventListener("input", (event) => {
   if (!slug.dataset.manual) slug.value = slugify(event.target.value);
 });
 document.querySelector("#create-slug").addEventListener("input", (event) => { event.target.dataset.manual = "true"; });
+
+function initializeTheme() {
+  setThemeMode(readStoredTheme(), false);
+}
+
+function toggleTheme() {
+  setThemeMode(document.documentElement.dataset.theme === "day" ? "night" : "day", true);
+}
+
+function setThemeMode(nextMode, persist) {
+  const mode = nextMode === "day" ? "day" : "night";
+  document.documentElement.dataset.theme = mode;
+  window.FrameTheme?.apply(mode);
+  const nextLabel = mode === "day" ? "Switch to night mode" : "Switch to day mode";
+  themeToggle.setAttribute("aria-label", nextLabel);
+  themeToggle.title = nextLabel;
+  themeToggle.setAttribute("aria-pressed", String(mode === "day"));
+  if (persist) writeStoredTheme(mode);
+}
+
+function readStoredTheme() {
+  try {
+    const stored = localStorage.getItem("frame-theme");
+    if (stored === "day" || stored === "night") return stored;
+  } catch {}
+  return "night";
+}
+
+function writeStoredTheme(mode) {
+  try {
+    localStorage.setItem("frame-theme", mode);
+  } catch {}
+}
 
 async function load(preserveSelection = false) {
   try {

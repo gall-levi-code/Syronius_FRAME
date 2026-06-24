@@ -376,6 +376,7 @@ services:
     volumes:
       - ${FRAME_DATA_ROOT:-./data}/galleries:/data/galleries:ro
       - ${FRAME_DATA_ROOT:-./data}/gallery-cache:/data/gallery-cache
+      - ${FRAME_DATA_ROOT:-./data}/gallery-branding:/data/gallery-branding
     depends_on:
       frame-pipeline-photos:
         condition: service_healthy

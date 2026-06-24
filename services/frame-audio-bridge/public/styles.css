@@ -811,6 +811,9 @@ button:active {
   min-height: 34px;
   margin-top: 0;
   padding: 7px;
+  border-color: var(--frame-accent-border);
+  background: var(--toggle-night-bg, #dff4ff);
+  color: var(--toggle-night-text, #087fc0);
 }
 
 .global-lock-toggle {
@@ -826,10 +829,11 @@ button:active {
   min-height: 38px;
 }
 
+:root[data-theme="day"] .theme-toggle,
 .theme-toggle[aria-pressed="true"] {
-  border-color: #d7b04c;
-  background: #fff6d5;
-  color: #8f6400;
+  border-color: var(--frame-accent-border);
+  background: var(--toggle-day-bg, #fff6d5);
+  color: var(--toggle-day-text, #8a5e00);
 }
 
 button:disabled,
@@ -1399,6 +1403,7 @@ input[type="color"] {
   transform: translateY(0);
 }
 
+:root[data-theme="day"] .control-page,
 .control-page.theme-day {
   color-scheme: light;
   background: #f6f8fc;
@@ -1595,16 +1600,18 @@ input[type="color"] {
   color: #ffffff;
 }
 
+:root[data-theme="day"] .control-page .theme-toggle,
 .control-page.theme-day .theme-toggle[aria-pressed="true"] {
-  border-color: #d7b04c;
-  background: #fff6d5;
-  color: #8f6400;
+  border-color: var(--frame-accent-border);
+  background: var(--toggle-day-bg, #fff6d5);
+  color: var(--toggle-day-text, #8a5e00);
 }
 
+:root[data-theme="night"] .control-page .theme-toggle,
 .control-page.theme-day .theme-toggle[aria-pressed="false"] {
-  border-color: #3c4660;
-  background: #172033;
-  color: #ffffff;
+  border-color: var(--frame-accent-border);
+  background: var(--toggle-night-bg, #dff4ff);
+  color: var(--toggle-night-text, #087fc0);
 }
 
 @media (max-width: 560px) {

@@ -11,6 +11,7 @@ export interface LoadedStackConfig {
 const FALLBACK_ROUTES: Record<string, string> = {
   dashboard: "/dashboard",
   status: "/status",
+  theme: "/theme",
   video_relay_ui: "/slsui",
   video_relay_stats: "/stats",
   overlays_root: "/overlays",
@@ -125,7 +126,7 @@ export async function loadStackConfig(appConfig: AppConfig): Promise<LoadedStack
           "frame-discord-audio-bridge": false,
         },
         routes: { ...FALLBACK_ROUTES },
-        public_route_prefixes: ["/dashboard", "/status"],
+        public_route_prefixes: ["/dashboard", "/status", "/theme"],
       },
     };
   }

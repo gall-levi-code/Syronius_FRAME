@@ -6,9 +6,29 @@
     <meta name="theme-color" content="#07111b" />
     <title>FRAME Control Center</title>
     <link rel="icon" type="image/svg+xml" href="/assets/frame-logo-square.svg?v=2026-06-07-hardening" />
-    <link rel="stylesheet" href="/assets/styles.css?v=2026-06-14-hybrid-context" />
+    <script>
+      (() => {
+        try {
+          const storedMode = localStorage.getItem("frame-theme") || localStorage.getItem("frame-portal-theme");
+          const mode = storedMode === "day" || storedMode === "night" ? storedMode : "night";
+          document.documentElement.dataset.theme = mode;
+          const profile = JSON.parse(localStorage.getItem("frame-theme-profile") || "null");
+          const palette = profile?.palettes?.[mode];
+          if (palette) {
+            Object.entries(palette).forEach(([key, value]) => {
+              const cssKey = key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+              document.documentElement.style.setProperty(`--frame-${cssKey}`, value);
+            });
+          }
+        } catch {}
+      })();
+    </script>
+    <link rel="stylesheet" href="/assets/styles.css?v=frame-theme-tab" />
   </head>
   <body>
+    <script>
+      document.body.classList.toggle("theme-day", document.documentElement.dataset.theme === "day");
+    </script>
     <main class="portal-shell">
       <header class="portal-header">
         <div class="brand">
@@ -23,7 +43,7 @@
           <button id="refresh-button" class="icon-button" type="button" aria-label="Refresh status" title="Refresh status">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8.1 8.1 0 0 0-15.5-2M4 4v5h5M4 13a8.1 8.1 0 0 0 15.5 2M20 20v-5h-5"/></svg>
           </button>
-          <button id="theme-toggle" class="icon-button" type="button" aria-label="Switch to day mode" title="Switch to day mode">
+          <button id="theme-toggle" class="icon-button theme-toggle" type="button" aria-label="Switch to day mode" title="Switch to day mode">
             <svg class="moon-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"/></svg>
             <svg class="sun-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/></svg>
           </button>
@@ -36,6 +56,7 @@
       <nav class="portal-nav" aria-label="FRAME Portal">
         <a href="/dashboard" data-portal-nav="dashboard">Dashboard</a>
         <a href="/status" data-portal-nav="status">Status</a>
+        <a href="/theme" data-portal-nav="theme">Theme</a>
       </nav>
 
       <section id="access-banner" class="access-banner" data-portal-view="dashboard" aria-live="polite">
@@ -131,6 +152,38 @@
         </div>
       </section>
 
+      <section id="theme-settings" class="portal-section theme-settings" data-portal-view="theme">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Interface theme</p>
+            <h2>FRAME Theme</h2>
+          </div>
+        </div>
+        <div class="theme-layout">
+          <section class="theme-control-panel">
+            <label>Default appearance
+              <span class="select-shell">
+                <select id="theme-mode-select">
+                  <option value="day">Day</option>
+                  <option value="night">Night</option>
+                </select>
+              </span>
+            </label>
+            <div class="theme-preset-field">
+              <span class="theme-field-label">Interface preset</span>
+              <div class="theme-preset-select">
+                <button id="theme-preset-trigger" class="theme-preset-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+                  <span id="theme-preset-trigger-swatches" class="theme-swatches"></span>
+                  <span><strong id="theme-preset-trigger-name">Frame Blue</strong><small id="theme-preset-trigger-meta">#2cb4fb</small></span>
+                </button>
+                <div id="theme-preset-menu" class="theme-preset-menu" role="listbox" hidden></div>
+              </div>
+              <button id="new-theme-preset" class="text-button theme-new-preset-button" type="button">New custom preset</button>
+            </div>
+          </section>
+        </div>
+      </section>
+
       <footer class="portal-footer">
         <span>FRAME Portal</span>
         <span id="footer-state">Connecting to status API</span>
@@ -150,7 +203,67 @@
       <pre id="logs-output" tabindex="0">Connecting...</pre>
     </dialog>
 
+    <dialog id="theme-preset-dialog" class="theme-dialog">
+      <div id="theme-preset-kind-step" class="theme-dialog-panel">
+        <div class="dialog-header compact-dialog-header">
+          <div>
+            <p class="eyebrow">New custom preset</p>
+            <h2>Preset Type</h2>
+          </div>
+        </div>
+        <div class="theme-choice-grid">
+          <button id="theme-color-choice" type="button">Color based theme</button>
+          <button id="theme-full-choice" type="button">Fully custom</button>
+        </div>
+        <div class="theme-dialog-actions">
+          <button id="theme-cancel-kind" class="text-button" type="button">Cancel</button>
+        </div>
+      </div>
+      <div id="theme-preset-editor-step" class="theme-dialog-panel" hidden>
+        <div class="dialog-header compact-dialog-header">
+          <div>
+            <p id="theme-editor-eyebrow" class="eyebrow">Custom preset</p>
+            <h2 id="theme-editor-title">Color based theme</h2>
+          </div>
+        </div>
+        <div class="theme-editor-grid">
+          <label>Preset name<input id="theme-preset-name-input" maxlength="40" autocomplete="off" required></label>
+          <label>Default appearance
+            <span class="select-shell">
+              <select id="theme-preset-default-mode">
+                <option value="day">Day</option>
+                <option value="night">Night</option>
+              </select>
+            </span>
+          </label>
+          <label id="theme-color-label">Theme color<input id="theme-color-input" type="color" value="#2cb4fb"></label>
+        </div>
+        <div id="theme-palette-fields" class="theme-palette-fields" hidden></div>
+        <div class="theme-dialog-actions">
+          <button id="theme-back-kind" class="text-button" type="button">Back</button>
+          <button id="theme-cancel-editor" class="text-button" type="button">Cancel</button>
+          <button id="theme-save-preset" class="text-button primary-text-button" type="button">Create preset</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="theme-confirm-dialog" class="theme-dialog confirm-theme-dialog">
+      <div class="theme-dialog-panel">
+        <div class="dialog-header compact-dialog-header">
+          <div>
+            <p class="eyebrow">Delete preset</p>
+            <h2 id="theme-confirm-title">Delete preset?</h2>
+          </div>
+        </div>
+        <p id="theme-confirm-copy" class="theme-dialog-copy"></p>
+        <div class="theme-dialog-actions">
+          <button id="theme-confirm-cancel" class="text-button" type="button">Cancel</button>
+          <button id="theme-confirm-accept" class="text-button danger-text-button" type="button">Delete preset</button>
+        </div>
+      </div>
+    </dialog>
+
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script src="/assets/portal.js?v=2026-06-14-hybrid-context"></script>
+    <script src="/assets/portal.js?v=frame-theme-tab"></script>
   </body>
 </html>

@@ -50,9 +50,19 @@ const qualityControls = [
   elements.noisesuppressioninput,
   elements.autogaininput,
 ];
+const themeToggle = document.querySelector("#theme-toggle");
 
-document.documentElement.dataset.theme = localStorage.getItem("frame-theme") || "night";
-document.querySelector("#theme-toggle").addEventListener("click", toggleTheme);
+setThemeMode(readStoredTheme(), false);
+themeToggle.addEventListener("click", toggleTheme);
+window.addEventListener("storage", (event) => {
+  if (event.key === "frame-theme-profile") {
+    setThemeMode(readStoredTheme(), false);
+    return;
+  }
+  if (event.key === "frame-theme" && (event.newValue === "day" || event.newValue === "night")) {
+    setThemeMode(event.newValue, false);
+  }
+});
 elements.livebutton.addEventListener("click", () => mediaRecorder?.state === "recording" ? stopCapture() : startCapture());
 elements.refreshdevicesbutton.addEventListener("click", () => loadDevices(true));
 document.querySelector("#popout-button").addEventListener("click", () => window.open(location.href, "frame-audio-capture", "popup,width=620,height=820"));
@@ -290,7 +300,32 @@ function initializeSettings(instanceId) {
   loadSettings();
 }
 
-function toggleTheme() { const next = document.documentElement.dataset.theme === "day" ? "night" : "day"; document.documentElement.dataset.theme = next; localStorage.setItem("frame-theme", next); }
+function toggleTheme() {
+  setThemeMode(document.documentElement.dataset.theme === "day" ? "night" : "day", true);
+}
+
+function setThemeMode(nextMode, persist) {
+  const mode = nextMode === "day" ? "day" : "night";
+  document.documentElement.dataset.theme = mode;
+  window.FrameTheme?.apply(mode);
+  const nextLabel = mode === "day" ? "Switch to night mode" : "Switch to day mode";
+  themeToggle.setAttribute("aria-label", nextLabel);
+  themeToggle.title = nextLabel;
+  themeToggle.setAttribute("aria-pressed", String(mode === "day"));
+  if (persist) {
+    try {
+      localStorage.setItem("frame-theme", mode);
+    } catch {}
+  }
+}
+
+function readStoredTheme() {
+  try {
+    const stored = localStorage.getItem("frame-theme");
+    if (stored === "day" || stored === "night") return stored;
+  } catch {}
+  return "night";
+}
 function showNotice(message, kind = "") { elements.notice.textContent = message; elements.notice.className = `notice ${kind}`.trim(); }
 async function api(url) { const response = await fetch(url); const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`); return body; }
 function escapeHtml(value) { const div = document.createElement("div"); div.textContent = value; return div.innerHTML; }

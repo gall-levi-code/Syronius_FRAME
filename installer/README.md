@@ -144,7 +144,8 @@ photo services through the generated Compose stack so these persistent mounts re
 
 Starting `frame-today` or `frame-gallery` directly from an image without the generated mounts
 creates an empty view. `frame-today` requires the persisted `galleries` and `state` directories,
-while `frame-gallery` requires `galleries` and its thumbnail cache.
+while `frame-gallery` requires `galleries`, its thumbnail cache, and `gallery-branding` for custom
+style/logo settings.
 
 ## Staging Hybrid mode
 

@@ -2,18 +2,48 @@ const state = { streams: [], editingId: null };
 const list = document.querySelector("#stream-list");
 const notice = document.querySelector("#notice");
 const dialog = document.querySelector("#stream-dialog");
+const themeToggle = document.querySelector("#theme-toggle");
 
-document.documentElement.dataset.theme = localStorage.getItem("frame-theme") || "night";
-document.querySelector("#theme-toggle").addEventListener("click", () => {
-  const next = document.documentElement.dataset.theme === "day" ? "night" : "day";
-  document.documentElement.dataset.theme = next;
-  localStorage.setItem("frame-theme", next);
+setThemeMode(readStoredTheme(), false);
+themeToggle.addEventListener("click", () => {
+  setThemeMode(document.documentElement.dataset.theme === "day" ? "night" : "day", true);
 });
-document.querySelector("#refresh-button").addEventListener("click", load);
+window.addEventListener("storage", (event) => {
+  if (event.key === "frame-theme-profile") {
+    setThemeMode(readStoredTheme(), false);
+    return;
+  }
+  if (event.key === "frame-theme" && (event.newValue === "day" || event.newValue === "night")) {
+    setThemeMode(event.newValue, false);
+  }
+});
 document.querySelector("#add-button").addEventListener("click", openAdd);
 document.querySelector("#close-dialog").addEventListener("click", () => dialog.close());
 document.querySelector("#regenerate-button").addEventListener("click", generateId);
 document.querySelector("#stream-form").addEventListener("submit", save);
+
+function setThemeMode(nextMode, persist) {
+  const mode = nextMode === "day" ? "day" : "night";
+  document.documentElement.dataset.theme = mode;
+  window.FrameTheme?.apply(mode);
+  const nextLabel = mode === "day" ? "Switch to night mode" : "Switch to day mode";
+  themeToggle.setAttribute("aria-label", nextLabel);
+  themeToggle.title = nextLabel;
+  themeToggle.setAttribute("aria-pressed", String(mode === "day"));
+  if (persist) {
+    try {
+      localStorage.setItem("frame-theme", mode);
+    } catch {}
+  }
+}
+
+function readStoredTheme() {
+  try {
+    const stored = localStorage.getItem("frame-theme");
+    if (stored === "day" || stored === "night") return stored;
+  } catch {}
+  return "night";
+}
 
 async function load() {
   try {

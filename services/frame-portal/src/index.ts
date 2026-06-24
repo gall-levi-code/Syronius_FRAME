@@ -124,7 +124,7 @@ app.get("/", (_request, response) => {
   response.redirect(302, "/dashboard");
 });
 
-app.get(["/dashboard", "/status"], (_request, response) => {
+app.get(["/dashboard", "/status", "/theme"], (_request, response) => {
   response.setHeader("Cache-Control", "no-store");
   response.sendFile(path.join(publicDir, "index.html"));
 });

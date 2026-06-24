@@ -30,6 +30,12 @@ button { min-height: 42px; border: 1px solid var(--accent); border-radius: 7px; 
 button:hover { filter: brightness(1.08); }
 button.secondary, .icon-button { background: transparent; color: var(--text); border-color: var(--border); }
 button.danger { background: transparent; color: var(--bad); border-color: rgba(255, 107, 122, 0.4); }
+.theme-toggle { width: 38px; min-width: 38px; padding: 0; border-color: var(--accent); background: var(--toggle-night-bg, #dff4ff); color: var(--toggle-night-text, #087fc0); }
+.theme-toggle svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; }
+.sun-icon { display: none; }
+:root[data-theme="day"] .moon-icon { display: none; }
+:root[data-theme="day"] .sun-icon { display: block; }
+:root[data-theme="day"] .theme-toggle { border-color: var(--accent); background: var(--toggle-day-bg, #fff6d5); color: var(--toggle-day-text, #8a5e00); }
 .topbar { min-height: 78px; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 22px; border-bottom: 1px solid var(--border); background: var(--panel); position: sticky; top: 0; z-index: 5; }
 .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .brand img { width: 54px; height: 54px; }

@@ -794,7 +794,7 @@ async function readStandardInput() {
 }
 
 async function ensureDataDirectories(dataRoot) {
-  for (const directory of ["state", "audio-bridge", "audio-monitor", "video-relay", "overlays", "logs", "inbox", "staging", "processing", "galleries", "gallery-cache", "archive", "quarantine"]) {
+  for (const directory of ["state", "audio-bridge", "audio-monitor", "video-relay", "overlays", "logs", "inbox", "staging", "processing", "galleries", "gallery-cache", "gallery-branding", "archive", "quarantine"]) {
     await mkdir(path.join(dataRoot, directory), { recursive: true });
   }
 }

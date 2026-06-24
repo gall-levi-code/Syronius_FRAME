@@ -6,60 +6,230 @@
     <meta name="theme-color" content="#071923">
     <title>FRAME Gallery Admin</title>
     <link rel="icon" href="/gallery/assets/frame-logo-square.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="/gallery/assets/admin.css">
+    <script>
+      (() => {
+        try {
+          const root = document.documentElement;
+          const key = (value) => String(value).replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+          const aliases = { page: ["page", "bg", "background"], panel: ["panel", "topbar"], panelStrong: ["panel-2", "surface", "surface-strong", "control"], panelMuted: ["panel-muted", "queue"], border: ["border", "line"], borderSoft: ["border-soft"], label: ["label", "muted"], text: ["text", "control-text"], accent: ["accent"], accentStrong: ["accent-strong"], accentSoft: ["accent-soft"], accentBorder: ["accent-border"], accentContrast: ["accent-contrast", "action-text"], danger: ["danger", "bad"], warning: ["warning", "warn"], good: ["good"], toggleNightBg: ["toggle-night-bg"], toggleNightText: ["toggle-night-text"], toggleDayBg: ["toggle-day-bg"], toggleDayText: ["toggle-day-text"] };
+          window.FrameTheme = { apply(mode) {
+            const stored = mode || localStorage.getItem("frame-theme") || localStorage.getItem("frame-gallery-theme-mode") || localStorage.getItem("frame-audio-bridge-color-mode");
+            const theme = stored === "day" || stored === "night" ? stored : "night";
+            root.dataset.theme = theme;
+            root.dataset.themeMode = theme;
+            const palette = JSON.parse(localStorage.getItem("frame-theme-profile") || "null")?.palettes?.[theme];
+            if (!palette) return;
+            Object.entries(palette).forEach(([name, color]) => {
+              root.style.setProperty(`--frame-${key(name)}`, color);
+              (aliases[name] || []).forEach((alias) => root.style.setProperty(`--${alias}`, color));
+            });
+          } };
+          window.FrameTheme.apply();
+        } catch {}
+      })();
+    </script>
+    <link rel="stylesheet" href="/gallery/assets/admin.css?v=logo-crop-4">
   </head>
   <body>
     <header class="topbar">
       <a class="brand" href="/today/gallery" aria-label="Open FRAME Photo Gallery">
-        <img src="/gallery/assets/frame-logo-square.svg" alt="">
-        <span><small>Syronius FRAME</small><strong>Gallery Admin</strong></span>
+        <img id="admin-brand-logo" src="/gallery/assets/frame-logo-square.svg" alt="">
+        <span><small id="admin-brand-name">Syronius FRAME</small><strong>Gallery Admin</strong></span>
       </a>
       <div class="header-actions">
-        <a class="icon-button" href="/today/gallery" aria-label="Open gallery" title="Open gallery">▦</a>
-        <button id="refresh" class="icon-button" type="button" aria-label="Refresh gallery" title="Refresh">↻</button>
-        <a class="icon-button" href="/auth/logout" aria-label="Sign out of FRAME" title="Sign out">⇥</a>
+        <button id="admin-theme-toggle" class="icon-button theme-toggle" type="button" aria-label="Switch to day mode" title="Switch to day mode"></button>
+        <a class="gallery-button" href="/today/gallery" aria-label="Open gallery">
+          <span class="gallery-button-icon" aria-hidden="true"></span>
+          Gallery
+        </a>
       </div>
     </header>
 
     <main>
       <section class="page-heading">
         <div>
-          <p>Protected photo management</p>
+          <p>Protected gallery admin</p>
           <h1>Gallery Admin</h1>
           <span id="summary">Loading photo library...</span>
         </div>
         <span id="status" class="status">Connecting</span>
       </section>
 
-      <nav class="tabs" aria-label="Gallery management views">
-        <button id="published-tab" type="button" aria-pressed="true">Published <strong id="published-count">0</strong></button>
-        <button id="trash-tab" type="button" aria-pressed="false">Trash <strong id="trash-count">0</strong></button>
+      <nav class="section-tabs" role="tablist" aria-label="Gallery admin sections">
+        <button id="content-management-tab" type="button" role="tab" aria-selected="true" aria-controls="content-management-view">Content management</button>
+        <button id="gallery-styling-tab" type="button" role="tab" aria-selected="false" aria-controls="gallery-styling-view" tabindex="-1">Gallery Branding</button>
       </nav>
 
-      <section id="published-view">
-        <div id="albums" class="album-list"></div>
-        <section id="album-detail" class="album-detail" hidden>
+      <section id="content-management-view" role="tabpanel" aria-labelledby="content-management-tab">
+        <nav class="subtabs" aria-label="Content management views">
+          <button id="published-tab" type="button" aria-pressed="true">Published <strong id="published-count">0</strong></button>
+          <button id="trash-tab" type="button" aria-pressed="false">Trash <strong id="trash-count">0</strong></button>
+        </nav>
+
+        <section id="published-view">
+          <div id="albums" class="album-list"></div>
+          <section id="album-detail" class="album-detail" hidden>
+            <div class="section-heading">
+              <div><p>Published album</p><h2 id="album-title"></h2><span id="album-summary"></span></div>
+              <button id="trash-album" class="danger-button" type="button">Move album to trash</button>
+            </div>
+            <div id="photos" class="photo-grid"></div>
+          </section>
+        </section>
+
+        <section id="trash-view" hidden>
           <div class="section-heading">
-            <div><p>Published album</p><h2 id="album-title"></h2><span id="album-summary"></span></div>
-            <button id="trash-album" class="danger-button" type="button">Move album to trash</button>
+            <div><p>Recoverable publications</p><h2>Trash</h2><span>Restore keeps .ready untouched. Permanent deletion removes the published files and .ready receipt, so queued StreamerBot paths stop resolving. Archived sources follow retention policy.</span></div>
+            <button id="empty-trash" class="danger-button" type="button">Empty trash</button>
           </div>
-          <div id="photos" class="photo-grid"></div>
+          <div id="trash-albums" class="trash-list"></div>
+        </section>
+
+        <section id="empty" class="empty" hidden>
+          <strong>Nothing here</strong>
+          <span>This view has no photos to manage.</span>
         </section>
       </section>
 
-      <section id="trash-view" hidden>
+      <section id="gallery-styling-view" role="tabpanel" aria-labelledby="gallery-styling-tab" hidden>
         <div class="section-heading">
-          <div><p>Recoverable publications</p><h2>Trash</h2><span>Restore keeps .ready untouched. Permanent deletion removes the published files and .ready receipt, so queued StreamerBot paths stop resolving. Archived sources follow retention policy.</span></div>
-          <button id="empty-trash" class="danger-button" type="button">Empty trash</button>
+          <div><p>Public gallery branding</p><h2>Gallery Branding</h2><span id="branding-summary">Loading gallery branding...</span></div>
+          <button id="save-branding" class="restore-button" type="button">Save branding</button>
         </div>
-        <div id="trash-albums" class="trash-list"></div>
-      </section>
+        <form id="branding-form" class="branding-form">
+          <section class="branding-panel">
+            <div class="mini-heading"><strong>Branding</strong><small>Logo uploads are constrained to stay readable in the web header.</small></div>
+            <div class="field-grid branding-fields">
+              <label>Brand name<input id="brand-name-input" name="brand_name" maxlength="60" autocomplete="organization"></label>
+              <label>Gallery title<input id="gallery-title-input" name="gallery_title" maxlength="80" autocomplete="off"></label>
+            </div>
+            <div class="logo-controls">
+              <img id="logo-preview" src="/gallery/assets/frame-logo-square.svg" alt="">
+              <div>
+                <small>PNG, JPEG, WebP, or SVG source under 20 MB. Crop before upload; saved as a transparent optimized WebP.</small>
+                <input id="logo-input" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg">
+                <button id="remove-logo" class="danger-button" type="button">Remove logo</button>
+              </div>
+            </div>
+          </section>
 
-      <section id="empty" class="empty" hidden>
-        <strong>Nothing here</strong>
-        <span>This view has no photos to manage.</span>
+          <section class="branding-panel" hidden>
+            <div class="mini-heading"><strong>Style</strong><button id="new-preset" class="restore-button compact-button" type="button">New custom preset</button></div>
+            <div class="style-fields">
+              <label>Default appearance
+                <span class="select-shell">
+                  <select id="default-mode" name="mode">
+                    <option value="day">Day</option>
+                    <option value="night">Night</option>
+                  </select>
+                </span>
+              </label>
+              <div class="preset-field">
+                <span class="field-label">Style preset</span>
+                <div class="preset-select">
+                  <button id="preset-trigger" class="preset-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
+                    <span id="preset-trigger-swatches" class="swatches"></span>
+                    <span><strong id="preset-trigger-name">Frame Blue</strong><small id="preset-trigger-meta">#2cb4fb</small></span>
+                  </button>
+                  <div id="preset-menu" class="preset-menu" role="listbox" hidden></div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </form>
       </section>
     </main>
+
+    <dialog id="preset-dialog" class="preset-dialog">
+      <div id="preset-kind-step" class="dialog-panel">
+        <div class="dialog-heading"><p>New custom preset</p><h2>Preset type</h2></div>
+        <div class="choice-grid">
+          <button id="color-theme-choice" type="button">Color based theme</button>
+          <button id="full-custom-choice" type="button">Fully custom</button>
+        </div>
+        <div class="dialog-actions">
+          <button id="cancel-preset-kind" class="secondary-button" type="button">Cancel</button>
+        </div>
+      </div>
+
+      <div id="preset-editor-step" class="dialog-panel" hidden>
+        <div class="dialog-heading"><p id="preset-editor-eyebrow">Custom preset</p><h2 id="preset-editor-title">Color based theme</h2></div>
+        <div class="field-grid">
+          <label>Preset name<input id="preset-name-input" maxlength="40" autocomplete="off"></label>
+          <label>Default appearance
+            <span class="select-shell">
+              <select id="preset-default-mode">
+                <option value="day">Day</option>
+                <option value="night">Night</option>
+              </select>
+            </span>
+          </label>
+          <label id="preset-theme-color-label">Theme color<input id="preset-theme-color" type="color" value="#2cb4fb"></label>
+        </div>
+        <div id="palette-fields" class="palette-fields" hidden></div>
+        <div class="dialog-actions">
+          <button id="back-preset-kind" class="secondary-button" type="button">Back</button>
+          <button id="cancel-preset-editor" class="secondary-button" type="button">Cancel</button>
+          <button id="save-preset" class="restore-button" type="button">Create preset</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="logo-crop-dialog" class="preset-dialog logo-crop-dialog" data-crop-mode="full">
+      <div class="dialog-panel">
+        <div class="dialog-heading"><p>Logo source</p><h2>Prepare logo</h2></div>
+        <div class="logo-crop-layout">
+          <div id="logo-crop-stage" class="logo-crop-stage">
+            <img id="logo-crop-image" alt="">
+            <div id="logo-crop-frame" class="logo-crop-frame" aria-hidden="true">
+              <span class="logo-crop-handle logo-crop-handle-nw" data-crop-handle="nw"></span>
+              <span class="logo-crop-handle logo-crop-handle-ne" data-crop-handle="ne"></span>
+              <span class="logo-crop-handle logo-crop-handle-sw" data-crop-handle="sw"></span>
+              <span class="logo-crop-handle logo-crop-handle-se" data-crop-handle="se"></span>
+            </div>
+          </div>
+          <div class="logo-crop-controls">
+            <div>
+              <span class="field-label">Logo shape</span>
+              <div class="logo-ratio-grid" role="radiogroup" aria-label="Logo crop ratio">
+                <button class="logo-aspect-option" type="button" data-logo-aspect="full" aria-pressed="true" aria-label="Use full image">Full</button>
+                <button class="logo-aspect-option" type="button" data-logo-aspect="wide" aria-pressed="false" aria-label="2 to 1 crop ratio">2:1</button>
+                <button class="logo-aspect-option" type="button" data-logo-aspect="square" aria-pressed="false" aria-label="1 to 1 crop ratio">1:1</button>
+                <button class="logo-aspect-option" type="button" data-logo-aspect="custom" aria-pressed="false" aria-label="Custom crop ratio">x:y</button>
+                <button class="logo-aspect-option" type="button" data-logo-aspect="freeform" aria-pressed="false" aria-label="Freeform crop">Free</button>
+              </div>
+              <div class="logo-ratio-inputs" aria-label="Custom crop ratio">
+                <input id="logo-ratio-x" type="number" min="1" max="99" step="1" value="2" inputmode="numeric" aria-label="Crop ratio width">
+                <span>:</span>
+                <input id="logo-ratio-y" type="number" min="1" max="99" step="1" value="1" inputmode="numeric" aria-label="Crop ratio height">
+              </div>
+            </div>
+            <label class="logo-zoom-field">Zoom
+              <input id="logo-crop-zoom" type="range" min="0.1" max="4" step="0.01" value="1">
+            </label>
+            <div class="logo-crop-preview">
+              <span class="field-label">Crop preview</span>
+              <div><canvas id="logo-crop-preview" width="360" height="120"></canvas></div>
+            </div>
+          </div>
+        </div>
+        <div class="dialog-actions">
+          <button id="cancel-logo-crop" class="secondary-button" type="button">Cancel</button>
+          <button id="save-logo-crop" class="restore-button" type="button">Use logo</button>
+        </div>
+      </div>
+    </dialog>
+
+    <dialog id="confirm-dialog" class="preset-dialog confirm-dialog">
+      <div class="dialog-panel">
+        <div class="dialog-heading"><p id="confirm-eyebrow">Confirm change</p><h2 id="confirm-title">Continue?</h2></div>
+        <p id="confirm-copy" class="dialog-copy"></p>
+        <div class="dialog-actions">
+          <button id="confirm-cancel" class="secondary-button" type="button">Cancel</button>
+          <button id="confirm-accept" class="danger-button" type="button">Continue</button>
+        </div>
+      </div>
+    </dialog>
 
     <template id="album-template">
       <article class="album-card">
@@ -103,6 +273,6 @@
       </article>
     </template>
 
-    <script type="module" src="/gallery/assets/admin.js"></script>
+    <script type="module" src="/gallery/assets/admin.js?v=logo-crop-4"></script>
   </body>
 </html>
