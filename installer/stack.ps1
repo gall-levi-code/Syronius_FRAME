@@ -32,7 +32,9 @@ $AdvancedSettings = @(
   "TIMEZONE", "FRAME_AUTH_SESSION_DAYS", "PORTAL_PORT", "AUDIO_BRIDGE_PORT", "AUDIO_MONITOR_PORT",
   "STREAMS_PORT", "OVERLAYS_PORT", "PHOTO_UPLOAD_PORT", "PHOTO_FTP_PORT", "GALLERY_PORT", "TODAY_PORT",
   "PHOTO_FTP_PASSIVE_MIN", "PHOTO_FTP_PASSIVE_MAX", "PHOTO_FTP_PASSIVE_HOST", "PHOTO_FTP_USERNAME",
-  "PHOTO_FTP_STABLE_MS", "PHOTO_FTP_SCAN_MS", "PIPELINE_POLL_MS", "PIPELINE_CONCURRENCY",
+  "PHOTO_FTP_MIN_PASSWORD_LENGTH", "PHOTO_FTP_MAX_SESSIONS", "PHOTO_FTP_MAX_SESSIONS_PER_IP",
+  "PHOTO_FTP_VERBOSE_LOG", "PHOTO_FTP_STABLE_MS", "PHOTO_FTP_SCAN_MS", "PHOTO_UPLOAD_MAX_FILES", "PHOTO_UPLOAD_MAX_SESSIONS",
+  "PIPELINE_POLL_MS", "PIPELINE_CONCURRENCY",
   "PHOTO_MAX_INPUT_MB", "PHOTO_MAX_MEGAPIXELS", "PHOTO_CONVERSION_ATTEMPTS", "PHOTO_ARCHIVE_ORIGINALS",
   "GALLERY_THUMB_WIDTH", "GALLERY_THUMB_QUALITY", "TODAY_DEFAULT_INTERVAL_MS", "TODAY_REFRESH_MS",
   "ENABLE_CONTAINER_RESTARTS", "STATUS_REFRESH_MS", "STATUS_CACHE_MS", "REQUEST_TIMEOUT_MS",
@@ -141,6 +143,71 @@ function Read-Default {
   $value = Read-Host "$Prompt$suffix"
   if ([string]::IsNullOrWhiteSpace($value)) { return $Default }
   return $value.Trim()
+}
+
+function Get-HostLanIPv4Candidates {
+  $candidates = @()
+  try {
+    $ipConfig = Get-NetIPConfiguration -ErrorAction Stop |
+      Where-Object {
+        $_.IPv4Address -and
+        $_.NetAdapter.Status -eq "Up" -and
+        $_.NetAdapter.HardwareInterface
+      }
+    foreach ($config in $ipConfig) {
+      foreach ($address in $config.IPv4Address) {
+        $value = [string]$address.IPAddress
+        if (Test-LanIPv4Candidate $value) {
+          $candidates += $value
+        }
+      }
+    }
+  } catch {
+    try {
+      $candidates += [System.Net.Dns]::GetHostAddresses([System.Net.Dns]::GetHostName()) |
+        Where-Object { $_.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork } |
+        ForEach-Object { $_.IPAddressToString } |
+        Where-Object { Test-LanIPv4Candidate $_ }
+    } catch {}
+  }
+  return @($candidates | Select-Object -Unique)
+}
+
+function Test-LanIPv4Candidate {
+  param([string]$Address)
+  if (-not $Address) { return $false }
+  if ($Address -eq "127.0.0.1" -or $Address.StartsWith("169.254.")) { return $false }
+  return $Address -match "^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)"
+}
+
+function Get-PhotoFtpPassiveHostDefault {
+  param([hashtable]$Env)
+  $current = ""
+  if ($Env -and $Env.PHOTO_FTP_PASSIVE_HOST) {
+    $current = [string]$Env.PHOTO_FTP_PASSIVE_HOST
+  }
+  if ($current -and $current -ne "127.0.0.1") {
+    return $current
+  }
+  $candidates = @(Get-HostLanIPv4Candidates)
+  if ($candidates.Count -gt 0) {
+    return $candidates[0]
+  }
+  return $current
+}
+
+function Read-PhotoFtpPassiveHost {
+  param([hashtable]$Env)
+  $default = Get-PhotoFtpPassiveHostDefault $Env
+  $detected = @(Get-HostLanIPv4Candidates)
+  if ($detected.Count -gt 1) {
+    Write-Host "Detected LAN IPv4 candidates for Photo FTP: $($detected -join ', ')" -ForegroundColor DarkGray
+  } elseif ($detected.Count -eq 1) {
+    Write-Host "Detected LAN IPv4 for Photo FTP: $($detected[0])" -ForegroundColor DarkGray
+  } elseif (-not $default -or $default -eq "127.0.0.1") {
+    Write-Host "Could not auto-detect a LAN IPv4 address. Enter the FRAME host address your camera can reach." -ForegroundColor Yellow
+  }
+  return Read-Default "Photo FTP passive/LAN host" $default
 }
 
 function Read-MenuChoice {
@@ -326,7 +393,7 @@ function Configure-StandardSettings {
   $env = Get-EnvMap
   $config = Get-StackConfig
   if (Test-CapabilityEnabled $config "frame-photo-ftp") {
-    Invoke-Install @("--set", "PHOTO_FTP_PASSIVE_HOST=$(Read-Default "Photo FTP passive/LAN host" $env.PHOTO_FTP_PASSIVE_HOST)")
+    Invoke-Install @("--set", "PHOTO_FTP_PASSIVE_HOST=$(Read-PhotoFtpPassiveHost $env)")
   }
 }
 
@@ -351,7 +418,7 @@ function Resolve-SetupIssues {
     Invoke-RuntimeInput @("set-tunnel-token") $token
   }
   if ((Test-CapabilityEnabled $config "frame-photo-ftp") -and $env.PHOTO_FTP_PASSIVE_HOST -eq "127.0.0.1") {
-    Invoke-Install @("--set", "PHOTO_FTP_PASSIVE_HOST=$(Read-Default "Photo FTP passive/LAN host" $env.PHOTO_FTP_PASSIVE_HOST)")
+    Invoke-Install @("--set", "PHOTO_FTP_PASSIVE_HOST=$(Read-PhotoFtpPassiveHost $env)")
   }
   if (((Test-CapabilityEnabled $config "frame-photo-ftp") -or (Test-CapabilityEnabled $config "frame-photo-webupload")) -and $env.FRAME_HOST_DATA_ROOT -eq "/data") {
     Invoke-Install @("--host-data-root", (Read-Default "Host-visible FRAME data path" (Join-Path $Root "data")))
@@ -409,7 +476,11 @@ function Configure-Credentials {
       "4" {
         $env = Get-EnvMap
         $username = Read-Default "Photo FTP username" $env.PHOTO_FTP_USERNAME
-        $password = Read-PlainTextSecret "Photo FTP password, at least 12 characters (input hidden)"
+        $minimum = "5"
+        if ($env.PHOTO_FTP_MIN_PASSWORD_LENGTH) {
+          $minimum = $env.PHOTO_FTP_MIN_PASSWORD_LENGTH
+        }
+        $password = Read-PlainTextSecret "Photo FTP password, at least $minimum characters (input hidden)"
         Invoke-RuntimeInput @("set-service-auth") "photo-ftp`n$username`n$password"
       }
       "5" {

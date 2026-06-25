@@ -79,6 +79,7 @@ Useful first pages:
 
 - Portal: `http://localhost/dashboard`
 - Stream Management: `http://localhost/slsui`
+- Stream Statistics: `http://localhost/stats/<stream-id>`
 - Overlay Wizard: `http://localhost/overlays/setup`
 - Browser Photo Upload: `http://localhost/photos/upload`
 - Photo Gallery: `http://localhost/today/gallery`
@@ -118,9 +119,26 @@ Then watch:
 
 Include subfolders and process only files whose names end exactly in `.ready`.
 
+Photo Upload defaults to 10 selected files and 10 concurrent upload sessions. Tune
+`PHOTO_UPLOAD_MAX_FILES` and `PHOTO_UPLOAD_MAX_SESSIONS` from Advanced setup or `.env`.
+Photo FTP passwords default to a 5-character minimum through `PHOTO_FTP_MIN_PASSWORD_LENGTH`.
+
 Run verification:
 
 - Choose **Validate and verify** from the menu.
+
+## Native Setup App
+
+The native [`apps/frame-setup`](apps/frame-setup) prototype explores the GUI-first installer path.
+It uses the FRAME theme, offers Quick Start, Guided Setup, and Advanced flows, detects Docker
+readiness and previous installs, plans host storage, checks exposed ports, and opens the local
+`/setup` handoff.
+
+For development:
+
+```powershell
+npm run setup:dev
+```
 
 ## What Is Included
 
@@ -128,6 +146,7 @@ Start with the service README when you want to understand, operate, or customize
 
 | Area | Service |
 | --- | --- |
+| Native setup prototype | [`apps/frame-setup/`](apps/frame-setup/README.md) |
 | Routing | [`services/frame-edge/`](services/frame-edge/README.md) |
 | Shared login | [`services/frame-auth/`](services/frame-auth/README.md) |
 | Portal and status | [`services/frame-portal/`](services/frame-portal/README.md) |

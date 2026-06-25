@@ -52,9 +52,9 @@
         <span>Queue completed photos from this device into the FRAME pipeline.</span>
       </section>
       <form id="upload-form">
-        <label class="drop" for="photo">
-          <strong>Select photos</strong>
-          <span>JPEG, PNG, WebP, TIFF, HEIC, and HEIF files are queued one at a time.</span>
+        <label class="drop" for="photo" id="drop-zone">
+          <strong>Drop photos here or tap to select</strong>
+          <span id="upload-limits">JPEG, PNG, WebP, TIFF, HEIC, and HEIF files are queued for upload.</span>
           <input id="photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp,image/tiff,image/heic,image/heif" multiple required>
         </label>
         <div class="queue-heading">

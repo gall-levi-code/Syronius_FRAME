@@ -1,4 +1,4 @@
-import { QUALITY, QualityStabilizer, canvasPixelSize, normalizedTelemetryOrder, qualityStatusText, shouldResetRuntimeState, telemetryAvailability, telemetryIsStale } from "./renderer-core.js";
+import { QUALITY, QualityStabilizer, canvasPixelSize, normalizedTelemetryBlockWidth, normalizedTelemetryOrder, qualityStatusText, resolvedTelemetryColumnCount, shouldResetRuntimeState, telemetryAvailability, telemetryGridPixelWidth, telemetryIsStale } from "./renderer-core.js";
 
 let payload = window.FRAME_OVERLAY;
 let preset = payload.preset;
@@ -13,6 +13,8 @@ let restInflight = false;
 let lastTelemetry;
 const history = [];
 const defaultOrder = ["header", "bitrate", "rtt", "latency", "buffer", "server", "dropped", "uptime", "meter", "chart", "recovery"];
+const telemetryGridGapPx = 7;
+const telemetryWidgetChromePx = 30;
 const widget = document.querySelector("#widget");
 const layout = document.querySelector("#telemetry-layout");
 const widgetHead = document.querySelector("#widget-head");
@@ -26,9 +28,12 @@ const chartRttLegend = document.querySelector(".rtt-line");
 const context = chart.getContext("2d");
 const blocks = new Map([...layout.querySelectorAll("[data-block]")].map((element) => [element.dataset.block, element]));
 const values = new Map([...layout.querySelectorAll("[data-value]")].map((element) => [element.dataset.value, element]));
-const previewMode = new URLSearchParams(location.search).has("preview");
+const query = new URLSearchParams(location.search);
+const previewMode = query.has("preview");
+const elementPreviewMode = query.has("elementPreview");
 
 if (previewMode) document.body.classList.add("preview");
+if (elementPreviewMode) document.body.classList.add("element-preview");
 applyPayload(payload);
 if (!previewMode) connectEvents();
 else acceptTelemetry({
@@ -40,8 +45,13 @@ else acceptTelemetry({
   publisher: { connected:true, bitrate:7200, rtt:68, latency:120, buffer:80, dropped_pkts:2, uptime:7320, recovery_rate:1.4 },
 });
 setInterval(renderLastTelemetry, 1000);
-window.addEventListener("resize", drawChart);
+window.addEventListener("resize", () => {
+  applyTelemetryColumns();
+  drawChart();
+  publishPreviewSize();
+});
 new ResizeObserver(drawChart).observe(chart);
+if (elementPreviewMode) new ResizeObserver(publishPreviewSize).observe(widget);
 window.addEventListener("message", (event) => {
   if (event.origin !== location.origin || event.data?.type !== "frame-preview" || !event.data.preset) return;
   applyPayload({ ...payload, ...event.data });
@@ -62,6 +72,7 @@ function applyPayload(next) {
   applyLayout();
   applyBlockVisibility(false, quality.stable, lastTelemetry?.publisher);
   renderLastTelemetry();
+  publishPreviewSize();
 }
 
 function connectEvents() {
@@ -145,6 +156,7 @@ function renderStats(stats) {
   history.push({ bitrate: Number(stats.bitrate || 0), rtt: Number.isFinite(Number(stats.rtt)) ? Number(stats.rtt) : null });
   while (history.length > (config.history_len || 10)) history.shift();
   drawChart();
+  publishPreviewSize();
   widget.hidden = false;
 }
 
@@ -158,6 +170,8 @@ function renderNoSignal(label, confirmed = true) {
   applyHeaderVisibility();
   for (const [id, block] of blocks) block.hidden = id !== "header";
   applyBlockOrder();
+  applyTelemetryColumns();
+  publishPreviewSize();
 }
 
 function applyHeaderVisibility(forceStatus = false) {
@@ -191,6 +205,7 @@ function applyBlockVisibility(compact, stableQuality, stats) {
   };
   for (const [id, isVisible] of Object.entries(visible)) blocks.get(id).hidden = compact || !isVisible;
   chartRttLegend.hidden = !available.rtt;
+  applyTelemetryColumns();
 }
 
 function applyBlockOrder() {
@@ -251,14 +266,46 @@ function applyLayout() {
   const pad = `${preset.layout.pad ?? 20}px`;
   const placement = { tl: { top: pad, left: pad, origin: "top left" }, t: { top: pad, left: "50%", transform: "translateX(-50%)", origin: "top center" }, tr: { top: pad, right: pad, origin: "top right" }, l: { left: pad, top: "50%", transform: "translateY(-50%)", origin: "center left" }, c: { left: "50%", top: "50%", transform: "translate(-50%, -50%)", origin: "center" }, r: { right: pad, top: "50%", transform: "translateY(-50%)", origin: "center right" }, bl: { bottom: pad, left: pad, origin: "bottom left" }, b: { bottom: pad, left: "50%", transform: "translateX(-50%)", origin: "bottom center" }, br: { bottom: pad, right: pad, origin: "bottom right" } }[preset.layout.dock || "br"];
   const { origin, transform = "", ...position } = placement;
-  Object.assign(widget.style, { top: "", right: "", bottom: "", left: "" }, position);
-  widget.style.transform = `${transform} scale(var(--scale, 1))`.trim();
-  widget.style.width = preset.layout.width_px ? `${preset.layout.width_px}px` : "fit-content";
+  if (elementPreviewMode) {
+    Object.assign(widget.style, { top: "", right: "", bottom: "", left: "" });
+    widget.style.transform = "scale(var(--scale, 1))";
+    widget.style.transformOrigin = "top left";
+  } else {
+    Object.assign(widget.style, { top: "", right: "", bottom: "", left: "" }, position);
+    widget.style.transform = `${transform} scale(var(--scale, 1))`.trim();
+    widget.style.transformOrigin = origin;
+  }
+  widget.style.width = "";
   widget.style.minHeight = preset.layout.height_px ? `${preset.layout.height_px}px` : "";
   document.documentElement.style.setProperty("--block-width", `${config.telemetry_block_width_px ?? 160}px`);
   document.documentElement.style.setProperty("--block-height", `${config.telemetry_block_height_px ?? 72}px`);
   document.documentElement.style.setProperty("--origin", origin);
   applyBlockOrder();
+  applyTelemetryColumns();
+}
+
+function applyTelemetryColumns() {
+  const visibleCount = [...blocks.values()].filter((block) => !block.hidden).length || 1;
+  const blockWidth = normalizedTelemetryBlockWidth(config.telemetry_block_width_px ?? 160);
+  const availableWidth = Math.max(blockWidth, window.innerWidth - ((preset.layout.pad ?? 20) * 2) - telemetryWidgetChromePx);
+  const columns = resolvedTelemetryColumnCount(config.telemetry_columns, visibleCount, blockWidth, availableWidth, telemetryGridGapPx);
+  layout.style.gridTemplateColumns = `repeat(${columns}, minmax(0, ${blockWidth}px))`;
+  widget.style.width = `${telemetryGridPixelWidth(columns, blockWidth, telemetryGridGapPx, telemetryWidgetChromePx)}px`;
+}
+
+function publishPreviewSize() {
+  if (!elementPreviewMode || window.parent === window) return;
+  requestAnimationFrame(() => {
+    const rect = widget.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    window.parent.postMessage({
+      type: "frame-preview-size",
+      width: Math.ceil(rect.width + 28),
+      height: Math.ceil(rect.height + 28),
+      content_width: Math.ceil(rect.width),
+      content_height: Math.ceil(rect.height),
+    }, "*");
+  });
 }
 
 function colorFor(value) { return value === QUALITY.GOOD ? theme.good_color || "#2cb4fb" : value === QUALITY.WARN ? theme.warn_color || "#ffd166" : theme.bad_color || "#ff5f6d"; }

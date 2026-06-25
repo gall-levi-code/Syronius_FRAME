@@ -62,3 +62,17 @@ removed.
 - Add archive retention controls and disk-pressure policy.
 - Add reliable HEIC decoding when the pinned production image runtime supports it.
 - Add camera and long-running FTP soak tests.
+
+### Remote Photo Agent / Belabox Module
+
+- Define a `frame-remote-photo-agent` capability for deploying a managed photo relay helper onto a Belabox or similar Linux encoder on the local network.
+- Build a FRAME-side setup wizard that can detect or accept the Belabox LAN IP, explain how to enable Belabox SSH, and connect with the fixed `user` SSH account plus the rotating password from the Belabox Advanced/developer panel.
+- Generate FRAME-managed usernames, paths, script names, and systemd unit names instead of reusing personal prototype paths from the reference scripts.
+- Configure a Belabox-local FTP ingest path for cameras, with a user-chosen camera FTP password and a reinstall option that rewrites the managed helper cleanly instead of creating duplicate services.
+- Keep the first production version on SFTP for reliability, landing files in a FRAME inbox/remote-agent path before the normal stability gate moves them into staging.
+- Default to deleting successfully transferred files on the Belabox, with an archive-completed-files option for users who want local recovery.
+- Define a remote photo upload progress event schema for future overlays: discovered, stable, queued, transferring, transferred, failed, retried, and archived/deleted.
+- Add a remote-agent status dashboard showing connection health, queue depth, last transfer, failures, and installed helper version.
+- Revisit chunked HTTPS or multi-connection transfer later if SFTP reliability is not enough for bonded or multi-WAN scenarios.
+- Keep remote photo overlay widgets in their own schema/preset namespace so they do not overwrite FRAME's stock connectivity presets.
+- Refactor the overlay wizard so stock defaults are immutable, OBS URL slugs can be chosen before first save, and saving a renamed preset creates a new preset instead of rewriting `default-connectivity`.

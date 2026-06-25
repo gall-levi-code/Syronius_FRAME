@@ -1,0 +1,1 @@
+{"main-capability":{"identifier":"main-capability","description":"Main FRAME Setup window permissions.","local":true,"windows":["main"],"permissions":["core:default","dialog:default","opener:default"]}}

@@ -10,10 +10,17 @@ import { UploadProgressTracker } from "./progress.js";
 export interface UploadConfig {
   dataRoot: string;
   maxInputBytes: number;
+  maxFiles: number;
+  maxSessions: number;
   publicDir: string;
   auth: BasicAuthConfig;
   serviceToken: string;
   progressTracker?: UploadProgressTracker;
+}
+
+interface CompletedUpload {
+  stagedName: string;
+  transferId: string;
 }
 
 export async function createApp(config: UploadConfig): Promise<Express> {
@@ -23,9 +30,17 @@ export async function createApp(config: UploadConfig): Promise<Express> {
   const progress = config.progressTracker ?? new UploadProgressTracker();
 
   const app = express();
+  let activeSessions = 0;
   app.disable("x-powered-by");
   app.get("/healthz", (_request, response) => {
-    response.json({ ok: true, service: "frame-photo-upload", max_input_bytes: config.maxInputBytes });
+    response.json({
+      ok: true,
+      service: "frame-photo-upload",
+      max_input_bytes: config.maxInputBytes,
+      max_files: config.maxFiles,
+      max_sessions: config.maxSessions,
+      active_sessions: activeSessions,
+    });
   });
   app.get("/api/internal/photo-upload/progress", requireServiceToken(config.serviceToken), (_request, response) => {
     response.setHeader("Cache-Control", "no-store");
@@ -36,67 +51,126 @@ export async function createApp(config: UploadConfig): Promise<Express> {
   app.get(["/photos/upload", "/photos/upload/"], (_request, response) => {
     response.sendFile(path.join(config.publicDir, "index.html"));
   });
+  app.get("/photos/api/config", (_request, response) => {
+    response.json({
+      max_input_bytes: config.maxInputBytes,
+      max_files: config.maxFiles,
+      max_sessions: config.maxSessions,
+      active_sessions: activeSessions,
+    });
+  });
   app.post("/photos/api/upload", (request, response, next) => {
-    const transferId = validTransferId(request.header("x-frame-transfer-id")) || randomUUID();
+    if (activeSessions >= config.maxSessions) {
+      response.status(429).json({ error: "Too many active upload sessions. Try again in a moment." });
+      return;
+    }
+    activeSessions += 1;
+    let released = false;
+    const releaseSession = () => {
+      if (released) return;
+      released = true;
+      activeSessions = Math.max(0, activeSessions - 1);
+    };
+    response.once("finish", releaseSession);
+    response.once("close", releaseSession);
+
+    const requestTransferId = validTransferId(request.header("x-frame-transfer-id")) || randomUUID();
     const bytesTotal = validFileSize(request.header("x-frame-file-size"), config.maxInputBytes);
+    const startedTransfers = new Set<string>();
+    const activeFiles = new Set<NodeJS.ReadableStream>();
+
     let busboy: Busboy.Busboy;
     try {
       busboy = Busboy({
         headers: request.headers,
-        limits: { files: 1, fileSize: config.maxInputBytes, fields: 4 },
+        limits: { files: config.maxFiles, fileSize: config.maxInputBytes, fields: 4 },
       });
     } catch (error) {
+      releaseSession();
       response.status(400).json({ error: errorMessage(error) });
       return;
     }
 
-    let upload: Promise<string> | null = null;
-    let activeFile: NodeJS.ReadableStream | null = null;
+    const uploads: Promise<CompletedUpload>[] = [];
     let limited = false;
+    let tooManyFiles = false;
     busboy.on("file", (_field, file, info) => {
-      if (upload) {
+      if (uploads.length >= config.maxFiles) {
+        tooManyFiles = true;
         file.resume();
         return;
       }
-      activeFile = file;
-      progress.begin(transferId, info.filename || "photo", bytesTotal);
-      file.on("limit", () => { limited = true; });
-      upload = streamCompletedUpload(
+      const transferId = transferIdForFile(requestTransferId, uploads.length);
+      startedTransfers.add(transferId);
+      activeFiles.add(file);
+      file.once("close", () => activeFiles.delete(file));
+      progress.begin(transferId, info.filename || "photo", uploads.length === 0 ? bytesTotal : null);
+      file.on("limit", () => {
+        limited = true;
+        progress.failed(transferId, "File exceeded the configured upload limit.");
+      });
+      const upload = streamCompletedUpload(
         file,
         info.filename || "photo",
         inbox,
         staging,
         (bytes) => progress.addBytes(transferId, bytes),
-      );
+      ).then((stagedName) => ({ stagedName, transferId }));
       // An aborted request may never emit Busboy's finish event. Attach a
       // rejection observer immediately so pipeline cleanup cannot become an
       // unhandled rejection; the finish path still awaits the same promise.
       void upload.catch(() => undefined);
+      uploads.push(upload);
     });
+    busboy.on("filesLimit", () => { tooManyFiles = true; });
     busboy.on("finish", async () => {
+      let completed: CompletedUpload[] = [];
       try {
-        if (!upload) {
-          response.status(400).json({ error: "Select one photo to upload." });
+        if (!uploads.length) {
+          response.status(400).json({ error: "Select at least one photo to upload." });
           return;
         }
-        const stagedName = await upload;
+        completed = await Promise.all(uploads);
+        if (limited || tooManyFiles) {
+          await Promise.all(completed.map(({ stagedName }) => rm(path.join(staging, stagedName), { force: true })));
+        }
+        if (tooManyFiles) {
+          failTransfers(startedTransfers, progress, `Select no more than ${config.maxFiles} photo(s) at once.`);
+          response.status(400).json({ error: `Select no more than ${config.maxFiles} photo(s) at once.` });
+          return;
+        }
         if (limited) {
-          await rm(path.join(staging, stagedName), { force: true });
+          failTransfers(startedTransfers, progress, "File exceeded the configured upload limit.");
           response.status(413).json({ error: `Photo exceeds the ${config.maxInputBytes} byte limit.` });
-          progress.failed(transferId, "File exceeded the configured upload limit.");
           return;
         }
-        progress.queued(transferId);
-        response.status(202).json({ accepted: true, staged_name: stagedName, transfer_id: transferId });
+        for (const { transferId } of completed) progress.queued(transferId);
+        const stagedNames = completed.map(({ stagedName }) => stagedName);
+        const transferIds = completed.map(({ transferId }) => transferId);
+        response.status(202).json({
+          accepted: true,
+          staged_name: stagedNames[0],
+          staged_names: stagedNames,
+          transfer_id: transferIds[0],
+          transfer_ids: transferIds,
+          count: stagedNames.length,
+        });
       } catch (error) {
-        progress.failed(transferId, errorMessage(error));
+        failTransfers(startedTransfers, progress, errorMessage(error));
         next(error);
       }
     });
-    busboy.on("error", (error) => { progress.failed(transferId, errorMessage(error)); next(error); });
+    busboy.on("error", (error) => {
+      failTransfers(startedTransfers, progress, errorMessage(error));
+      next(error);
+    });
     request.on("aborted", () => {
-      progress.failed(transferId, "Upload connection was interrupted.");
-      if (activeFile && "destroy" in activeFile && typeof activeFile.destroy === "function") activeFile.destroy(new Error("Upload connection was interrupted."));
+      failTransfers(startedTransfers, progress, "Upload connection was interrupted.");
+      for (const file of activeFiles) {
+        if ("destroy" in file && typeof file.destroy === "function") {
+          file.destroy(new Error("Upload connection was interrupted."));
+        }
+      }
     });
     request.pipe(busboy);
   });
@@ -118,6 +192,16 @@ function requireServiceToken(expected: string): express.RequestHandler {
     }
     next();
   };
+}
+
+function transferIdForFile(requestTransferId: string, index: number): string {
+  if (index === 0) return requestTransferId;
+  const suffix = `-${index + 1}`;
+  return `${requestTransferId.slice(0, 96 - suffix.length)}${suffix}`;
+}
+
+function failTransfers(transfers: Iterable<string>, progress: UploadProgressTracker, message: string): void {
+  for (const transferId of transfers) progress.failed(transferId, message);
 }
 
 function validTransferId(value: string | undefined): string | null {

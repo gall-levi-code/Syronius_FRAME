@@ -16,8 +16,13 @@ const sourceName = document.querySelector("#source-name");
 const adapterLabel = document.querySelector("#adapter-label");
 const focusName = document.querySelector("#focus-name");
 const summary = document.querySelector("#upload-summary");
-const progressTrack = document.querySelector("#progress-track");
-const progressFill = document.querySelector("#progress-fill");
+const currentProgressName = document.querySelector("#current-progress-name");
+const currentProgressValue = document.querySelector("#current-progress-value");
+const currentProgressTrack = document.querySelector("#current-progress-track");
+const currentProgressFill = document.querySelector("#current-progress-fill");
+const overallProgressValue = document.querySelector("#overall-progress-value");
+const overallProgressTrack = document.querySelector("#overall-progress-track");
+const overallProgressFill = document.querySelector("#overall-progress-fill");
 const sentDetail = document.querySelector("#sent-detail");
 const speedDetail = document.querySelector("#speed-detail");
 const elapsedDetail = document.querySelector("#elapsed-detail");
@@ -26,10 +31,14 @@ const speedValue = document.querySelector("#speed-value");
 const elapsedValue = document.querySelector("#elapsed-value");
 const errorValue = document.querySelector("#upload-error");
 
+const query = new URLSearchParams(location.search);
+const elementPreviewMode = query.has("elementPreview");
 if (previewMode) document.body.classList.add("preview");
+if (elementPreviewMode) document.body.classList.add("element-preview");
 applyPayload(payload);
 if (previewMode) acceptSnapshot(mockSnapshot()); else connectEvents();
 setInterval(render, 500);
+if (elementPreviewMode) new ResizeObserver(publishPreviewSize).observe(widget);
 window.addEventListener("message", (event) => {
   if (event.origin !== location.origin || event.data?.type !== "frame-preview" || !event.data.preset) return;
   applyPayload({ ...payload, ...event.data });
@@ -38,7 +47,7 @@ window.addEventListener("message", (event) => {
 function applyPayload(next) {
   if (payload && payload.telemetry_identity !== next.telemetry_identity) lastSnapshot = undefined;
   payload = next; preset = payload.preset; config = preset.config || {}; theme = preset.theme || {};
-  applyTheme(); applyLayout(); render();
+  applyTheme(); applyLayout(); render(); publishPreviewSize();
 }
 
 function connectEvents() {
@@ -79,24 +88,38 @@ function render() {
     sourceName.textContent = payload.source?.display_name || preset.name;
     focusName.textContent = lastSnapshot?.error || "No active transfers";
     summary.textContent = "";
-    progressTrack.classList.remove("indeterminate"); progressFill.style.width="0%";
+    adapterLabel.textContent = adapterLabelFor(payload.source?.data_source?.adapters || ["web_upload"]);
+    currentProgressName.textContent = "Current file";
+    currentProgressName.title = "";
+    currentProgressValue.textContent = "--";
+    currentProgressTrack.classList.remove("indeterminate");
+    currentProgressFill.style.width = "0%";
+    overallProgressValue.textContent = "0/0";
+    overallProgressTrack.classList.remove("indeterminate");
+    overallProgressFill.style.width = "0%";
     errorValue.hidden = true;
-    widget.classList.toggle("hidden", config.idle_behavior !== "show_idle");
+    widget.classList.toggle("hidden", !lastSnapshot?.error && config.idle_behavior !== "show_idle");
     return;
   }
   const focus = view.focus;
   widget.classList.remove("hidden");
-  status.textContent = focus.phase === "receiving" ? "UPLOADING" : focus.phase.toUpperCase();
+  status.textContent = phaseStatus(focus.phase);
   sourceName.textContent = payload.source?.display_name || preset.name;
-  adapterLabel.textContent = focus.adapter.replaceAll("_"," ").toUpperCase();
-  focusName.textContent = focus.filename || "Unnamed transfer";
+  adapterLabel.textContent = adapterLabelFor(view.adapters.length ? view.adapters : [focus.adapter]);
+  focusName.textContent = focusOrdinal(view);
   summary.textContent = uploadSummary(view);
-  progressTrack.classList.toggle("indeterminate", view.receiving > 0 && view.percent === null);
-  progressFill.style.width = `${view.percent ?? (focus.phase === "queued" || focus.phase === "published" ? 100 : 0)}%`;
+  currentProgressName.textContent = focus.filename || "Unnamed transfer";
+  currentProgressName.title = focus.filename || "";
+  currentProgressValue.textContent = percentText(view.current_percent);
+  currentProgressTrack.classList.toggle("indeterminate", focus.phase === "receiving" && view.current_percent === null);
+  currentProgressFill.style.width = `${view.current_percent ?? (focus.phase === "queued" || focus.phase === "processing" || focus.phase === "published" ? 100 : 0)}%`;
+  overallProgressValue.textContent = `${view.overall_complete}/${view.overall_total}`;
+  overallProgressTrack.classList.remove("indeterminate");
+  overallProgressFill.style.width = `${view.overall_percent}%`;
   sentDetail.hidden = config.show_sent === false;
   speedDetail.hidden = config.show_speed === false || view.speed_bps === null;
   elapsedDetail.hidden = config.show_elapsed === false || !focus.capabilities?.elapsed;
-  sentValue.textContent = view.bytes_total === null ? formatBytes(view.bytes_received) : `${formatBytes(view.bytes_received)} / ${formatBytes(view.bytes_total)}`;
+  sentValue.textContent = view.current_bytes_total === null ? formatBytes(view.current_bytes_received) : `${formatBytes(view.current_bytes_received)} / ${formatBytes(view.current_bytes_total)}`;
   speedValue.textContent = view.speed_bps === null ? "--" : `${formatBytes(view.speed_bps)}/s`;
   elapsedValue.textContent = formatDuration(focus.elapsed_ms);
   errorValue.hidden = focus.phase !== "failed"; errorValue.textContent = focus.error || "Upload failed";
@@ -108,6 +131,7 @@ function render() {
       : theme.bg_opacity_warn ?? .52;
   document.documentElement.style.setProperty("--quality",stateColor);
   document.documentElement.style.setProperty("--widget-opacity",String(stateOpacity));
+  publishPreviewSize();
 }
 
 function applyTheme() {
@@ -118,6 +142,29 @@ function applyTheme() {
 function applyLayout() {
   const pad=`${preset.layout.pad??20}px`;
   const placement={tl:{top:pad,left:pad,origin:"top left"},t:{top:pad,left:"50%",transform:"translateX(-50%)",origin:"top center"},tr:{top:pad,right:pad,origin:"top right"},l:{left:pad,top:"50%",transform:"translateY(-50%)",origin:"center left"},c:{left:"50%",top:"50%",transform:"translate(-50%, -50%)",origin:"center"},r:{right:pad,top:"50%",transform:"translateY(-50%)",origin:"center right"},bl:{bottom:pad,left:pad,origin:"bottom left"},b:{bottom:pad,left:"50%",transform:"translateX(-50%)",origin:"bottom center"},br:{bottom:pad,right:pad,origin:"bottom right"}}[preset.layout.dock||"bl"];
-  const {origin,transform="",...position}=placement;Object.assign(widget.style,{top:"",right:"",bottom:"",left:""},position);widget.style.transform=`${transform} scale(var(--scale, 1))`.trim();widget.style.transformOrigin=origin;widget.style.width=`${config.width_px||preset.layout.width_px||520}px`;
+  const {origin,transform="",...position}=placement;
+  if(elementPreviewMode){Object.assign(widget.style,{top:"",right:"",bottom:"",left:""});widget.style.transform="scale(var(--scale, 1))";widget.style.transformOrigin="top left";}
+  else{Object.assign(widget.style,{top:"",right:"",bottom:"",left:""},position);widget.style.transform=`${transform} scale(var(--scale, 1))`.trim();widget.style.transformOrigin=origin;}
+  widget.style.width=`${config.width_px||preset.layout.width_px||520}px`;
 }
-function mockSnapshot(){const now=new Date();return{sequence:1,observed_at:now.toISOString(),received_at:now.toISOString(),stale:false,transfers:[{transfer_id:"web_upload:preview-a",adapter:"web_upload",phase:"receiving",filename:"FRAME_Adventure_001.jpg",bytes_received:7340032,bytes_total:12582912,speed_bps:1572864,elapsed_ms:4700,started_at:new Date(now-4700).toISOString(),updated_at:now.toISOString(),capabilities:{filename:true,total_bytes:true,speed:true,elapsed:true}},{transfer_id:"web_upload:preview-b",adapter:"web_upload",phase:"queued",filename:"FRAME_Adventure_002.jpg",bytes_received:8388608,bytes_total:8388608,speed_bps:null,elapsed_ms:5200,started_at:new Date(now-5200).toISOString(),updated_at:now.toISOString(),capabilities:{filename:true,total_bytes:true,speed:false,elapsed:true}}]};}
+function publishPreviewSize(){
+  if(!elementPreviewMode||window.parent===window)return;
+  requestAnimationFrame(()=>{const rect=widget.getBoundingClientRect();if(!rect.width||!rect.height)return;window.parent.postMessage({type:"frame-preview-size",width:Math.ceil(rect.width+28),height:Math.ceil(rect.height+28),content_width:Math.ceil(rect.width),content_height:Math.ceil(rect.height)},"*");});
+}
+function phaseStatus(phase) {
+  if (phase === "receiving") return "UPLOADING";
+  if (phase === "queued") return "ACCEPTED";
+  return phase.toUpperCase();
+}
+function focusOrdinal(view) {
+  if (!view.overall_total || view.focus_index < 0) return phaseStatus(view.focus?.phase || "receiving");
+  return `${phaseStatus(view.focus.phase)} ${view.focus_index + 1}/${view.overall_total}`;
+}
+function percentText(value) {
+  return value === null ? "--" : `${Math.round(value)}%`;
+}
+function adapterLabelFor(adapters) {
+  const labels = (Array.isArray(adapters) ? adapters : []).map((adapter) => String(adapter).replace(/^web_upload$/,"web").replace(/^belabox_agent$/,"belabox").replaceAll("_"," ").toUpperCase());
+  return labels.length ? labels.join("+") : "WEB";
+}
+function mockSnapshot(){const now=new Date();return{sequence:1,observed_at:now.toISOString(),received_at:now.toISOString(),stale:false,transfers:[{transfer_id:"web_upload:preview-a",adapter:"web_upload",phase:"receiving",filename:"FRAME_Adventure_001.jpg",bytes_received:7340032,bytes_total:12582912,speed_bps:1572864,elapsed_ms:4700,started_at:new Date(now-4700).toISOString(),updated_at:now.toISOString(),capabilities:{filename:true,total_bytes:true,speed:true,elapsed:true}},{transfer_id:"web_upload:preview-b",adapter:"web_upload",phase:"queued",filename:"FRAME_Adventure_002.jpg",bytes_received:8388608,bytes_total:8388608,speed_bps:null,elapsed_ms:5200,started_at:new Date(now-5200).toISOString(),updated_at:now.toISOString(),capabilities:{filename:true,total_bytes:true,speed:false,elapsed:true}},{transfer_id:"web_upload:preview-c",adapter:"web_upload",phase:"receiving",filename:"Very_Long_Mobile_Camera_Roll_File_Name_That_Should_Ellipsize_003.jpg",bytes_received:3145728,bytes_total:20971520,speed_bps:524288,elapsed_ms:2600,started_at:new Date(now-2600).toISOString(),updated_at:now.toISOString(),capabilities:{filename:true,total_bytes:true,speed:true,elapsed:true}}]};}

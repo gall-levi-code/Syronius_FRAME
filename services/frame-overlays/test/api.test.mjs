@@ -34,19 +34,30 @@ test("source creation returns a keyed URL, rejects stale writes, and stock templ
   assert.equal((await fetch(`${fixture.base}/internal/streams/overlay-bindings`)).status, 401);
   const uploadSource = await json(`${fixture.base}/overlays/api/sources`, {
     method:"POST",
-    body:JSON.stringify({ expected_revision:1, template_id:"default-upload-progress", preset_name:"Uploads Preset", display_name:"Photo Uploads", slug:"photo-uploads", data_source:{kind:"upload_progress",adapters:["web_upload"]} }),
+    body:JSON.stringify({ expected_revision:1, template_id:"default-upload-progress", preset_name:"Uploads Preset", display_name:"Photo Uploads", slug:"photo-uploads", data_source:{kind:"upload_progress",adapters:["web_upload","ftp"]} }),
   });
   assert.equal(uploadSource.preset.type, "upload_progress");
-  assert.deepEqual(uploadSource.source.data_source, { kind:"upload_progress", adapters:["web_upload"] });
+  assert.deepEqual(uploadSource.source.data_source, { kind:"upload_progress", adapters:["web_upload","ftp"] });
   const uploadView = await fetch(`${fixture.base}${new URL(uploadSource.source.public_url).pathname}`);
   assert.equal(uploadView.status, 200);
   assert.match(await uploadView.text(), /upload-status/);
+  const duplicateName = await fetch(`${fixture.base}/overlays/api/sources`, {
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({ expected_revision:uploadSource.revision, template_id:"default-upload-progress", preset_name:"Duplicate Uploads Preset", display_name:"photo uploads", slug:"photo-uploads-copy", data_source:{kind:"upload_progress",adapters:["web_upload"]} }),
+  });
+  assert.equal(duplicateName.status, 409);
   const crossType = await fetch(`${fixture.base}/overlays/api/sources/${created.source.id}`, {
     method:"PUT",
     headers:{"Content-Type":"application/json","If-Match":"2"},
     body:JSON.stringify({ preset_id:uploadSource.preset.id }),
   });
   assert.equal(crossType.status, 409);
+  const deleteUpload = await fetch(`${fixture.base}/overlays/api/sources/${uploadSource.source.id}`, { method:"DELETE", headers:{"If-Match":String(uploadSource.revision)} });
+  assert.equal(deleteUpload.status, 204);
+  const afterDelete = await json(`${fixture.base}/overlays/api/catalog`);
+  assert.equal(afterDelete.sources.some((source) => source.id === uploadSource.source.id), false);
+  assert.equal(afterDelete.presets.some((preset) => preset.id === uploadSource.preset.id), false);
 });
 
 test("a migrated V1 OBS URL still renders through its legacy alias", async (t) => {

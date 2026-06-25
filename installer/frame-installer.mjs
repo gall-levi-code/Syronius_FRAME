@@ -44,6 +44,11 @@ const IMPORTABLE_ENV_KEYS = new Set([
   "TIMEZONE",
   "FRAME_HOST_DATA_ROOT",
   "PHOTO_FTP_PASSIVE_HOST",
+  "PHOTO_FTP_MIN_PASSWORD_LENGTH",
+  "PHOTO_FTP_MAX_SESSIONS",
+  "PHOTO_FTP_MAX_SESSIONS_PER_IP",
+  "PHOTO_UPLOAD_MAX_FILES",
+  "PHOTO_UPLOAD_MAX_SESSIONS",
 ]);
 
 const CUSTOMIZABLE_ENV_KEYS = new Set([
@@ -62,8 +67,14 @@ const CUSTOMIZABLE_ENV_KEYS = new Set([
   "PHOTO_FTP_PASSIVE_MAX",
   "PHOTO_FTP_PASSIVE_HOST",
   "PHOTO_FTP_USERNAME",
+  "PHOTO_FTP_MIN_PASSWORD_LENGTH",
+  "PHOTO_FTP_MAX_SESSIONS",
+  "PHOTO_FTP_MAX_SESSIONS_PER_IP",
+  "PHOTO_FTP_VERBOSE_LOG",
   "PHOTO_FTP_STABLE_MS",
   "PHOTO_FTP_SCAN_MS",
+  "PHOTO_UPLOAD_MAX_FILES",
+  "PHOTO_UPLOAD_MAX_SESSIONS",
   "PIPELINE_POLL_MS",
   "PIPELINE_CONCURRENCY",
   "PHOTO_MAX_INPUT_MB",
@@ -369,8 +380,11 @@ async function setServiceAuth() {
     throw new Error("Unknown service credential group.");
   }
   const [usernameKey, passwordKey, required] = credentials;
-  if (required && (!username.trim() || password.length < 12)) {
-    throw new Error("Photo FTP username and a password of at least 12 characters are required.");
+  const minimumPasswordLength = group.trim() === "photo-ftp"
+    ? normalizeInteger(defaultIfBlank(env.PHOTO_FTP_MIN_PASSWORD_LENGTH, "5"), "Photo FTP minimum password length", 5, 128)
+    : "1";
+  if (required && (!username.trim() || password.length < Number(minimumPasswordLength))) {
+    throw new Error(`Photo FTP username and a password of at least ${minimumPasswordLength} characters are required.`);
   }
   if (!required && Boolean(username.trim()) !== Boolean(password)) {
     throw new Error("Username and password must both be set, or both be empty.");
@@ -396,36 +410,41 @@ async function reset(options) {
 }
 
 function buildEnvironment(existing, options, mode, capabilities) {
-  const dataRoot = normalizeDataRoot(String(options["data-root"] ?? existing.FRAME_DATA_ROOT ?? "./data"));
-  const hostDataRoot = normalizeHostDataRoot(String(options["host-data-root"] ?? existing.FRAME_HOST_DATA_ROOT ?? "/data"));
-  const edgePort = normalizePort(options["edge-http-port"] ?? existing.EDGE_HTTP_PORT ?? "80", "FRAME Edge port");
+  const dataRoot = normalizeDataRoot(String(options["data-root"] ?? setting(existing, "FRAME_DATA_ROOT", "./data")));
+  const hostDataRoot = normalizeHostDataRoot(String(options["host-data-root"] ?? setting(existing, "FRAME_HOST_DATA_ROOT", "/data")));
+  const edgePort = normalizePort(options["edge-http-port"] ?? setting(existing, "EDGE_HTTP_PORT", "80"), "FRAME Edge port");
   const edgeLanBaseUrl = formatLocalHttpUrl(edgePort);
   const cloudflarePublicHostname = normalizeHostname(
     options["public-hostname"] ?? existing.CLOUDFLARE_PUBLIC_HOSTNAME ?? "",
     mode === "HYBRID",
   );
   const edgePublicBaseUrl = mode === "HYBRID" ? `https://${cloudflarePublicHostname}` : edgeLanBaseUrl;
-  const portalPort = normalizePort(options["portal-port"] ?? existing.PORTAL_PORT ?? "3730", "portal port");
+  const portalPort = normalizePort(options["portal-port"] ?? setting(existing, "PORTAL_PORT", "3730"), "portal port");
   const audioPort = normalizePort(
-    options["audio-bridge-port"] ?? existing.AUDIO_BRIDGE_PORT ?? "3729",
+    options["audio-bridge-port"] ?? setting(existing, "AUDIO_BRIDGE_PORT", "3729"),
     "Audio Bridge port",
   );
-  const audioMonitorPort = normalizePort(existing.AUDIO_MONITOR_PORT ?? "3734", "Audio Monitor port");
-  const streamsPort = normalizePort(existing.STREAMS_PORT ?? "3732", "Stream Management port");
-  const overlaysPort = normalizePort(existing.OVERLAYS_PORT ?? "3733", "Overlay Wizard port");
-  const photoUploadPort = normalizePort(existing.PHOTO_UPLOAD_PORT ?? "3736", "Photo Upload port");
-  const photoFtpPort = normalizePort(existing.PHOTO_FTP_PORT ?? "2121", "Photo FTP port");
-  const galleryPort = normalizePort(existing.GALLERY_PORT ?? "3738", "Photo Gallery port");
-  const todayPort = normalizePort(existing.TODAY_PORT ?? "3739", "Today Tools port");
-  const photoFtpPassiveMin = normalizePort(existing.PHOTO_FTP_PASSIVE_MIN ?? "30000", "Photo FTP passive minimum");
-  const photoFtpPassiveMax = normalizePort(existing.PHOTO_FTP_PASSIVE_MAX ?? "30009", "Photo FTP passive maximum");
+  const audioMonitorPort = normalizePort(setting(existing, "AUDIO_MONITOR_PORT", "3734"), "Audio Monitor port");
+  const streamsPort = normalizePort(setting(existing, "STREAMS_PORT", "3732"), "Stream Management port");
+  const overlaysPort = normalizePort(setting(existing, "OVERLAYS_PORT", "3733"), "Overlay Wizard port");
+  const photoUploadPort = normalizePort(setting(existing, "PHOTO_UPLOAD_PORT", "3736"), "Photo Upload port");
+  const photoFtpPort = normalizePort(setting(existing, "PHOTO_FTP_PORT", "2121"), "Photo FTP port");
+  const galleryPort = normalizePort(setting(existing, "GALLERY_PORT", "3738"), "Photo Gallery port");
+  const todayPort = normalizePort(setting(existing, "TODAY_PORT", "3739"), "Today Tools port");
+  const photoFtpPassiveMin = normalizePort(setting(existing, "PHOTO_FTP_PASSIVE_MIN", "30000"), "Photo FTP passive minimum");
+  const photoFtpPassiveMax = normalizePort(setting(existing, "PHOTO_FTP_PASSIVE_MAX", "30019"), "Photo FTP passive maximum");
   if (Number(photoFtpPassiveMin) > Number(photoFtpPassiveMax)) {
     throw new Error("Photo FTP passive minimum cannot exceed its maximum.");
   }
-  const slsStatsPort = normalizePort(existing.SLS_STATS_PORT ?? "8080", "SLS statistics port");
-  const srtlaPort = normalizePort(existing.SRTLA_PORT ?? "5000", "SRTLA port");
-  const srtPlayerPort = normalizePort(existing.SRT_PLAYER_PORT ?? "4000", "SRT player port");
-  const srtSenderPort = normalizePort(existing.SRT_SENDER_PORT ?? "4001", "SRT sender port");
+  const photoFtpMinPasswordLength = normalizeInteger(setting(existing, "PHOTO_FTP_MIN_PASSWORD_LENGTH", "5"), "Photo FTP minimum password length", 5, 128);
+  const photoFtpMaxSessions = normalizeInteger(setting(existing, "PHOTO_FTP_MAX_SESSIONS", "20"), "Photo FTP max sessions", 1, 100);
+  const photoFtpMaxSessionsPerIp = normalizeInteger(setting(existing, "PHOTO_FTP_MAX_SESSIONS_PER_IP", "10"), "Photo FTP max sessions per IP", 1, 100);
+  const photoUploadMaxFiles = normalizeInteger(setting(existing, "PHOTO_UPLOAD_MAX_FILES", "100"), "Photo upload max files", 1, 100);
+  const photoUploadMaxSessions = normalizeInteger(setting(existing, "PHOTO_UPLOAD_MAX_SESSIONS", "2"), "Photo upload max sessions", 1, 100);
+  const slsStatsPort = normalizePort(setting(existing, "SLS_STATS_PORT", "8080"), "SLS statistics port");
+  const srtlaPort = normalizePort(setting(existing, "SRTLA_PORT", "5000"), "SRTLA port");
+  const srtPlayerPort = normalizePort(setting(existing, "SRT_PLAYER_PORT", "4000"), "SRT player port");
+  const srtSenderPort = normalizePort(setting(existing, "SRT_SENDER_PORT", "4001"), "SRT sender port");
   assertPortSet([
     ["FRAME Edge", edgePort, true],
     ["Portal", portalPort, true],
@@ -448,7 +467,7 @@ function buildEnvironment(existing, options, mode, capabilities) {
     FRAME_MODE: mode,
     FRAME_DATA_ROOT: dataRoot,
     FRAME_HOST_DATA_ROOT: hostDataRoot,
-    TIMEZONE: existing.TIMEZONE ?? "America/Chicago",
+    TIMEZONE: setting(existing, "TIMEZONE", "America/Chicago"),
     COMPOSE_PROFILES: profiles.join(","),
     EDGE_HTTP_PORT: edgePort,
     EDGE_PUBLIC_BASE_URL: edgePublicBaseUrl,
@@ -469,45 +488,51 @@ function buildEnvironment(existing, options, mode, capabilities) {
     TODAY_PORT: todayPort,
     PHOTO_FTP_PASSIVE_MIN: photoFtpPassiveMin,
     PHOTO_FTP_PASSIVE_MAX: photoFtpPassiveMax,
-    PHOTO_FTP_PASSIVE_HOST: existing.PHOTO_FTP_PASSIVE_HOST ?? "127.0.0.1",
-    PHOTO_FTP_USERNAME: existing.PHOTO_FTP_USERNAME ?? "frame",
-    PHOTO_FTP_PASSWORD: preserveSecret(existing.PHOTO_FTP_PASSWORD, 18),
-    PHOTO_FTP_STABLE_MS: existing.PHOTO_FTP_STABLE_MS ?? "3000",
-    PHOTO_FTP_SCAN_MS: existing.PHOTO_FTP_SCAN_MS ?? "1000",
-    PIPELINE_POLL_MS: existing.PIPELINE_POLL_MS ?? "1000",
-    PIPELINE_CONCURRENCY: existing.PIPELINE_CONCURRENCY ?? "2",
-    PHOTO_MAX_INPUT_MB: existing.PHOTO_MAX_INPUT_MB ?? "50",
-    PHOTO_MAX_MEGAPIXELS: existing.PHOTO_MAX_MEGAPIXELS ?? "80",
-    PHOTO_CONVERSION_ATTEMPTS: existing.PHOTO_CONVERSION_ATTEMPTS ?? "3",
-    PHOTO_ARCHIVE_ORIGINALS: existing.PHOTO_ARCHIVE_ORIGINALS ?? "true",
-    GALLERY_THUMB_WIDTH: existing.GALLERY_THUMB_WIDTH ?? "720",
-    GALLERY_THUMB_QUALITY: existing.GALLERY_THUMB_QUALITY ?? "82",
-    TODAY_DEFAULT_INTERVAL_MS: existing.TODAY_DEFAULT_INTERVAL_MS ?? "10000",
-    TODAY_REFRESH_MS: existing.TODAY_REFRESH_MS ?? "1000",
+    PHOTO_FTP_PASSIVE_HOST: setting(existing, "PHOTO_FTP_PASSIVE_HOST", "127.0.0.1"),
+    PHOTO_FTP_USERNAME: setting(existing, "PHOTO_FTP_USERNAME", "frame"),
+    PHOTO_FTP_PASSWORD: preserveSecret(existing.PHOTO_FTP_PASSWORD, Number(photoFtpMinPasswordLength)),
+    PHOTO_FTP_MIN_PASSWORD_LENGTH: photoFtpMinPasswordLength,
+    PHOTO_FTP_MAX_SESSIONS: photoFtpMaxSessions,
+    PHOTO_FTP_MAX_SESSIONS_PER_IP: photoFtpMaxSessionsPerIp,
+    PHOTO_FTP_VERBOSE_LOG: setting(existing, "PHOTO_FTP_VERBOSE_LOG", "false"),
+    PHOTO_FTP_STABLE_MS: setting(existing, "PHOTO_FTP_STABLE_MS", "3000"),
+    PHOTO_FTP_SCAN_MS: setting(existing, "PHOTO_FTP_SCAN_MS", "1000"),
+    PHOTO_UPLOAD_MAX_FILES: photoUploadMaxFiles,
+    PHOTO_UPLOAD_MAX_SESSIONS: photoUploadMaxSessions,
+    PIPELINE_POLL_MS: setting(existing, "PIPELINE_POLL_MS", "1000"),
+    PIPELINE_CONCURRENCY: setting(existing, "PIPELINE_CONCURRENCY", "2"),
+    PHOTO_MAX_INPUT_MB: setting(existing, "PHOTO_MAX_INPUT_MB", "50"),
+    PHOTO_MAX_MEGAPIXELS: setting(existing, "PHOTO_MAX_MEGAPIXELS", "80"),
+    PHOTO_CONVERSION_ATTEMPTS: setting(existing, "PHOTO_CONVERSION_ATTEMPTS", "3"),
+    PHOTO_ARCHIVE_ORIGINALS: setting(existing, "PHOTO_ARCHIVE_ORIGINALS", "true"),
+    GALLERY_THUMB_WIDTH: setting(existing, "GALLERY_THUMB_WIDTH", "720"),
+    GALLERY_THUMB_QUALITY: setting(existing, "GALLERY_THUMB_QUALITY", "82"),
+    TODAY_DEFAULT_INTERVAL_MS: setting(existing, "TODAY_DEFAULT_INTERVAL_MS", "10000"),
+    TODAY_REFRESH_MS: setting(existing, "TODAY_REFRESH_MS", "1000"),
     FRAME_AUTH_SESSION_SECRET: preserveSecret(existing.FRAME_AUTH_SESSION_SECRET, 32),
-    FRAME_AUTH_SESSION_DAYS: existing.FRAME_AUTH_SESSION_DAYS ?? "7",
+    FRAME_AUTH_SESSION_DAYS: setting(existing, "FRAME_AUTH_SESSION_DAYS", "7"),
     PORTAL_SERVICE_TOKEN: preserveSecret(existing.PORTAL_SERVICE_TOKEN, 32),
     PORTAL_USERNAME: existing.PORTAL_USERNAME ?? "",
     PORTAL_PASSWORD: existing.PORTAL_PASSWORD ?? "",
-    PORTAL_REALM: existing.PORTAL_REALM ?? "FRAME Portal",
-    ENABLE_CONTAINER_RESTARTS: existing.ENABLE_CONTAINER_RESTARTS ?? "false",
-    DOCKER_PROXY_POST: existing.DOCKER_PROXY_POST ?? "0",
-    STATUS_REFRESH_MS: existing.STATUS_REFRESH_MS ?? "5000",
-    STATUS_CACHE_MS: existing.STATUS_CACHE_MS ?? "4000",
-    REQUEST_TIMEOUT_MS: existing.REQUEST_TIMEOUT_MS ?? "3000",
-    DISK_WARN_PERCENT: existing.DISK_WARN_PERCENT ?? "85",
-    DISK_ERROR_PERCENT: existing.DISK_ERROR_PERCENT ?? "95",
-    DISK_MINIMUM_FREE_GB: existing.DISK_MINIMUM_FREE_GB ?? "20",
-    DISCORD_TOKEN: existing.DISCORD_TOKEN ?? "your_bot_token_here",
-    DISCORD_CLIENT_ID: existing.DISCORD_CLIENT_ID ?? "your_discord_application_client_id_here",
+    PORTAL_REALM: setting(existing, "PORTAL_REALM", "FRAME Portal"),
+    ENABLE_CONTAINER_RESTARTS: setting(existing, "ENABLE_CONTAINER_RESTARTS", "false"),
+    DOCKER_PROXY_POST: setting(existing, "DOCKER_PROXY_POST", "0"),
+    STATUS_REFRESH_MS: setting(existing, "STATUS_REFRESH_MS", "5000"),
+    STATUS_CACHE_MS: setting(existing, "STATUS_CACHE_MS", "4000"),
+    REQUEST_TIMEOUT_MS: setting(existing, "REQUEST_TIMEOUT_MS", "3000"),
+    DISK_WARN_PERCENT: setting(existing, "DISK_WARN_PERCENT", "85"),
+    DISK_ERROR_PERCENT: setting(existing, "DISK_ERROR_PERCENT", "95"),
+    DISK_MINIMUM_FREE_GB: setting(existing, "DISK_MINIMUM_FREE_GB", "20"),
+    DISCORD_TOKEN: setting(existing, "DISCORD_TOKEN", "your_bot_token_here"),
+    DISCORD_CLIENT_ID: setting(existing, "DISCORD_CLIENT_ID", "your_discord_application_client_id_here"),
     PUBLIC_BASE_URL: mode === "HYBRID" ? edgePublicBaseUrl : `http://localhost:${audioPort}`,
     SESSION_SECRET: preserveSecret(existing.SESSION_SECRET, 32),
-    DEFAULT_AUDIO_DELAY_MS: existing.DEFAULT_AUDIO_DELAY_MS ?? "2000",
-    MAX_AUDIO_DELAY_MS: existing.MAX_AUDIO_DELAY_MS ?? "10000",
-    SESSION_IDLE_TIMEOUT_MINUTES: existing.SESSION_IDLE_TIMEOUT_MINUTES ?? "30",
+    DEFAULT_AUDIO_DELAY_MS: setting(existing, "DEFAULT_AUDIO_DELAY_MS", "2000"),
+    MAX_AUDIO_DELAY_MS: setting(existing, "MAX_AUDIO_DELAY_MS", "10000"),
+    SESSION_IDLE_TIMEOUT_MINUTES: setting(existing, "SESSION_IDLE_TIMEOUT_MINUTES", "30"),
     READONLY_OBS_TOKEN: existing.READONLY_OBS_TOKEN ?? "",
     SLS_API_KEY: preserveSecret(existing.SLS_API_KEY, 32),
-    PUBLIC_RELAY_HOST: existing.PUBLIC_RELAY_HOST ?? "localhost",
+    PUBLIC_RELAY_HOST: setting(existing, "PUBLIC_RELAY_HOST", "localhost"),
     SRTLA_PORT: srtlaPort,
     SRT_PLAYER_PORT: srtPlayerPort,
     SRT_SENDER_PORT: srtSenderPort,
@@ -521,27 +546,32 @@ function buildEnvironment(existing, options, mode, capabilities) {
 }
 
 function validateEnvironment(env, config, forStart) {
-  const dataRoot = normalizeDataRoot(env.FRAME_DATA_ROOT);
+  const dataRoot = normalizeDataRoot(defaultIfBlank(env.FRAME_DATA_ROOT, "./data"));
   resolveDataRoot(dataRoot);
-  const edgePort = normalizePort(env.EDGE_HTTP_PORT, "FRAME Edge port");
-  const portalPort = normalizePort(env.PORTAL_PORT, "portal port");
-  const audioPort = normalizePort(env.AUDIO_BRIDGE_PORT, "Audio Bridge port");
-  const audioMonitorPort = normalizePort(env.AUDIO_MONITOR_PORT, "Audio Monitor port");
-  const streamsPort = normalizePort(env.STREAMS_PORT, "Stream Management port");
-  const overlaysPort = normalizePort(env.OVERLAYS_PORT, "Overlay Wizard port");
-  const photoUploadPort = normalizePort(env.PHOTO_UPLOAD_PORT, "Photo Upload port");
-  const photoFtpPort = normalizePort(env.PHOTO_FTP_PORT, "Photo FTP port");
-  const galleryPort = normalizePort(env.GALLERY_PORT, "Photo Gallery port");
-  const todayPort = normalizePort(env.TODAY_PORT, "Today Tools port");
-  const photoFtpPassiveMin = normalizePort(env.PHOTO_FTP_PASSIVE_MIN, "Photo FTP passive minimum");
-  const photoFtpPassiveMax = normalizePort(env.PHOTO_FTP_PASSIVE_MAX, "Photo FTP passive maximum");
+  const edgePort = normalizePort(defaultIfBlank(env.EDGE_HTTP_PORT, "80"), "FRAME Edge port");
+  const portalPort = normalizePort(defaultIfBlank(env.PORTAL_PORT, "3730"), "portal port");
+  const audioPort = normalizePort(defaultIfBlank(env.AUDIO_BRIDGE_PORT, "3729"), "Audio Bridge port");
+  const audioMonitorPort = normalizePort(defaultIfBlank(env.AUDIO_MONITOR_PORT, "3734"), "Audio Monitor port");
+  const streamsPort = normalizePort(defaultIfBlank(env.STREAMS_PORT, "3732"), "Stream Management port");
+  const overlaysPort = normalizePort(defaultIfBlank(env.OVERLAYS_PORT, "3733"), "Overlay Wizard port");
+  const photoUploadPort = normalizePort(defaultIfBlank(env.PHOTO_UPLOAD_PORT, "3736"), "Photo Upload port");
+  const photoFtpPort = normalizePort(defaultIfBlank(env.PHOTO_FTP_PORT, "2121"), "Photo FTP port");
+  const galleryPort = normalizePort(defaultIfBlank(env.GALLERY_PORT, "3738"), "Photo Gallery port");
+  const todayPort = normalizePort(defaultIfBlank(env.TODAY_PORT, "3739"), "Today Tools port");
+  const photoFtpPassiveMin = normalizePort(defaultIfBlank(env.PHOTO_FTP_PASSIVE_MIN, "30000"), "Photo FTP passive minimum");
+  const photoFtpPassiveMax = normalizePort(defaultIfBlank(env.PHOTO_FTP_PASSIVE_MAX, "30019"), "Photo FTP passive maximum");
   if (Number(photoFtpPassiveMin) > Number(photoFtpPassiveMax)) {
     throw new Error("Photo FTP passive minimum cannot exceed its maximum.");
   }
-  const slsStatsPort = normalizePort(env.SLS_STATS_PORT, "SLS statistics port");
-  const srtlaPort = normalizePort(env.SRTLA_PORT, "SRTLA port");
-  const srtPlayerPort = normalizePort(env.SRT_PLAYER_PORT, "SRT player port");
-  const srtSenderPort = normalizePort(env.SRT_SENDER_PORT, "SRT sender port");
+  const photoFtpMinPasswordLength = normalizeInteger(setting(env, "PHOTO_FTP_MIN_PASSWORD_LENGTH", "5"), "Photo FTP minimum password length", 5, 128);
+  normalizeInteger(setting(env, "PHOTO_FTP_MAX_SESSIONS", "20"), "Photo FTP max sessions", 1, 100);
+  normalizeInteger(setting(env, "PHOTO_FTP_MAX_SESSIONS_PER_IP", "10"), "Photo FTP max sessions per IP", 1, 100);
+  normalizeInteger(setting(env, "PHOTO_UPLOAD_MAX_FILES", "100"), "Photo upload max files", 1, 100);
+  normalizeInteger(setting(env, "PHOTO_UPLOAD_MAX_SESSIONS", "2"), "Photo upload max sessions", 1, 100);
+  const slsStatsPort = normalizePort(defaultIfBlank(env.SLS_STATS_PORT, "8080"), "SLS statistics port");
+  const srtlaPort = normalizePort(defaultIfBlank(env.SRTLA_PORT, "5000"), "SRTLA port");
+  const srtPlayerPort = normalizePort(defaultIfBlank(env.SRT_PLAYER_PORT, "4000"), "SRT player port");
+  const srtSenderPort = normalizePort(defaultIfBlank(env.SRT_SENDER_PORT, "4001"), "SRT sender port");
   assertPortSet([
     ["FRAME Edge", edgePort, true],
     ["Portal", portalPort, true],
@@ -570,8 +600,9 @@ function validateEnvironment(env, config, forStart) {
   if ((env.FRAME_AUTH_SESSION_SECRET ?? "").length < 32) {
     throw new Error("FRAME_AUTH_SESSION_SECRET is missing or too short. Re-run stack install.");
   }
-  const authSessionDays = Number.parseInt(String(env.FRAME_AUTH_SESSION_DAYS ?? ""), 10);
-  if (!Number.isInteger(authSessionDays) || String(authSessionDays) !== String(env.FRAME_AUTH_SESSION_DAYS) || authSessionDays < 1 || authSessionDays > 30) {
+  const normalizedAuthSessionDays = defaultIfBlank(env.FRAME_AUTH_SESSION_DAYS, "7");
+  const authSessionDays = Number.parseInt(normalizedAuthSessionDays, 10);
+  if (!Number.isInteger(authSessionDays) || String(authSessionDays) !== normalizedAuthSessionDays || authSessionDays < 1 || authSessionDays > 30) {
     throw new Error("FRAME_AUTH_SESSION_DAYS must be an integer from 1 to 30.");
   }
   if (!isHttpUrl(env.EDGE_PUBLIC_BASE_URL)) {
@@ -589,11 +620,11 @@ function validateEnvironment(env, config, forStart) {
   if (config.capabilities["frame-video-relay"] && !String(env.PUBLIC_RELAY_HOST ?? "").trim()) {
     throw new Error("PUBLIC_RELAY_HOST is required when the Video Relay is enabled.");
   }
+  if (config.capabilities["frame-photo-ftp"] && String(env.PHOTO_FTP_PASSWORD ?? "").length < Number(photoFtpMinPasswordLength)) {
+    throw new Error(`PHOTO_FTP_PASSWORD is missing or shorter than ${photoFtpMinPasswordLength} characters. Re-run stack install.`);
+  }
   if (config.capabilities["frame-video-relay"] && env.STREAMS_PUBLIC_BASE_URL !== env.EDGE_PUBLIC_BASE_URL) {
     throw new Error("STREAMS_PUBLIC_BASE_URL must match EDGE_PUBLIC_BASE_URL. Re-run stack install.");
-  }
-  if (config.capabilities["frame-photo-ftp"] && String(env.PHOTO_FTP_PASSWORD ?? "").length < 12) {
-    throw new Error("PHOTO_FTP_PASSWORD is missing or too short. Re-run stack install.");
   }
   if (config.mode === "HYBRID") {
     const hostname = normalizeHostname(env.CLOUDFLARE_PUBLIC_HOSTNAME, true);
@@ -875,6 +906,24 @@ function normalizePort(value, label) {
   return String(port);
 }
 
+function normalizeInteger(value, label, minimum, maximum) {
+  const text = String(value ?? "").trim();
+  const integer = Number.parseInt(text, 10);
+  if (!Number.isInteger(integer) || String(integer) !== text || integer < minimum || integer > maximum) {
+    throw new Error(`${label} must be an integer from ${minimum} to ${maximum}.`);
+  }
+  return String(integer);
+}
+
+function defaultIfBlank(value, fallback) {
+  const text = String(value ?? "").trim();
+  return text ? text : fallback;
+}
+
+function setting(env, key, fallback) {
+  return defaultIfBlank(env?.[key], fallback);
+}
+
 function assertPortSet(entries) {
   const seen = new Map();
   for (const [label, port, enabled] of entries) {
@@ -1087,8 +1136,14 @@ function serializeEnv(env) {
         "PHOTO_FTP_PASSIVE_HOST",
         "PHOTO_FTP_USERNAME",
         "PHOTO_FTP_PASSWORD",
+        "PHOTO_FTP_MIN_PASSWORD_LENGTH",
+        "PHOTO_FTP_MAX_SESSIONS",
+        "PHOTO_FTP_MAX_SESSIONS_PER_IP",
+        "PHOTO_FTP_VERBOSE_LOG",
         "PHOTO_FTP_STABLE_MS",
         "PHOTO_FTP_SCAN_MS",
+        "PHOTO_UPLOAD_MAX_FILES",
+        "PHOTO_UPLOAD_MAX_SESSIONS",
         "PIPELINE_POLL_MS",
         "PIPELINE_CONCURRENCY",
         "PHOTO_MAX_INPUT_MB",

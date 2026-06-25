@@ -564,4 +564,3 @@ update();
 updateBufferReadout();
 setInterval(update, 3_000);
 setInterval(updateBufferReadout, 500);
-
