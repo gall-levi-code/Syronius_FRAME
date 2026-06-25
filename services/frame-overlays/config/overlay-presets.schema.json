@@ -118,6 +118,12 @@
           "uniqueItems": true,
           "items": { "enum": ["header", "bitrate", "rtt", "latency", "buffer", "server", "dropped", "uptime", "meter", "chart", "recovery"] }
         },
+        "telemetry_columns": {
+          "oneOf": [
+            { "enum": ["auto", "all"] },
+            { "type": "integer", "minimum": 1, "maximum": 8 }
+          ]
+        },
         "telemetry_block_width_px": { "type": "number", "minimum": 80, "maximum": 600 },
         "telemetry_block_height_px": { "type": "number", "minimum": 40, "maximum": 400 },
         "no_signal_behavior": { "enum": ["show_offline", "hide"] },

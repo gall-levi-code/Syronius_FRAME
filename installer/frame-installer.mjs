@@ -432,15 +432,15 @@ function buildEnvironment(existing, options, mode, capabilities) {
   const galleryPort = normalizePort(setting(existing, "GALLERY_PORT", "3738"), "Photo Gallery port");
   const todayPort = normalizePort(setting(existing, "TODAY_PORT", "3739"), "Today Tools port");
   const photoFtpPassiveMin = normalizePort(setting(existing, "PHOTO_FTP_PASSIVE_MIN", "30000"), "Photo FTP passive minimum");
-  const photoFtpPassiveMax = normalizePort(setting(existing, "PHOTO_FTP_PASSIVE_MAX", "30009"), "Photo FTP passive maximum");
+  const photoFtpPassiveMax = normalizePort(setting(existing, "PHOTO_FTP_PASSIVE_MAX", "30019"), "Photo FTP passive maximum");
   if (Number(photoFtpPassiveMin) > Number(photoFtpPassiveMax)) {
     throw new Error("Photo FTP passive minimum cannot exceed its maximum.");
   }
   const photoFtpMinPasswordLength = normalizeInteger(setting(existing, "PHOTO_FTP_MIN_PASSWORD_LENGTH", "5"), "Photo FTP minimum password length", 5, 128);
-  const photoFtpMaxSessions = normalizeInteger(setting(existing, "PHOTO_FTP_MAX_SESSIONS", "10"), "Photo FTP max sessions", 1, 100);
+  const photoFtpMaxSessions = normalizeInteger(setting(existing, "PHOTO_FTP_MAX_SESSIONS", "20"), "Photo FTP max sessions", 1, 100);
   const photoFtpMaxSessionsPerIp = normalizeInteger(setting(existing, "PHOTO_FTP_MAX_SESSIONS_PER_IP", "10"), "Photo FTP max sessions per IP", 1, 100);
-  const photoUploadMaxFiles = normalizeInteger(setting(existing, "PHOTO_UPLOAD_MAX_FILES", "10"), "Photo upload max files", 1, 100);
-  const photoUploadMaxSessions = normalizeInteger(setting(existing, "PHOTO_UPLOAD_MAX_SESSIONS", "10"), "Photo upload max sessions", 1, 100);
+  const photoUploadMaxFiles = normalizeInteger(setting(existing, "PHOTO_UPLOAD_MAX_FILES", "100"), "Photo upload max files", 1, 100);
+  const photoUploadMaxSessions = normalizeInteger(setting(existing, "PHOTO_UPLOAD_MAX_SESSIONS", "2"), "Photo upload max sessions", 1, 100);
   const slsStatsPort = normalizePort(setting(existing, "SLS_STATS_PORT", "8080"), "SLS statistics port");
   const srtlaPort = normalizePort(setting(existing, "SRTLA_PORT", "5000"), "SRTLA port");
   const srtPlayerPort = normalizePort(setting(existing, "SRT_PLAYER_PORT", "4000"), "SRT player port");
@@ -559,15 +559,15 @@ function validateEnvironment(env, config, forStart) {
   const galleryPort = normalizePort(defaultIfBlank(env.GALLERY_PORT, "3738"), "Photo Gallery port");
   const todayPort = normalizePort(defaultIfBlank(env.TODAY_PORT, "3739"), "Today Tools port");
   const photoFtpPassiveMin = normalizePort(defaultIfBlank(env.PHOTO_FTP_PASSIVE_MIN, "30000"), "Photo FTP passive minimum");
-  const photoFtpPassiveMax = normalizePort(defaultIfBlank(env.PHOTO_FTP_PASSIVE_MAX, "30009"), "Photo FTP passive maximum");
+  const photoFtpPassiveMax = normalizePort(defaultIfBlank(env.PHOTO_FTP_PASSIVE_MAX, "30019"), "Photo FTP passive maximum");
   if (Number(photoFtpPassiveMin) > Number(photoFtpPassiveMax)) {
     throw new Error("Photo FTP passive minimum cannot exceed its maximum.");
   }
   const photoFtpMinPasswordLength = normalizeInteger(setting(env, "PHOTO_FTP_MIN_PASSWORD_LENGTH", "5"), "Photo FTP minimum password length", 5, 128);
-  normalizeInteger(setting(env, "PHOTO_FTP_MAX_SESSIONS", "10"), "Photo FTP max sessions", 1, 100);
+  normalizeInteger(setting(env, "PHOTO_FTP_MAX_SESSIONS", "20"), "Photo FTP max sessions", 1, 100);
   normalizeInteger(setting(env, "PHOTO_FTP_MAX_SESSIONS_PER_IP", "10"), "Photo FTP max sessions per IP", 1, 100);
-  normalizeInteger(setting(env, "PHOTO_UPLOAD_MAX_FILES", "10"), "Photo upload max files", 1, 100);
-  normalizeInteger(setting(env, "PHOTO_UPLOAD_MAX_SESSIONS", "10"), "Photo upload max sessions", 1, 100);
+  normalizeInteger(setting(env, "PHOTO_UPLOAD_MAX_FILES", "100"), "Photo upload max files", 1, 100);
+  normalizeInteger(setting(env, "PHOTO_UPLOAD_MAX_SESSIONS", "2"), "Photo upload max sessions", 1, 100);
   const slsStatsPort = normalizePort(defaultIfBlank(env.SLS_STATS_PORT, "8080"), "SLS statistics port");
   const srtlaPort = normalizePort(defaultIfBlank(env.SRTLA_PORT, "5000"), "SRTLA port");
   const srtPlayerPort = normalizePort(defaultIfBlank(env.SRT_PLAYER_PORT, "4000"), "SRT player port");

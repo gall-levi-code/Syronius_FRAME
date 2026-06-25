@@ -69,6 +69,7 @@
         "show_uptime": true,
         "show_recovery": false,
         "telemetry_order": ["header", "bitrate", "rtt", "latency", "buffer", "server", "dropped", "uptime", "meter", "chart", "recovery"],
+        "telemetry_columns": "auto",
         "telemetry_block_width_px": 160,
         "telemetry_block_height_px": 72,
         "no_signal_behavior": "show_offline",

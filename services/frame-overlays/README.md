@@ -6,7 +6,7 @@
 - **Presets** are reusable user-owned layout, theme, and widget configurations. Their overlay type is immutable, and they never contain stream bindings or public URL identity.
 - **Sources** bind one preset to one data source and own the permanent OBS Browser Source URL.
 
-Open the studio at `http://localhost:3733/overlays/setup`. New URLs use
+Open the wizard at `http://localhost:3733/overlays/setup`. New URLs use
 `/overlays/view/<readable-slug>/<random-source-key>`. Every V1
 `/overlays/view/<preset-id>` URL is retained through a migration-created legacy alias.
 
@@ -42,7 +42,7 @@ floor as a dashed guide. RTT uses a matching `good < bad < max` control on a 0â€
 its max value defines the RTT chart ceiling. When a GOOD overlay is compact, the optional current
 bitrate is rendered inside the status bubble instead of opening a separate telemetry card.
 
-The studio follows a source-first workflow: OBS Sources own URLs and feed bindings, Presets own
+The wizard follows a source-first workflow: OBS Sources own URLs and feed bindings, Presets own
 reusable designs, and Templates are read-only starting points. Source and preset editors keep a
 sticky Save bar visible with explicit saved/unsaved feedback.
 

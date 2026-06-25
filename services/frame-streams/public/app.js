@@ -1,4 +1,4 @@
-const state = { streams: [], config: null };
+const state = { streams: [], config: null, pendingDeleteStreamId: null };
 const list = document.querySelector("#stream-list");
 const notice = document.querySelector("#notice");
 const receiverStatus = document.querySelector("#receiver-status");
@@ -6,6 +6,7 @@ const streamDialog = document.querySelector("#stream-dialog");
 const linksDialog = document.querySelector("#links-dialog");
 const statsOutputDialog = document.querySelector("#stats-output-dialog");
 const boundOverlaysDialog = document.querySelector("#bound-overlays-dialog");
+const deleteStreamDialog = document.querySelector("#delete-stream-dialog");
 const themeToggle = document.querySelector("#theme-toggle");
 
 themeToggle.addEventListener("click", () => {
@@ -29,6 +30,10 @@ document.querySelectorAll(".close-dialog").forEach((button) => {
   button.addEventListener("click", () => button.closest("dialog").close());
 });
 document.querySelector("#stream-form").addEventListener("submit", saveStream);
+document.querySelector("#confirm-delete-stream").addEventListener("click", confirmDeleteStream);
+streamDialog.addEventListener("close", clearAddStreamHash);
+deleteStreamDialog.addEventListener("close", () => { state.pendingDeleteStreamId = null; });
+window.addEventListener("hashchange", openDialogForHash);
 
 function setThemeMode(nextMode, persist) {
   const mode = nextMode === "day" ? "day" : "night";
@@ -62,6 +67,7 @@ async function load() {
     receiverStatus.textContent = "Telemetry ready";
     receiverStatus.className = "status-pill good";
     render();
+    openDialogForHash();
   } catch (error) {
     receiverStatus.textContent = "Telemetry unavailable";
     receiverStatus.className = "status-pill bad";
@@ -114,6 +120,7 @@ function stat(label, value) {
 }
 
 function openAddDialog() {
+  if (streamDialog.open) return;
   document.querySelector("#dialog-title").textContent = "Add stream";
   document.querySelector("#description-input").value = "";
   document.querySelector("#custom-toggle").checked = false;
@@ -121,6 +128,15 @@ function openAddDialog() {
   generateIds();
   updateSourceFields();
   streamDialog.showModal();
+}
+
+function openDialogForHash() {
+  if (window.location.hash.toLowerCase() === "#add-stream") openAddDialog();
+}
+
+function clearAddStreamHash() {
+  if (window.location.hash.toLowerCase() !== "#add-stream") return;
+  history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
 }
 
 function generateIds() {
@@ -165,21 +181,43 @@ async function saveStream(event) {
   }
 }
 
-async function removeStream(id) {
+function removeStream(id) {
   const stream = state.streams.find((item) => item.id === id);
+  if (!stream) {
+    showNotice("Stream not found.");
+    return;
+  }
   const name = stream?.description || id;
   const impact = stream?.source_type === "custom"
     ? "The BELABOX relay itself will not be changed."
     : "Relay links will stop working.";
-  if (!confirm(`Delete ${name}? ${impact} Related overlay sources will be unbound.`)) return;
+  const overlays = stream.bound_overlays ?? [];
+  state.pendingDeleteStreamId = id;
+  document.querySelector("#delete-stream-title").textContent = `Delete ${name}?`;
+  document.querySelector("#delete-stream-copy").textContent = overlays.length
+    ? `${impact} ${overlays.length} overlay source${overlays.length === 1 ? "" : "s"} will be unbound but kept.`
+    : `${impact} No overlay sources are bound to this stream.`;
+  document.querySelector("#delete-stream-overlays").innerHTML = boundOverlaysMarkup(overlays, "No overlay sources are bound to this stream.");
+  document.querySelector("#confirm-delete-stream").textContent = overlays.length ? "Delete stream and unbind overlays" : "Delete stream";
+  deleteStreamDialog.showModal();
+}
+
+async function confirmDeleteStream() {
+  const id = state.pendingDeleteStreamId;
+  if (!id) return;
+  const button = document.querySelector("#confirm-delete-stream");
+  button.disabled = true;
   try {
     const result = await api(`/slsui/api/streams/${encodeURIComponent(id)}`, { method: "DELETE" });
+    deleteStreamDialog.close();
     await load();
     const count = Array.isArray(result.unbound_overlays) ? result.unbound_overlays.length : 0;
     const cleanup = count ? ` ${count} overlay source${count === 1 ? " was" : "s were"} unbound.` : "";
     showNotice(`Stream deleted.${cleanup}${result.overlay_cleanup_warning ? ` ${result.overlay_cleanup_warning}` : ""}`, result.overlay_cleanup_warning ? "error" : "ok");
   } catch (error) {
     showNotice(error.message);
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -209,13 +247,17 @@ function openBoundOverlays(id) {
   const stream = state.streams.find((item) => item.id === id);
   const overlays = stream?.bound_overlays ?? [];
   document.querySelector("#bound-overlays-title").textContent = `Bound overlays · ${stream?.description || id}`;
-  document.querySelector("#bound-overlays-list").innerHTML = overlays.length
+  document.querySelector("#bound-overlays-list").innerHTML = boundOverlaysMarkup(overlays, "No overlay sources are bound to this stream.");
+  boundOverlaysDialog.showModal();
+}
+
+function boundOverlaysMarkup(overlays, emptyText) {
+  return overlays.length
     ? overlays.map((overlay) => `<article class="bound-overlay-row">
         <div><strong>${escapeHtml(overlay.display_name)}</strong><span>${escapeHtml(overlay.preset_name)} · ${escapeHtml(overlay.slug)}</span></div>
         <span class="binding-status ${overlay.enabled ? "enabled" : ""}">${overlay.enabled ? "Enabled" : "Disabled"}</span>
       </article>`).join("")
-    : '<div class="empty compact">No overlay sources are bound to this stream.</div>';
-  boundOverlaysDialog.showModal();
+    : `<div class="empty compact">${escapeHtml(emptyText)}</div>`;
 }
 
 function openStatsOutputs(id) {

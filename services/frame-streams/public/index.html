@@ -27,7 +27,7 @@
         } catch {}
       })();
     </script>
-    <link rel="stylesheet" href="/slsui/assets/styles.css?v=frame-theme-tab">
+    <link rel="stylesheet" href="/slsui/assets/styles.css?v=stream-delete-dialog-v1">
   </head>
   <body>
     <header class="topbar">
@@ -112,6 +112,19 @@
       <div id="bound-overlays-list" class="bound-overlays-list"></div>
     </dialog>
 
-    <script src="/slsui/assets/app.js?v=refresh-cleanup" defer></script>
+    <dialog id="delete-stream-dialog">
+      <div class="dialog-head">
+        <div><strong id="delete-stream-title">Delete stream?</strong><span>Related OBS overlay sources will be unbound, not deleted.</span></div>
+        <button type="button" class="icon-button close-dialog" title="Close">Close</button>
+      </div>
+      <p id="delete-stream-copy" class="dialog-copy"></p>
+      <div id="delete-stream-overlays" class="bound-overlays-list"></div>
+      <div class="dialog-actions">
+        <button type="button" class="secondary close-dialog">Cancel</button>
+        <button type="button" id="confirm-delete-stream" class="danger">Delete stream and unbind overlays</button>
+      </div>
+    </dialog>
+
+    <script src="/slsui/assets/app.js?v=stream-delete-dialog-v1" defer></script>
   </body>
 </html>

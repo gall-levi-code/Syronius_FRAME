@@ -187,7 +187,7 @@ export async function createFrameOverlaysApp(options: CreateFrameOverlaysOptions
         schema_version: "2.0",
         revision: `preview:${preset.revision}`,
         preset,
-        source: { id: "preview-source", slug: "preview", display_name: preset.name, enabled: true, revision: 1 },
+        source: { id: "preview-source", slug: "preview", display_name: preset.name, enabled: true, revision: 1, data_source: dataSourceForType(preset.type) },
         telemetry_identity: "preview",
         stream_display_name: preset.name,
         server_name: new URL(config.publicBaseUrl).hostname,
@@ -218,7 +218,7 @@ export async function createFrameOverlaysApp(options: CreateFrameOverlaysOptions
         schema_version: "2.0",
         revision: `template:${template.id}`,
         preset,
-        source: { id: "preview-source", slug: "preview", display_name: template.name, enabled: true, revision: 1 },
+        source: { id: "preview-source", slug: "preview", display_name: template.name, enabled: true, revision: 1, data_source: dataSourceForType(template.type) },
         telemetry_identity: "preview",
         stream_display_name: template.name,
         server_name: new URL(config.publicBaseUrl).hostname,
@@ -338,14 +338,16 @@ export async function createFrameOverlaysApp(options: CreateFrameOverlaysOptions
           draft.presets.push(createdPreset);
           preset = createdPreset;
         }
+        const displayName = requiredText(body.display_name, 80, "Display name");
+        assertUniqueSourceName(draft, displayName);
         const slug = validId(body.slug);
-        if (draft.sources.some((source) => source.slug === slug)) throw new RequestError(409, "That source slug is already in use.");
+        assertUniqueSourceSlug(draft, slug);
         const now = new Date().toISOString();
         createdSource = {
           id: `source-${randomUUID()}`,
           slug,
           source_key: createSourceKey(),
-          display_name: requiredText(body.display_name, 80, "Display name"),
+          display_name: displayName,
           preset_id: preset.id,
           enabled: true,
           data_source: parseDataSource(body.data_source, preset.type),
@@ -381,9 +383,11 @@ export async function createFrameOverlaysApp(options: CreateFrameOverlaysOptions
         if (preset.type !== currentPreset.type) throw new RequestError(409, "A source cannot switch to a preset of another overlay type.");
         if (body.slug !== undefined && body.slug !== current.slug) throw new RequestError(409, "Source slugs are permanent.");
         if (body.source_key !== undefined && body.source_key !== current.source_key) throw new RequestError(409, "Source keys are permanent.");
+        const displayName = body.display_name === undefined ? current.display_name : requiredText(body.display_name, 80, "Display name");
+        assertUniqueSourceName(draft, displayName, current.id);
         saved = {
           ...current,
-          display_name: body.display_name === undefined ? current.display_name : requiredText(body.display_name, 80, "Display name"),
+          display_name: displayName,
           preset_id: presetId,
           enabled: body.enabled === undefined ? current.enabled : Boolean(body.enabled),
           data_source: body.data_source === undefined ? current.data_source : parseDataSource(body.data_source, preset.type),
@@ -407,9 +411,13 @@ export async function createFrameOverlaysApp(options: CreateFrameOverlaysOptions
       const id = validId(request.params.id);
       const expectedRevision = expectedStateRevision(request, objectBody(request.body));
       const document = await store.mutate(expectedRevision, (draft) => {
+        const deleted = draft.sources.find((source) => source.id === id);
         const nextSources = draft.sources.filter((source) => source.id !== id);
         if (nextSources.length === draft.sources.length) throw new RequestError(404, "Source not found.");
         draft.sources = nextSources;
+        if (deleted && !draft.sources.some((source) => source.preset_id === deleted.preset_id)) {
+          draft.presets = draft.presets.filter((preset) => preset.id !== deleted.preset_id);
+        }
         for (const [alias, sourceId] of Object.entries(draft.legacy_aliases)) {
           if (sourceId === id) delete draft.legacy_aliases[alias];
         }
@@ -536,7 +544,7 @@ export async function createFrameOverlaysApp(options: CreateFrameOverlaysOptions
       schema_version: "2.0",
       revision: `${preset.revision}:${source.revision}`,
       preset: clone(preset),
-      source: { id: source.id, slug: source.slug, display_name: source.display_name, enabled: source.enabled, revision: source.revision },
+      source: { id: source.id, slug: source.slug, display_name: source.display_name, enabled: source.enabled, revision: source.revision, data_source: clone(source.data_source) },
       telemetry_identity: telemetryIdentity(source.data_source),
       stream_display_name: await resolveStreamDisplayName(source),
       server_name: new URL(config.publicBaseUrl).hostname,
@@ -632,6 +640,24 @@ function findTemplate(document: OverlayDocumentV2, id: string): BuiltinTemplate 
   const template = document.templates.find((candidate) => candidate.id === id);
   if (!template) throw new RequestError(404, "Template not found.");
   return template;
+}
+
+function assertUniqueSourceName(document: OverlayDocumentV2, displayName: string, exceptSourceId?: string): void {
+  const normalized = normalizeIdentity(displayName);
+  if (document.sources.some((source) => source.id !== exceptSourceId && normalizeIdentity(source.display_name) === normalized)) {
+    throw new RequestError(409, "That source name is already in use.");
+  }
+}
+
+function assertUniqueSourceSlug(document: OverlayDocumentV2, slug: string, exceptSourceId?: string): void {
+  const normalized = normalizeIdentity(slug);
+  if (document.sources.some((source) => source.id !== exceptSourceId && normalizeIdentity(source.slug) === normalized)) {
+    throw new RequestError(409, "That source slug is already in use.");
+  }
+}
+
+function normalizeIdentity(value: string): string {
+  return value.trim().toLocaleLowerCase("en-US");
 }
 
 function parseDesign(value: unknown, expectedType: OverlayType): OverlayDesign {

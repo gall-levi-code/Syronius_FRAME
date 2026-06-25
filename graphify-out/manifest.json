@@ -20,8 +20,8 @@
     "semantic_hash": ""
   },
   "docs/schemas/overlay-presets.default.json": {
-    "mtime": 1782322906.7116506,
-    "ast_hash": "10b4e6ae1a66ab8d96d91699a01d916e",
+    "mtime": 1782407917.256039,
+    "ast_hash": "4202f22f073731fde8b3272cbf591a7b",
     "semantic_hash": ""
   },
   "docs/schemas/overlay-presets.example.json": {
@@ -30,8 +30,8 @@
     "semantic_hash": ""
   },
   "docs/schemas/overlay-presets.schema.json": {
-    "mtime": 1782322906.7121546,
-    "ast_hash": "9a1eafde178d3a49946134c8377f3c13",
+    "mtime": 1782417856.9795983,
+    "ast_hash": "bd64c371d29a2d8bcd8bb969bf965e52",
     "semantic_hash": ""
   },
   "docs/schemas/stack-config.schema.json": {
@@ -45,18 +45,18 @@
     "semantic_hash": ""
   },
   "installer/frame-installer.mjs": {
-    "mtime": 1782323116.984639,
-    "ast_hash": "ee4179b65bfd0243b380dcc23d81a8d3",
+    "mtime": 1782340011.5605657,
+    "ast_hash": "b237aa38f14e961bb447bfa128190dcb",
     "semantic_hash": ""
   },
   "installer/stack.ps1": {
-    "mtime": 1782321916.6582916,
-    "ast_hash": "7c76ac70336fc28e41530ab818fe6ca4",
+    "mtime": 1782323977.8376832,
+    "ast_hash": "23624e03524e1ca3c3f47dd009b27962",
     "semantic_hash": ""
   },
   "installer/stack.sh": {
-    "mtime": 1782321916.6587906,
-    "ast_hash": "3ee9cd4812fd5ae7bb2b332fa79d91e7",
+    "mtime": 1782324081.5579314,
+    "ast_hash": "8862313c1a44558894cb657446b1d04a",
     "semantic_hash": ""
   },
   "services/frame-audio-bridge/cloudflare-worker.js": {
@@ -190,8 +190,8 @@
     "semantic_hash": ""
   },
   "services/frame-audio/public/listen.js": {
-    "mtime": 1782322906.7465823,
-    "ast_hash": "95582618ace22912c228b2005feb778f",
+    "mtime": 1782323261.6613917,
+    "ast_hash": "40af7f73e6ec4c62ef765e9712ed537f",
     "semantic_hash": ""
   },
   "services/frame-audio/src/config.ts": {
@@ -225,13 +225,13 @@
     "semantic_hash": ""
   },
   "services/frame-overlays/config/overlay-presets.default.json": {
-    "mtime": 1782322906.7572424,
-    "ast_hash": "10b4e6ae1a66ab8d96d91699a01d916e",
+    "mtime": 1782407910.8957212,
+    "ast_hash": "4202f22f073731fde8b3272cbf591a7b",
     "semantic_hash": ""
   },
   "services/frame-overlays/config/overlay-presets.schema.json": {
-    "mtime": 1782322906.7572424,
-    "ast_hash": "9a1eafde178d3a49946134c8377f3c13",
+    "mtime": 1782417856.9795983,
+    "ast_hash": "bd64c371d29a2d8bcd8bb969bf965e52",
     "semantic_hash": ""
   },
   "services/frame-overlays/package.json": {
@@ -240,13 +240,13 @@
     "semantic_hash": ""
   },
   "services/frame-overlays/public/app.js": {
-    "mtime": 1782322906.758894,
-    "ast_hash": "7aa2ddf423390f60f1c1c9b523fe164b",
+    "mtime": 1782420807.4861627,
+    "ast_hash": "d5981043bd49e9c4ddca933ff1e2677b",
     "semantic_hash": ""
   },
   "services/frame-overlays/public/renderer.js": {
-    "mtime": 1782322906.7603998,
-    "ast_hash": "09a909fab837203bb61e83a28ce91e15",
+    "mtime": 1782420792.0233748,
+    "ast_hash": "59b831c6c8e57827a36dd8dec0ce00c7",
     "semantic_hash": ""
   },
   "services/frame-overlays/src/index.ts": {
@@ -310,8 +310,8 @@
     "semantic_hash": ""
   },
   "services/frame-streams/public/app.js": {
-    "mtime": 1782322906.7774527,
-    "ast_hash": "8509545b35fe9d2f3bf5a78e960c8555",
+    "mtime": 1782363559.7899365,
+    "ast_hash": "0a3ba992dd193243c7aede304c63c88b",
     "semantic_hash": ""
   },
   "services/frame-streams/src/index.ts": {
@@ -405,8 +405,8 @@
     "semantic_hash": ""
   },
   "installer/README.md": {
-    "mtime": 1782322906.7303276,
-    "ast_hash": "7b2866875a678c991fb223509c2093ca",
+    "mtime": 1782340011.5615642,
+    "ast_hash": "7ed95591d74a3491abafce8da68bee8e",
     "semantic_hash": ""
   },
   "services/frame-audio-bridge/README.md": {
@@ -465,18 +465,18 @@
     "semantic_hash": ""
   },
   "services/frame-overlays/README.md": {
-    "mtime": 1782322906.756743,
-    "ast_hash": "58b4047e28aac8d05d6be7cf0db4e2cd",
+    "mtime": 1782356854.8372428,
+    "ast_hash": "28722e56622996654ed2f19e8a996f39",
     "semantic_hash": ""
   },
   "services/frame-overlays/public/index.html": {
-    "mtime": 1782322906.7593951,
-    "ast_hash": "f635227860164aa11879d6d3819f0466",
+    "mtime": 1782420817.146698,
+    "ast_hash": "a8ffab93e5c995bf9b4b3988bf8b442e",
     "semantic_hash": ""
   },
   "services/frame-overlays/public/renderer.html": {
-    "mtime": 1782322906.7603998,
-    "ast_hash": "8aa00f8bce900cc02e154af477fa70e6",
+    "mtime": 1782420817.147196,
+    "ast_hash": "f03c1c8820d3b13ab72d1a6974c1457f",
     "semantic_hash": ""
   },
   "services/frame-portal/README.md": {
@@ -495,8 +495,8 @@
     "semantic_hash": ""
   },
   "services/frame-streams/public/index.html": {
-    "mtime": 1782322906.7779539,
-    "ast_hash": "b9de79f6c58b406d925cb06423f59475",
+    "mtime": 1782363662.0089586,
+    "ast_hash": "44517b1987e096b808739b5b4dfe6aef",
     "semantic_hash": ""
   },
   "services/frame-tunnel/README.md": {
@@ -555,8 +555,8 @@
     "semantic_hash": ""
   },
   "tests/frame-contract.test.mjs": {
-    "mtime": 1782322906.7824583,
-    "ast_hash": "f5d71fd8aad11ea3d7c0fa5a315bb270",
+    "mtime": 1782420862.0192227,
+    "ast_hash": "908391d9aa7eb0749cadcffbc1819886",
     "semantic_hash": ""
   },
   ".github/workflows/verify.yml": {
@@ -900,18 +900,18 @@
     "semantic_hash": ""
   },
   "services/frame-overlays/public/renderer-core.js": {
-    "mtime": 1782322906.7593951,
-    "ast_hash": "42adea8b36039a1ee96fd41aa79b99df",
+    "mtime": 1782420770.4878662,
+    "ast_hash": "d981d172958d2475bf8015aeaf0135fe",
     "semantic_hash": ""
   },
   "services/frame-overlays/src/app.ts": {
-    "mtime": 1782322906.7629166,
-    "ast_hash": "2529b2c74e891b9b439c021aaff28dce",
+    "mtime": 1782363009.2859414,
+    "ast_hash": "691139ea12472750ee01b00753cfdac3",
     "semantic_hash": ""
   },
   "services/frame-overlays/src/model.ts": {
-    "mtime": 1782322906.763929,
-    "ast_hash": "588b97219e6853203ab2174bba589241",
+    "mtime": 1782407922.5940247,
+    "ast_hash": "57b8ed58ae66a88190eca85d944e0347",
     "semantic_hash": ""
   },
   "services/frame-overlays/src/store.ts": {
@@ -925,8 +925,8 @@
     "semantic_hash": ""
   },
   "services/frame-overlays/test/api.test.mjs": {
-    "mtime": 1782322906.7644393,
-    "ast_hash": "fc2c3e61903d63861b618a3b08b84818",
+    "mtime": 1782363637.3124437,
+    "ast_hash": "7b6f5f4c74a05add7e2232fd74e02bec",
     "semantic_hash": ""
   },
   "services/frame-overlays/test/helpers.mjs": {
@@ -935,8 +935,8 @@
     "semantic_hash": ""
   },
   "services/frame-overlays/test/renderer-core.test.mjs": {
-    "mtime": 1782322906.7655559,
-    "ast_hash": "9c197e9ca3e7f9fa3f9126e6bcd55784",
+    "mtime": 1782420834.1785026,
+    "ast_hash": "1763c35a58ba1aae3a8f1d456d3865b9",
     "semantic_hash": ""
   },
   "services/frame-overlays/test/schema.test.mjs": {
@@ -995,13 +995,13 @@
     "semantic_hash": ""
   },
   "services/frame-overlays/public/upload-renderer-core.js": {
-    "mtime": 1782322906.7614086,
-    "ast_hash": "72d958fd31a778b580a85963b04505b9",
+    "mtime": 1782329044.2408717,
+    "ast_hash": "73e53ec8c4d8644c4d85f1132c6968c6",
     "semantic_hash": ""
   },
   "services/frame-overlays/public/upload-renderer.js": {
-    "mtime": 1782322906.7624192,
-    "ast_hash": "9dac53a1b6620da37761fc598a539782",
+    "mtime": 1782400044.5594978,
+    "ast_hash": "d2507656d1b4c0dc9ff1ae82290083ec",
     "semantic_hash": ""
   },
   "services/frame-overlays/src/ingest.ts": {
@@ -1020,8 +1020,8 @@
     "semantic_hash": ""
   },
   "services/frame-overlays/public/upload-renderer.html": {
-    "mtime": 1782322906.7619205,
-    "ast_hash": "cc1cdd048996f665b8ba8bbffa146fd8",
+    "mtime": 1782420823.4994707,
+    "ast_hash": "bd49e7535483b6254d4fe898bd5bfc78",
     "semantic_hash": ""
   },
   "services/frame-streams/src/statsOutput.ts": {
@@ -1110,8 +1110,8 @@
     "semantic_hash": ""
   },
   "apps/frame-setup/src-tauri/src/lib.rs": {
-    "mtime": 1782321916.6160774,
-    "ast_hash": "8ff62176a3a0f86ecfe65af3e0a368c5",
+    "mtime": 1782340194.1289773,
+    "ast_hash": "8745f1945a597886e00c398ec7e402b5",
     "semantic_hash": ""
   },
   "apps/frame-setup/src-tauri/src/main.rs": {
@@ -1125,8 +1125,8 @@
     "semantic_hash": ""
   },
   "apps/frame-setup/src/main.js": {
-    "mtime": 1782321916.6165824,
-    "ast_hash": "50a3f89c434a78dcba7384b9783cdee9",
+    "mtime": 1782340143.351849,
+    "ast_hash": "e12e874e109f35724798eca5199ab711",
     "semantic_hash": ""
   },
   "apps/frame-setup/vite.config.js": {

@@ -60,6 +60,7 @@ export interface ConnectivityConfig {
   show_uptime?: boolean;
   show_recovery?: boolean;
   telemetry_order?: string[];
+  telemetry_columns?: "auto" | "all" | number;
   telemetry_block_width_px?: number;
   telemetry_block_height_px?: number;
   no_signal_behavior?: "show_offline" | "hide";

@@ -97,7 +97,7 @@ Advanced automation can repeat `--set KEY=VALUE` for installer-whitelisted non-s
 
 ```powershell
 .\stack.cmd install --set TIMEZONE=America/Chicago --set PHOTO_MAX_INPUT_MB=100
-.\stack.cmd install --set PHOTO_UPLOAD_MAX_FILES=10 --set PHOTO_UPLOAD_MAX_SESSIONS=10
+.\stack.cmd install --set PHOTO_UPLOAD_MAX_FILES=100 --set PHOTO_UPLOAD_MAX_SESSIONS=2
 ```
 
 For host-side StreamerBot, set `--host-data-root` to the absolute host directory that backs

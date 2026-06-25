@@ -647,7 +647,7 @@ fn check_passive_range(range: &str) -> Vec<ReadinessCheck> {
         return vec![ReadinessCheck {
             label: "Photo FTP passive range".to_string(),
             status: CheckStatus::Bad,
-            detail: "Use a range like 30000-30009.".to_string(),
+            detail: "Use a range like 30000-30019.".to_string(),
         }];
     };
 
@@ -1286,7 +1286,7 @@ fn build_apply_environment(
     let edge_port = validate_port(plan.ports.edge, "FRAME Edge port")?.to_string();
     let audio_bridge_port = existing_or(existing, "AUDIO_BRIDGE_PORT", "3729");
     let (photo_ftp_passive_min, photo_ftp_passive_max) = parse_range(&plan.ports.photo_ftp_passive)
-        .ok_or_else(|| "Photo FTP passive range must look like 30000-30009.".to_string())?;
+        .ok_or_else(|| "Photo FTP passive range must look like 30000-30019.".to_string())?;
     let hostname = plan.public_hostname.trim().to_lowercase();
     if mode == "HYBRID" && !is_valid_public_hostname(&hostname) {
         return Err(
@@ -1408,7 +1408,7 @@ fn build_apply_environment(
             plan,
             existing,
             "PHOTO_FTP_MAX_SESSIONS",
-            "10",
+            "20",
             1,
             100,
             "Photo FTP max sessions",
@@ -1444,7 +1444,7 @@ fn build_apply_environment(
             plan,
             existing,
             "PHOTO_UPLOAD_MAX_FILES",
-            "10",
+            "100",
             1,
             100,
             "Photo upload max files",
@@ -1456,7 +1456,7 @@ fn build_apply_environment(
             plan,
             existing,
             "PHOTO_UPLOAD_MAX_SESSIONS",
-            "10",
+            "2",
             1,
             100,
             "Photo upload max sessions",

@@ -21,10 +21,29 @@ body.preview {
   inset: 0;
   pointer-events: none;
 }
+body.element-preview {
+  width: max-content;
+  height: max-content;
+  min-width: 100%;
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 14px;
+}
+body.element-preview .overlay-root {
+  position: static;
+  inset: auto;
+  display: inline-grid;
+  place-items: center;
+}
+body.element-preview .widget {
+  position: relative;
+  max-width: none;
+}
 .widget {
   position: absolute;
-  min-width: 290px;
-  max-width: calc(100vw - 20px);
+  min-width: 0;
+  max-width: none;
   color: var(--text, #eef8ff);
   background: rgba(0, 0, 0, 0.72);
   border: 1px solid color-mix(in srgb, var(--plot-primary, #2cb4fb) 40%, transparent);
@@ -41,7 +60,7 @@ body.preview {
 .widget.hidden { opacity: 0; }
 .telemetry-layout {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--block-width, 160px)), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(0, var(--block-width, 160px)));
   gap: 7px;
   align-items: stretch;
 }

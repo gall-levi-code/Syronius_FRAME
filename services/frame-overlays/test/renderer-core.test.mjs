@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { QUALITY, QualityStabilizer, canvasPixelSize, qualityStatusText, shouldResetRuntimeState, telemetryAvailability, telemetryIsStale } from "../public/renderer-core.js";
+import { QUALITY, QualityStabilizer, canvasPixelSize, normalizedTelemetryBlockWidth, normalizedTelemetryColumns, qualityStatusText, resolvedTelemetryColumnCount, shouldResetRuntimeState, telemetryAvailability, telemetryGridPixelWidth, telemetryIsStale } from "../public/renderer-core.js";
 import { clampBitrateLevels, clampNumericValue, clampRttLevels, samplingWindowLabel } from "../public/wizard-core.js";
 import { deriveUploadView, uploadSummary } from "../public/upload-renderer-core.js";
 
@@ -54,6 +54,20 @@ test("numeric sampling controls honor their min, max, and step", () => {
   assert.equal(clampNumericValue(57, 20, 2000, 20), 60);
 });
 
+test("telemetry column wrapping supports auto, fixed counts, and all visible blocks", () => {
+  assert.equal(normalizedTelemetryColumns("auto", 8), 0);
+  assert.equal(normalizedTelemetryColumns("all", 8), 8);
+  assert.equal(normalizedTelemetryColumns(3, 8), 3);
+  assert.equal(normalizedTelemetryColumns(12, 8), 8);
+  assert.equal(normalizedTelemetryColumns("bad", 8), 0);
+  assert.equal(normalizedTelemetryBlockWidth(163), 163);
+  assert.equal(normalizedTelemetryBlockWidth(40), 80);
+  assert.equal(resolvedTelemetryColumnCount(8, 3, 160, 400), 3);
+  assert.equal(resolvedTelemetryColumnCount("all", 8, 160, 400), 8);
+  assert.equal(resolvedTelemetryColumnCount("auto", 8, 160, 520), 3);
+  assert.equal(telemetryGridPixelWidth(3, 160), 524);
+});
+
 test("unavailable feed telemetry is omitted while supported values remain visible", () => {
   assert.deepEqual(telemetryAvailability({
     bitrate: 7200,
@@ -77,15 +91,21 @@ test("unavailable feed telemetry is omitted while supported values remain visibl
   });
 });
 
-test("upload renderer keeps a stable oldest focus and does not invent mixed-adapter percentages", () => {
+test("upload renderer focuses the most complete active file and does not invent mixed-adapter percentages", () => {
   const transfers=[
-    {transfer_id:"web:a",phase:"receiving",bytes_received:400,bytes_total:1000,speed_bps:100,started_at:"2026-06-21T12:00:00Z",updated_at:"2026-06-21T12:00:02Z"},
-    {transfer_id:"ftp:b",phase:"receiving",bytes_received:200,bytes_total:null,speed_bps:50,started_at:"2026-06-21T12:00:01Z",updated_at:"2026-06-21T12:00:02Z"},
-    {transfer_id:"web:c",phase:"queued",bytes_received:100,bytes_total:100,speed_bps:null,started_at:"2026-06-21T11:59:00Z",updated_at:"2026-06-21T12:00:02Z"},
+    {transfer_id:"web:a",adapter:"web_upload",phase:"receiving",bytes_received:400,bytes_total:1000,speed_bps:100,started_at:"2026-06-21T12:00:00Z",updated_at:"2026-06-21T12:00:02Z"},
+    {transfer_id:"ftp:b",adapter:"ftp",phase:"receiving",bytes_received:200,bytes_total:null,speed_bps:50,started_at:"2026-06-21T12:00:01Z",updated_at:"2026-06-21T12:00:02Z"},
+    {transfer_id:"web:d",adapter:"web_upload",phase:"receiving",bytes_received:900,bytes_total:1000,speed_bps:75,started_at:"2026-06-21T12:00:02Z",updated_at:"2026-06-21T12:00:02Z"},
+    {transfer_id:"web:c",adapter:"web_upload",phase:"queued",bytes_received:100,bytes_total:100,speed_bps:null,started_at:"2026-06-21T11:59:00Z",updated_at:"2026-06-21T12:00:02Z"},
   ];
   const view=deriveUploadView(transfers,5000,Date.parse("2026-06-21T12:00:03Z"));
-  assert.equal(view.focus.transfer_id,"web:a");
+  assert.equal(view.focus.transfer_id,"web:d");
+  assert.equal(view.current_percent,90);
   assert.equal(view.percent,null);
-  assert.equal(view.speed_bps,150);
-  assert.equal(uploadSummary(view),"2 uploading · 1 queued");
+  assert.equal(view.speed_bps,225);
+  assert.equal(view.overall_complete,1);
+  assert.equal(view.overall_total,4);
+  assert.equal(Math.round(view.overall_percent),25);
+  assert.deepEqual(view.adapters, ["web_upload", "ftp"]);
+  assert.equal(uploadSummary(view),"3 uploading - 1 accepted");
 });

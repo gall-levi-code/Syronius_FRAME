@@ -85,3 +85,34 @@ export function normalizedTelemetryOrder(value, defaults) {
   const supplied = Array.isArray(value) ? value.filter((id) => defaults.includes(id)) : [];
   return [...new Set([...supplied, ...defaults])];
 }
+
+export function normalizedTelemetryColumns(value, visibleCount = 1) {
+  if (value === "all") return Math.max(1, Math.floor(Number(visibleCount) || 1));
+  if (value === "auto" || value === null || value === undefined) return 0;
+  const numeric = Math.round(Number(value));
+  return Number.isFinite(numeric) ? Math.min(8, Math.max(1, numeric)) : 0;
+}
+
+export function normalizedTelemetryBlockWidth(value, fallback = 160) {
+  const numeric = Math.round(Number(value));
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.min(600, Math.max(80, numeric));
+}
+
+export function resolvedTelemetryColumnCount(value, visibleCount = 1, blockWidth = 160, availableWidth = Infinity, gap = 7) {
+  const visible = Math.max(1, Math.floor(Number(visibleCount) || 1));
+  const fixed = normalizedTelemetryColumns(value, visible);
+  if (fixed) return Math.min(visible, fixed);
+  const safeBlockWidth = normalizedTelemetryBlockWidth(blockWidth);
+  const safeAvailableWidth = Number.isFinite(Number(availableWidth)) ? Math.max(safeBlockWidth, Number(availableWidth)) : Infinity;
+  if (!Number.isFinite(safeAvailableWidth)) return visible;
+  return Math.min(visible, Math.max(1, Math.floor((safeAvailableWidth + gap) / (safeBlockWidth + gap))));
+}
+
+export function telemetryGridPixelWidth(columns = 1, blockWidth = 160, gap = 7, horizontalChrome = 30) {
+  const safeColumns = Math.max(1, Math.floor(Number(columns) || 1));
+  const safeBlockWidth = normalizedTelemetryBlockWidth(blockWidth);
+  const safeGap = Math.max(0, Number(gap) || 0);
+  const safeChrome = Math.max(0, Number(horizontalChrome) || 0);
+  return (safeColumns * safeBlockWidth) + ((safeColumns - 1) * safeGap) + safeChrome;
+}

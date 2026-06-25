@@ -114,6 +114,43 @@ read_default() {
   [ -n "$REPLY" ] || REPLY=$default
 }
 
+lan_ipv4_candidates() {
+  if command -v ip >/dev/null 2>&1; then
+    ip -o -4 addr show scope global up 2>/dev/null |
+      awk '{ split($4, address, "/"); print address[1] }' |
+      grep -E '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)' || true
+  elif command -v ifconfig >/dev/null 2>&1; then
+    ifconfig 2>/dev/null |
+      awk '/inet / { print $2 }' |
+      grep -E '^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)' || true
+  fi
+}
+
+photo_ftp_passive_host_default() {
+  current=$(env_value PHOTO_FTP_PASSIVE_HOST 127.0.0.1)
+  if [ -n "$current" ] && [ "$current" != "127.0.0.1" ]; then
+    printf "%s" "$current"
+    return
+  fi
+  candidate=$(lan_ipv4_candidates | awk 'NR == 1 { print; exit }')
+  if [ -n "$candidate" ]; then
+    printf "%s" "$candidate"
+    return
+  fi
+  printf "%s" "$current"
+}
+
+read_photo_ftp_passive_host() {
+  default=$(photo_ftp_passive_host_default)
+  detected=$(lan_ipv4_candidates | awk '!seen[$0]++' | paste -sd ', ' -)
+  if [ -n "$detected" ]; then
+    echo "Detected LAN IPv4 candidates for Photo FTP: $detected"
+  elif [ -z "$default" ] || [ "$default" = "127.0.0.1" ]; then
+    echo "Could not auto-detect a LAN IPv4 address. Enter the FRAME host address your camera can reach."
+  fi
+  read_default "Photo FTP passive/LAN host" "$default"
+}
+
 read_secret() {
   printf "%s: " "$1"
   stty -echo
@@ -239,7 +276,7 @@ configure_standard() {
   configure_network_storage
   configure_services
   if profile_enabled photo-ftp; then
-    read_default "Photo FTP passive/LAN host" "$(env_value PHOTO_FTP_PASSIVE_HOST 127.0.0.1)"
+    read_photo_ftp_passive_host
     run_install --set "PHOTO_FTP_PASSIVE_HOST=$REPLY"
   fi
 }
@@ -295,7 +332,7 @@ resolve_setup_issues() {
     return
   fi
   if profile_enabled photo-ftp && [ "$(env_value PHOTO_FTP_PASSIVE_HOST 127.0.0.1)" = "127.0.0.1" ]; then
-    read_default "Photo FTP passive/LAN host" "127.0.0.1"
+    read_photo_ftp_passive_host
     run_install --set "PHOTO_FTP_PASSIVE_HOST=$REPLY"
   fi
   if { profile_enabled photo-ftp || profile_enabled photo-webupload; } && [ "$(env_value FRAME_HOST_DATA_ROOT /data)" = "/data" ]; then

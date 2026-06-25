@@ -134,7 +134,7 @@ const EXPOSED_PORTS = [
   { key: "edge", label: "FRAME Web GUI", protocol: "tcp", env: "EDGE_HTTP_PORT", defaultValue: 80, required: true },
   { key: "ftp", label: "Photo FTP control", protocol: "tcp", env: "PHOTO_FTP_PORT", defaultValue: 2121, service: "frame-photo-ftp" },
   { key: "ftpPassiveMin", label: "Photo FTP passive min", protocol: "tcp", env: "PHOTO_FTP_PASSIVE_MIN", defaultValue: 30000, service: "frame-photo-ftp" },
-  { key: "ftpPassiveMax", label: "Photo FTP passive max", protocol: "tcp", env: "PHOTO_FTP_PASSIVE_MAX", defaultValue: 30009, service: "frame-photo-ftp" },
+  { key: "ftpPassiveMax", label: "Photo FTP passive max", protocol: "tcp", env: "PHOTO_FTP_PASSIVE_MAX", defaultValue: 30019, service: "frame-photo-ftp" },
   { key: "srtla", label: "SRTLA ingest", protocol: "udp", env: "SRTLA_PORT", defaultValue: 5000, service: "frame-video-relay" },
   { key: "srtPlayer", label: "SRT player", protocol: "udp", env: "SRT_PLAYER_PORT", defaultValue: 4000, service: "frame-video-relay" },
   { key: "srtSender", label: "SRT sender", protocol: "udp", env: "SRT_SENDER_PORT", defaultValue: 4001, service: "frame-video-relay" },
@@ -172,7 +172,7 @@ const ADVANCED_VALUE_FIELDS = [
   {
     key: "PHOTO_FTP_MAX_SESSIONS",
     label: "FTP max sessions",
-    defaultValue: "10",
+    defaultValue: "20",
     min: 1,
     max: 100,
   },
@@ -186,14 +186,14 @@ const ADVANCED_VALUE_FIELDS = [
   {
     key: "PHOTO_UPLOAD_MAX_FILES",
     label: "Upload max files",
-    defaultValue: "10",
+    defaultValue: "100",
     min: 1,
     max: 100,
   },
   {
     key: "PHOTO_UPLOAD_MAX_SESSIONS",
     label: "Upload max sessions",
-    defaultValue: "10",
+    defaultValue: "2",
     min: 1,
     max: 100,
   },
@@ -1234,7 +1234,7 @@ async function mockInvoke(command, args, originalError) {
       ports: {
         edge: 80,
         photoFtp: 2121,
-        photoFtpPassive: "30000-30009",
+        photoFtpPassive: "30000-30019",
         srtla: 5000,
         srtPlayer: 4000,
         srtSender: 4001,
@@ -1539,7 +1539,7 @@ function passiveRangeToPorts(range) {
   const [start, end] = String(range ?? "").split("-").map((value) => parsePort(value.trim()));
   return {
     ftpPassiveMin: start || 30000,
-    ftpPassiveMax: end || start || 30009,
+    ftpPassiveMax: end || start || 30019,
   };
 }
 

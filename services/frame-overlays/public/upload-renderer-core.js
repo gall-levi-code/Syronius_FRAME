@@ -2,25 +2,43 @@ export function deriveUploadView(transfers, completeHideMs = 5000, now = Date.no
   const visible = (Array.isArray(transfers) ? transfers : []).filter((transfer) => {
     if (transfer.phase !== "queued" && transfer.phase !== "published") return true;
     return now - Date.parse(transfer.updated_at) <= Math.max(0, completeHideMs);
-  });
+  }).sort(compareTransfers);
   const phase = (name) => visible.filter((transfer) => transfer.phase === name);
   const receiving = phase("receiving");
-  const focus = receiving[0] ?? phase("processing")[0] ?? phase("queued")[0] ?? phase("failed")[0] ?? null;
+  const queued = phase("queued");
+  const processing = phase("processing");
+  const published = phase("published");
+  const failed = phase("failed");
+  const focus = focusTransfer({ receiving, processing, queued, published, failed });
+  const focusIndex = focus ? visible.findIndex((transfer) => transfer.transfer_id === focus.transfer_id) : -1;
   const knownTotals = receiving.length > 0 && receiving.every((transfer) => Number.isFinite(transfer.bytes_total));
   const bytesReceived = receiving.reduce((total, transfer) => total + finite(transfer.bytes_received), 0);
   const bytesTotal = knownTotals ? receiving.reduce((total, transfer) => total + finite(transfer.bytes_total), 0) : null;
   const speeds = receiving.map((transfer) => transfer.speed_bps).filter(Number.isFinite);
+  const completeCount = queued.length + processing.length + published.length + failed.length;
+  const overallTotal = visible.length;
+  const currentPercent = focus ? transferPercent(focus) : null;
+  const currentBytesTotal = focus && finite(focus.bytes_total) > 0 ? finite(focus.bytes_total) : null;
   return {
     transfers: visible,
     focus,
+    focus_index: focusIndex,
+    adapters: [...new Set(visible.map((transfer) => transfer.adapter).filter(Boolean))],
     receiving: receiving.length,
-    queued: phase("queued").length,
-    processing: phase("processing").length,
-    failed: phase("failed").length,
+    queued: queued.length,
+    processing: processing.length,
+    published: published.length,
+    failed: failed.length,
     bytes_received: bytesReceived,
     bytes_total: bytesTotal,
     percent: bytesTotal > 0 ? Math.min(100, (bytesReceived / bytesTotal) * 100) : null,
     speed_bps: speeds.length ? speeds.reduce((total, value) => total + value, 0) : null,
+    current_percent: currentPercent,
+    current_bytes_received: focus ? finite(focus.bytes_received) : 0,
+    current_bytes_total: currentBytesTotal,
+    overall_complete: completeCount,
+    overall_total: overallTotal,
+    overall_percent: overallTotal ? Math.min(100, (completeCount / overallTotal) * 100) : 0,
   };
 }
 
@@ -28,9 +46,10 @@ export function uploadSummary(view) {
   const parts = [];
   if (view.receiving) parts.push(`${view.receiving} uploading`);
   if (view.processing) parts.push(`${view.processing} processing`);
-  if (view.queued) parts.push(`${view.queued} queued`);
+  if (view.queued) parts.push(`${view.queued} accepted`);
+  if (view.published) parts.push(`${view.published} published`);
   if (view.failed) parts.push(`${view.failed} failed`);
-  return parts.join(" · ");
+  return parts.join(" - ");
 }
 
 export function formatBytes(bytes) {
@@ -49,4 +68,31 @@ export function formatDuration(milliseconds) {
 
 function finite(value) {
   return Number.isFinite(Number(value)) ? Number(value) : 0;
+}
+
+function focusTransfer(groups) {
+  const receiving = [...groups.receiving].sort((left, right) => {
+    const leftPercent = transferPercent(left);
+    const rightPercent = transferPercent(right);
+    if (leftPercent !== null || rightPercent !== null) return (rightPercent ?? -1) - (leftPercent ?? -1);
+    return compareTransfers(left, right);
+  });
+  return receiving[0] ?? groups.processing[0] ?? groups.queued[0] ?? groups.published[0] ?? groups.failed[0] ?? null;
+}
+
+function transferPercent(transfer) {
+  if (transfer.phase === "queued" || transfer.phase === "processing" || transfer.phase === "published") return 100;
+  const total = finite(transfer.bytes_total);
+  if (total <= 0) return null;
+  return Math.min(100, (finite(transfer.bytes_received) / total) * 100);
+}
+
+function compareTransfers(left, right) {
+  return timestamp(left.started_at) - timestamp(right.started_at)
+    || String(left.transfer_id || "").localeCompare(String(right.transfer_id || ""));
+}
+
+function timestamp(value) {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
