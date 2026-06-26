@@ -25,7 +25,7 @@ $Capabilities = @(
   [pscustomobject]@{ Key = "frame-photo-ftp"; Name = "Photo FTP Ingest"; Description = "Accept completed camera uploads through FTP." },
   [pscustomobject]@{ Key = "frame-photo-webupload"; Name = "Browser Photo Upload"; Description = "Upload photos from a protected browser page." },
   [pscustomobject]@{ Key = "frame-photo-gallery"; Name = "Photo Gallery"; Description = "Publish multi-day photo galleries. Requires a photo input." },
-  [pscustomobject]@{ Key = "frame-photo-todaytools"; Name = "Today Tools"; Description = "Provide Today dashboard, OBS viewer, and remote. Requires Gallery and a photo input." }
+  [pscustomobject]@{ Key = "frame-photo-todaytools"; Name = "Photo Stage"; Description = "Provide Photo Stage dashboard, OBS viewer, and remote. Requires Gallery and a photo input." }
 )
 
 $AdvancedSettings = @(

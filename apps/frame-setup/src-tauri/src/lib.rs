@@ -1033,7 +1033,7 @@ fn enforce_apply_dependencies(capabilities: &mut BTreeMap<String, bool>) -> Vec<
             .unwrap_or(false)
     {
         capabilities.insert("frame-photo-todaytools".to_string(), false);
-        warnings.push("Today Tools was disabled because Photo Gallery is disabled.".to_string());
+        warnings.push("Photo Stage was disabled because Photo Gallery is disabled.".to_string());
     } else if capabilities
         .get("frame-photo-todaytools")
         .copied()
@@ -1042,7 +1042,7 @@ fn enforce_apply_dependencies(capabilities: &mut BTreeMap<String, bool>) -> Vec<
     {
         capabilities.insert("frame-photo-todaytools".to_string(), false);
         warnings.push(
-            "Today Tools was disabled because no photo input service is enabled.".to_string(),
+            "Photo Stage was disabled because no photo input service is enabled.".to_string(),
         );
     }
 

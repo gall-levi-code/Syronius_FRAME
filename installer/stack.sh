@@ -287,7 +287,7 @@ configure_services() {
   configure_capability "frame-photo-ftp" "Photo FTP Ingest"
   configure_capability "frame-photo-webupload" "Browser Photo Upload"
   configure_capability "frame-photo-gallery" "Photo Gallery"
-  configure_capability "frame-photo-todaytools" "Today Tools"
+  configure_capability "frame-photo-todaytools" "Photo Stage"
 }
 
 configure_capability() {

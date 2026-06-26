@@ -330,6 +330,9 @@ test("Windows and Unix wrappers preserve direct commands while offering the numb
   assert.ok(!powershell.includes("$(if"), "PowerShell wrapper must not execute inline if expressions as commands");
   assert.ok(!powershell.includes("= if ("), "PowerShell wrapper must remain compatible with Windows PowerShell 5");
   assert.ok(!powershell.includes("return if ("), "PowerShell wrapper must not return an if expression");
+  const oldPhotoBranding = ["Today", "Tools"].join(" ");
+  assert.ok(!powershell.includes(oldPhotoBranding), "Windows wrapper should avoid old photo branding");
+  assert.ok(!shell.includes(oldPhotoBranding), "Unix wrapper should avoid old photo branding");
   assert.ok(powershell.includes("Get-HostLanIPv4Candidates"), "Windows wrapper must detect host LAN IP candidates for passive FTP");
   assert.ok(powershell.includes("Read-PhotoFtpPassiveHost"), "Windows wrapper must prompt with a passive FTP LAN host helper");
   assert.ok(powershell.includes("Portal login needs setup."), "Windows setup must require Portal credentials in every mode");
