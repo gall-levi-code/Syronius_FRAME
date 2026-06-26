@@ -45,18 +45,18 @@
     "semantic_hash": ""
   },
   "installer/frame-installer.mjs": {
-    "mtime": 1782510640.366678,
-    "ast_hash": "6a81cd79fd2639013918039a6e9ac5d9",
+    "mtime": 1782513454.6868134,
+    "ast_hash": "05ae332474be2f2fc7a74bc071ada2bf",
     "semantic_hash": ""
   },
   "installer/stack.ps1": {
-    "mtime": 1782510755.465621,
-    "ast_hash": "67dfaf581733850d94ec93893c7b742d",
+    "mtime": 1782513454.6852956,
+    "ast_hash": "bbdbd6083b270afaff68501590874fe6",
     "semantic_hash": ""
   },
   "installer/stack.sh": {
-    "mtime": 1782510702.973803,
-    "ast_hash": "e73196407103cf1a9c8fddc2a8116650",
+    "mtime": 1782513454.6868134,
+    "ast_hash": "1c8195302885151f0a5b0b67a5eaaac5",
     "semantic_hash": ""
   },
   "services/frame-audio-bridge/cloudflare-worker.js": {
@@ -350,8 +350,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1782511054.4526598,
-    "ast_hash": "e98312ce9f4c8044b03d78c7a70c9adf",
+    "mtime": 1782513527.421707,
+    "ast_hash": "579491912c74437b2cc4a992184ecb92",
     "semantic_hash": ""
   },
   "docker_container_samples/Docker_OBS_Overlays/public/index.html": {
@@ -405,8 +405,8 @@
     "semantic_hash": ""
   },
   "installer/README.md": {
-    "mtime": 1782340011.5615642,
-    "ast_hash": "7ed95591d74a3491abafce8da68bee8e",
+    "mtime": 1782513527.4222069,
+    "ast_hash": "cf47d7f7a3b89634cca5387044252577",
     "semantic_hash": ""
   },
   "services/frame-audio-bridge/README.md": {
@@ -555,8 +555,8 @@
     "semantic_hash": ""
   },
   "tests/frame-contract.test.mjs": {
-    "mtime": 1782420862.0192227,
-    "ast_hash": "908391d9aa7eb0749cadcffbc1819886",
+    "mtime": 1782513454.6881025,
+    "ast_hash": "437d9ca6c1ee8b5a14a2e373f801a12c",
     "semantic_hash": ""
   },
   ".github/workflows/verify.yml": {
@@ -975,8 +975,8 @@
     "semantic_hash": ""
   },
   "services/frame-auth/README.md": {
-    "mtime": 1782510961.783082,
-    "ast_hash": "251ebcdd923c05a98d9acf590faa856f",
+    "mtime": 1782513527.422708,
+    "ast_hash": "84f9e391db58fb5e5290cdaf62e63d45",
     "semantic_hash": ""
   },
   "services/frame-gallery/public/admin.html": {

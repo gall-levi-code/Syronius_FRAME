@@ -94,7 +94,7 @@ If login keeps looping, check that you are using the same browser address each t
 
 If everyone is suddenly logged out, the session secret may have changed. This is expected after replacing or regenerating that secret.
 
-If Portal credentials are blank, protected login will not work correctly. Set the Portal username and password before using Hybrid or public-facing access.
+If Portal credentials are blank, protected login will not work correctly. FRAME setup now requires a Portal username and password before the stack starts.
 
 The session length can be changed with:
 
