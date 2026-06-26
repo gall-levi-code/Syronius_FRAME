@@ -1,16 +1,16 @@
-# Graph Report - Syronius_FRAME  (2026-06-25)
+# Graph Report - Syronius_FRAME  (2026-06-26)
 
 ## Corpus Check
-- 197 files · ~177,794 words
+- 197 files · ~178,142 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 4407 nodes · 6722 edges · 348 communities (324 shown, 24 thin omitted)
+- 4407 nodes · 6722 edges · 351 communities (327 shown, 24 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 44 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `f862762c`
+- Built from commit: `10c862be`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -340,7 +340,10 @@
 - [[_COMMUNITY_Community 334|Community 334]]
 - [[_COMMUNITY_Community 335|Community 335]]
 - [[_COMMUNITY_Community 336|Community 336]]
+- [[_COMMUNITY_Community 337|Community 337]]
 - [[_COMMUNITY_Community 338|Community 338]]
+- [[_COMMUNITY_Community 339|Community 339]]
+- [[_COMMUNITY_Community 340|Community 340]]
 - [[_COMMUNITY_Community 341|Community 341]]
 - [[_COMMUNITY_Community 342|Community 342]]
 - [[_COMMUNITY_Community 372|Community 372]]
@@ -378,7 +381,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (348 total, 24 thin omitted)
+## Communities (351 total, 24 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.05
@@ -465,8 +468,8 @@ Cohesion: 0.14
 Nodes (28): checkOperatorRoleAssignment(), formatActiveStreamers(), formatInfoMessage(), formatInviteAccessLine(), formatInviteGuide(), formatMarkdownLink(), formatObsSetupSteps(), formatOperatorRole() (+20 more)
 
 ### Community 21 - "Community 21"
-Cohesion: 0.08
-Nodes (25): additionalProperties, $ref, $id, $ref, items, type, properties, default_template_id (+17 more)
+Cohesion: 0.12
+Nodes (19): $ref, $ref, items, type, properties, default_template_id, presets, revision (+11 more)
 
 ### Community 22 - "Community 22"
 Cohesion: 0.08
@@ -525,12 +528,12 @@ Cohesion: 0.08
 Nodes (50): api(), applyVolume(), attach(), attachNativeSource(), BUFFER_PROFILES, bufferProfileSelect, bufferWindowLabel, clamp() (+42 more)
 
 ### Community 36 - "Community 36"
-Cohesion: 0.08
-Nodes (24): additionalProperties, type, oneOf, $defs, connectivity_config, data_source, preset, source (+16 more)
+Cohesion: 0.09
+Nodes (23): additionalProperties, type, oneOf, $defs, connectivity_config, data_source, design, preset (+15 more)
 
 ### Community 37 - "Community 37"
-Cohesion: 0.08
-Nodes (24): additionalProperties, type, oneOf, $defs, connectivity_config, data_source, preset, source (+16 more)
+Cohesion: 0.09
+Nodes (23): additionalProperties, type, oneOf, $defs, connectivity_config, data_source, design, preset (+15 more)
 
 ### Community 38 - "Community 38"
 Cohesion: 0.12
@@ -645,20 +648,20 @@ Cohesion: 0.20
 Nodes (10): 4.0 - Config & Presets, A) Static Config (`.env`), B) Capability Config (`/data/state/stack-config.json`), C) Route Definitions (V1), D) `latest.json` (V1), Day-boundary semantics (Draft, in progress), E) Dependency Enforcement Rules, F) Presets (+2 more)
 
 ### Community 66 - "Community 66"
-Cohesion: 0.09
-Nodes (23): type, design, maxLength, type, allOf, properties, required, type (+15 more)
+Cohesion: 0.10
+Nodes (21): type, maxLength, type, properties, type, $ref, maxLength, minLength (+13 more)
 
 ### Community 67 - "Community 67"
 Cohesion: 0.24
 Nodes (3): errorMessage(), PhotoPipeline, runPool()
 
 ### Community 68 - "Community 68"
-Cohesion: 0.22
-Nodes (8): API, Current Features, Development, Environment, FRAME Portal, Run With Docker Compose, Security Model, Storage and Retention
+Cohesion: 0.25
+Nodes (7): FRAME Portal, How To Install, How To Operate, Notes For Operators, Relies Upon, What You Use It For, Who This Is For
 
 ### Community 69 - "Community 69"
-Cohesion: 0.09
-Nodes (23): type, design, maxLength, type, allOf, properties, required, type (+15 more)
+Cohesion: 0.10
+Nodes (21): type, maxLength, type, properties, type, $ref, maxLength, minLength (+13 more)
 
 ### Community 70 - "Community 70"
 Cohesion: 0.08
@@ -669,8 +672,8 @@ Cohesion: 0.06
 Nodes (46): acceptSnapshot(), adapterLabel, adapterLabelFor(), applyLayout(), applyPayload(), applyTheme(), connectEvents(), compareTransfers() (+38 more)
 
 ### Community 72 - "Community 72"
-Cohesion: 0.25
-Nodes (7): Browser Capture Quality, Current Boundaries, FRAME Audio Monitor, MVP Flow, Pages, Run In The FRAME Stack, Run Standalone
+Cohesion: 0.22
+Nodes (8): Best Results On Your Hardware, Browser Capture Quality, Current Boundaries, FRAME Audio Monitor, MVP Flow, Pages, Run In The FRAME Stack, Run Standalone
 
 ### Community 73 - "Community 73"
 Cohesion: 0.18
@@ -1113,8 +1116,8 @@ Cohesion: 0.24
 Nodes (11): cancelCreate(), createSourceKey(), renderCreate(), renderCreateDataSource(), renderTabs(), renderWelcome(), saveSourceDraft(), selectCreateDataSource() (+3 more)
 
 ### Community 191 - "Community 191"
-Cohesion: 0.09
-Nodes (22): format, type, $ref, maxLength, minLength, type, type, $ref (+14 more)
+Cohesion: 0.10
+Nodes (20): format, type, $ref, maxLength, minLength, type, $ref, created_at (+12 more)
 
 ### Community 192 - "Community 192"
 Cohesion: 0.17
@@ -1133,8 +1136,8 @@ Cohesion: 0.29
 Nodes (7): layout, enum, additionalProperties, properties, required, type, dock
 
 ### Community 196 - "Community 196"
-Cohesion: 0.50
-Nodes (4): maximum, minimum, type, backdrop_blur_px
+Cohesion: 0.67
+Nodes (3): rtt_bad_max, minimum, type
 
 ### Community 197 - "Community 197"
 Cohesion: 0.83
@@ -1169,8 +1172,8 @@ Cohesion: 0.50
 Nodes (4): photo, additionalProperties, required, type
 
 ### Community 205 - "Community 205"
-Cohesion: 0.50
-Nodes (4): maximum, minimum, type, bg_opacity_bad
+Cohesion: 0.29
+Nodes (6): additionalProperties, $id, required, $schema, title, type
 
 ### Community 206 - "Community 206"
 Cohesion: 0.67
@@ -1185,16 +1188,16 @@ Cohesion: 0.67
 Nodes (3): minimum, type, bitrate_good_min
 
 ### Community 210 - "Community 210"
-Cohesion: 0.09
-Nodes (22): format, type, $ref, maxLength, minLength, type, type, $ref (+14 more)
+Cohesion: 0.10
+Nodes (20): format, type, $ref, maxLength, minLength, type, $ref, created_at (+12 more)
 
 ### Community 211 - "Community 211"
 Cohesion: 0.09
 Nodes (22): button, createQueueItem(), dropZone, entries, form, formatBytes(), initializeTheme(), input (+14 more)
 
 ### Community 212 - "Community 212"
-Cohesion: 0.50
-Nodes (4): width_px, maximum, minimum, type
+Cohesion: 0.40
+Nodes (5): source_id, maxLength, minLength, pattern, type
 
 ### Community 213 - "Community 213"
 Cohesion: 0.20
@@ -1213,8 +1216,8 @@ Cohesion: 0.67
 Nodes (3): minimum, type, bitrate_meter_max
 
 ### Community 217 - "Community 217"
-Cohesion: 0.50
-Nodes (4): maximum, minimum, type, bg_opacity_good
+Cohesion: 0.40
+Nodes (5): source_id, maxLength, minLength, pattern, type
 
 ### Community 218 - "Community 218"
 Cohesion: 0.67
@@ -1250,7 +1253,7 @@ Nodes (16): additionalProperties, required, type, additionalProperties, required
 
 ### Community 227 - "Community 227"
 Cohesion: 0.50
-Nodes (4): maximum, minimum, type, height_px
+Nodes (4): maximum, minimum, type, backdrop_blur_px
 
 ### Community 229 - "Community 229"
 Cohesion: 0.33
@@ -1262,11 +1265,11 @@ Nodes (4): ADR 0007: Photo Pipeline Processing Contract, Consequences, Context, 
 
 ### Community 232 - "Community 232"
 Cohesion: 0.50
-Nodes (4): maximum, minimum, type, pad
+Nodes (4): maximum, minimum, type, bg_opacity_good
 
 ### Community 233 - "Community 233"
 Cohesion: 0.50
-Nodes (4): scale, maximum, minimum, type
+Nodes (4): maximum, minimum, type, border_radius_px
 
 ### Community 234 - "Community 234"
 Cohesion: 0.50
@@ -1278,7 +1281,7 @@ Nodes (5): 5.1 LAN mode, 5.2 HYBRID mode, 5.3 Switching HYBRID → LAN, 5.4 Swit
 
 ### Community 236 - "Community 236"
 Cohesion: 0.50
-Nodes (4): maximum, minimum, type, bg_opacity_bad
+Nodes (4): maximum, minimum, type, font_size_base_px
 
 ### Community 237 - "Community 237"
 Cohesion: 0.40
@@ -1289,8 +1292,8 @@ Cohesion: 0.29
 Nodes (7): layout, enum, additionalProperties, properties, required, type, dock
 
 ### Community 239 - "Community 239"
-Cohesion: 0.67
-Nodes (3): minimum, type, active_poll_ms
+Cohesion: 0.50
+Nodes (4): maximum, minimum, type, backdrop_blur_px
 
 ### Community 240 - "Community 240"
 Cohesion: 0.21
@@ -1309,8 +1312,8 @@ Cohesion: 0.33
 Nodes (5): ADR 0011: Native FRAME Setup App Boundary, Consequences, Context, Decision, Status
 
 ### Community 250 - "Community 250"
-Cohesion: 0.67
-Nodes (3): minimum, type, complete_hide_ms
+Cohesion: 0.50
+Nodes (4): maximum, minimum, type, bg_opacity_good
 
 ### Community 251 - "Community 251"
 Cohesion: 0.67
@@ -1350,19 +1353,19 @@ Nodes (3): Camera troubleshooting, Connection flow and ports, FRAME Photo FTP
 
 ### Community 266 - "Community 266"
 Cohesion: 0.50
-Nodes (4): maximum, minimum, type, font_size_base_px
+Nodes (4): maximum, minimum, type, border_radius_px
 
 ### Community 267 - "Community 267"
 Cohesion: 0.05
 Nodes (53): dataRoot, port, server, store, assertBase(), assertDate(), PhotoSidecar, readTextOrEmpty() (+45 more)
 
 ### Community 268 - "Community 268"
-Cohesion: 0.67
-Nodes (3): upload_progress_config, additionalProperties, type
+Cohesion: 0.50
+Nodes (4): maximum, minimum, type, font_size_base_px
 
 ### Community 269 - "Community 269"
-Cohesion: 0.67
-Nodes (3): minimum, type, fetch_timeout_ms
+Cohesion: 0.50
+Nodes (4): maximum, minimum, type, height_px
 
 ### Community 271 - "Community 271"
 Cohesion: 0.50
@@ -1386,15 +1389,15 @@ Nodes (9): { BridgeWebSocketServer }, clone(), config(), createFixture(), listen
 
 ### Community 278 - "Community 278"
 Cohesion: 0.50
-Nodes (4): maximum, minimum, type, bg_opacity_good
+Nodes (4): maximum, minimum, type, pad
 
 ### Community 279 - "Community 279"
-Cohesion: 0.67
-Nodes (3): maxLength, type, idle_label
+Cohesion: 0.50
+Nodes (4): scale, maximum, minimum, type
 
 ### Community 280 - "Community 280"
-Cohesion: 0.67
-Nodes (3): minimum, type, idle_poll_ms
+Cohesion: 0.50
+Nodes (4): width_px, maximum, minimum, type
 
 ### Community 281 - "Community 281"
 Cohesion: 0.67
@@ -1481,8 +1484,8 @@ Cohesion: 0.67
 Nodes (3): updated_at, format, type
 
 ### Community 302 - "Community 302"
-Cohesion: 0.50
-Nodes (4): maximum, minimum, type, font_size_base_px
+Cohesion: 0.67
+Nodes (3): minimum, type, bitrate_warn_min
 
 ### Community 303 - "Community 303"
 Cohesion: 0.50
@@ -1513,8 +1516,8 @@ Cohesion: 0.67
 Nodes (3): upload_progress_config, additionalProperties, type
 
 ### Community 310 - "Community 310"
-Cohesion: 0.50
-Nodes (4): maximum, minimum, type, backdrop_blur_px
+Cohesion: 0.67
+Nodes (3): minimum, type, active_poll_ms
 
 ### Community 311 - "Community 311"
 Cohesion: 0.67
@@ -1570,7 +1573,7 @@ Nodes (3): PermissionEntry, anyOf, description
 
 ### Community 325 - "Community 325"
 Cohesion: 0.67
-Nodes (3): minimum, type, bitrate_warn_min
+Nodes (3): minimum, type, complete_hide_ms
 
 ### Community 326 - "Community 326"
 Cohesion: 0.17
@@ -1578,7 +1581,7 @@ Nodes (11): compilerOptions, esModuleInterop, forceConsistentCasingInFileNames, 
 
 ### Community 327 - "Community 327"
 Cohesion: 0.67
-Nodes (3): rtt_bad_max, minimum, type
+Nodes (3): upload_progress_config, additionalProperties, type
 
 ### Community 328 - "Community 328"
 Cohesion: 0.67
@@ -1596,9 +1599,21 @@ Nodes (3): today_gallery, pattern, type
 Cohesion: 0.67
 Nodes (3): video_relay_ui, pattern, type
 
+### Community 336 - "Community 336"
+Cohesion: 0.67
+Nodes (3): minimum, type, fetch_timeout_ms
+
+### Community 337 - "Community 337"
+Cohesion: 0.67
+Nodes (3): maxLength, type, idle_label
+
 ### Community 338 - "Community 338"
 Cohesion: 0.67
 Nodes (3): minimum, type, chart_rtt_max
+
+### Community 339 - "Community 339"
+Cohesion: 0.67
+Nodes (3): minimum, type, idle_poll_ms
 
 ### Community 372 - "Community 372"
 Cohesion: 0.29

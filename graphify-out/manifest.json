@@ -430,8 +430,8 @@
     "semantic_hash": ""
   },
   "services/frame-audio/README.md": {
-    "mtime": 1781326298.3526917,
-    "ast_hash": "2cfc47d19d0497cb4c5e7e97ede1f397",
+    "mtime": 1782496113.5001678,
+    "ast_hash": "8f409440d744da432d1f051ad86985c5",
     "semantic_hash": ""
   },
   "services/frame-audio/public/admin.html": {
@@ -480,8 +480,8 @@
     "semantic_hash": ""
   },
   "services/frame-portal/README.md": {
-    "mtime": 1781831284.0746481,
-    "ast_hash": "60696a9a1c58c1119b070dae0e3ea547",
+    "mtime": 1782499000.210044,
+    "ast_hash": "7852dbb269f54027742df4300c4fe7b3",
     "semantic_hash": ""
   },
   "services/frame-portal/public/index.html": {

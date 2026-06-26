@@ -6750,7 +6750,7 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_defs_source_id",
-      "community": 37,
+      "community": 217,
       "norm_label": "source_id"
     },
     {
@@ -6760,7 +6760,7 @@
       "source_location": "L48",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_source_id_type",
-      "community": 37,
+      "community": 217,
       "norm_label": "type"
     },
     {
@@ -6770,7 +6770,7 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_source_id_pattern",
-      "community": 37,
+      "community": 217,
       "norm_label": "pattern"
     },
     {
@@ -6780,7 +6780,7 @@
       "source_location": "L50",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_source_id_minlength",
-      "community": 37,
+      "community": 217,
       "norm_label": "minlength"
     },
     {
@@ -6790,7 +6790,7 @@
       "source_location": "L51",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_source_id_maxlength",
-      "community": 37,
+      "community": 217,
       "norm_label": "maxlength"
     },
     {
@@ -6870,7 +6870,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_pad",
-      "community": 232,
+      "community": 278,
       "norm_label": "pad"
     },
     {
@@ -6880,7 +6880,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_pad_type",
-      "community": 232,
+      "community": 278,
       "norm_label": "type"
     },
     {
@@ -6890,7 +6890,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_pad_minimum",
-      "community": 232,
+      "community": 278,
       "norm_label": "minimum"
     },
     {
@@ -6900,7 +6900,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_pad_maximum",
-      "community": 232,
+      "community": 278,
       "norm_label": "maximum"
     },
     {
@@ -6910,7 +6910,7 @@
       "source_location": "L60",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_scale",
-      "community": 233,
+      "community": 279,
       "norm_label": "scale"
     },
     {
@@ -6920,7 +6920,7 @@
       "source_location": "L60",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_scale_type",
-      "community": 233,
+      "community": 279,
       "norm_label": "type"
     },
     {
@@ -6930,7 +6930,7 @@
       "source_location": "L60",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_scale_minimum",
-      "community": 233,
+      "community": 279,
       "norm_label": "minimum"
     },
     {
@@ -6940,7 +6940,7 @@
       "source_location": "L60",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_scale_maximum",
-      "community": 233,
+      "community": 279,
       "norm_label": "maximum"
     },
     {
@@ -6950,7 +6950,7 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_width_px",
-      "community": 212,
+      "community": 280,
       "norm_label": "width_px"
     },
     {
@@ -6960,7 +6960,7 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_width_px_type",
-      "community": 212,
+      "community": 280,
       "norm_label": "type"
     },
     {
@@ -6970,7 +6970,7 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_width_px_minimum",
-      "community": 212,
+      "community": 280,
       "norm_label": "minimum"
     },
     {
@@ -6980,7 +6980,7 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_width_px_maximum",
-      "community": 212,
+      "community": 280,
       "norm_label": "maximum"
     },
     {
@@ -6990,7 +6990,7 @@
       "source_location": "L62",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_height_px",
-      "community": 227,
+      "community": 269,
       "norm_label": "height_px"
     },
     {
@@ -7000,7 +7000,7 @@
       "source_location": "L62",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_height_px_type",
-      "community": 227,
+      "community": 269,
       "norm_label": "type"
     },
     {
@@ -7010,7 +7010,7 @@
       "source_location": "L62",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_height_px_minimum",
-      "community": 227,
+      "community": 269,
       "norm_label": "minimum"
     },
     {
@@ -7020,7 +7020,7 @@
       "source_location": "L62",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_height_px_maximum",
-      "community": 227,
+      "community": 269,
       "norm_label": "maximum"
     },
     {
@@ -7280,7 +7280,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_bg_opacity_good",
-      "community": 217,
+      "community": 250,
       "norm_label": "bg_opacity_good"
     },
     {
@@ -7290,7 +7290,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_bg_opacity_good_type",
-      "community": 217,
+      "community": 250,
       "norm_label": "type"
     },
     {
@@ -7300,7 +7300,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_bg_opacity_good_minimum",
-      "community": 217,
+      "community": 250,
       "norm_label": "minimum"
     },
     {
@@ -7310,7 +7310,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_bg_opacity_good_maximum",
-      "community": 217,
+      "community": 250,
       "norm_label": "maximum"
     },
     {
@@ -7360,7 +7360,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_bg_opacity_bad",
-      "community": 205,
+      "community": 119,
       "norm_label": "bg_opacity_bad"
     },
     {
@@ -7370,7 +7370,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_bg_opacity_bad_type",
-      "community": 205,
+      "community": 119,
       "norm_label": "type"
     },
     {
@@ -7380,7 +7380,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_bg_opacity_bad_minimum",
-      "community": 205,
+      "community": 119,
       "norm_label": "minimum"
     },
     {
@@ -7390,7 +7390,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_bg_opacity_bad_maximum",
-      "community": 205,
+      "community": 119,
       "norm_label": "maximum"
     },
     {
@@ -7400,7 +7400,7 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_border_radius_px",
-      "community": 119,
+      "community": 266,
       "norm_label": "border_radius_px"
     },
     {
@@ -7410,7 +7410,7 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_border_radius_px_type",
-      "community": 119,
+      "community": 266,
       "norm_label": "type"
     },
     {
@@ -7420,7 +7420,7 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_border_radius_px_minimum",
-      "community": 119,
+      "community": 266,
       "norm_label": "minimum"
     },
     {
@@ -7430,7 +7430,7 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_border_radius_px_maximum",
-      "community": 119,
+      "community": 266,
       "norm_label": "maximum"
     },
     {
@@ -7440,7 +7440,7 @@
       "source_location": "L80",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_backdrop_blur_px",
-      "community": 310,
+      "community": 239,
       "norm_label": "backdrop_blur_px"
     },
     {
@@ -7450,7 +7450,7 @@
       "source_location": "L80",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_backdrop_blur_px_type",
-      "community": 310,
+      "community": 239,
       "norm_label": "type"
     },
     {
@@ -7460,7 +7460,7 @@
       "source_location": "L80",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_backdrop_blur_px_minimum",
-      "community": 310,
+      "community": 239,
       "norm_label": "minimum"
     },
     {
@@ -7470,7 +7470,7 @@
       "source_location": "L80",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_backdrop_blur_px_maximum",
-      "community": 310,
+      "community": 239,
       "norm_label": "maximum"
     },
     {
@@ -7480,7 +7480,7 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_font_size_base_px",
-      "community": 266,
+      "community": 268,
       "norm_label": "font_size_base_px"
     },
     {
@@ -7490,7 +7490,7 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_font_size_base_px_type",
-      "community": 266,
+      "community": 268,
       "norm_label": "type"
     },
     {
@@ -7500,7 +7500,7 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_font_size_base_px_minimum",
-      "community": 266,
+      "community": 268,
       "norm_label": "minimum"
     },
     {
@@ -7510,7 +7510,7 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_font_size_base_px_maximum",
-      "community": 266,
+      "community": 268,
       "norm_label": "maximum"
     },
     {
@@ -8570,7 +8570,7 @@
       "source_location": "L135",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_defs_upload_progress_config",
-      "community": 268,
+      "community": 327,
       "norm_label": "upload_progress_config"
     },
     {
@@ -8580,7 +8580,7 @@
       "source_location": "L136",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_upload_progress_config_type",
-      "community": 268,
+      "community": 327,
       "norm_label": "type"
     },
     {
@@ -8590,7 +8590,7 @@
       "source_location": "L137",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_upload_progress_config_additionalproperties",
-      "community": 268,
+      "community": 327,
       "norm_label": "additionalproperties"
     },
     {
@@ -8610,7 +8610,7 @@
       "source_location": "L139",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_active_poll_ms",
-      "community": 239,
+      "community": 310,
       "norm_label": "active_poll_ms"
     },
     {
@@ -8620,7 +8620,7 @@
       "source_location": "L139",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_active_poll_ms_type",
-      "community": 239,
+      "community": 310,
       "norm_label": "type"
     },
     {
@@ -8630,7 +8630,7 @@
       "source_location": "L139",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_active_poll_ms_minimum",
-      "community": 239,
+      "community": 310,
       "norm_label": "minimum"
     },
     {
@@ -8640,7 +8640,7 @@
       "source_location": "L140",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_idle_poll_ms",
-      "community": 280,
+      "community": 339,
       "norm_label": "idle_poll_ms"
     },
     {
@@ -8650,7 +8650,7 @@
       "source_location": "L140",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_idle_poll_ms_type",
-      "community": 280,
+      "community": 339,
       "norm_label": "type"
     },
     {
@@ -8660,7 +8660,7 @@
       "source_location": "L140",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_idle_poll_ms_minimum",
-      "community": 280,
+      "community": 339,
       "norm_label": "minimum"
     },
     {
@@ -8700,7 +8700,7 @@
       "source_location": "L142",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_complete_hide_ms",
-      "community": 250,
+      "community": 325,
       "norm_label": "complete_hide_ms"
     },
     {
@@ -8710,7 +8710,7 @@
       "source_location": "L142",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_complete_hide_ms_type",
-      "community": 250,
+      "community": 325,
       "norm_label": "type"
     },
     {
@@ -8720,7 +8720,7 @@
       "source_location": "L142",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_complete_hide_ms_minimum",
-      "community": 250,
+      "community": 325,
       "norm_label": "minimum"
     },
     {
@@ -8730,7 +8730,7 @@
       "source_location": "L143",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_fetch_timeout_ms",
-      "community": 269,
+      "community": 336,
       "norm_label": "fetch_timeout_ms"
     },
     {
@@ -8740,7 +8740,7 @@
       "source_location": "L143",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_fetch_timeout_ms_type",
-      "community": 269,
+      "community": 336,
       "norm_label": "type"
     },
     {
@@ -8750,7 +8750,7 @@
       "source_location": "L143",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_fetch_timeout_ms_minimum",
-      "community": 269,
+      "community": 336,
       "norm_label": "minimum"
     },
     {
@@ -8840,7 +8840,7 @@
       "source_location": "L149",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_idle_label",
-      "community": 279,
+      "community": 337,
       "norm_label": "idle_label"
     },
     {
@@ -8850,7 +8850,7 @@
       "source_location": "L149",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_idle_label_type",
-      "community": 279,
+      "community": 337,
       "norm_label": "type"
     },
     {
@@ -8860,7 +8860,7 @@
       "source_location": "L149",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_idle_label_maxlength",
-      "community": 279,
+      "community": 337,
       "norm_label": "maxlength"
     },
     {
@@ -9060,7 +9060,7 @@
       "source_location": "L165",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_defs_design",
-      "community": 69,
+      "community": 37,
       "norm_label": "design"
     },
     {
@@ -9070,7 +9070,7 @@
       "source_location": "L166",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_design_type",
-      "community": 69,
+      "community": 37,
       "norm_label": "type"
     },
     {
@@ -9080,7 +9080,7 @@
       "source_location": "L167",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_design_required",
-      "community": 69,
+      "community": 37,
       "norm_label": "required"
     },
     {
@@ -9240,7 +9240,7 @@
       "source_location": "L177",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_enabled",
-      "community": 210,
+      "community": 69,
       "norm_label": "enabled"
     },
     {
@@ -9250,7 +9250,7 @@
       "source_location": "L177",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_enabled_type",
-      "community": 210,
+      "community": 69,
       "norm_label": "type"
     },
     {
@@ -9370,7 +9370,7 @@
       "source_location": "L184",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_design_allof",
-      "community": 69,
+      "community": 37,
       "norm_label": "allof"
     },
     {
@@ -25430,7 +25430,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "config_overlay_presets_schema",
-      "community": 21,
+      "community": 205,
       "norm_label": "overlay-presets.schema.json"
     },
     {
@@ -25440,7 +25440,7 @@
       "source_location": "L2",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_schema",
-      "community": 21,
+      "community": 205,
       "norm_label": "$schema"
     },
     {
@@ -25450,7 +25450,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_id",
-      "community": 21,
+      "community": 205,
       "norm_label": "$id"
     },
     {
@@ -25460,7 +25460,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_title",
-      "community": 21,
+      "community": 205,
       "norm_label": "title"
     },
     {
@@ -25470,7 +25470,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_type",
-      "community": 21,
+      "community": 205,
       "norm_label": "type"
     },
     {
@@ -25480,7 +25480,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_additionalproperties",
-      "community": 21,
+      "community": 205,
       "norm_label": "additionalproperties"
     },
     {
@@ -25490,7 +25490,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_required",
-      "community": 21,
+      "community": 205,
       "norm_label": "required"
     },
     {
@@ -25910,7 +25910,7 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_defs_source_id",
-      "community": 36,
+      "community": 212,
       "norm_label": "source_id"
     },
     {
@@ -25920,7 +25920,7 @@
       "source_location": "L48",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_source_id_type",
-      "community": 36,
+      "community": 212,
       "norm_label": "type"
     },
     {
@@ -25930,7 +25930,7 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_source_id_pattern",
-      "community": 36,
+      "community": 212,
       "norm_label": "pattern"
     },
     {
@@ -25940,7 +25940,7 @@
       "source_location": "L50",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_source_id_minlength",
-      "community": 36,
+      "community": 212,
       "norm_label": "minlength"
     },
     {
@@ -25950,7 +25950,7 @@
       "source_location": "L51",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_source_id_maxlength",
-      "community": 36,
+      "community": 212,
       "norm_label": "maxlength"
     },
     {
@@ -26440,7 +26440,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_bg_opacity_good",
-      "community": 278,
+      "community": 232,
       "norm_label": "bg_opacity_good"
     },
     {
@@ -26450,7 +26450,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_bg_opacity_good_type",
-      "community": 278,
+      "community": 232,
       "norm_label": "type"
     },
     {
@@ -26460,7 +26460,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_bg_opacity_good_minimum",
-      "community": 278,
+      "community": 232,
       "norm_label": "minimum"
     },
     {
@@ -26470,7 +26470,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_bg_opacity_good_maximum",
-      "community": 278,
+      "community": 232,
       "norm_label": "maximum"
     },
     {
@@ -26520,7 +26520,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_bg_opacity_bad",
-      "community": 236,
+      "community": 86,
       "norm_label": "bg_opacity_bad"
     },
     {
@@ -26530,7 +26530,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_bg_opacity_bad_type",
-      "community": 236,
+      "community": 86,
       "norm_label": "type"
     },
     {
@@ -26540,7 +26540,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_bg_opacity_bad_minimum",
-      "community": 236,
+      "community": 86,
       "norm_label": "minimum"
     },
     {
@@ -26550,7 +26550,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_bg_opacity_bad_maximum",
-      "community": 236,
+      "community": 86,
       "norm_label": "maximum"
     },
     {
@@ -26560,7 +26560,7 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_border_radius_px",
-      "community": 86,
+      "community": 233,
       "norm_label": "border_radius_px"
     },
     {
@@ -26570,7 +26570,7 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_border_radius_px_type",
-      "community": 86,
+      "community": 233,
       "norm_label": "type"
     },
     {
@@ -26580,7 +26580,7 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_border_radius_px_minimum",
-      "community": 86,
+      "community": 233,
       "norm_label": "minimum"
     },
     {
@@ -26590,7 +26590,7 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_border_radius_px_maximum",
-      "community": 86,
+      "community": 233,
       "norm_label": "maximum"
     },
     {
@@ -26600,7 +26600,7 @@
       "source_location": "L80",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_backdrop_blur_px",
-      "community": 196,
+      "community": 227,
       "norm_label": "backdrop_blur_px"
     },
     {
@@ -26610,7 +26610,7 @@
       "source_location": "L80",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_backdrop_blur_px_type",
-      "community": 196,
+      "community": 227,
       "norm_label": "type"
     },
     {
@@ -26620,7 +26620,7 @@
       "source_location": "L80",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_backdrop_blur_px_minimum",
-      "community": 196,
+      "community": 227,
       "norm_label": "minimum"
     },
     {
@@ -26630,7 +26630,7 @@
       "source_location": "L80",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_backdrop_blur_px_maximum",
-      "community": 196,
+      "community": 227,
       "norm_label": "maximum"
     },
     {
@@ -26640,7 +26640,7 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_font_size_base_px",
-      "community": 302,
+      "community": 236,
       "norm_label": "font_size_base_px"
     },
     {
@@ -26650,7 +26650,7 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_font_size_base_px_type",
-      "community": 302,
+      "community": 236,
       "norm_label": "type"
     },
     {
@@ -26660,7 +26660,7 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_font_size_base_px_minimum",
-      "community": 302,
+      "community": 236,
       "norm_label": "minimum"
     },
     {
@@ -26670,7 +26670,7 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_font_size_base_px_maximum",
-      "community": 302,
+      "community": 236,
       "norm_label": "maximum"
     },
     {
@@ -26790,7 +26790,7 @@
       "source_location": "L90",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_bitrate_warn_min",
-      "community": 325,
+      "community": 302,
       "norm_label": "bitrate_warn_min"
     },
     {
@@ -26800,7 +26800,7 @@
       "source_location": "L90",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_bitrate_warn_min_type",
-      "community": 325,
+      "community": 302,
       "norm_label": "type"
     },
     {
@@ -26810,7 +26810,7 @@
       "source_location": "L90",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_bitrate_warn_min_minimum",
-      "community": 325,
+      "community": 302,
       "norm_label": "minimum"
     },
     {
@@ -26850,7 +26850,7 @@
       "source_location": "L92",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_rtt_bad_max",
-      "community": 327,
+      "community": 196,
       "norm_label": "rtt_bad_max"
     },
     {
@@ -26860,7 +26860,7 @@
       "source_location": "L92",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_rtt_bad_max_type",
-      "community": 327,
+      "community": 196,
       "norm_label": "type"
     },
     {
@@ -26870,7 +26870,7 @@
       "source_location": "L92",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_rtt_bad_max_minimum",
-      "community": 327,
+      "community": 196,
       "norm_label": "minimum"
     },
     {
@@ -27270,7 +27270,7 @@
       "source_location": "L106",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_show_bitrate_in_good",
-      "community": 336,
+      "community": 340,
       "norm_label": "show_bitrate_in_good"
     },
     {
@@ -27280,7 +27280,7 @@
       "source_location": "L106",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_show_bitrate_in_good_type",
-      "community": 336,
+      "community": 340,
       "norm_label": "type"
     },
     {
@@ -28220,7 +28220,7 @@
       "source_location": "L165",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_defs_design",
-      "community": 66,
+      "community": 36,
       "norm_label": "design"
     },
     {
@@ -28230,7 +28230,7 @@
       "source_location": "L166",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_design_type",
-      "community": 66,
+      "community": 36,
       "norm_label": "type"
     },
     {
@@ -28240,7 +28240,7 @@
       "source_location": "L167",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_design_required",
-      "community": 66,
+      "community": 36,
       "norm_label": "required"
     },
     {
@@ -28400,7 +28400,7 @@
       "source_location": "L177",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_enabled",
-      "community": 191,
+      "community": 66,
       "norm_label": "enabled"
     },
     {
@@ -28410,7 +28410,7 @@
       "source_location": "L177",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_enabled_type",
-      "community": 191,
+      "community": 66,
       "norm_label": "type"
     },
     {
@@ -28530,7 +28530,7 @@
       "source_location": "L184",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_design_allof",
-      "community": 66,
+      "community": 36,
       "norm_label": "allof"
     },
     {
@@ -43790,10 +43790,20 @@
       "norm_label": "browser capture quality"
     },
     {
+      "label": "Best Results On Your Hardware",
+      "file_type": "document",
+      "source_file": "services/frame-audio/README.md",
+      "source_location": "L68",
+      "_origin": "ast",
+      "id": "frame_audio_readme_best_results_on_your_hardware",
+      "community": 72,
+      "norm_label": "best results on your hardware"
+    },
+    {
       "label": "Run Standalone",
       "file_type": "document",
       "source_file": "services/frame-audio/README.md",
-      "source_location": "L67",
+      "source_location": "L90",
       "_origin": "ast",
       "id": "frame_audio_readme_run_standalone",
       "community": 72,
@@ -43803,7 +43813,7 @@
       "label": "Run In The FRAME Stack",
       "file_type": "document",
       "source_file": "services/frame-audio/README.md",
-      "source_location": "L75",
+      "source_location": "L98",
       "_origin": "ast",
       "id": "frame_audio_readme_run_in_the_frame_stack",
       "community": 72,
@@ -43813,7 +43823,7 @@
       "label": "Current Boundaries",
       "file_type": "document",
       "source_file": "services/frame-audio/README.md",
-      "source_location": "L85",
+      "source_location": "L108",
       "_origin": "ast",
       "id": "frame_audio_readme_current_boundaries",
       "community": 72,
@@ -44070,74 +44080,64 @@
       "norm_label": "frame portal"
     },
     {
-      "label": "Current Features",
+      "label": "Who This Is For",
       "file_type": "document",
       "source_file": "services/frame-portal/README.md",
-      "source_location": "L10",
+      "source_location": "L6",
       "_origin": "ast",
-      "id": "frame_portal_readme_current_features",
+      "id": "frame_portal_readme_who_this_is_for",
       "community": 68,
-      "norm_label": "current features"
+      "norm_label": "who this is for"
     },
     {
-      "label": "Security Model",
+      "label": "What You Use It For",
       "file_type": "document",
       "source_file": "services/frame-portal/README.md",
-      "source_location": "L25",
+      "source_location": "L20",
       "_origin": "ast",
-      "id": "frame_portal_readme_security_model",
+      "id": "frame_portal_readme_what_you_use_it_for",
       "community": 68,
-      "norm_label": "security model"
+      "norm_label": "what you use it for"
     },
     {
-      "label": "Environment",
+      "label": "How To Install",
       "file_type": "document",
       "source_file": "services/frame-portal/README.md",
-      "source_location": "L55",
+      "source_location": "L33",
       "_origin": "ast",
-      "id": "frame_portal_readme_environment",
+      "id": "frame_portal_readme_how_to_install",
       "community": 68,
-      "norm_label": "environment"
+      "norm_label": "how to install"
     },
     {
-      "label": "Run With Docker Compose",
+      "label": "How To Operate",
       "file_type": "document",
       "source_file": "services/frame-portal/README.md",
-      "source_location": "L82",
+      "source_location": "L72",
       "_origin": "ast",
-      "id": "frame_portal_readme_run_with_docker_compose",
+      "id": "frame_portal_readme_how_to_operate",
       "community": 68,
-      "norm_label": "run with docker compose"
+      "norm_label": "how to operate"
     },
     {
-      "label": "Storage and Retention",
-      "file_type": "document",
-      "source_file": "services/frame-portal/README.md",
-      "source_location": "L100",
-      "_origin": "ast",
-      "id": "frame_portal_readme_storage_and_retention",
-      "community": 68,
-      "norm_label": "storage and retention"
-    },
-    {
-      "label": "API",
+      "label": "Relies Upon",
       "file_type": "document",
       "source_file": "services/frame-portal/README.md",
       "source_location": "L107",
       "_origin": "ast",
-      "id": "frame_portal_readme_api",
+      "id": "frame_portal_readme_relies_upon",
       "community": 68,
-      "norm_label": "api"
+      "norm_label": "relies upon"
     },
     {
-      "label": "Development",
+      "label": "Notes For Operators",
       "file_type": "document",
       "source_file": "services/frame-portal/README.md",
-      "source_location": "L118",
+      "source_location": "L126",
       "_origin": "ast",
-      "id": "frame_portal_readme_development",
+      "id": "frame_portal_readme_notes_for_operators",
       "community": 68,
-      "norm_label": "development"
+      "norm_label": "notes for operators"
     },
     {
       "label": "README.md",
@@ -93878,9 +93878,9 @@
       "source_file": "services/frame-overlays/public/renderer-core.js",
       "source_location": "L96",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "public_renderer_core",
-      "target": "public_renderer_core_normalizedtelemetryblockwidth",
-      "confidence_score": 1.0
+      "target": "public_renderer_core_normalizedtelemetryblockwidth"
     },
     {
       "relation": "contains",
@@ -93948,9 +93948,9 @@
       "source_file": "services/frame-overlays/public/renderer-core.js",
       "source_location": "L102",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "public_renderer_core",
-      "target": "public_renderer_core_resolvedtelemetrycolumncount",
-      "confidence_score": 1.0
+      "target": "public_renderer_core_resolvedtelemetrycolumncount"
     },
     {
       "relation": "contains",
@@ -93978,9 +93978,9 @@
       "source_file": "services/frame-overlays/public/renderer-core.js",
       "source_location": "L112",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "public_renderer_core",
-      "target": "public_renderer_core_telemetrygridpixelwidth",
-      "confidence_score": 1.0
+      "target": "public_renderer_core_telemetrygridpixelwidth"
     },
     {
       "relation": "contains",
@@ -94294,9 +94294,9 @@
       "source_file": "services/frame-overlays/public/renderer-core.js",
       "source_location": "L104",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "public_renderer_core_resolvedtelemetrycolumncount",
-      "target": "public_renderer_core_normalizedtelemetrycolumns",
-      "confidence_score": 1.0
+      "target": "public_renderer_core_normalizedtelemetrycolumns"
     },
     {
       "relation": "imports",
@@ -94316,9 +94316,9 @@
       "source_file": "services/frame-overlays/public/renderer.js",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "public_renderer",
-      "target": "public_renderer_core_normalizedtelemetryblockwidth",
-      "confidence_score": 1.0
+      "target": "public_renderer_core_normalizedtelemetryblockwidth"
     },
     {
       "relation": "calls",
@@ -94327,9 +94327,9 @@
       "source_file": "services/frame-overlays/public/renderer.js",
       "source_location": "L289",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "public_renderer_applytelemetrycolumns",
-      "target": "public_renderer_core_normalizedtelemetryblockwidth",
-      "confidence_score": 1.0
+      "target": "public_renderer_core_normalizedtelemetryblockwidth"
     },
     {
       "relation": "calls",
@@ -94338,9 +94338,9 @@
       "source_file": "services/frame-overlays/public/renderer-core.js",
       "source_location": "L106",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "public_renderer_core_resolvedtelemetrycolumncount",
-      "target": "public_renderer_core_normalizedtelemetryblockwidth",
-      "confidence_score": 1.0
+      "target": "public_renderer_core_normalizedtelemetryblockwidth"
     },
     {
       "relation": "calls",
@@ -94349,9 +94349,9 @@
       "source_file": "services/frame-overlays/public/renderer-core.js",
       "source_location": "L114",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "public_renderer_core_telemetrygridpixelwidth",
-      "target": "public_renderer_core_normalizedtelemetryblockwidth",
-      "confidence_score": 1.0
+      "target": "public_renderer_core_normalizedtelemetryblockwidth"
     },
     {
       "relation": "imports",
@@ -94360,9 +94360,9 @@
       "source_file": "services/frame-overlays/test/renderer-core.test.mjs",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "test_renderer_core_test",
-      "target": "public_renderer_core_normalizedtelemetryblockwidth",
-      "confidence_score": 1.0
+      "target": "public_renderer_core_normalizedtelemetryblockwidth"
     },
     {
       "relation": "imports",
@@ -94371,9 +94371,9 @@
       "source_file": "services/frame-overlays/public/renderer.js",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "public_renderer",
-      "target": "public_renderer_core_resolvedtelemetrycolumncount",
-      "confidence_score": 1.0
+      "target": "public_renderer_core_resolvedtelemetrycolumncount"
     },
     {
       "relation": "calls",
@@ -94382,9 +94382,9 @@
       "source_file": "services/frame-overlays/public/renderer.js",
       "source_location": "L291",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "public_renderer_applytelemetrycolumns",
-      "target": "public_renderer_core_resolvedtelemetrycolumncount",
-      "confidence_score": 1.0
+      "target": "public_renderer_core_resolvedtelemetrycolumncount"
     },
     {
       "relation": "imports",
@@ -94393,9 +94393,9 @@
       "source_file": "services/frame-overlays/test/renderer-core.test.mjs",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "test_renderer_core_test",
-      "target": "public_renderer_core_resolvedtelemetrycolumncount",
-      "confidence_score": 1.0
+      "target": "public_renderer_core_resolvedtelemetrycolumncount"
     },
     {
       "relation": "imports",
@@ -94404,9 +94404,9 @@
       "source_file": "services/frame-overlays/public/renderer.js",
       "source_location": "L1",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "public_renderer",
-      "target": "public_renderer_core_telemetrygridpixelwidth",
-      "confidence_score": 1.0
+      "target": "public_renderer_core_telemetrygridpixelwidth"
     },
     {
       "relation": "calls",
@@ -94415,9 +94415,9 @@
       "source_file": "services/frame-overlays/public/renderer.js",
       "source_location": "L293",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "public_renderer_applytelemetrycolumns",
-      "target": "public_renderer_core_telemetrygridpixelwidth",
-      "confidence_score": 1.0
+      "target": "public_renderer_core_telemetrygridpixelwidth"
     },
     {
       "relation": "imports",
@@ -94426,9 +94426,9 @@
       "source_file": "services/frame-overlays/test/renderer-core.test.mjs",
       "source_location": "L3",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "test_renderer_core_test",
-      "target": "public_renderer_core_telemetrygridpixelwidth",
-      "confidence_score": 1.0
+      "target": "public_renderer_core_telemetrygridpixelwidth"
     },
     {
       "relation": "contains",
@@ -113497,6 +113497,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "services/frame-audio/README.md",
+      "source_location": "L67",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "frame_audio_readme_frame_audio_monitor",
+      "target": "frame_audio_readme_best_results_on_your_hardware"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-audio/README.md",
       "source_location": "L37",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -113717,71 +113727,61 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "services/frame-portal/README.md",
-      "source_location": "L105",
+      "source_location": "L33",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "frame_portal_readme_frame_portal",
-      "target": "frame_portal_readme_api"
+      "target": "frame_portal_readme_how_to_install",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "services/frame-portal/README.md",
-      "source_location": "L10",
+      "source_location": "L72",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "frame_portal_readme_frame_portal",
-      "target": "frame_portal_readme_current_features"
+      "target": "frame_portal_readme_how_to_operate",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "services/frame-portal/README.md",
-      "source_location": "L116",
+      "source_location": "L126",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "frame_portal_readme_frame_portal",
-      "target": "frame_portal_readme_development"
+      "target": "frame_portal_readme_notes_for_operators",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "services/frame-portal/README.md",
-      "source_location": "L53",
+      "source_location": "L107",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "frame_portal_readme_frame_portal",
-      "target": "frame_portal_readme_environment"
+      "target": "frame_portal_readme_relies_upon",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "services/frame-portal/README.md",
-      "source_location": "L80",
+      "source_location": "L20",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "frame_portal_readme_frame_portal",
-      "target": "frame_portal_readme_run_with_docker_compose"
+      "target": "frame_portal_readme_what_you_use_it_for",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "services/frame-portal/README.md",
-      "source_location": "L24",
+      "source_location": "L6",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "frame_portal_readme_frame_portal",
-      "target": "frame_portal_readme_security_model"
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "services/frame-portal/README.md",
-      "source_location": "L98",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "frame_portal_readme_frame_portal",
-      "target": "frame_portal_readme_storage_and_retention"
+      "target": "frame_portal_readme_who_this_is_for",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -113825,5 +113825,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "f862762c39563947d2e89b71bfbefae33c2c4b9a"
+  "built_at_commit": "10c862be88a06173da328c5f63bb98c1dd33e32b"
 }

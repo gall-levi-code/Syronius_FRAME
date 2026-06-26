@@ -51,11 +51,12 @@ Each source independently selects a final AAC/HLS listener quality from `64` thr
 Changing an always-on source updates its silence relay immediately. Changing a live source applies
 the new AAC target the next time its browser capture reconnects.
 
-Listeners can choose a local playback stability profile:
+Listeners can choose how much delay to trade for smoother playback:
 
-- **Low latency** targets roughly 3 seconds behind live.
-- **Balanced** targets roughly 6 seconds and is the default.
-- **Stable** targets roughly 12 seconds for inconsistent Wi-Fi or remote networks.
+- **Near realtime** is the fastest option. Use it on a strong local network.
+- **Low latency** is still quick, with a little more room for small network hiccups.
+- **Balanced** is the default and the best first choice for most listeners.
+- **Stable** adds the most delay, but is the best choice for weak Wi-Fi or remote listeners.
 
 The relay retains a rolling 30-second HLS playlist. Playback remains at normal speed during
 recovery instead of accelerating audio to catch up.
@@ -63,6 +64,28 @@ recovery instead of accelerating audio to catch up.
 Hybrid deployments can set `PUBLIC_BASE_URL` to the tunneled listener hostname and
 `CAPTURE_BASE_URL` to the LAN-only FRAME Edge address. This keeps copied listener URLs public while
 capture links continue to point at the protected LAN route.
+
+## Best Results On Your Hardware
+
+- Use the latest Chrome or Edge for the capture page. Firefox is a good backup.
+- Safari, iPhone, and iPad are best used for listening pages, not as the main capture device.
+- Open the capture page on the capture computer with `localhost` when you can.
+- If you capture from another phone or computer, use a secure `https://` address. A plain LAN address
+  may not be allowed to use the microphone.
+- Pick the exact microphone, virtual cable, or mixer output in the capture page before going live.
+- For a stream mix, send FRAME a virtual cable or mixer output instead of a room microphone.
+- Set the audio device or mixer output to 48 kHz when your audio software offers that choice.
+- Avoid letting another app take exclusive control of the same audio device.
+- Keep the capture computer plugged in and awake. Turn off sleep mode and battery saver for long
+  sessions.
+- Use wired Ethernet when possible. If you use Wi-Fi, prefer a strong 5 GHz or 6 GHz connection.
+- Start with **Music / Desktop** for stream audio, **Voice** for microphone-only audio, and
+  **Maximum Quality** only after the connection has proven stable.
+- If a listener needs the fastest possible sound, try **Near realtime** first.
+- If playback gets choppy, move one step slower: **Near realtime** to **Low latency**, then
+  **Balanced**, then **Stable**.
+- On low-power computers, keep fewer always-on sources active and start with `128`-`160 kbps` output
+  quality.
 
 ## Run Standalone
 
