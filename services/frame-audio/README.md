@@ -1,79 +1,116 @@
 # FRAME Audio Monitor
 
-FRAME Audio Monitor publishes browser-captured audio from a LAN machine to stable remote listener
-pages using AAC/HLS.
+FRAME Audio Monitor captures audio from a browser and gives trusted listeners a stable web link to
+hear it.
 
-It is separate from FRAME Audio Bridge:
+It is separate from FRAME Audio Bridge. Audio Monitor is for microphones, mixer outputs, virtual
+audio cables, and desktop audio feeds. Audio Bridge is for Discord voice and OBS mixes.
 
-- `frame-audio` captures a local microphone, virtual cable, or VoiceMeeter device for remote listening.
-- `frame-audio-bridge` receives Discord voice and creates per-streamer OBS mixes.
+## Who This Is For
 
-## MVP Flow
+FRAME Audio Monitor is for streamers and operators who need a simple remote audio listen page.
+
+Use it if you want to:
+
+- Let a producer, moderator, or remote helper listen to a live audio feed.
+- Monitor a stream mix without opening the full video feed.
+- Share a stable listener link for a microphone, mixer output, or virtual audio cable.
+- Keep a listener page available even when the capture computer reconnects.
+- Choose between faster audio and steadier playback.
+
+## What You Use It For
+
+Use Audio Monitor when someone needs to hear a live source from another computer.
+
+Common uses:
+
+- Send a stream mix to a remote producer.
+- Let staff check microphone or desktop audio during a live show.
+- Give a trusted listener a browser link instead of a full production tool.
+- Keep audio monitoring separate from Discord Audio Bridge.
+
+Audio Monitor is not a public music broadcast tool. Treat listener links as trusted production
+links.
+
+## How To Install
+
+Audio Monitor is part of the normal FRAME stack when enabled.
+
+Recommended setup:
+
+1. Open the FRAME folder.
+2. Run `stack.cmd`.
+3. Choose **Guided setup**.
+4. Enable **Audio Monitor**.
+5. Start the stack.
+6. Open Audio Monitor:
 
 ```text
-Browser getUserMedia + MediaRecorder
-  -> WebSocket binary chunks
-  -> frame-audio ffmpeg process
-  -> one-second AAC/HLS segments
-  -> remote listen page
+http://localhost/audio/admin
 ```
 
-## Pages
+For standalone testing only:
 
-- `/audio/admin` - create, edit, and delete audio sources.
-- `/audio/capture/<streamId>` - select a browser audio input and publish it.
-- `/audio/listen/<streamId>` - remote HLS listener.
-- `/audio/public/streams/<streamId>/*` - read/heartbeat-only listener API used by public pages.
-- `/audio/hls/<streamId>/<generation>/index.m3u8` - generated HLS output.
+1. Open this folder:
 
-Only one browser publisher is accepted for each audio source. When `alwaysOn` is enabled, FRAME
-generates silence while capture is offline so the listen page remains available.
+```text
+services/frame-audio
+```
 
-Source names and stream IDs must be unique. Deleting a source closes its publisher, clears active
-listener state, removes its generated HLS media, and removes its registry entry. The same public ID
-can be reused after deletion, but the recreated source receives a fresh internal identity so stale
-browser capture settings are not restored.
+2. Start the service:
 
-## Browser Capture Quality
+```bash
+docker compose up --build -d
+```
 
-The capture page provides three presets plus a custom mode:
+3. Open:
 
-- **Voice** requests mono `96 kbps` Opus with echo cancellation, noise suppression, and automatic
-  gain enabled.
-- **Music / Desktop** requests stereo `256 kbps` Opus with browser voice processing disabled.
-- **Maximum Quality** requests stereo `510 kbps` Opus with browser voice processing disabled.
-- **Custom** exposes the Opus bitrate, channel count, and voice-processing controls individually.
+```text
+http://localhost:3734/audio/admin
+```
 
-Browsers may cap or ignore requested media settings. While capture is live, the page reports the
-actual channel/sample-rate settings and the MediaRecorder bitrate reported by the browser.
+Most users should use the full FRAME stack instead of standalone mode.
 
-Each source independently selects a final AAC/HLS listener quality from `64` through `320 kbps`.
-Changing an always-on source updates its silence relay immediately. Changing a live source applies
-the new AAC target the next time its browser capture reconnects.
+## How To Operate
 
-Listeners can choose how much delay to trade for smoother playback:
+Open the admin page:
 
-- **Near realtime** is the fastest option. Use it on a strong local network.
-- **Low latency** is still quick, with a little more room for small network hiccups.
-- **Balanced** is the default and the best first choice for most listeners.
-- **Stable** adds the most delay, but is the best choice for weak Wi-Fi or remote listeners.
+```text
+http://localhost/audio/admin
+```
 
-The relay retains a rolling 30-second HLS playlist. Playback remains at normal speed during
-recovery instead of accelerating audio to catch up.
+Create an audio source, then open its capture page on the computer that has the audio device.
 
-Hybrid deployments can set `PUBLIC_BASE_URL` to the tunneled listener hostname and
-`CAPTURE_BASE_URL` to the LAN-only FRAME Edge address. This keeps copied listener URLs public while
-capture links continue to point at the protected LAN route.
+On the capture page:
+
+1. Allow microphone access when the browser asks.
+2. Choose the microphone, mixer output, virtual audio cable, or desktop audio source.
+3. Pick a capture preset.
+4. Choose whether the page should resume capture when reopened.
+5. Start capture.
+
+The capture page remembers the selected device and capture settings in that browser. If **Resume
+capture on launch** is enabled, the page will try to go live again automatically when it is reopened.
+
+Resume works best when the same browser, same capture page, and same audio device are still
+available. If the device has changed, been unplugged, or another capture page is already live, choose
+the correct device and start capture manually.
+
+On a brand-new capture page, the browser may need microphone permission before device names appear.
+Allow microphone access, then use **Refresh devices** to reload the device list. Use the same button
+after plugging in a new microphone, changing audio routing, or adding a virtual audio device.
+
+Share the listener page only with people who should hear the feed.
 
 ## Best Results On Your Hardware
 
-- Use the latest Chrome or Edge for the capture page. Firefox is a good backup.
+- Use Chrome or Edge for the capture computer when possible. Firefox is a good backup.
 - Safari, iPhone, and iPad are best used for listening pages, not as the main capture device.
 - Open the capture page on the capture computer with `localhost` when you can.
-- If you capture from another phone or computer, use a secure `https://` address. A plain LAN address
-  may not be allowed to use the microphone.
-- Pick the exact microphone, virtual cable, or mixer output in the capture page before going live.
-- For a stream mix, send FRAME a virtual cable or mixer output instead of a room microphone.
+- If you capture from another phone or computer, use a secure `https://` address. A plain LAN
+  address may not be allowed to use the microphone.
+- Pick the exact microphone, virtual cable, or mixer output before going live.
+- For a stream mix, send FRAME a mixer output or virtual audio cable instead of a room microphone.
 - Set the audio device or mixer output to 48 kHz when your audio software offers that choice.
 - Avoid letting another app take exclusive control of the same audio device.
 - Keep the capture computer plugged in and awake. Turn off sleep mode and battery saver for long
@@ -87,28 +124,48 @@ capture links continue to point at the protected LAN route.
 - On low-power computers, keep fewer always-on sources active and start with `128`-`160 kbps` output
   quality.
 
-## Run Standalone
+## Operating System Notes
 
-```bash
-docker compose up --build -d
-```
+Audio Monitor is currently best tested on Windows.
 
-Open `http://localhost:3734/audio/admin`.
+macOS and Linux may work, but should be treated as best-effort until they have been checked in your
+setup.
 
-## Run In The FRAME Stack
+On macOS, make sure the browser has microphone permission in system privacy settings. If you use
+virtual audio routing, confirm the virtual device appears in the browser device list before going
+live.
 
-```bash
-stack.cmd install --enable frame-audio-relay
-stack.cmd start
-```
+On Linux, audio device names and routing can vary depending on the system audio setup. After changing
+audio devices or routing, refresh the device list or restart the browser if the expected device does
+not appear.
 
-The service stores its registry and generated HLS segments under
-`${FRAME_DATA_ROOT}/audio-monitor`.
+For listeners, most modern browsers should work. For capture, Chrome or Edge are the safest first
+choice.
 
-## Current Boundaries
+## Relies Upon
 
-- Stream IDs are permanent URL identifiers. Create a new source to rename an ID.
-- Listener counts track active FRAME listen pages, not direct HLS clients.
-- Listener limits are enforced for FRAME listen pages; direct HLS requests are not authenticated in V1.
-- Capture and admin routes are intended for LAN exposure. Hybrid/public routing should expose only
-  `/audio/listen` and `/audio/hls`.
+Audio Monitor relies on:
+
+- FRAME Portal
+- FRAME Edge
+- FRAME shared data storage
+- The browser on the capture computer
+- The audio device, mixer output, or virtual audio cable you select
+
+Optional connections:
+
+| Feature | Relies Upon |
+| --- | --- |
+| Public listener links | FRAME Tunnel or configured public FRAME access |
+| OBS monitoring workflow | OBS, a mixer output, or a virtual audio cable |
+| Discord voice mixes | FRAME Audio Bridge instead of Audio Monitor |
+
+## Notes For Operators
+
+Only one capture page can publish to a source at a time.
+
+Always-on sources keep the listener page available while capture is offline, then reconnect when the
+capture computer comes back.
+
+Capture and admin pages should stay local or login-protected. Public routing should expose only the
+listener pages needed by trusted users.
