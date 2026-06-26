@@ -210,6 +210,37 @@ function Read-PhotoFtpPassiveHost {
   return Read-Default "Photo FTP passive/LAN host" $default
 }
 
+function Read-Timezone {
+  param([string]$Current)
+  if ([string]::IsNullOrWhiteSpace($Current)) { $Current = "America/Chicago" }
+  $timezones = @(
+    [pscustomobject]@{ Name = "Eastern"; Value = "America/New_York" },
+    [pscustomobject]@{ Name = "Central"; Value = "America/Chicago" },
+    [pscustomobject]@{ Name = "Mountain"; Value = "America/Denver" },
+    [pscustomobject]@{ Name = "Arizona"; Value = "America/Phoenix" },
+    [pscustomobject]@{ Name = "Pacific"; Value = "America/Los_Angeles" },
+    [pscustomobject]@{ Name = "Alaska"; Value = "America/Anchorage" },
+    [pscustomobject]@{ Name = "Hawaii"; Value = "Pacific/Honolulu" },
+    [pscustomobject]@{ Name = "Atlantic"; Value = "America/Halifax" },
+    [pscustomobject]@{ Name = "Newfoundland"; Value = "America/St_Johns" }
+  )
+  while ($true) {
+    Write-Host "Timezone:"
+    for ($index = 0; $index -lt $timezones.Count; $index++) {
+      Write-Host "$($index + 1). $($timezones[$index].Name) ($($timezones[$index].Value))"
+    }
+    Write-Host "C. Custom"
+    $choice = (Read-Host "Selection [keep $Current]").Trim()
+    if ([string]::IsNullOrWhiteSpace($choice)) { return $Current }
+    if ($choice -eq "C" -or $choice -eq "c") { return Read-Default "Custom timezone" $Current }
+    $number = 0
+    if ([int]::TryParse($choice, [ref]$number) -and $number -ge 1 -and $number -le $timezones.Count) {
+      return $timezones[$number - 1].Value
+    }
+    Write-Host "Choose a listed timezone, C for custom, or Enter to keep the current value." -ForegroundColor Yellow
+  }
+}
+
 function Read-MenuChoice {
   param([string]$Prompt, [string[]]$Allowed)
   while ($true) {
@@ -306,7 +337,9 @@ function Show-ConfigurationSummary {
     return
   }
   $enabled = @($Capabilities | Where-Object { Test-CapabilityEnabled $config $_.Key }).Count
-  Write-Host "Current state: $($config.mode) | $enabled optional services enabled | Edge $($env.EDGE_LAN_BASE_URL)" -ForegroundColor DarkGray
+  $timezone = "America/Chicago"
+  if ($env.TIMEZONE) { $timezone = $env.TIMEZONE }
+  Write-Host "Current state: $($config.mode) | $enabled optional services enabled | Timezone $timezone | Edge $($env.EDGE_LAN_BASE_URL)" -ForegroundColor DarkGray
   $issues = @(Get-SetupIssues)
   if ($issues.Count -eq 0) {
     Write-Host "Readiness: no known setup issues" -ForegroundColor Green
@@ -383,7 +416,7 @@ function Configure-NetworkStorage {
   if ($env.TIMEZONE) { $timezone = $env.TIMEZONE }
   $arguments += @("--edge-http-port", (Read-Default "FRAME Edge HTTP port" $edgePort))
   $arguments += @("--host-data-root", (Read-Default "Host-visible FRAME data path" $hostDataRoot))
-  $arguments += @("--set", "TIMEZONE=$(Read-Default "Timezone" $timezone)")
+  $arguments += @("--set", "TIMEZONE=$(Read-Timezone $timezone)")
   Invoke-Install $arguments
 }
 
@@ -538,7 +571,7 @@ function Invoke-InteractiveMenu {
     Write-Host ""
     Write-Host "1. Guided setup                 Resolve setup issues or review all settings"
     Write-Host "2. Configure services           Enable or disable FRAME capabilities"
-    Write-Host "3. Configure network/storage    Standard paths, mode, hostname, and Edge settings"
+    Write-Host "3. Configure network/storage    Mode, hostname, data path, timezone, and Edge settings"
     Write-Host "4. Configure Hybrid access      Stage hostname, tunnel token, and Portal login"
     Write-Host "5. Credentials and security     Portal, Cloudflare, and Discord credentials"
     Write-Host "6. Validate and verify          Check configuration and contracts"

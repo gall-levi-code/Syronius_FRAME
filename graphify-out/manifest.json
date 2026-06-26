@@ -50,13 +50,13 @@
     "semantic_hash": ""
   },
   "installer/stack.ps1": {
-    "mtime": 1782323977.8376832,
-    "ast_hash": "23624e03524e1ca3c3f47dd009b27962",
+    "mtime": 1782508762.3304956,
+    "ast_hash": "b92fb83baf945c8f7d6a38af344179b5",
     "semantic_hash": ""
   },
   "installer/stack.sh": {
-    "mtime": 1782324081.5579314,
-    "ast_hash": "8862313c1a44558894cb657446b1d04a",
+    "mtime": 1782508768.7444372,
+    "ast_hash": "b46d3fdca98fafe04e6eda95165f0938",
     "semantic_hash": ""
   },
   "services/frame-audio-bridge/cloudflare-worker.js": {
