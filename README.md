@@ -162,6 +162,66 @@ Start with the service README when you want to understand, operate, or customize
 | Audio monitor | [`services/frame-audio/`](services/frame-audio/README.md) |
 | Discord audio bridge | [`services/frame-audio-bridge/`](services/frame-audio-bridge/README.md) |
 
+## Container Breakdown
+
+FRAME separates the platform containers that make the stack work from the service containers that
+provide optional tools. The installer turns service containers on and off from your selected
+capabilities; core containers stay in place so routing, login, status, and shared storage keep
+working.
+
+```mermaid
+flowchart TD
+  operator["Browser / OBS / phone"] --> edge["frame-edge"]
+  edge --> auth["frame-auth"]
+  edge --> portal["frame-portal"]
+  portal --> dockerProxy["frame-docker-proxy"]
+
+  tunnel["frame-tunnel"] --> publicGateway["frame-public-gateway"]
+  publicGateway --> edge
+
+  edge --> streams["frame-streams"]
+  streams --> ingestVideo["frame-ingest-video"]
+  edge --> overlays["frame-overlays"]
+
+  edge --> audio["frame-audio"]
+  edge --> audioBridge["frame-audio-bridge"]
+
+  edge --> photoUpload["frame-photo-upload"]
+  camera["Camera FTP"] --> photoFtp["frame-photo-ftp"]
+  photoUpload --> photoPipeline["frame-pipeline-photos"]
+  photoFtp --> photoPipeline
+  photoPipeline --> gallery["frame-gallery"]
+  photoPipeline --> today["frame-today"]
+  edge --> gallery
+  edge --> today
+```
+
+**Core containers**
+
+| Container | When It Runs | What It Does |
+| --- | --- | --- |
+| `frame-edge` | Always | Main local web entry point for FRAME pages. |
+| `frame-auth` | Always | Shared login screen and protected-page session checks. |
+| `frame-portal` | Always | Dashboard, navigation, status, and logs. |
+| `frame-docker-proxy` | Always | Restricted Docker status access for Portal and Edge. |
+| `frame-public-gateway` | Hybrid only | Filters which HTTP routes are allowed through the public tunnel. |
+| `frame-tunnel` | Hybrid only | Cloudflare Tunnel connection for approved public web routes. |
+
+**Service containers**
+
+| Container | Enabled By | What It Does |
+| --- | --- | --- |
+| `frame-ingest-video` | Video Relay | SRTLA/SRT ingest and stream statistics. |
+| `frame-streams` | Video Relay or Overlays | Stream profile management and `/stats` routing. |
+| `frame-overlays` | Overlays | OBS overlay sources and the Overlay Wizard. |
+| `frame-audio` | Audio Monitor | Browser capture, audio relay, listen pages, and HLS output. |
+| `frame-audio-bridge` | Discord Audio Bridge | Discord voice audio, OBS mixes, speaking overlay, and controls. |
+| `frame-photo-upload` | Browser Photo Upload | Protected browser/phone upload page. |
+| `frame-photo-ftp` | Photo FTP Ingest | Camera FTP upload intake. |
+| `frame-pipeline-photos` | Any photo feature | Photo validation, conversion, sidecars, `.ready` files, and archive output. |
+| `frame-gallery` | Photo Gallery | Gallery pages and thumbnail cache. |
+| `frame-today` | Photo Stage | Current-day viewer, remote, and dashboard controls. |
+
 The canonical spec is [`docs/spec/v1.1.md`](docs/spec/v1.1.md). Installer details live in
 [`installer/README.md`](installer/README.md).
 
