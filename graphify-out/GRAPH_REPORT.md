@@ -1,16 +1,16 @@
 # Graph Report - Syronius_FRAME  (2026-06-26)
 
 ## Corpus Check
-- 197 files · ~182,459 words
+- 197 files · ~182,715 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 4457 nodes · 6776 edges · 354 communities (329 shown, 25 thin omitted)
+- 4463 nodes · 6782 edges · 352 communities (336 shown, 16 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 44 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `9a057851`
+- Built from commit: `b3900727`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -346,8 +346,6 @@
 - [[_COMMUNITY_Community 340|Community 340]]
 - [[_COMMUNITY_Community 341|Community 341]]
 - [[_COMMUNITY_Community 342|Community 342]]
-- [[_COMMUNITY_Community 343|Community 343]]
-- [[_COMMUNITY_Community 344|Community 344]]
 - [[_COMMUNITY_Community 345|Community 345]]
 - [[_COMMUNITY_Community 372|Community 372]]
 - [[_COMMUNITY_Community 386|Community 386]]
@@ -384,7 +382,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (354 total, 25 thin omitted)
+## Communities (352 total, 16 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.05
@@ -403,8 +401,8 @@ Cohesion: 0.06
 Nodes (31): AppConfig, loadConfig(), readInt(), app, publicDir, readBoolean(), consumeDockerLogStream(), DockerClient (+23 more)
 
 ### Community 4 - "Community 4"
-Cohesion: 0.08
-Nodes (24): app, config, publicDir, safeEqual(), assertUniqueCustomStream(), assertUniqueName(), assertUniqueSlsStream(), BelaboxStats (+16 more)
+Cohesion: 0.07
+Nodes (27): app, config, publicDir, safeEqual(), assertUniqueCustomStream(), assertUniqueName(), assertUniqueSlsStream(), BelaboxStats (+19 more)
 
 ### Community 5 - "Community 5"
 Cohesion: 0.04
@@ -432,7 +430,7 @@ Nodes (23): latest_photo_config, additionalProperties, properties, type, enum, m
 
 ### Community 11 - "Community 11"
 Cohesion: 0.10
-Nodes (12): AudioSession, BridgeProfile, defaultUserControls(), GuildConfig, clamp(), cloneProfile(), cloneSession(), isGeneratedProfileLabel() (+4 more)
+Nodes (11): AudioSession, BridgeProfile, defaultUserControls(), clamp(), cloneProfile(), cloneSession(), isGeneratedProfileLabel(), mergeUserControls() (+3 more)
 
 ### Community 12 - "Community 12"
 Cohesion: 0.09
@@ -456,15 +454,15 @@ Nodes (24): OverlayAvatarPosition, OverlayBubbleShape, OverlayFontFamily, Overla
 
 ### Community 17 - "Community 17"
 Cohesion: 0.09
-Nodes (43): applyProfile(), availableDevices, captureSettings, configuredProcessingLabel(), describeMediaError(), elementIds, elements, escapeAttr() (+35 more)
+Nodes (44): api(), applyProfile(), availableDevices, captureSettings, configuredProcessingLabel(), describeMediaError(), elementIds, elements (+36 more)
 
 ### Community 18 - "Community 18"
 Cohesion: 0.18
 Nodes (8): parseCommand(), PlaybackState, PresentationMode, TodayCommand, TodayCommandError, TodayState, LatestPublication, TodayPhoto
 
 ### Community 19 - "Community 19"
-Cohesion: 0.18
-Nodes (11): defaultOverlaySettings(), cloneConfig(), cloneProfile(), JsonGuildConfigStore, normalizeConfig(), normalizeOverlaySettings(), normalizeProfile(), nowIso() (+3 more)
+Cohesion: 0.17
+Nodes (12): defaultOverlaySettings(), GuildConfig, cloneConfig(), cloneProfile(), JsonGuildConfigStore, normalizeConfig(), normalizeOverlaySettings(), normalizeProfile() (+4 more)
 
 ### Community 20 - "Community 20"
 Cohesion: 0.14
@@ -483,8 +481,8 @@ Cohesion: 0.40
 Nodes (10): advancedTimingMarkup(), blockDensityMarkup(), blockThemeSectionMarkup(), connectivityDesignMarkup(), connectivityTelemetryMarkup(), layoutSectionMarkup(), stateColoringSectionMarkup(), templateForDraft() (+2 more)
 
 ### Community 24 - "Community 24"
-Cohesion: 0.11
-Nodes (12): OverlaySettings, BridgeAudioChunk, BridgeSnapshot, WebServerHandle, BridgeClient, BridgeWebSocketServer, ClientCounts, ClientKind (+4 more)
+Cohesion: 0.12
+Nodes (11): OverlaySettings, BridgeAudioChunk, BridgeSnapshot, BridgeClient, BridgeWebSocketServer, ClientCounts, ClientKind, ClientMessage (+3 more)
 
 ### Community 25 - "Community 25"
 Cohesion: 0.09
@@ -495,8 +493,8 @@ Cohesion: 0.08
 Nodes (25): additionalProperties, description, minimum, type, description, pattern, type, description (+17 more)
 
 ### Community 27 - "Community 27"
-Cohesion: 0.09
-Nodes (22): type, type, enum, type, type, properties, minimum, type (+14 more)
+Cohesion: 0.08
+Nodes (25): type, type, enum, type, type, enum, type, properties (+17 more)
 
 ### Community 28 - "Community 28"
 Cohesion: 0.05
@@ -531,20 +529,20 @@ Cohesion: 0.08
 Nodes (50): api(), applyVolume(), attach(), attachNativeSource(), BUFFER_PROFILES, bufferProfileSelect, bufferWindowLabel, clamp() (+42 more)
 
 ### Community 36 - "Community 36"
-Cohesion: 0.10
-Nodes (22): additionalProperties, type, oneOf, $defs, connectivity_config, data_source, id, preset (+14 more)
+Cohesion: 0.09
+Nodes (21): additionalProperties, additionalProperties, type, oneOf, $defs, connectivity_config, data_source, preset (+13 more)
 
 ### Community 37 - "Community 37"
-Cohesion: 0.10
-Nodes (20): additionalProperties, type, oneOf, $defs, connectivity_config, data_source, preset, source_id (+12 more)
+Cohesion: 0.09
+Nodes (23): additionalProperties, type, oneOf, $defs, connectivity_config, data_source, design, preset (+15 more)
 
 ### Community 38 - "Community 38"
 Cohesion: 0.12
 Nodes (16): 1.1 Required top-level fields, 1.2 Canonical capabilities (V1 naming for implementation), 1.3 Canonical routes (V1.1), 1.4 Canonical public exposure prefixes (Hybrid allowlist), 1) Canonical capability config: `/data/state/stack-config.json`, 3.1 Dependencies, 3.2 Cascading disables, 3.3 Data safety (+8 more)
 
 ### Community 39 - "Community 39"
-Cohesion: 0.07
-Nodes (24): assertUniqueSourceName(), assertUniqueSourceSlug(), cleanText(), ConfigListener, connectivityConfig(), createFrameOverlaysApp(), findPreset(), FrameOverlaysConfig (+16 more)
+Cohesion: 0.06
+Nodes (25): assertUniqueSourceName(), assertUniqueSourceSlug(), cleanText(), ConfigListener, connectivityConfig(), createFrameOverlaysApp(), findPreset(), FrameOverlaysConfig (+17 more)
 
 ### Community 40 - "Community 40"
 Cohesion: 0.14
@@ -559,8 +557,8 @@ Cohesion: 0.06
 Nodes (19): escapeHtml(), app, port, server, AttemptState, AuthConfig, CredentialPair, ERROR_COPY (+11 more)
 
 ### Community 43 - "Community 43"
-Cohesion: 0.19
-Nodes (15): items, type, items, items, type, items, additionalProperties, required (+7 more)
+Cohesion: 0.26
+Nodes (12): items, type, items, items, type, items, additionalProperties, required (+4 more)
 
 ### Community 44 - "Community 44"
 Cohesion: 0.14
@@ -571,8 +569,8 @@ Cohesion: 0.09
 Nodes (22): dependencies, busboy, dotenv, express, description, devDependencies, @types/busboy, @types/express (+14 more)
 
 ### Community 46 - "Community 46"
-Cohesion: 0.25
-Nodes (11): createDiscordClient(), audioAdminCommand, audioCommand, registerCommands(), getErrorCode(), isRetryableStartupError(), main(), RETRYABLE_ERROR_CODES (+3 more)
+Cohesion: 0.19
+Nodes (13): createDiscordClient(), audioAdminCommand, audioCommand, registerCommands(), getErrorCode(), isRetryableStartupError(), main(), RETRYABLE_ERROR_CODES (+5 more)
 
 ### Community 47 - "Community 47"
 Cohesion: 0.06
@@ -584,15 +582,15 @@ Nodes (12): minimum, type, enum, complete_poll_ms, idle_behavior, show_elapsed, 
 
 ### Community 49 - "Community 49"
 Cohesion: 0.09
-Nodes (32): publicManagementSource(), BuiltinTemplate, clone(), ConnectivityConfig, ConnectivityDesign, createSourceKey(), dataSourceForType(), DesignBase (+24 more)
+Nodes (31): publicManagementSource(), BuiltinTemplate, clone(), ConnectivityConfig, ConnectivityDesign, createSourceKey(), dataSourceForType(), DesignBase (+23 more)
 
 ### Community 50 - "Community 50"
 Cohesion: 0.22
 Nodes (8): Discord Setup Caveats, FRAME Audio Bridge, How To Install, How To Operate, Notes For Operators, Relies Upon, What You Use It For, Who This Is For
 
 ### Community 51 - "Community 51"
-Cohesion: 0.08
-Nodes (24): type, properties, enum, compact_when_good, no_signal_behavior, rtt_bad_max, show_bitrate_in_good, show_chart (+16 more)
+Cohesion: 0.06
+Nodes (35): type, properties, enum, enum, compact_when_good, label_style, no_signal_behavior, show_bitrate (+27 more)
 
 ### Community 52 - "Community 52"
 Cohesion: 0.17
@@ -604,7 +602,7 @@ Nodes (10): $ref, additionalProperties, properties, type, $ref, connectivity, de
 
 ### Community 54 - "Community 54"
 Cohesion: 0.12
-Nodes (16): pattern, type, pattern, type, audio_admin, overlays_wizard, status, today_gallery (+8 more)
+Nodes (16): pattern, type, pattern, type, pattern, type, audio_admin, overlays_wizard (+8 more)
 
 ### Community 55 - "Community 55"
 Cohesion: 0.17
@@ -663,8 +661,8 @@ Cohesion: 0.25
 Nodes (7): FRAME Portal, How To Install, How To Operate, Notes For Operators, Relies Upon, What You Use It For, Who This Is For
 
 ### Community 69 - "Community 69"
-Cohesion: 0.08
-Nodes (25): type, design, maxLength, type, allOf, properties, required, type (+17 more)
+Cohesion: 0.10
+Nodes (21): type, maxLength, type, properties, type, $ref, maxLength, minLength (+13 more)
 
 ### Community 70 - "Community 70"
 Cohesion: 0.08
@@ -695,8 +693,8 @@ Cohesion: 0.12
 Nodes (15): app, dataRoot, gate, healthPort, healthServer, inbox, scanTimer, staging (+7 more)
 
 ### Community 77 - "Community 77"
-Cohesion: 0.16
-Nodes (12): FrameOverlaysRuntime, clampPollMs(), finiteNumber(), isStale(), normalizePublisher(), objectValue(), StatsFetcher, StreamPublisherStats (+4 more)
+Cohesion: 0.17
+Nodes (11): clampPollMs(), finiteNumber(), isStale(), normalizePublisher(), objectValue(), StatsFetcher, StreamPublisherStats, StreamState (+3 more)
 
 ### Community 78 - "Community 78"
 Cohesion: 0.06
@@ -731,8 +729,8 @@ Cohesion: 0.11
 Nodes (17): additionalProperties, pattern, type, pattern, type, properties, base, date_folder (+9 more)
 
 ### Community 86 - "Community 86"
-Cohesion: 0.06
-Nodes (34): maximum, minimum, type, maxLength, type, maximum, minimum, type (+26 more)
+Cohesion: 0.07
+Nodes (30): maximum, minimum, type, maxLength, type, maximum, minimum, type (+22 more)
 
 ### Community 87 - "Community 87"
 Cohesion: 0.19
@@ -748,7 +746,7 @@ Nodes (9): atomicWrite(), atomicWriteJson(), hostJoin(), sanitizeBase(), availab
 
 ### Community 90 - "Community 90"
 Cohesion: 0.09
-Nodes (18): CreateFrameOverlaysOptions, AdapterState, aggregateTransfers(), clampPoll(), dateValue(), IngestAdapterId, IngestAggregate, IngestCapabilities (+10 more)
+Nodes (19): CreateFrameOverlaysOptions, FrameOverlaysRuntime, AdapterState, aggregateTransfers(), clampPoll(), dateValue(), IngestAdapterId, IngestAggregate (+11 more)
 
 ### Community 92 - "Community 92"
 Cohesion: 0.50
@@ -767,8 +765,8 @@ Cohesion: 0.18
 Nodes (10): compilerOptions, esModuleInterop, module, moduleResolution, outDir, rootDir, skipLibCheck, strict (+2 more)
 
 ### Community 96 - "Community 96"
-Cohesion: 0.22
-Nodes (9): fetch(), OFFLINE_STATUSES, offlineResponse(), api(), externalFetch(), isInternalOverlayBinding(), photoUploadFetch(), readOverlayBindings() (+1 more)
+Cohesion: 0.20
+Nodes (10): fetch(), OFFLINE_STATUSES, offlineResponse(), externalFetch(), isInternalOverlayBinding(), photoUploadFetch(), readOverlayBindings(), streamsFetch() (+2 more)
 
 ### Community 97 - "Community 97"
 Cohesion: 0.19
@@ -824,7 +822,7 @@ Nodes (10): compilerOptions, esModuleInterop, module, moduleResolution, outDir, 
 
 ### Community 111 - "Community 111"
 Cohesion: 0.17
-Nodes (10): clone(), config(), createFixture(), express, listen(), MemoryGuildConfigStore, { registerRoutes }, require (+2 more)
+Nodes (9): clone(), config(), createFixture(), express, listen(), MemoryGuildConfigStore, { registerRoutes }, require (+1 more)
 
 ### Community 112 - "Community 112"
 Cohesion: 0.50
@@ -855,8 +853,8 @@ Cohesion: 0.29
 Nodes (11): durationLabel(), elements, formatDate(), friendlyBase(), initializeTheme(), readStoredTheme(), refresh(), render() (+3 more)
 
 ### Community 119 - "Community 119"
-Cohesion: 0.04
-Nodes (46): maximum, minimum, type, maxLength, type, maximum, minimum, type (+38 more)
+Cohesion: 0.07
+Nodes (30): maxLength, type, maximum, minimum, type, maximum, minimum, type (+22 more)
 
 ### Community 120 - "Community 120"
 Cohesion: 0.47
@@ -883,8 +881,8 @@ Cohesion: 0.50
 Nodes (4): maximum, minimum, type, bitrate_streak_warn
 
 ### Community 126 - "Community 126"
-Cohesion: 0.29
-Nodes (6): additionalProperties, $id, required, $schema, title, type
+Cohesion: 0.43
+Nodes (7): id, maxLength, minLength, pattern, $ref, type, id
 
 ### Community 127 - "Community 127"
 Cohesion: 0.40
@@ -892,7 +890,7 @@ Nodes (4): ADR 0010: Photo administration uses reversible publication markers, C
 
 ### Community 128 - "Community 128"
 Cohesion: 0.07
-Nodes (19): { AudioMixer }, { DelayBuffer }, require, DelayBuffer, DelayedItem, AudioMixer, AudioMixerStats, clampSample() (+11 more)
+Nodes (18): { AudioMixer }, { DelayBuffer }, require, DelayBuffer, DelayedItem, AudioMixer, clampSample(), clampVolume() (+10 more)
 
 ### Community 129 - "Community 129"
 Cohesion: 0.11
@@ -1023,12 +1021,12 @@ Cohesion: 0.50
 Nodes (4): maximum, minimum, type, border_radius_px
 
 ### Community 162 - "Community 162"
-Cohesion: 0.25
-Nodes (8): ensureCustomState(), readCustomState(), readProfile(), readProfiles(), readSlsProfiles(), readStats(), start(), writeCustomState()
+Cohesion: 0.27
+Nodes (10): ensureCustomState(), finiteNumber(), nullableNumber(), parseRecoveryRate(), readBelaboxStats(), readCustomState(), readSlsStats(), readStats() (+2 more)
 
 ### Community 163 - "Community 163"
-Cohesion: 0.12
-Nodes (19): $ref, $ref, items, type, properties, default_template_id, presets, revision (+11 more)
+Cohesion: 0.08
+Nodes (25): additionalProperties, $ref, $id, $ref, items, type, properties, default_template_id (+17 more)
 
 ### Community 164 - "Community 164"
 Cohesion: 0.67
@@ -1107,8 +1105,8 @@ Cohesion: 0.24
 Nodes (11): applyPreviewScale(), bindSourceDetails(), findPreset(), previewPresetUrl(), previewSourceUrl(), renderPreview(), renderSelectedSource(), selectedSource() (+3 more)
 
 ### Community 184 - "Community 184"
-Cohesion: 0.29
-Nodes (6): additionalProperties, $id, required, $schema, title, type
+Cohesion: 0.33
+Nodes (5): additionalProperties, required, $schema, title, type
 
 ### Community 185 - "Community 185"
 Cohesion: 0.13
@@ -1143,8 +1141,8 @@ Cohesion: 0.29
 Nodes (7): layout, enum, additionalProperties, properties, required, type, dock
 
 ### Community 196 - "Community 196"
-Cohesion: 0.38
-Nodes (7): finiteNumber(), nullableNumber(), parseRecoveryRate(), readBelaboxStats(), readSlsStats(), upstreamFetch(), upstreamJson()
+Cohesion: 0.40
+Nodes (5): source_id, maxLength, minLength, pattern, type
 
 ### Community 197 - "Community 197"
 Cohesion: 0.83
@@ -1164,7 +1162,7 @@ Nodes (19): logo, maximum, minimum, type, additionalProperties, properties, requ
 
 ### Community 201 - "Community 201"
 Cohesion: 0.50
-Nodes (4): routes, additionalProperties, required, type
+Nodes (4): maximum, minimum, type, bg_opacity_good
 
 ### Community 202 - "Community 202"
 Cohesion: 0.33
@@ -1175,8 +1173,8 @@ Cohesion: 0.20
 Nodes (10): type, webviews, windows, items, description, items, type, description (+2 more)
 
 ### Community 205 - "Community 205"
-Cohesion: 0.67
-Nodes (3): pattern, type, photo_upload
+Cohesion: 0.50
+Nodes (4): maximum, minimum, type, backdrop_blur_px
 
 ### Community 206 - "Community 206"
 Cohesion: 0.67
@@ -1187,12 +1185,12 @@ Cohesion: 0.20
 Nodes (10): $ref, description, items, type, uniqueItems, description, items, type (+2 more)
 
 ### Community 209 - "Community 209"
-Cohesion: 0.67
-Nodes (3): today_remote, pattern, type
+Cohesion: 0.50
+Nodes (4): maximum, minimum, type, bg_opacity_good
 
 ### Community 210 - "Community 210"
-Cohesion: 0.08
-Nodes (24): format, type, $ref, source, maxLength, minLength, type, $ref (+16 more)
+Cohesion: 0.10
+Nodes (20): format, type, $ref, maxLength, minLength, type, $ref, created_at (+12 more)
 
 ### Community 211 - "Community 211"
 Cohesion: 0.09
@@ -1251,8 +1249,8 @@ Cohesion: 0.33
 Nodes (6): 7.0 - Resource Planning, A) CPU, B) RAM, C) Disk, D) Network, E) Retention & Cleanup Defaults (V1)
 
 ### Community 225 - "Community 225"
-Cohesion: 0.67
-Nodes (3): enum, type, level
+Cohesion: 0.50
+Nodes (4): maximum, minimum, type, border_radius_px
 
 ### Community 226 - "Community 226"
 Cohesion: 0.10
@@ -1309,6 +1307,10 @@ Nodes (3): minimum, type, bitrate_warn_min
 ### Community 240 - "Community 240"
 Cohesion: 0.21
 Nodes (4): clone(), MemoryGuildConfigStore, require, { SessionManager }
+
+### Community 244 - "Community 244"
+Cohesion: 0.25
+Nodes (7): FRAME Edge, How To Install, How To Operate, Notes For Operators, Relies Upon, What You Use It For, Who This Is For
 
 ### Community 245 - "Community 245"
 Cohesion: 0.25
@@ -1393,6 +1395,10 @@ Nodes (4): scale, maximum, minimum, type
 ### Community 271 - "Community 271"
 Cohesion: 0.50
 Nodes (4): 2.1 Path normalization, 2.2 Prefix set normalization, 2.3 Route key aliasing (migration helper), 2) Normalization rules (installer-owned)
+
+### Community 272 - "Community 272"
+Cohesion: 0.13
+Nodes (3): AudioMixerStats, formatError(), VoiceManager
 
 ### Community 273 - "Community 273"
 Cohesion: 0.50
@@ -1531,8 +1537,8 @@ Cohesion: 0.67
 Nodes (3): theme, pattern, type
 
 ### Community 308 - "Community 308"
-Cohesion: 0.67
-Nodes (3): today_dashboard, pattern, type
+Cohesion: 0.50
+Nodes (4): maximum, minimum, type, font_size_base_px
 
 ### Community 309 - "Community 309"
 Cohesion: 0.67
@@ -1540,15 +1546,15 @@ Nodes (3): minimum, type, active_mix_count
 
 ### Community 310 - "Community 310"
 Cohesion: 0.67
-Nodes (3): enum, type, health
+Nodes (3): rtt_bad_max, minimum, type
 
 ### Community 311 - "Community 311"
 Cohesion: 0.67
 Nodes (3): minimum, type, complete_hide_ms
 
 ### Community 312 - "Community 312"
-Cohesion: 0.14
-Nodes (13): additionalProperties, additionalProperties, required, type, enum, type, properties, capabilities (+5 more)
+Cohesion: 0.17
+Nodes (12): additionalProperties, required, type, enum, type, properties, capabilities, mode (+4 more)
 
 ### Community 313 - "Community 313"
 Cohesion: 0.50
@@ -1610,6 +1616,10 @@ Nodes (3): uptime_seconds, minimum, type
 Cohesion: 0.67
 Nodes (3): maxLength, type, idle_label
 
+### Community 333 - "Community 333"
+Cohesion: 0.67
+Nodes (3): status, pattern, type
+
 ### Community 334 - "Community 334"
 Cohesion: 0.67
 Nodes (3): minimum, type, idle_poll_ms
@@ -1618,9 +1628,25 @@ Nodes (3): minimum, type, idle_poll_ms
 Cohesion: 0.67
 Nodes (3): upload_progress_config, additionalProperties, type
 
+### Community 337 - "Community 337"
+Cohesion: 0.67
+Nodes (3): today_gallery, pattern, type
+
 ### Community 338 - "Community 338"
 Cohesion: 0.67
 Nodes (3): minimum, type, chart_rtt_max
+
+### Community 339 - "Community 339"
+Cohesion: 0.67
+Nodes (3): video_relay_ui, pattern, type
+
+### Community 340 - "Community 340"
+Cohesion: 0.67
+Nodes (3): minimum, type, listener_count
+
+### Community 341 - "Community 341"
+Cohesion: 0.67
+Nodes (3): speaking_users, items, type
 
 ### Community 372 - "Community 372"
 Cohesion: 0.29
@@ -1651,21 +1677,21 @@ Cohesion: 0.25
 Nodes (7): FRAME Photo Gallery, How To Install, How To Operate, Notes For Operators, Relies Upon, What You Use It For, Who This Is For
 
 ## Knowledge Gaps
-- **1881 isolated node(s):** `name`, `version`, `private`, `type`, `description` (+1876 more)
+- **1886 isolated node(s):** `name`, `version`, `private`, `type`, `description` (+1881 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **25 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **16 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `fetch()` connect `Community 96` to `Community 193`, `Community 97`, `Community 35`, `Community 196`, `Community 3`, `Community 71`, `Community 8`, `Community 267`, `Community 12`, `Community 13`, `Community 15`, `Community 304`, `Community 17`, `Community 211`, `Community 147`, `Community 118`, `Community 253`, `Community 31`?**
+- **Why does `fetch()` connect `Community 96` to `Community 193`, `Community 97`, `Community 35`, `Community 3`, `Community 71`, `Community 8`, `Community 267`, `Community 12`, `Community 13`, `Community 15`, `Community 304`, `Community 17`, `Community 211`, `Community 147`, `Community 118`, `Community 253`, `Community 31`?**
   _High betweenness centrality (0.059) - this node is a cross-community bridge._
 - **Why does `api()` connect `Community 97` to `Community 96`, `Community 190`, `Community 7`?**
   _High betweenness centrality (0.017) - this node is a cross-community bridge._
 - **Why does `requestJson()` connect `Community 193` to `Community 96`, `Community 169`, `Community 178`, `Community 70`?**
   _High betweenness centrality (0.015) - this node is a cross-community bridge._
 - **What connects `name`, `version`, `private` to the rest of the system?**
-  _1881 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _1886 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `Community 0` be split into smaller, more focused modules?**
   _Cohesion score 0.05160662122687439 - nodes in this community are weakly interconnected._
 - **Should `Community 1` be split into smaller, more focused modules?**
