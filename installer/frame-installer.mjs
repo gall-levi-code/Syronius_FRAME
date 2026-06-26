@@ -205,7 +205,7 @@ async function install(options) {
   console.log(`  Photo Upload: ${capabilities["frame-photo-webupload"] ? "enabled" : "disabled"}`);
   console.log(`  Photo FTP: ${capabilities["frame-photo-ftp"] ? "enabled" : "disabled"}`);
   console.log(`  Photo Gallery: ${capabilities["frame-photo-gallery"] ? "enabled" : "disabled"}`);
-  console.log(`  Today Tools: ${capabilities["frame-photo-todaytools"] ? "enabled" : "disabled"}`);
+  console.log(`  Photo Stage: ${capabilities["frame-photo-todaytools"] ? "enabled" : "disabled"}`);
   if (mode === "HYBRID") {
     console.log(`  Public hostname: ${env.CLOUDFLARE_PUBLIC_HOSTNAME}`);
     console.log(`  Public routes: ${effectivePublicPrefixes.join(", ")}`);
@@ -319,7 +319,7 @@ async function status() {
     }`,
   );
   console.log(
-    `  Today Tools: ${
+    `  Photo Stage: ${
       config.capabilities["frame-photo-todaytools"] ? `${env.EDGE_PUBLIC_BASE_URL}/today/dashboard` : "disabled"
     }`,
   );
@@ -430,7 +430,7 @@ function buildEnvironment(existing, options, mode, capabilities) {
   const photoUploadPort = normalizePort(setting(existing, "PHOTO_UPLOAD_PORT", "3736"), "Photo Upload port");
   const photoFtpPort = normalizePort(setting(existing, "PHOTO_FTP_PORT", "2121"), "Photo FTP port");
   const galleryPort = normalizePort(setting(existing, "GALLERY_PORT", "3738"), "Photo Gallery port");
-  const todayPort = normalizePort(setting(existing, "TODAY_PORT", "3739"), "Today Tools port");
+  const todayPort = normalizePort(setting(existing, "TODAY_PORT", "3739"), "Photo Stage port");
   const photoFtpPassiveMin = normalizePort(setting(existing, "PHOTO_FTP_PASSIVE_MIN", "30000"), "Photo FTP passive minimum");
   const photoFtpPassiveMax = normalizePort(setting(existing, "PHOTO_FTP_PASSIVE_MAX", "30019"), "Photo FTP passive maximum");
   if (Number(photoFtpPassiveMin) > Number(photoFtpPassiveMax)) {
@@ -455,7 +455,7 @@ function buildEnvironment(existing, options, mode, capabilities) {
     ["Photo Upload", photoUploadPort, capabilities["frame-photo-webupload"]],
     ["Photo FTP", photoFtpPort, capabilities["frame-photo-ftp"]],
     ["Photo Gallery", galleryPort, capabilities["frame-photo-gallery"]],
-    ["Today Tools", todayPort, capabilities["frame-photo-todaytools"]],
+    ["Photo Stage", todayPort, capabilities["frame-photo-todaytools"]],
     ["SLS statistics", slsStatsPort, capabilities["frame-video-relay"]],
     ["SRTLA ingest", srtlaPort, capabilities["frame-video-relay"]],
     ["SRT player", srtPlayerPort, capabilities["frame-video-relay"]],
@@ -557,7 +557,7 @@ function validateEnvironment(env, config, forStart) {
   const photoUploadPort = normalizePort(defaultIfBlank(env.PHOTO_UPLOAD_PORT, "3736"), "Photo Upload port");
   const photoFtpPort = normalizePort(defaultIfBlank(env.PHOTO_FTP_PORT, "2121"), "Photo FTP port");
   const galleryPort = normalizePort(defaultIfBlank(env.GALLERY_PORT, "3738"), "Photo Gallery port");
-  const todayPort = normalizePort(defaultIfBlank(env.TODAY_PORT, "3739"), "Today Tools port");
+  const todayPort = normalizePort(defaultIfBlank(env.TODAY_PORT, "3739"), "Photo Stage port");
   const photoFtpPassiveMin = normalizePort(defaultIfBlank(env.PHOTO_FTP_PASSIVE_MIN, "30000"), "Photo FTP passive minimum");
   const photoFtpPassiveMax = normalizePort(defaultIfBlank(env.PHOTO_FTP_PASSIVE_MAX, "30019"), "Photo FTP passive maximum");
   if (Number(photoFtpPassiveMin) > Number(photoFtpPassiveMax)) {
@@ -582,7 +582,7 @@ function validateEnvironment(env, config, forStart) {
     ["Photo Upload", photoUploadPort, config.capabilities["frame-photo-webupload"]],
     ["Photo FTP", photoFtpPort, config.capabilities["frame-photo-ftp"]],
     ["Photo Gallery", galleryPort, config.capabilities["frame-photo-gallery"]],
-    ["Today Tools", todayPort, config.capabilities["frame-photo-todaytools"]],
+    ["Photo Stage", todayPort, config.capabilities["frame-photo-todaytools"]],
     ["SLS statistics", slsStatsPort, config.capabilities["frame-video-relay"]],
     ["SRTLA ingest", srtlaPort, config.capabilities["frame-video-relay"]],
     ["SRT player", srtPlayerPort, config.capabilities["frame-video-relay"]],
@@ -1263,7 +1263,7 @@ Usage:
   stack install [options]   Generate or update FRAME configuration
   stack hybrid-stage       Prompt for a hostname and stage Hybrid mode without starting it
   stack tunnel-token       Securely prompt for and store the Cloudflare tunnel token
-  stack portal-auth        Securely prompt for and store Portal credentials
+  stack portal-auth        Securely prompt for Portal credentials and session length
   stack discord-auth       Securely prompt for Discord Audio Bridge credentials
   stack validate           Validate config and startup requirements
   stack verify             Run contract tests and static verification

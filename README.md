@@ -8,7 +8,7 @@ FRAME is a modular, Docker-based streaming appliance for IRL and live production
 The official project name is FRAME; the full styled name is Syronius' F.R.A.M.E.
 
 This repository is the platform stack: a shared portal, routing edge, video relay, OBS overlays,
-photo upload and gallery tools, Today viewer controls, audio tools, and optional Discord audio
+photo upload and gallery tools, Photo Stage controls, audio tools, and optional Discord audio
 bridge. Each service has its own README under `services/` for deeper setup and operating details.
 
 Current release target: `v1.0.0-Alpha`.
@@ -62,7 +62,7 @@ For a first install:
    - Overlays
    - Browser Photo Upload
    - Photo Gallery
-   - Today Tools
+   - Photo Stage
 4. Leave the other optional services disabled for now.
 5. Let the installer validate and verify the setup.
 6. When it offers to reconcile the Docker Compose stack, choose yes.
@@ -83,8 +83,8 @@ Useful first pages:
 - Overlay Wizard: `http://localhost/overlays/setup`
 - Browser Photo Upload: `http://localhost/photos/upload`
 - Photo Gallery: `http://localhost/today/gallery`
-- OBS Today Viewer: `http://localhost/today/viewer`
-- Phone Today Remote: `http://localhost/today/remote`
+- OBS Photo Stage Viewer: `http://localhost/today/viewer`
+- Phone Photo Stage Remote: `http://localhost/today/remote`
 
 Check status or logs:
 
@@ -158,9 +158,69 @@ Start with the service README when you want to understand, operate, or customize
 | Camera FTP upload | [`services/frame-photo-ftp/`](services/frame-photo-ftp/README.md) |
 | Photo processing | [`services/frame-pipeline-photos/`](services/frame-pipeline-photos/README.md) |
 | Gallery | [`services/frame-gallery/`](services/frame-gallery/README.md) |
-| Today viewer and remote | [`services/frame-today/`](services/frame-today/README.md) |
+| Photo Stage viewer and remote | [`services/frame-today/`](services/frame-today/README.md) |
 | Audio monitor | [`services/frame-audio/`](services/frame-audio/README.md) |
 | Discord audio bridge | [`services/frame-audio-bridge/`](services/frame-audio-bridge/README.md) |
+
+## Container Breakdown
+
+FRAME separates the platform containers that make the stack work from the service containers that
+provide optional tools. The installer turns service containers on and off from your selected
+capabilities; core containers stay in place so routing, login, status, and shared storage keep
+working.
+
+```mermaid
+flowchart TD
+  operator["Browser / OBS / phone"] --> edge["frame-edge"]
+  edge --> auth["frame-auth"]
+  edge --> portal["frame-portal"]
+  portal --> dockerProxy["frame-docker-proxy"]
+
+  tunnel["frame-tunnel"] --> publicGateway["frame-public-gateway"]
+  publicGateway --> edge
+
+  edge --> streams["frame-streams"]
+  streams --> ingestVideo["frame-ingest-video"]
+  edge --> overlays["frame-overlays"]
+
+  edge --> audio["frame-audio"]
+  edge --> audioBridge["frame-audio-bridge"]
+
+  edge --> photoUpload["frame-photo-upload"]
+  camera["Camera FTP"] --> photoFtp["frame-photo-ftp"]
+  photoUpload --> photoPipeline["frame-pipeline-photos"]
+  photoFtp --> photoPipeline
+  photoPipeline --> gallery["frame-gallery"]
+  photoPipeline --> today["frame-today"]
+  edge --> gallery
+  edge --> today
+```
+
+**Core containers**
+
+| Container | When It Runs | What It Does |
+| --- | --- | --- |
+| `frame-edge` | Always | Main local web entry point for FRAME pages. |
+| `frame-auth` | Always | Shared login screen and protected-page session checks. |
+| `frame-portal` | Always | Dashboard, navigation, status, and logs. |
+| `frame-docker-proxy` | Always | Restricted Docker status access for Portal and Edge. |
+| `frame-public-gateway` | Hybrid only | Filters which HTTP routes are allowed through the public tunnel. |
+| `frame-tunnel` | Hybrid only | Cloudflare Tunnel connection for approved public web routes. |
+
+**Service containers**
+
+| Container | Enabled By | What It Does |
+| --- | --- | --- |
+| `frame-ingest-video` | Video Relay | SRTLA/SRT ingest and stream statistics. |
+| `frame-streams` | Video Relay or Overlays | Stream profile management and `/stats` routing. |
+| `frame-overlays` | Overlays | OBS overlay sources and the Overlay Wizard. |
+| `frame-audio` | Audio Monitor | Browser capture, audio relay, listen pages, and HLS output. |
+| `frame-audio-bridge` | Discord Audio Bridge | Discord voice audio, OBS mixes, speaking overlay, and controls. |
+| `frame-photo-upload` | Browser Photo Upload | Protected browser/phone upload page. |
+| `frame-photo-ftp` | Photo FTP Ingest | Camera FTP upload intake. |
+| `frame-pipeline-photos` | Any photo feature | Photo validation, conversion, sidecars, `.ready` files, and archive output. |
+| `frame-gallery` | Photo Gallery | Gallery pages and thumbnail cache. |
+| `frame-today` | Photo Stage | Current-day viewer, remote, and dashboard controls. |
 
 The canonical spec is [`docs/spec/v1.1.md`](docs/spec/v1.1.md). Installer details live in
 [`installer/README.md`](installer/README.md).
@@ -172,7 +232,7 @@ The public-facing backlog for the alpha release line:
 **Overlay System**
 
 - Add FTP/BELABOX upload-progress adapters and photo-pipeline correlation.
-- Add latest-photo overlay and Today Tools integration.
+- Add latest-photo overlay and Photo Stage integration.
 
 **Audio Monitor**
 

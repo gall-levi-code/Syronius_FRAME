@@ -1,55 +1,129 @@
-# FRAME Overlays V2
+# FRAME Overlays
 
-`frame-overlays` is one container with three deliberately separate concepts:
+FRAME Overlays creates real-time browser-source overlays for OBS. Use it to display stream health,
+BELABOX cloud telemetry, and live photo upload progress on top of your production scene.
 
-- **Templates** are shipped, immutable starting designs. Every registered overlay type has its own default template.
-- **Presets** are reusable user-owned layout, theme, and widget configurations. Their overlay type is immutable, and they never contain stream bindings or public URL identity.
-- **Sources** bind one preset to one data source and own the permanent OBS Browser Source URL.
+## Who This Is For
 
-Open the wizard at `http://localhost:3733/overlays/setup`. New URLs use
-`/overlays/view/<readable-slug>/<random-source-key>`. Every V1
-`/overlays/view/<preset-id>` URL is retained through a migration-created legacy alias.
+FRAME Overlays is for streamers and production operators who use OBS.
 
-## Runtime behavior
+Use it if you want to:
 
-The service stores schema-versioned state at `/data/state/overlay-presets.json`. Mutations are
-serialized, validated, revisioned, written through unique temporary files, and preceded by a
-latest-state backup. A V1 file is backed up before automatic migration. Management writes require
-an `If-Match` header or `expected_revision` and return `409` when another editor wins the race.
+- Show SRT stream health in OBS.
+- Show BELABOX cloud telemetry in OBS.
+- Show live photo upload progress in OBS.
+- Copy a stable browser-source URL for each overlay.
+- Adjust overlay colors, layout, size, and behavior from FRAME.
 
-Connectivity telemetry is normalized and cached by stream profile. All sources and OBS clients for
-the same profile share one non-overlapping upstream poll. Renderers receive telemetry and config
-revisions over SSE, reconnect automatically, and use source-scoped REST as a fallback. The old
-public `/overlays/stats/:player` proxy now returns `410` so private profile identity is not exposed.
+## What You Use It For
 
-Upload-progress sources use an adapter-aware hub. The first `web_upload` adapter normalizes every
-active file into stable transfer identities and fans one shared upstream poll out to all OBS clients.
-Aggregate percentages are byte-weighted only when every active transfer reports a total; mixed or
-unknown totals use an indeterminate bar. The renderer keeps the oldest active file focused, shows
-concurrent receiving/queued counts, and hides unsupported metrics instead of inventing values.
+Use Overlays when you want OBS viewers to see real-time feedback from your FRAME tools.
 
-The renderer keeps permanent DOM nodes, chart history, and quality hysteresis through visual-only
-preset edits. It treats brief polling errors as transient, computes stale state from sample time,
-sizes canvases to their CSS dimensions and device pixel ratio, and remains transparent and
-pointer-free for OBS. Nullable metrics remain unavailable through normalization, so feeds such as
-BELABOX never render empty telemetry cards or irrelevant chart lines.
+Supported overlay feeds:
 
-The preset editor separates Telemetry from Behavior. Bitrate quality uses a clamped
-`warn < good < max` control on a 0–12,000 kbps scale; max drives both the meter and chart. Sampling
-runs from 20–2,000 ms and new presets retain 20 samples by default while showing the resulting
-visible history duration. The chart labels bitrate and RTT and draws the configured bitrate warning
-floor as a dashed guide. RTT uses a matching `good < bad < max` control on a 0–5,000 ms scale;
-its max value defines the RTT chart ceiling. When a GOOD overlay is compact, the optional current
-bitrate is rendered inside the status bubble instead of opening a separate telemetry card.
+| Feed | What It Shows |
+| --- | --- |
+| SRT stream health | Bitrate, latency, RTT, dropped packets, uptime, and connection state. |
+| BELABOX cloud telemetry | BELABOX-compatible stream health from a connected telemetry source. |
+| Live photo upload progress | Browser upload progress for incoming photo files. Coming soon. |
 
-The wizard follows a source-first workflow: OBS Sources own URLs and feed bindings, Presets own
-reusable designs, and Templates are read-only starting points. Source and preset editors keep a
-sticky Save bar visible with explicit saved/unsaved feedback.
+The main thing users create is a **Source**.
 
-## Validation
+A Source is the OBS browser-source URL plus the data feed and visual settings behind it. The wizard
+walks you through creating one Source at a time.
 
-```sh
-npm test
-npm run typecheck
-npm run build
+## How To Install
+
+Overlays is part of the normal FRAME stack.
+
+Recommended setup:
+
+1. Open the FRAME folder.
+2. Run `stack.cmd`.
+3. Choose **Guided setup**.
+4. Enable Overlays.
+5. Enable Stream Management if you want SRT stream health overlays.
+6. Enable Browser Photo Upload when upload progress overlays are available.
+7. Start the stack.
+8. Open the Overlay Wizard:
+
+```text
+http://localhost/overlays/setup
 ```
+
+For standalone testing only:
+
+1. Open this folder:
+
+```text
+services/frame-overlays
+```
+
+2. Copy `.env.example` to `.env`.
+3. Start the service:
+
+```bash
+docker compose up --build -d
+```
+
+4. Open:
+
+```text
+http://localhost:3733/overlays/setup
+```
+
+Most users should use the full FRAME stack instead of standalone mode.
+
+## How To Operate
+
+Open the Overlay Wizard:
+
+```text
+http://localhost/overlays/setup
+```
+
+To create an OBS overlay:
+
+1. Create a new Source.
+2. Choose what the Source should display.
+3. Name the Source.
+4. Follow the wizard steps.
+5. Copy the OBS URL.
+6. Add it to OBS as a Browser Source.
+
+In OBS:
+
+1. Add a new **Browser Source**.
+2. Paste the copied FRAME overlay URL.
+3. Set the width and height you want.
+4. Keep the source visible in your scene.
+5. Return to FRAME Overlays whenever you want to adjust the source.
+
+Editing a Source keeps the same OBS URL. You should not need to re-add the browser source in OBS
+after normal changes.
+
+## Relies Upon
+
+Overlays relies on:
+
+- FRAME Portal
+- FRAME Edge
+- OBS or another app that supports browser sources
+
+Optional connections:
+
+| Overlay Feed | Relies Upon |
+| --- | --- |
+| SRT stream health | FRAME Stream Management |
+| Local SRT/SRTLA relay health | FRAME Video Ingest |
+| BELABOX cloud telemetry | A connected BELABOX-compatible telemetry source |
+| Live photo upload progress | FRAME Photo Upload |
+
+## Notes For Operators
+
+The Overlay Wizard is a management page and should stay local or login-protected.
+
+The copied OBS view URL is designed to be stable. Deleting a Source removes that OBS URL.
+
+If you remove or rename a stream, existing Sources may need to be pointed at a new stream, but their
+OBS URLs can stay the same.

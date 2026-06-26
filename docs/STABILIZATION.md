@@ -100,5 +100,5 @@ identical.
 `frame-pipeline-photos` is an internal required service, not a user-facing capability toggle.
 
 Selecting any implemented photo capability automatically activates the `photo-pipeline` Compose
-profile. This prevents users from enabling an input, gallery, Discord delivery, or Today Tools
+profile. This prevents users from enabling an input, gallery, Discord delivery, or Photo Stage
 without the pipeline required to safely normalize and publish images.

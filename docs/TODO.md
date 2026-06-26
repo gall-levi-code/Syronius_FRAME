@@ -24,7 +24,7 @@ removed.
 ### Keep Separate For Later
 
 - FTP/BELABOX upload-progress adapters and photo-pipeline queued/processing/published correlation.
-- Latest-photo overlay and Today Tools integration.
+- Latest-photo overlay and Photo Stage integration.
 - General-purpose freeform overlay editor.
 
 ## Audio Monitor
@@ -56,9 +56,10 @@ removed.
 
 - [x] Freeze V1 processing, recovery, sidecar, and quarantine contracts.
 - [x] Build the read-only FRAME photo gallery and thumbnail cache.
-- [x] Build Today Tools with a direct multi-day gallery, OBS viewer, live EXIF display, and authenticated mobile remote.
+- [x] Build Photo Stage with a direct multi-day gallery, OBS viewer, live EXIF display, and authenticated mobile remote.
 - [x] Add protected Gallery Admin with reversible trash, album management, and authoritative latest-state recalculation.
-- Build the Discord delivery outbox after Today Tools stabilizes.
+- Add `/stage/*` Photo Stage routes while preserving `/today/*` compatibility aliases.
+- Build the Discord delivery outbox after Photo Stage stabilizes.
 - Add archive retention controls and disk-pressure policy.
 - Add reliable HEIC decoding when the pinned production image runtime supports it.
 - Add camera and long-running FTP soak tests.

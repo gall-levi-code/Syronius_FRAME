@@ -1,24 +1,128 @@
 # FRAME Video Ingest
 
-`frame-ingest-video` wraps the pinned OpenIRL SRTLA Receiver image and preserves its SRTLA, SRT,
-statistics, and stream-ID API behavior.
+FRAME Video Ingest receives live video from SRTLA or SRT senders and makes it available to FRAME
+Stream Management.
 
-FRAME adds one initialization step: when `/var/lib/sls/streams.db` does not exist, the wrapper seeds
-the SHA-256 hash of `SLS_API_KEY` as the initial admin key. Existing databases are never modified.
-This lets other FRAME services authenticate without scraping a one-time key from container logs.
+It is the video relay receiver behind the stream links, stats, and health data shown in FRAME.
 
-## Ports
+## Who This Is For
 
-- `5000/udp` - SRTLA publisher ingest
-- `4001/udp` - direct SRT publisher ingest
-- `4000/udp` - SRT player output
-- `8080/tcp` - health, management API, and publisher statistics
+FRAME Video Ingest is for streamers and operators who send live video into FRAME.
 
-## Upstream
+Use it if you want to:
 
-- Receiver: <https://github.com/OpenIRL/srtla-receiver>
-- SRT Live Server: <https://github.com/OpenIRL/srt-live-server>
-- Pinned receiver image digest:
-  `sha256:3202ba3584864273ff7293a4e81a0983acda71d5a79e1a2da2b7bcf0b98db2f8`
+- Receive video from an IRL camera, encoder, phone app, or relay sender.
+- Use SRTLA for unstable mobile networks.
+- Use direct SRT when SRTLA is not needed.
+- Feed local stream health into FRAME Stream Management.
+- Provide stream data to FRAME Overlays.
 
-The upstream receiver is licensed under GPL-3.0. See `OPENIRL-LICENSE.txt`.
+## What You Use It For
+
+Use Video Ingest as the receiving side of your live video relay.
+
+Common uses:
+
+- Point an SRTLA sender at your FRAME machine.
+- Point a direct SRT sender at your FRAME machine.
+- Let Stream Management create and show relay links.
+- Monitor bitrate, latency, dropped packets, and uptime.
+- Supply stream health data to overlays.
+
+Most users operate this through FRAME Stream Management instead of opening Video Ingest directly.
+
+## How To Install
+
+Video Ingest is part of the normal FRAME stack when **Video Relay and Stream Management** is enabled.
+
+Recommended setup:
+
+1. Open the FRAME folder.
+2. Run `stack.cmd`.
+3. Choose **Guided setup**.
+4. Enable **Video Relay and Stream Management**.
+5. Start the stack.
+6. Open Stream Management:
+
+```text
+http://localhost/slsui
+```
+
+For standalone testing only:
+
+```bash
+docker compose up --build -d
+```
+
+Most users should use the full FRAME stack instead of standalone mode.
+
+## How To Operate
+
+Open Stream Management:
+
+```text
+http://localhost/slsui
+```
+
+Create or select a stream, then copy the publisher link into your camera, encoder, or sending app.
+
+Common ports:
+
+| Port | Use |
+| --- | --- |
+| `5000/udp` | SRTLA sender ingest |
+| `4001/udp` | Direct SRT sender ingest |
+| `4000/udp` | SRT player output |
+| `8080/tcp` | Receiver stats and management API |
+
+For local testing, point your sender at the FRAME machine on your LAN.
+
+For remote senders outside your network, you usually need to port forward the ingest port you are
+using. SRTLA normally uses `5000/udp`. Direct SRT sender ingest normally uses `4001/udp`.
+
+Forward UDP, not TCP, for SRTLA and SRT ingest.
+
+FRAME Tunnel and the optional Cloudflare Worker are for public web pages. They do not carry SRTLA or
+SRT video ingest. Remote video senders still need UDP port forwarding, a VPN, or another UDP-capable
+relay path.
+
+Do not expose the stats/API port publicly unless you know exactly why you need it.
+
+## Relies Upon
+
+Video Ingest relies on:
+
+- FRAME shared data storage
+- FRAME Stream Management
+- A camera, encoder, phone app, or sender that supports SRTLA or SRT
+- Network access to the selected ingest port
+
+Optional connections:
+
+| Feature | Relies Upon |
+| --- | --- |
+| Stream health dashboard | FRAME Stream Management |
+| Stream health overlays | FRAME Overlays |
+| Public stats links | FRAME Edge and configured public/Hybrid access |
+| Remote senders | Router/firewall port forwarding or another network path |
+
+## Notes For Operators
+
+SRTLA is usually the better choice for mobile or unstable networks.
+
+Direct SRT is useful for simpler setups, local testing, or senders that do not support SRTLA.
+
+Keep receiver stats and management routes local or protected.
+
+Test remote ingest from outside your LAN. Some routers cannot test their own public address from
+inside the same network.
+
+If your ISP does not give your router a real public address, normal port forwarding may not work.
+
+Do not delete the video relay data folder unless you are ready to recreate relay streams and keys.
+
+If a sender cannot connect, check the IP address, selected protocol, port, firewall rules, and router
+port forwarding.
+
+If stream health looks poor, lower the sender bitrate or improve the sender network before changing
+FRAME settings.

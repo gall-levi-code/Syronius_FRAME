@@ -151,6 +151,47 @@ read_photo_ftp_passive_host() {
   read_default "Photo FTP passive/LAN host" "$default"
 }
 
+configure_auth_session_days() {
+  read_default "Shared login session length in days (1-30)" "$(env_value FRAME_AUTH_SESSION_DAYS 7)"
+  run_install --set "FRAME_AUTH_SESSION_DAYS=$REPLY"
+}
+
+read_timezone() {
+  current=$1
+  [ -n "$current" ] || current=America/Chicago
+  while true; do
+    cat <<EOF
+Timezone:
+1) Eastern (America/New_York)
+2) Central (America/Chicago)
+3) Mountain (America/Denver)
+4) Arizona (America/Phoenix)
+5) Pacific (America/Los_Angeles)
+6) Alaska (America/Anchorage)
+7) Hawaii (Pacific/Honolulu)
+8) Atlantic (America/Halifax)
+9) Newfoundland (America/St_Johns)
+C) Custom
+EOF
+    printf "Selection [keep %s]: " "$current"
+    read -r choice
+    case "$choice" in
+      "") REPLY=$current; return ;;
+      1) REPLY=America/New_York; return ;;
+      2) REPLY=America/Chicago; return ;;
+      3) REPLY=America/Denver; return ;;
+      4) REPLY=America/Phoenix; return ;;
+      5) REPLY=America/Los_Angeles; return ;;
+      6) REPLY=America/Anchorage; return ;;
+      7) REPLY=Pacific/Honolulu; return ;;
+      8) REPLY=America/Halifax; return ;;
+      9) REPLY=America/St_Johns; return ;;
+      c|C) read_default "Custom timezone" "$current"; return ;;
+      *) echo "Choose a listed timezone, C for custom, or Enter to keep the current value." ;;
+    esac
+  done
+}
+
 read_secret() {
   printf "%s: " "$1"
   stty -echo
@@ -267,7 +308,7 @@ configure_network_storage() {
   edge_port=$REPLY
   read_default "Host-visible FRAME data path" "$(env_value FRAME_HOST_DATA_ROOT "$ROOT_DIR/data")"
   host_data=$REPLY
-  read_default "Timezone" "$(env_value TIMEZONE America/Chicago)"
+  read_timezone "$(env_value TIMEZONE America/Chicago)"
   timezone=$REPLY
   run_install --edge-http-port "$edge_port" --host-data-root "$host_data" --set "TIMEZONE=$timezone"
 }
@@ -363,7 +404,7 @@ configure_credentials() {
   while :; do
     echo ""
     echo "Credentials and security"
-    echo "1. Portal login"
+    echo "1. Portal login and session length"
     echo "2. Cloudflare tunnel token"
     echo "3. Discord bot credentials"
     echo "4. Photo FTP credentials"
@@ -379,6 +420,7 @@ configure_credentials() {
         username=$REPLY
         read_secret "Portal password (input hidden)"
         password=$REPLY
+        configure_auth_session_days
         printf "%s\n%s\n" "$username" "$password" | runtime set-portal-auth
         unset password
         ;;
@@ -463,13 +505,14 @@ interactive_menu() {
     echo ""
     if [ -f "$ROOT_DIR/.env" ]; then
       echo "Current mode: $(env_value FRAME_MODE LAN)"
+      echo "Timezone: $(env_value TIMEZONE America/Chicago)"
     else
       echo "Current state: Not configured"
     fi
     echo ""
     echo "1. Guided setup"
     echo "2. Configure services"
-    echo "3. Configure network and storage"
+    echo "3. Configure network, storage, and timezone"
     echo "4. Configure Hybrid access"
     echo "5. Credentials and security"
     echo "6. Validate and verify"
@@ -554,6 +597,7 @@ case "$COMMAND" in
     read -r password
     stty echo
     printf "\n"
+    configure_auth_session_days
     printf "%s\n%s\n" "$username" "$password" | runtime set-portal-auth
     unset username password
     ;;

@@ -86,7 +86,7 @@ const SERVICES = [
     summary: "Camera FTP input with completed-upload stability checks.",
     guided: {
       what: "Starts an FTP endpoint that cameras or phones can send photos to, then moves completed uploads into the photo pipeline.",
-      why: "Use this when a camera can FTP images directly to FRAME for live photo galleries, Streamer.bot triggers, or Today Tools.",
+      why: "Use this when a camera can FTP images directly to FRAME for live photo galleries, Streamer.bot triggers, or Photo Stage.",
       ports: "Exposes an FTP control port plus a passive FTP port range. Cameras need these open on the LAN, and remote FTP may require router/firewall forwarding.",
       setup: "In localhost/setup you will set the FTP username/password, passive host, passive range, camera connection instructions, and verify that uploads appear in the pipeline.",
     },
@@ -118,13 +118,13 @@ const SERVICES = [
   },
   {
     id: "frame-photo-todaytools",
-    label: "Today Tools",
-    summary: "Today dashboard, OBS viewer, and mobile remote for live photo publishing.",
+    label: "Photo Stage",
+    summary: "Photo Stage dashboard, OBS viewer, and mobile remote for live photo publishing.",
     guided: {
-      what: "Adds the live Today workflow: current-day gallery, OBS viewer, remote controls, latest image metadata, and Streamer.bot-friendly file outputs.",
+      what: "Adds the live Photo Stage workflow: current-day gallery, OBS viewer, remote controls, latest image metadata, and Streamer.bot-friendly file outputs.",
       why: "Use this when you want photos to appear live during a stream, with a remote page to control what the OBS viewer shows.",
       ports: "Does not expose its own port. The OBS viewer can be public if you choose, while dashboard/upload/remote pages stay protected.",
-      setup: "In localhost/setup you will copy the OBS viewer URL, configure remote access, verify latest.json, and confirm Today folder/ready-file behavior.",
+      setup: "In localhost/setup you will copy the OBS viewer URL, configure remote access, verify latest.json, and confirm published-photo ready-file behavior.",
     },
     defaultEnabled: true,
   },

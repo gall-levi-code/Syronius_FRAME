@@ -6,7 +6,7 @@
 ## Context
 
 FRAME exposes user-facing photo capabilities for FTP input, browser upload, gallery, Discord
-delivery, and Today Tools. Every one of these features depends on the photo pipeline to decide when
+delivery, and Photo Stage. Every one of these features depends on the photo pipeline to decide when
 an upload is complete, normalize it, publish it, and maintain shared state.
 
 Exposing the pipeline as another independent toggle would allow invalid configurations where photo

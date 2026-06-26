@@ -1,219 +1,192 @@
 # FRAME Audio Bridge
 
-FRAME Audio Bridge is a Discord bot plus web server for OBS browser sources. Each streamer gets permanent OBS URLs, while live voice sessions can be started and stopped with `/frame` slash commands.
+FRAME Audio Bridge sends Discord voice into OBS as browser-source audio and a speaking overlay.
 
-The MVP implements Discord login, slash command registration, guild config persistence, stable URLs, control WebSocket updates, voice-channel joining, speaking-state overlays, and PCM receive/decode/mix for OBS audio browser sources.
+Each streamer gets permanent OBS links, a private control page, and Discord slash commands for
+starting and stopping their own mix.
 
-Within the Syronius FRAME repository, this is the optional `frame-audio-bridge` service represented
-by the `frame-discord-audio-bridge` capability. It is separate from the browser-capture/HLS
-`frame-audio` monitor and can be deployed independently.
+## Who This Is For
 
-## Features
+FRAME Audio Bridge is for experienced Discord and OBS users who want Discord voice in a live
+production.
 
-- Permanent per-streamer bridge URLs:
-  - `/bridge/:guildKey/audio`
-  - `/bridge/:guildKey/overlay`
-  - `/bridge/:guildKey/control?token=...`
-- Slash commands:
-  - `/frame info`
-  - `/frame start`
-  - `/frame stop`
-  - `/frame status`
-  - `/frame control`
-  - `/frame links`
-  - `/frame reset-links`
-  - `/frame-admin setup`
-  - `/frame-admin invite`
-- JSON persistence under `DATA_DIR`.
-- Mobile-first control page with delay, layout, per-user mute, per-user volume, and overlay hide/show controls.
-- Transparent OBS overlay using Discord display names and Discord avatars.
-- Optional readonly OBS token for audio/overlay browser sources.
-- Session idle timeout and configurable empty-channel timeout.
-- One shared Discord voice receiver per guild with separate streamer mixes.
+Use it if you want to:
 
-## Discord Application Setup
+- Bring Discord voice into OBS without capturing the whole Discord app.
+- Give each streamer their own stable OBS audio link.
+- Show who is speaking with a transparent OBS overlay.
+- Control delay, volume, mute, and overlay visibility from a phone or second screen.
+- Let multiple streamers share one Discord voice session with separate OBS mixes.
 
-1. Create an application in the Discord Developer Portal.
-2. Open **Bot**, create a bot, and copy the bot token into `DISCORD_TOKEN`.
-3. Copy the application client ID into `DISCORD_CLIENT_ID`.
-4. In **Bot > Privileged Gateway Intents**, enable:
-   - Server Members Intent
-   - Voice States Intent
-5. Invite the bot with these scopes:
-   - `bot`
-   - `applications.commands`
-6. Grant the bot only the permissions it needs in streamer guilds:
-   - View Channels
-   - Connect
-   - Manage Roles, only if you want `/frame-admin setup` and `/frame-admin invite` to create/assign the operator role
+## What You Use It For
 
-Least-invasive install options:
+Use Audio Bridge when Discord voice is part of the show.
 
-- Manual role management: View Channels + Connect (`permissions=1049600`).
-- Bot-managed operator role: View Channels + Connect + Manage Roles (`permissions=269485056`).
-- Do not request Administrator for normal installs.
-- Speak and Use Voice Activity are not required because FRAME Audio Bridge listens to Discord voice and sends the mixed audio to OBS, not back into Discord.
+Common uses:
 
-Invite URL template:
+- Add Discord guests to an OBS scene.
+- Give streamers their own voice mix from the same Discord channel.
+- Show active speakers on stream.
+- Keep OBS links stable between sessions.
+- Share private control links with trusted stream operators.
+
+Audio Bridge is separate from FRAME Audio Monitor. Use Audio Monitor for microphones, mixer outputs,
+desktop audio, or virtual audio cables.
+
+## How To Install
+
+Audio Bridge is optional and needs a Discord bot application before it can run.
+
+In the Discord Developer Portal:
+
+1. Create a Discord application.
+2. Create a bot for that application.
+3. Copy the bot token.
+4. Copy the application client ID.
+5. Turn on **Server Members Intent**.
+6. Leave **Presence Intent** and **Message Content Intent** off unless you need them for another bot
+   feature.
+
+Create an OAuth/install link for the bot.
+
+The install link must include these scopes:
+
+- `bot`
+- `applications.commands`
+
+The bot needs these permissions:
+
+- **View Channels**
+- **Connect**
+
+Only add this permission if you want FRAME to create or assign operator roles:
+
+- **Manage Roles**
+
+Do not use **Administrator** for a normal install.
+
+Use the OAuth/install link to add the bot to your Discord server. The FRAME commands will not work
+until the bot has been installed into the server.
+
+After the Discord bot is created and installed:
+
+1. Copy `services/frame-audio-bridge/.env.example` to `services/frame-audio-bridge/.env`.
+2. Fill in at least:
 
 ```text
-https://discord.com/oauth2/authorize?client_id=YOUR_CLIENT_ID&scope=bot%20applications.commands&permissions=269485056
-```
-
-Use Discord's provided install link unless you are building a separate website login flow. The Discord-provided link is already an OAuth2 install URL for guild installs.
-
-Global slash commands are registered at startup. Discord can take a few minutes to show updated global commands.
-
-## Environment
-
-Copy `.env.example` to `.env` and fill in the values:
-
-```bash
 DISCORD_TOKEN=your_bot_token_here
 DISCORD_CLIENT_ID=your_discord_application_client_id_here
-PUBLIC_BASE_URL=https://your-public-host.example
-PORT=3728
+PUBLIC_BASE_URL=http://localhost:3729
 SESSION_SECRET=replace_with_a_long_random_value
-DEFAULT_AUDIO_DELAY_MS=2000
-MAX_AUDIO_DELAY_MS=10000
-SESSION_IDLE_TIMEOUT_MINUTES=30
-DATA_DIR=./data
 ```
 
-Optional OBS readonly token:
+Then import that configuration into FRAME:
 
-```bash
-READONLY_OBS_TOKEN=replace_with_random_readonly_token
+```powershell
+.\stack.cmd install --import-env services/frame-audio-bridge/.env
 ```
 
-When `READONLY_OBS_TOKEN` is set, `/frame-admin setup` includes `?obsToken=...` on the permanent audio and overlay URLs. The control token is separate and only appears in the private control URL.
+Enable **Discord Audio Bridge** during setup, then start the stack.
 
-Optional FRAME Portal telemetry:
-
-```bash
-PORTAL_SERVICE_TOKEN=replace_with_a_long_random_service_token
-```
-
-When configured, `GET /api/internal/portal-status` accepts that token as a Bearer token and reports
-bot state, active guild sessions, streamer names, engine health, and connected client counts. It
-does not expose bridge keys, control tokens, or private URLs.
-
-## Run With Docker Compose
+For standalone testing only:
 
 ```bash
 docker compose up --build
 ```
 
-The app listens on `PORT` and stores guild configs in the `frame-audio-bridge-data` Docker volume at `/data`.
-
-The Compose file treats `.env` as optional so `docker compose config` can run in clean checkouts. The app still requires valid Discord values before it can start successfully.
-
-## Run Locally
-
-```bash
-npm install
-npm run dev
-```
-
-For a production-style local run:
-
-```bash
-npm run build
-npm start
-```
-
-## Optional Cloudflare Worker Proxy
-
-`cloudflare-worker.js` can sit in front of a Cloudflare Tunnel hostname and return an empty response
-when the tunnel or bridge is unavailable. Deploy it as a Worker route on the public OBS hostname,
-then configure this Worker environment variable:
+Standalone mode opens on:
 
 ```text
-ORIGIN_HOST=your-private-tunnel-origin.example
+http://localhost:3728
 ```
 
-Keep the Worker hostname and `ORIGIN_HOST` different to avoid a proxy loop. WebSocket requests are
-passed through while the bridge is online, so audio, overlay, and control updates continue to work.
+## How To Operate
 
-## OBS Setup
-
-1. In Discord, have a server admin run `/frame-admin setup`.
-   - Optional: `operator-role-name:"IRL Streamer"` creates and configures an operator role.
-   - Optional: `operator-role:@Role` uses an existing operator role.
-   - Optional: `empty-channel-timeout-minutes:5` disconnects after the bot is alone in voice for that long.
-2. Add an OBS Browser Source for the permanent audio URL.
-   - The page is visually blank.
-   - Keep the source active so it can reconnect between sessions.
-3. Add an OBS Browser Source for the permanent overlay URL.
-   - Enable transparency in OBS.
-   - Use a canvas-sized browser source, for example 1920x1080.
-4. Open the private control URL on a phone or stream deck browser.
-5. Join a Discord voice channel and run `/frame start`.
-6. Run `/frame stop` when finished.
-
-The OBS URLs are stable for that streamer profile. They only change if `/frame reset-links` is used.
-
-## Multi-Streamer Flow
-
-FRAME Audio Bridge separates the Discord voice session from streamer bridge profiles:
-
-- The bot joins a guild voice channel once.
-- Each streamer has their own audio URL, overlay URL, control URL, delay, mute/volume settings, and overlay settings.
-- If a voice session is already active in one channel, `/frame start` from a different channel is rejected instead of moving the bot.
-- Multiple streamers in the same voice channel each run `/frame start` to activate their own mix.
-- `/frame stop` stops only the caller's mix. The bot disconnects only when no streamer mixes remain active.
-
-To invite another streamer:
-
-1. Run `/frame-admin setup operator-role-name:"IRL Streamer"` once, or set an existing operator role with `/frame-admin setup operator-role:@Role`.
-2. Run `/frame-admin invite user:@Streamer`.
-3. The bot assigns the operator role, creates that user's bridge profile, and DMs their OBS/control URLs.
-4. If the user blocks server DMs, the command response includes the links so an admin can share them manually.
-5. Operators can run `/frame links` any time to retrieve their permanent OBS and control URLs.
-
-## Audio Pipeline Status
-
-This MVP joins voice, receives Discord Opus streams, decodes them with `prism-media` plus `opusscript`, mixes users into stereo PCM, applies the global delay, and sends delayed PCM chunks to the OBS audio browser source.
-
-- `src/voice/receiver.ts` subscribes to Discord receive streams.
-- `src/voice/mixer.ts` applies each profile's mute/volume settings and emits stereo PCM chunks.
-- `src/voice/delayBuffer.ts` delays chunks before WebSocket delivery.
-- `public/audio.html` accepts stereo 48 kHz signed 16-bit PCM binary WebSocket chunks and schedules playback.
-
-The current engine is intentionally simple and tick-based. It should be good enough for MVP testing, but production tuning should focus on jitter buffering, clipping behavior, and long-session drift.
-
-## Security Notes
-
-- Control pages require the per-profile `controlToken`.
-- Audio and overlay pages are tokenless by default, but use an unguessable random bridge key.
-- Set `READONLY_OBS_TOKEN` if you want audio and overlay URLs to require a shared readonly query token.
-- Discord bot tokens and control tokens are never embedded in the static client files.
-- The private Portal telemetry endpoint is disabled unless `PORTAL_SERVICE_TOKEN` is configured.
-- JSON storage is an MVP implementation behind `GuildConfigStore`, so replacing it with SQLite or Postgres later should be straightforward.
-
-## Project Layout
+In Discord, have a server admin run:
 
 ```text
-.
-|-- Dockerfile
-|-- docker-compose.yml
-|-- package.json
-|-- tsconfig.json
-|-- .env.example
-|-- README.md
-|-- src/
-|   |-- index.ts
-|   |-- config.ts
-|   |-- bot/
-|   |-- voice/
-|   |-- sessions/
-|   |-- storage/
-|   `-- web/
-`-- public/
-    |-- audio.html
-    |-- overlay.html
-    |-- control.html
-    |-- control.js
-    |-- overlay.js
-    `-- styles.css
+/frame-admin setup
 ```
+
+That creates the server setup and permanent links for the admin's bridge profile.
+
+In OBS:
+
+1. Add the audio URL as a Browser Source.
+2. Add the overlay URL as a transparent Browser Source.
+3. Keep both sources active so they can reconnect between sessions.
+
+For each stream session:
+
+1. Join the Discord voice channel.
+2. Run `/frame start`.
+3. Open the private control URL on a phone or second screen.
+4. Adjust delay, mute, volume, and overlay visibility as needed.
+5. Run `/frame stop` when finished.
+
+Use `/frame links` to get your URLs again. Use `/frame reset-links` only when old links should stop
+working.
+
+To invite another streamer, have a server admin run:
+
+```text
+/frame-admin invite
+```
+
+The invited user must already be a member of the Discord server.
+
+## Discord Setup Caveats
+
+Discord setup has two parts: configuring the bot in the Developer Portal, then installing that bot
+into your Discord server.
+
+Use a server install link. A user-only install will not put the bot into server voice channels.
+
+Private channel or category permissions can still block the bot, even if the server-level bot role
+looks correct. The bot needs **View Channels** and **Connect** in the voice channel it will join.
+
+If you use **Manage Roles**, the bot's role must be above the operator role in Discord's role list.
+
+`/frame-admin` is for server admins. Users need **Manage Server** or **Administrator** to run setup
+and invite operators.
+
+`/frame-admin invite` only works for users who are already in the server.
+
+If Discord DMs are blocked, FRAME will show the setup links so an admin can share them manually.
+
+Discord slash commands can take a few minutes to appear after the bot starts.
+
+Do not share control links publicly. Treat them like private production links.
+
+## Relies Upon
+
+Audio Bridge relies on:
+
+- Discord
+- A Discord bot application
+- OBS Browser Sources
+- FRAME Portal
+- FRAME Edge
+- FRAME shared data storage
+
+Optional connections:
+
+| Feature | Relies Upon |
+| --- | --- |
+| Public OBS access | FRAME Tunnel or configured public FRAME access |
+| Private control page | The streamer's control URL |
+| Portal status | FRAME Portal service token |
+| Bot-managed operator roles | Discord Manage Roles permission |
+
+## Notes For Operators
+
+The bot listens to Discord voice and sends the mix to OBS. It does not speak back into the Discord
+voice channel.
+
+Audio and overlay links are stable, but should still be treated as private production links.
+
+Control links are sensitive. Only share them with trusted operators.
+
+Multiple streamers can use the same Discord voice session with separate OBS mixes.
+
+If Audio Bridge is exposed through a tunnel or public hostname, make sure WebSockets are supported.
