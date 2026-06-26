@@ -151,6 +151,11 @@ read_photo_ftp_passive_host() {
   read_default "Photo FTP passive/LAN host" "$default"
 }
 
+configure_auth_session_days() {
+  read_default "Shared login session length in days (1-30)" "$(env_value FRAME_AUTH_SESSION_DAYS 7)"
+  run_install --set "FRAME_AUTH_SESSION_DAYS=$REPLY"
+}
+
 read_timezone() {
   current=$1
   [ -n "$current" ] || current=America/Chicago
@@ -399,7 +404,7 @@ configure_credentials() {
   while :; do
     echo ""
     echo "Credentials and security"
-    echo "1. Portal login"
+    echo "1. Portal login and session length"
     echo "2. Cloudflare tunnel token"
     echo "3. Discord bot credentials"
     echo "4. Photo FTP credentials"
@@ -415,6 +420,7 @@ configure_credentials() {
         username=$REPLY
         read_secret "Portal password (input hidden)"
         password=$REPLY
+        configure_auth_session_days
         printf "%s\n%s\n" "$username" "$password" | runtime set-portal-auth
         unset password
         ;;
@@ -591,6 +597,7 @@ case "$COMMAND" in
     read -r password
     stty echo
     printf "\n"
+    configure_auth_session_days
     printf "%s\n%s\n" "$username" "$password" | runtime set-portal-auth
     unset username password
     ;;

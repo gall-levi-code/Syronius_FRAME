@@ -1263,7 +1263,7 @@ Usage:
   stack install [options]   Generate or update FRAME configuration
   stack hybrid-stage       Prompt for a hostname and stage Hybrid mode without starting it
   stack tunnel-token       Securely prompt for and store the Cloudflare tunnel token
-  stack portal-auth        Securely prompt for and store Portal credentials
+  stack portal-auth        Securely prompt for Portal credentials and session length
   stack discord-auth       Securely prompt for Discord Audio Bridge credentials
   stack validate           Validate config and startup requirements
   stack verify             Run contract tests and static verification

@@ -210,6 +210,14 @@ function Read-PhotoFtpPassiveHost {
   return Read-Default "Photo FTP passive/LAN host" $default
 }
 
+function Configure-AuthSessionDays {
+  $env = Get-EnvMap
+  $current = "7"
+  if ($env.FRAME_AUTH_SESSION_DAYS) { $current = $env.FRAME_AUTH_SESSION_DAYS }
+  $days = Read-Default "Shared login session length in days (1-30)" $current
+  Invoke-Install @("--set", "FRAME_AUTH_SESSION_DAYS=$days")
+}
+
 function Read-Timezone {
   param([string]$Current)
   if ([string]::IsNullOrWhiteSpace($Current)) { $Current = "America/Chicago" }
@@ -444,6 +452,7 @@ function Resolve-SetupIssues {
   if ($config.mode -eq "HYBRID" -and (-not $env.PORTAL_USERNAME -or -not $env.PORTAL_PASSWORD)) {
     $username = Read-Default "Portal username" $env.PORTAL_USERNAME
     $password = Read-PlainTextSecret "Portal password (input hidden)"
+    Configure-AuthSessionDays
     Invoke-RuntimeInput @("set-portal-auth") "$username`n$password"
   }
   if ($config.mode -eq "HYBRID" -and (@(Get-SetupIssues) -contains "Hybrid mode needs a Cloudflare tunnel token.")) {
@@ -483,7 +492,7 @@ function Configure-Credentials {
   while ($true) {
     Write-Host ""
     Write-Host "Credentials and Security" -ForegroundColor Cyan
-    Write-Host "1. Portal login        Shared seven-day login for protected panels"
+    Write-Host "1. Portal login        Shared login and session length for protected panels"
     Write-Host "2. Cloudflare token    Hidden connector token for Hybrid mode"
     Write-Host "3. Discord bot         Client ID and hidden bot token"
     Write-Host "4. Photo FTP           Camera upload username and hidden password"
@@ -495,6 +504,7 @@ function Configure-Credentials {
       "1" {
         $username = Read-Host "Portal username"
         $password = Read-PlainTextSecret "Portal password (input hidden)"
+        Configure-AuthSessionDays
         Invoke-RuntimeInput @("set-portal-auth") "$username`n$password"
       }
       "2" {
@@ -650,6 +660,7 @@ switch ($Command) {
   "portal-auth" {
     $username = Read-Host "Portal username"
     $password = Read-PlainTextSecret "Portal password (input hidden)"
+    Configure-AuthSessionDays
     Invoke-RuntimeInput @("set-portal-auth") "$username`n$password"
   }
   "discord-auth" {

@@ -4570,7 +4570,7 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_defs_photo",
-      "community": 226,
+      "community": 204,
       "norm_label": "photo"
     },
     {
@@ -4580,7 +4580,7 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_photo_type",
-      "community": 226,
+      "community": 204,
       "norm_label": "type"
     },
     {
@@ -4590,7 +4590,7 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_photo_additionalproperties",
-      "community": 226,
+      "community": 204,
       "norm_label": "additionalproperties"
     },
     {
@@ -4600,7 +4600,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_photo_required",
-      "community": 226,
+      "community": 204,
       "norm_label": "required"
     },
     {
@@ -4900,7 +4900,7 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_properties_background",
-      "community": 250,
+      "community": 121,
       "norm_label": "background"
     },
     {
@@ -4910,7 +4910,7 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_background_type",
-      "community": 250,
+      "community": 121,
       "norm_label": "type"
     },
     {
@@ -4920,7 +4920,7 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_background_pattern",
-      "community": 250,
+      "community": 121,
       "norm_label": "pattern"
     },
     {
@@ -4960,7 +4960,7 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_properties_text",
-      "community": 284,
+      "community": 121,
       "norm_label": "text"
     },
     {
@@ -4970,7 +4970,7 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_text_type",
-      "community": 284,
+      "community": 121,
       "norm_label": "type"
     },
     {
@@ -4980,7 +4980,7 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_text_pattern",
-      "community": 284,
+      "community": 121,
       "norm_label": "pattern"
     },
     {
@@ -5170,7 +5170,7 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_properties_muted",
-      "community": 283,
+      "community": 121,
       "norm_label": "muted"
     },
     {
@@ -5180,7 +5180,7 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_muted_type",
-      "community": 283,
+      "community": 121,
       "norm_label": "type"
     },
     {
@@ -5190,7 +5190,7 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_muted_pattern",
-      "community": 283,
+      "community": 121,
       "norm_label": "pattern"
     },
     {
@@ -5290,7 +5290,7 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_properties_lightboxtext",
-      "community": 282,
+      "community": 121,
       "norm_label": "lightboxtext"
     },
     {
@@ -5300,7 +5300,7 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_lightboxtext_type",
-      "community": 282,
+      "community": 121,
       "norm_label": "type"
     },
     {
@@ -5310,7 +5310,7 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_lightboxtext_pattern",
-      "community": 282,
+      "community": 121,
       "norm_label": "pattern"
     },
     {
@@ -5470,7 +5470,7 @@
       "source_location": "L88",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_properties_palettes",
-      "community": 168,
+      "community": 126,
       "norm_label": "palettes"
     },
     {
@@ -5480,7 +5480,7 @@
       "source_location": "L89",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_palettes_type",
-      "community": 168,
+      "community": 126,
       "norm_label": "type"
     },
     {
@@ -5490,7 +5490,7 @@
       "source_location": "L90",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_palettes_additionalproperties",
-      "community": 168,
+      "community": 126,
       "norm_label": "additionalproperties"
     },
     {
@@ -5500,7 +5500,7 @@
       "source_location": "L91",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_palettes_required",
-      "community": 168,
+      "community": 126,
       "norm_label": "required"
     },
     {
@@ -5510,7 +5510,7 @@
       "source_location": "L92",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_palettes_properties",
-      "community": 168,
+      "community": 126,
       "norm_label": "properties"
     },
     {
@@ -5520,7 +5520,7 @@
       "source_location": "L93",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_properties_day",
-      "community": 168,
+      "community": 126,
       "norm_label": "day"
     },
     {
@@ -5530,7 +5530,7 @@
       "source_location": "L93",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_day_ref",
-      "community": 168,
+      "community": 126,
       "norm_label": "$ref"
     },
     {
@@ -5540,7 +5540,7 @@
       "source_location": "L94",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_properties_night",
-      "community": 168,
+      "community": 126,
       "norm_label": "night"
     },
     {
@@ -5550,7 +5550,7 @@
       "source_location": "L94",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_night_ref",
-      "community": 168,
+      "community": 126,
       "norm_label": "$ref"
     },
     {
@@ -6270,7 +6270,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema",
-      "community": 163,
+      "community": 196,
       "norm_label": "overlay-presets.schema.json"
     },
     {
@@ -6280,7 +6280,7 @@
       "source_location": "L2",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_schema",
-      "community": 163,
+      "community": 196,
       "norm_label": "$schema"
     },
     {
@@ -6290,7 +6290,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_id",
-      "community": 163,
+      "community": 196,
       "norm_label": "$id"
     },
     {
@@ -6300,7 +6300,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_title",
-      "community": 163,
+      "community": 196,
       "norm_label": "title"
     },
     {
@@ -6310,7 +6310,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_type",
-      "community": 163,
+      "community": 196,
       "norm_label": "type"
     },
     {
@@ -6320,7 +6320,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_additionalproperties",
-      "community": 163,
+      "community": 196,
       "norm_label": "additionalproperties"
     },
     {
@@ -6330,7 +6330,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_required",
-      "community": 163,
+      "community": 196,
       "norm_label": "required"
     },
     {
@@ -6750,7 +6750,7 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_defs_source_id",
-      "community": 196,
+      "community": 201,
       "norm_label": "source_id"
     },
     {
@@ -6760,7 +6760,7 @@
       "source_location": "L48",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_source_id_type",
-      "community": 196,
+      "community": 201,
       "norm_label": "type"
     },
     {
@@ -6770,7 +6770,7 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_source_id_pattern",
-      "community": 196,
+      "community": 201,
       "norm_label": "pattern"
     },
     {
@@ -6780,7 +6780,7 @@
       "source_location": "L50",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_source_id_minlength",
-      "community": 196,
+      "community": 201,
       "norm_label": "minlength"
     },
     {
@@ -6790,7 +6790,7 @@
       "source_location": "L51",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_source_id_maxlength",
-      "community": 196,
+      "community": 201,
       "norm_label": "maxlength"
     },
     {
@@ -6870,7 +6870,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_pad",
-      "community": 268,
+      "community": 278,
       "norm_label": "pad"
     },
     {
@@ -6880,7 +6880,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_pad_type",
-      "community": 268,
+      "community": 278,
       "norm_label": "type"
     },
     {
@@ -6890,7 +6890,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_pad_minimum",
-      "community": 268,
+      "community": 278,
       "norm_label": "minimum"
     },
     {
@@ -6900,7 +6900,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_pad_maximum",
-      "community": 268,
+      "community": 278,
       "norm_label": "maximum"
     },
     {
@@ -6910,7 +6910,7 @@
       "source_location": "L60",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_scale",
-      "community": 269,
+      "community": 279,
       "norm_label": "scale"
     },
     {
@@ -6920,7 +6920,7 @@
       "source_location": "L60",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_scale_type",
-      "community": 269,
+      "community": 279,
       "norm_label": "type"
     },
     {
@@ -6930,7 +6930,7 @@
       "source_location": "L60",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_scale_minimum",
-      "community": 269,
+      "community": 279,
       "norm_label": "minimum"
     },
     {
@@ -6940,7 +6940,7 @@
       "source_location": "L60",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_scale_maximum",
-      "community": 269,
+      "community": 279,
       "norm_label": "maximum"
     },
     {
@@ -6950,7 +6950,7 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_width_px",
-      "community": 278,
+      "community": 280,
       "norm_label": "width_px"
     },
     {
@@ -6960,7 +6960,7 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_width_px_type",
-      "community": 278,
+      "community": 280,
       "norm_label": "type"
     },
     {
@@ -6970,7 +6970,7 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_width_px_minimum",
-      "community": 278,
+      "community": 280,
       "norm_label": "minimum"
     },
     {
@@ -6980,7 +6980,7 @@
       "source_location": "L61",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_width_px_maximum",
-      "community": 278,
+      "community": 280,
       "norm_label": "maximum"
     },
     {
@@ -6990,7 +6990,7 @@
       "source_location": "L62",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_height_px",
-      "community": 266,
+      "community": 269,
       "norm_label": "height_px"
     },
     {
@@ -7000,7 +7000,7 @@
       "source_location": "L62",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_height_px_type",
-      "community": 266,
+      "community": 269,
       "norm_label": "type"
     },
     {
@@ -7010,7 +7010,7 @@
       "source_location": "L62",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_height_px_minimum",
-      "community": 266,
+      "community": 269,
       "norm_label": "minimum"
     },
     {
@@ -7020,7 +7020,7 @@
       "source_location": "L62",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_height_px_maximum",
-      "community": 266,
+      "community": 269,
       "norm_label": "maximum"
     },
     {
@@ -7280,7 +7280,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_bg_opacity_good",
-      "community": 209,
+      "community": 250,
       "norm_label": "bg_opacity_good"
     },
     {
@@ -7290,7 +7290,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_bg_opacity_good_type",
-      "community": 209,
+      "community": 250,
       "norm_label": "type"
     },
     {
@@ -7300,7 +7300,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_bg_opacity_good_minimum",
-      "community": 209,
+      "community": 250,
       "norm_label": "minimum"
     },
     {
@@ -7310,7 +7310,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_bg_opacity_good_maximum",
-      "community": 209,
+      "community": 250,
       "norm_label": "maximum"
     },
     {
@@ -7400,7 +7400,7 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_border_radius_px",
-      "community": 225,
+      "community": 266,
       "norm_label": "border_radius_px"
     },
     {
@@ -7410,7 +7410,7 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_border_radius_px_type",
-      "community": 225,
+      "community": 266,
       "norm_label": "type"
     },
     {
@@ -7420,7 +7420,7 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_border_radius_px_minimum",
-      "community": 225,
+      "community": 266,
       "norm_label": "minimum"
     },
     {
@@ -7430,7 +7430,7 @@
       "source_location": "L79",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_border_radius_px_maximum",
-      "community": 225,
+      "community": 266,
       "norm_label": "maximum"
     },
     {
@@ -7440,7 +7440,7 @@
       "source_location": "L80",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_backdrop_blur_px",
-      "community": 205,
+      "community": 225,
       "norm_label": "backdrop_blur_px"
     },
     {
@@ -7450,7 +7450,7 @@
       "source_location": "L80",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_backdrop_blur_px_type",
-      "community": 205,
+      "community": 225,
       "norm_label": "type"
     },
     {
@@ -7460,7 +7460,7 @@
       "source_location": "L80",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_backdrop_blur_px_minimum",
-      "community": 205,
+      "community": 225,
       "norm_label": "minimum"
     },
     {
@@ -7470,7 +7470,7 @@
       "source_location": "L80",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_backdrop_blur_px_maximum",
-      "community": 205,
+      "community": 225,
       "norm_label": "maximum"
     },
     {
@@ -7480,7 +7480,7 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_font_size_base_px",
-      "community": 308,
+      "community": 268,
       "norm_label": "font_size_base_px"
     },
     {
@@ -7490,7 +7490,7 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_font_size_base_px_type",
-      "community": 308,
+      "community": 268,
       "norm_label": "type"
     },
     {
@@ -7500,7 +7500,7 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_font_size_base_px_minimum",
-      "community": 308,
+      "community": 268,
       "norm_label": "minimum"
     },
     {
@@ -7510,7 +7510,7 @@
       "source_location": "L81",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_font_size_base_px_maximum",
-      "community": 308,
+      "community": 268,
       "norm_label": "maximum"
     },
     {
@@ -8570,7 +8570,7 @@
       "source_location": "L135",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_defs_upload_progress_config",
-      "community": 336,
+      "community": 308,
       "norm_label": "upload_progress_config"
     },
     {
@@ -8580,7 +8580,7 @@
       "source_location": "L136",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_upload_progress_config_type",
-      "community": 336,
+      "community": 308,
       "norm_label": "type"
     },
     {
@@ -8590,7 +8590,7 @@
       "source_location": "L137",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_upload_progress_config_additionalproperties",
-      "community": 336,
+      "community": 308,
       "norm_label": "additionalproperties"
     },
     {
@@ -8610,7 +8610,7 @@
       "source_location": "L139",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_active_poll_ms",
-      "community": 280,
+      "community": 284,
       "norm_label": "active_poll_ms"
     },
     {
@@ -8620,7 +8620,7 @@
       "source_location": "L139",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_active_poll_ms_type",
-      "community": 280,
+      "community": 284,
       "norm_label": "type"
     },
     {
@@ -8630,7 +8630,7 @@
       "source_location": "L139",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_active_poll_ms_minimum",
-      "community": 280,
+      "community": 284,
       "norm_label": "minimum"
     },
     {
@@ -10630,7 +10630,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_stack_config_schema",
-      "community": 184,
+      "community": 312,
       "norm_label": "stack-config.schema.json"
     },
     {
@@ -10640,7 +10640,7 @@
       "source_location": "L2",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_schema",
-      "community": 184,
+      "community": 312,
       "norm_label": "$schema"
     },
     {
@@ -10650,7 +10650,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_title",
-      "community": 184,
+      "community": 312,
       "norm_label": "title"
     },
     {
@@ -10660,7 +10660,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_type",
-      "community": 184,
+      "community": 312,
       "norm_label": "type"
     },
     {
@@ -10670,7 +10670,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_additionalproperties",
-      "community": 184,
+      "community": 312,
       "norm_label": "additionalproperties"
     },
     {
@@ -10680,7 +10680,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_required",
-      "community": 184,
+      "community": 312,
       "norm_label": "required"
     },
     {
@@ -10960,7 +10960,7 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_properties_routes",
-      "community": 312,
+      "community": 282,
       "norm_label": "routes"
     },
     {
@@ -10970,7 +10970,7 @@
       "source_location": "L65",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_routes_type",
-      "community": 312,
+      "community": 282,
       "norm_label": "type"
     },
     {
@@ -10980,7 +10980,7 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_routes_additionalproperties",
-      "community": 312,
+      "community": 282,
       "norm_label": "additionalproperties"
     },
     {
@@ -10990,7 +10990,7 @@
       "source_location": "L67",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_routes_required",
-      "community": 312,
+      "community": 282,
       "norm_label": "required"
     },
     {
@@ -11040,7 +11040,7 @@
       "source_location": "L92",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_properties_status",
-      "community": 333,
+      "community": 54,
       "norm_label": "status"
     },
     {
@@ -11050,7 +11050,7 @@
       "source_location": "L93",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_status_type",
-      "community": 333,
+      "community": 54,
       "norm_label": "type"
     },
     {
@@ -11060,7 +11060,7 @@
       "source_location": "L94",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_status_pattern",
-      "community": 333,
+      "community": 54,
       "norm_label": "pattern"
     },
     {
@@ -11100,7 +11100,7 @@
       "source_location": "L100",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_properties_video_relay_ui",
-      "community": 339,
+      "community": 54,
       "norm_label": "video_relay_ui"
     },
     {
@@ -11110,7 +11110,7 @@
       "source_location": "L101",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_video_relay_ui_type",
-      "community": 339,
+      "community": 54,
       "norm_label": "type"
     },
     {
@@ -11120,7 +11120,7 @@
       "source_location": "L102",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_video_relay_ui_pattern",
-      "community": 339,
+      "community": 54,
       "norm_label": "pattern"
     },
     {
@@ -11220,7 +11220,7 @@
       "source_location": "L116",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_properties_photo_upload",
-      "community": 54,
+      "community": 333,
       "norm_label": "photo_upload"
     },
     {
@@ -11230,7 +11230,7 @@
       "source_location": "L117",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_photo_upload_type",
-      "community": 54,
+      "community": 333,
       "norm_label": "type"
     },
     {
@@ -11240,7 +11240,7 @@
       "source_location": "L118",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_photo_upload_pattern",
-      "community": 54,
+      "community": 333,
       "norm_label": "pattern"
     },
     {
@@ -11280,7 +11280,7 @@
       "source_location": "L124",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_properties_today_gallery",
-      "community": 337,
+      "community": 54,
       "norm_label": "today_gallery"
     },
     {
@@ -11290,7 +11290,7 @@
       "source_location": "L125",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_today_gallery_type",
-      "community": 337,
+      "community": 54,
       "norm_label": "type"
     },
     {
@@ -11300,7 +11300,7 @@
       "source_location": "L126",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_today_gallery_pattern",
-      "community": 337,
+      "community": 54,
       "norm_label": "pattern"
     },
     {
@@ -11310,7 +11310,7 @@
       "source_location": "L128",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_properties_today_dashboard",
-      "community": 54,
+      "community": 336,
       "norm_label": "today_dashboard"
     },
     {
@@ -11320,7 +11320,7 @@
       "source_location": "L129",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_today_dashboard_type",
-      "community": 54,
+      "community": 336,
       "norm_label": "type"
     },
     {
@@ -11330,7 +11330,7 @@
       "source_location": "L130",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_today_dashboard_pattern",
-      "community": 54,
+      "community": 336,
       "norm_label": "pattern"
     },
     {
@@ -11370,7 +11370,7 @@
       "source_location": "L136",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_properties_today_remote",
-      "community": 54,
+      "community": 337,
       "norm_label": "today_remote"
     },
     {
@@ -11380,7 +11380,7 @@
       "source_location": "L137",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_today_remote_type",
-      "community": 54,
+      "community": 337,
       "norm_label": "type"
     },
     {
@@ -11390,7 +11390,7 @@
       "source_location": "L138",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_today_remote_pattern",
-      "community": 54,
+      "community": 337,
       "norm_label": "pattern"
     },
     {
@@ -14274,10 +14274,20 @@
       "norm_label": "read-photoftppassivehost()"
     },
     {
-      "label": "Read-Timezone()",
+      "label": "Configure-AuthSessionDays()",
       "file_type": "code",
       "source_file": "installer/stack.ps1",
       "source_location": "L213",
+      "_origin": "ast",
+      "id": "installer_stack_configure_authsessiondays",
+      "community": 116,
+      "norm_label": "configure-authsessiondays()"
+    },
+    {
+      "label": "Read-Timezone()",
+      "file_type": "code",
+      "source_file": "installer/stack.ps1",
+      "source_location": "L221",
       "_origin": "ast",
       "id": "installer_stack_ps1_installer_stack_read_timezone",
       "community": 116,
@@ -14287,7 +14297,7 @@
       "label": "Read-MenuChoice()",
       "file_type": "code",
       "source_file": "installer/stack.ps1",
-      "source_location": "L244",
+      "source_location": "L252",
       "_origin": "ast",
       "id": "installer_stack_read_menuchoice",
       "community": 116,
@@ -14297,7 +14307,7 @@
       "label": "Read-YesNo()",
       "file_type": "code",
       "source_file": "installer/stack.ps1",
-      "source_location": "L253",
+      "source_location": "L261",
       "_origin": "ast",
       "id": "installer_stack_read_yesno",
       "community": 116,
@@ -14307,7 +14317,7 @@
       "label": "Wait-ForMenu()",
       "file_type": "code",
       "source_file": "installer/stack.ps1",
-      "source_location": "L262",
+      "source_location": "L270",
       "_origin": "ast",
       "id": "installer_stack_wait_formenu",
       "community": 116,
@@ -14317,7 +14327,7 @@
       "label": "Invoke-Install()",
       "file_type": "code",
       "source_file": "installer/stack.ps1",
-      "source_location": "L266",
+      "source_location": "L274",
       "_origin": "ast",
       "id": "installer_stack_invoke_install",
       "community": 116,
@@ -14327,7 +14337,7 @@
       "label": "Invoke-StartStack()",
       "file_type": "code",
       "source_file": "installer/stack.ps1",
-      "source_location": "L272",
+      "source_location": "L280",
       "_origin": "ast",
       "id": "installer_stack_invoke_startstack",
       "community": 116,
@@ -14337,7 +14347,7 @@
       "label": "Invoke-ReadinessFlow()",
       "file_type": "code",
       "source_file": "installer/stack.ps1",
-      "source_location": "L280",
+      "source_location": "L288",
       "_origin": "ast",
       "id": "installer_stack_invoke_readinessflow",
       "community": 116,
@@ -14347,7 +14357,7 @@
       "label": "Get-SetupIssues()",
       "file_type": "code",
       "source_file": "installer/stack.ps1",
-      "source_location": "L295",
+      "source_location": "L303",
       "_origin": "ast",
       "id": "installer_stack_get_setupissues",
       "community": 116,
@@ -14357,7 +14367,7 @@
       "label": "Show-ConfigurationSummary()",
       "file_type": "code",
       "source_file": "installer/stack.ps1",
-      "source_location": "L332",
+      "source_location": "L340",
       "_origin": "ast",
       "id": "installer_stack_show_configurationsummary",
       "community": 116,
@@ -14367,7 +14377,7 @@
       "label": "Select-Capabilities()",
       "file_type": "code",
       "source_file": "installer/stack.ps1",
-      "source_location": "L351",
+      "source_location": "L359",
       "_origin": "ast",
       "id": "installer_stack_select_capabilities",
       "community": 116,
@@ -14377,7 +14387,7 @@
       "label": "Configure-NetworkStorage()",
       "file_type": "code",
       "source_file": "installer/stack.ps1",
-      "source_location": "L394",
+      "source_location": "L402",
       "_origin": "ast",
       "id": "installer_stack_configure_networkstorage",
       "community": 116,
@@ -14387,7 +14397,7 @@
       "label": "Configure-StandardSettings()",
       "file_type": "code",
       "source_file": "installer/stack.ps1",
-      "source_location": "L423",
+      "source_location": "L431",
       "_origin": "ast",
       "id": "installer_stack_configure_standardsettings",
       "community": 116,
@@ -14397,7 +14407,7 @@
       "label": "Resolve-SetupIssues()",
       "file_type": "code",
       "source_file": "installer/stack.ps1",
-      "source_location": "L433",
+      "source_location": "L441",
       "_origin": "ast",
       "id": "installer_stack_resolve_setupissues",
       "community": 116,
@@ -14407,7 +14417,7 @@
       "label": "Configure-AdvancedSetting()",
       "file_type": "code",
       "source_file": "installer/stack.ps1",
-      "source_location": "L466",
+      "source_location": "L475",
       "_origin": "ast",
       "id": "installer_stack_configure_advancedsetting",
       "community": 116,
@@ -14417,7 +14427,7 @@
       "label": "Configure-Credentials()",
       "file_type": "code",
       "source_file": "installer/stack.ps1",
-      "source_location": "L482",
+      "source_location": "L491",
       "_origin": "ast",
       "id": "installer_stack_ps1_installer_stack_configure_credentials",
       "community": 116,
@@ -14427,7 +14437,7 @@
       "label": "Invoke-GuidedSetup()",
       "file_type": "code",
       "source_file": "installer/stack.ps1",
-      "source_location": "L535",
+      "source_location": "L545",
       "_origin": "ast",
       "id": "installer_stack_invoke_guidedsetup",
       "community": 116,
@@ -14437,7 +14447,7 @@
       "label": "Invoke-InteractiveMenu()",
       "file_type": "code",
       "source_file": "installer/stack.ps1",
-      "source_location": "L564",
+      "source_location": "L574",
       "_origin": "ast",
       "id": "installer_stack_invoke_interactivemenu",
       "community": 116,
@@ -14584,10 +14594,24 @@
       "norm_label": "read_photo_ftp_passive_host()"
     },
     {
-      "label": "read_timezone()",
+      "label": "configure_auth_session_days()",
       "file_type": "code",
       "source_file": "installer/stack.sh",
       "source_location": "L154",
+      "metadata": {
+        "language": "bash",
+        "kind": "bash_function"
+      },
+      "_origin": "ast",
+      "id": "installer_stack_configure_auth_session_days",
+      "community": 166,
+      "norm_label": "configure_auth_session_days()"
+    },
+    {
+      "label": "read_timezone()",
+      "file_type": "code",
+      "source_file": "installer/stack.sh",
+      "source_location": "L159",
       "metadata": {
         "language": "bash",
         "kind": "bash_function"
@@ -14601,7 +14625,7 @@
       "label": "read_secret()",
       "file_type": "code",
       "source_file": "installer/stack.sh",
-      "source_location": "L190",
+      "source_location": "L195",
       "metadata": {
         "language": "bash",
         "kind": "bash_function"
@@ -14615,7 +14639,7 @@
       "label": "yes_no()",
       "file_type": "code",
       "source_file": "installer/stack.sh",
-      "source_location": "L198",
+      "source_location": "L203",
       "metadata": {
         "language": "bash",
         "kind": "bash_function"
@@ -14629,7 +14653,7 @@
       "label": "pause_menu()",
       "file_type": "code",
       "source_file": "installer/stack.sh",
-      "source_location": "L204",
+      "source_location": "L209",
       "metadata": {
         "language": "bash",
         "kind": "bash_function"
@@ -14643,7 +14667,7 @@
       "label": "env_value()",
       "file_type": "code",
       "source_file": "installer/stack.sh",
-      "source_location": "L209",
+      "source_location": "L214",
       "metadata": {
         "language": "bash",
         "kind": "bash_function"
@@ -14657,7 +14681,7 @@
       "label": "profile_enabled()",
       "file_type": "code",
       "source_file": "installer/stack.sh",
-      "source_location": "L224",
+      "source_location": "L229",
       "metadata": {
         "language": "bash",
         "kind": "bash_function"
@@ -14671,7 +14695,7 @@
       "label": "run_install()",
       "file_type": "code",
       "source_file": "installer/stack.sh",
-      "source_location": "L232",
+      "source_location": "L237",
       "metadata": {
         "language": "bash",
         "kind": "bash_function"
@@ -14685,7 +14709,7 @@
       "label": "start_stack()",
       "file_type": "code",
       "source_file": "installer/stack.sh",
-      "source_location": "L237",
+      "source_location": "L242",
       "metadata": {
         "language": "bash",
         "kind": "bash_function"
@@ -14699,7 +14723,7 @@
       "label": "readiness_flow()",
       "file_type": "code",
       "source_file": "installer/stack.sh",
-      "source_location": "L244",
+      "source_location": "L249",
       "metadata": {
         "language": "bash",
         "kind": "bash_function"
@@ -14713,7 +14737,7 @@
       "label": "configure_services()",
       "file_type": "code",
       "source_file": "installer/stack.sh",
-      "source_location": "L259",
+      "source_location": "L264",
       "metadata": {
         "language": "bash",
         "kind": "bash_function"
@@ -14727,7 +14751,7 @@
       "label": "configure_capability()",
       "file_type": "code",
       "source_file": "installer/stack.sh",
-      "source_location": "L274",
+      "source_location": "L279",
       "metadata": {
         "language": "bash",
         "kind": "bash_function"
@@ -14741,7 +14765,7 @@
       "label": "configure_network_storage()",
       "file_type": "code",
       "source_file": "installer/stack.sh",
-      "source_location": "L285",
+      "source_location": "L290",
       "metadata": {
         "language": "bash",
         "kind": "bash_function"
@@ -14755,7 +14779,7 @@
       "label": "configure_standard()",
       "file_type": "code",
       "source_file": "installer/stack.sh",
-      "source_location": "L311",
+      "source_location": "L316",
       "metadata": {
         "language": "bash",
         "kind": "bash_function"
@@ -14769,7 +14793,7 @@
       "label": "show_setup_issues()",
       "file_type": "code",
       "source_file": "installer/stack.sh",
-      "source_location": "L320",
+      "source_location": "L325",
       "metadata": {
         "language": "bash",
         "kind": "bash_function"
@@ -14783,7 +14807,7 @@
       "label": "resolve_setup_issues()",
       "file_type": "code",
       "source_file": "installer/stack.sh",
-      "source_location": "L365",
+      "source_location": "L370",
       "metadata": {
         "language": "bash",
         "kind": "bash_function"
@@ -14797,7 +14821,7 @@
       "label": "advanced_setting()",
       "file_type": "code",
       "source_file": "installer/stack.sh",
-      "source_location": "L383",
+      "source_location": "L388",
       "metadata": {
         "language": "bash",
         "kind": "bash_function"
@@ -14811,7 +14835,7 @@
       "label": "configure_credentials()",
       "file_type": "code",
       "source_file": "installer/stack.sh",
-      "source_location": "L398",
+      "source_location": "L403",
       "metadata": {
         "language": "bash",
         "kind": "bash_function"
@@ -14825,7 +14849,7 @@
       "label": "guided_setup()",
       "file_type": "code",
       "source_file": "installer/stack.sh",
-      "source_location": "L464",
+      "source_location": "L470",
       "metadata": {
         "language": "bash",
         "kind": "bash_function"
@@ -14839,7 +14863,7 @@
       "label": "interactive_menu()",
       "file_type": "code",
       "source_file": "installer/stack.sh",
-      "source_location": "L494",
+      "source_location": "L500",
       "metadata": {
         "language": "bash",
         "kind": "bash_function"
@@ -16856,7 +16880,7 @@
       "source_location": "L83",
       "_origin": "ast",
       "id": "sessions_guildconfig_guildconfig",
-      "community": 19,
+      "community": 11,
       "norm_label": "guildconfig"
     },
     {
@@ -17216,7 +17240,7 @@
       "source_location": "L299",
       "_origin": "ast",
       "id": "sessions_sessionmanager_sessionmanager_getguildconfigbyguildid",
-      "community": 19,
+      "community": 11,
       "norm_label": ".getguildconfigbyguildid()"
     },
     {
@@ -17226,7 +17250,7 @@
       "source_location": "L303",
       "_origin": "ast",
       "id": "sessions_sessionmanager_sessionmanager_getguildconfigbykey",
-      "community": 19,
+      "community": 11,
       "norm_label": ".getguildconfigbykey()"
     },
     {
@@ -17516,7 +17540,7 @@
       "source_location": "L947",
       "_origin": "ast",
       "id": "sessions_sessionmanager_sessionmanager_mergeprofileusers",
-      "community": 11,
+      "community": 16,
       "norm_label": ".mergeprofileusers()"
     },
     {
@@ -17896,7 +17920,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "voice_mixer_audiomixerstats",
-      "community": 272,
+      "community": 128,
       "norm_label": "audiomixerstats"
     },
     {
@@ -18356,7 +18380,7 @@
       "source_location": "L258",
       "_origin": "ast",
       "id": "voice_voicemanager_voicemanager_handleaudioframe",
-      "community": 272,
+      "community": 128,
       "norm_label": ".handleaudioframe()"
     },
     {
@@ -18406,7 +18430,7 @@
       "source_location": "L454",
       "_origin": "ast",
       "id": "voice_voicemanager_voicemanager_calculateaudiolevel",
-      "community": 272,
+      "community": 128,
       "norm_label": ".calculateaudiolevel()"
     },
     {
@@ -18496,7 +18520,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "web_routes_registerroutes",
-      "community": 46,
+      "community": 111,
       "norm_label": "registerroutes()"
     },
     {
@@ -18546,7 +18570,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "web_server",
-      "community": 46,
+      "community": 24,
       "norm_label": "server.ts"
     },
     {
@@ -18556,7 +18580,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "web_server_webserverhandle",
-      "community": 46,
+      "community": 24,
       "norm_label": "webserverhandle"
     },
     {
@@ -18576,7 +18600,7 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "web_server_closeserver",
-      "community": 46,
+      "community": 24,
       "norm_label": "closeserver()"
     },
     {
@@ -25454,7 +25478,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "config_overlay_presets_schema",
-      "community": 36,
+      "community": 21,
       "norm_label": "overlay-presets.schema.json"
     },
     {
@@ -25464,7 +25488,7 @@
       "source_location": "L2",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_schema",
-      "community": 36,
+      "community": 21,
       "norm_label": "$schema"
     },
     {
@@ -25474,7 +25498,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_id",
-      "community": 36,
+      "community": 21,
       "norm_label": "$id"
     },
     {
@@ -25484,7 +25508,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_title",
-      "community": 36,
+      "community": 21,
       "norm_label": "title"
     },
     {
@@ -25494,7 +25518,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_type",
-      "community": 36,
+      "community": 21,
       "norm_label": "type"
     },
     {
@@ -25504,7 +25528,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_additionalproperties",
-      "community": 36,
+      "community": 21,
       "norm_label": "additionalproperties"
     },
     {
@@ -25514,7 +25538,7 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_required",
-      "community": 36,
+      "community": 21,
       "norm_label": "required"
     },
     {
@@ -25884,7 +25908,7 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_defs_id",
-      "community": 126,
+      "community": 152,
       "norm_label": "id"
     },
     {
@@ -25894,7 +25918,7 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_id_type",
-      "community": 126,
+      "community": 152,
       "norm_label": "type"
     },
     {
@@ -25904,7 +25928,7 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_id_pattern",
-      "community": 126,
+      "community": 152,
       "norm_label": "pattern"
     },
     {
@@ -25914,7 +25938,7 @@
       "source_location": "L44",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_id_minlength",
-      "community": 126,
+      "community": 152,
       "norm_label": "minlength"
     },
     {
@@ -25924,7 +25948,7 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_id_maxlength",
-      "community": 126,
+      "community": 152,
       "norm_label": "maxlength"
     },
     {
@@ -26464,7 +26488,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_bg_opacity_good",
-      "community": 201,
+      "community": 209,
       "norm_label": "bg_opacity_good"
     },
     {
@@ -26474,7 +26498,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_bg_opacity_good_type",
-      "community": 201,
+      "community": 209,
       "norm_label": "type"
     },
     {
@@ -26484,7 +26508,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_bg_opacity_good_minimum",
-      "community": 201,
+      "community": 209,
       "norm_label": "minimum"
     },
     {
@@ -26494,7 +26518,7 @@
       "source_location": "L76",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_bg_opacity_good_maximum",
-      "community": 201,
+      "community": 209,
       "norm_label": "maximum"
     },
     {
@@ -26544,7 +26568,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_bg_opacity_bad",
-      "community": 152,
+      "community": 86,
       "norm_label": "bg_opacity_bad"
     },
     {
@@ -26554,7 +26578,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_bg_opacity_bad_type",
-      "community": 152,
+      "community": 86,
       "norm_label": "type"
     },
     {
@@ -26564,7 +26588,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_bg_opacity_bad_minimum",
-      "community": 152,
+      "community": 86,
       "norm_label": "minimum"
     },
     {
@@ -26574,7 +26598,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_bg_opacity_bad_maximum",
-      "community": 152,
+      "community": 86,
       "norm_label": "maximum"
     },
     {
@@ -26624,7 +26648,7 @@
       "source_location": "L80",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_backdrop_blur_px",
-      "community": 86,
+      "community": 205,
       "norm_label": "backdrop_blur_px"
     },
     {
@@ -26634,7 +26658,7 @@
       "source_location": "L80",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_backdrop_blur_px_type",
-      "community": 86,
+      "community": 205,
       "norm_label": "type"
     },
     {
@@ -26644,7 +26668,7 @@
       "source_location": "L80",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_backdrop_blur_px_minimum",
-      "community": 86,
+      "community": 205,
       "norm_label": "minimum"
     },
     {
@@ -26654,7 +26678,7 @@
       "source_location": "L80",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_backdrop_blur_px_maximum",
-      "community": 86,
+      "community": 205,
       "norm_label": "maximum"
     },
     {
@@ -26814,7 +26838,7 @@
       "source_location": "L90",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_bitrate_warn_min",
-      "community": 279,
+      "community": 283,
       "norm_label": "bitrate_warn_min"
     },
     {
@@ -26824,7 +26848,7 @@
       "source_location": "L90",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_bitrate_warn_min_type",
-      "community": 279,
+      "community": 283,
       "norm_label": "type"
     },
     {
@@ -26834,7 +26858,7 @@
       "source_location": "L90",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_bitrate_warn_min_minimum",
-      "community": 279,
+      "community": 283,
       "norm_label": "minimum"
     },
     {
@@ -28244,7 +28268,7 @@
       "source_location": "L165",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_defs_design",
-      "community": 66,
+      "community": 36,
       "norm_label": "design"
     },
     {
@@ -28254,7 +28278,7 @@
       "source_location": "L166",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_design_type",
-      "community": 66,
+      "community": 36,
       "norm_label": "type"
     },
     {
@@ -28264,7 +28288,7 @@
       "source_location": "L167",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_design_required",
-      "community": 66,
+      "community": 36,
       "norm_label": "required"
     },
     {
@@ -28554,7 +28578,7 @@
       "source_location": "L184",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_design_allof",
-      "community": 66,
+      "community": 36,
       "norm_label": "allof"
     },
     {
@@ -28644,7 +28668,7 @@
       "source_location": "L270",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_defs_source",
-      "community": 191,
+      "community": 36,
       "norm_label": "source"
     },
     {
@@ -28654,7 +28678,7 @@
       "source_location": "L271",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_source_type",
-      "community": 191,
+      "community": 36,
       "norm_label": "type"
     },
     {
@@ -28664,7 +28688,7 @@
       "source_location": "L272",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_source_additionalproperties",
-      "community": 191,
+      "community": 36,
       "norm_label": "additionalproperties"
     },
     {
@@ -28674,7 +28698,7 @@
       "source_location": "L273",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_source_required",
-      "community": 191,
+      "community": 36,
       "norm_label": "required"
     },
     {
@@ -28694,7 +28718,7 @@
       "source_location": "L275",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_id",
-      "community": 126,
+      "community": 152,
       "norm_label": "id"
     },
     {
@@ -28704,7 +28728,7 @@
       "source_location": "L275",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_id_ref",
-      "community": 126,
+      "community": 152,
       "norm_label": "$ref"
     },
     {
@@ -31714,7 +31738,7 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "src_app_frameoverlaysruntime",
-      "community": 90,
+      "community": 77,
       "norm_label": "frameoverlaysruntime"
     },
     {
@@ -32894,7 +32918,7 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "src_store_storeconflicterror",
-      "community": 39,
+      "community": 49,
       "norm_label": "storeconflicterror"
     },
     {
@@ -32904,7 +32928,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "src_store_storeconflicterror_constructor",
-      "community": 39,
+      "community": 49,
       "norm_label": ".constructor()"
     },
     {
@@ -35662,7 +35686,7 @@
       "source_location": "L108",
       "_origin": "ast",
       "id": "src_pipeline_photopipeline_init",
-      "community": 204,
+      "community": 67,
       "norm_label": ".init()"
     },
     {
@@ -35812,7 +35836,7 @@
       "source_location": "L429",
       "_origin": "ast",
       "id": "src_pipeline_photopipeline_writelatest",
-      "community": 204,
+      "community": 67,
       "norm_label": ".writelatest()"
     },
     {
@@ -35822,7 +35846,7 @@
       "source_location": "L448",
       "_origin": "ast",
       "id": "src_pipeline_photopipeline_reconcilelatest",
-      "community": 204,
+      "community": 67,
       "norm_label": ".reconcilelatest()"
     },
     {
@@ -35832,7 +35856,7 @@
       "source_location": "L453",
       "_origin": "ast",
       "id": "src_pipeline_photopipeline_hasreadypublications",
-      "community": 204,
+      "community": 67,
       "norm_label": ".hasreadypublications()"
     },
     {
@@ -35842,7 +35866,7 @@
       "source_location": "L461",
       "_origin": "ast",
       "id": "src_pipeline_photopipeline_recalculatelatest",
-      "community": 204,
+      "community": 67,
       "norm_label": ".recalculatelatest()"
     },
     {
@@ -35852,7 +35876,7 @@
       "source_location": "L488",
       "_origin": "ast",
       "id": "src_pipeline_photopipeline_nextrevisiontimestamp",
-      "community": 204,
+      "community": 67,
       "norm_label": ".nextrevisiontimestamp()"
     },
     {
@@ -35912,7 +35936,7 @@
       "source_location": "L570",
       "_origin": "ast",
       "id": "src_pipeline_photopipeline_ensurecurrentgallery",
-      "community": 204,
+      "community": 67,
       "norm_label": ".ensurecurrentgallery()"
     },
     {
@@ -35972,7 +35996,7 @@
       "source_location": "L602",
       "_origin": "ast",
       "id": "src_pipeline_failure",
-      "community": 89,
+      "community": 148,
       "norm_label": "failure()"
     },
     {
@@ -35982,7 +36006,7 @@
       "source_location": "L606",
       "_origin": "ast",
       "id": "src_pipeline_failurereason",
-      "community": 89,
+      "community": 148,
       "norm_label": "failurereason()"
     },
     {
@@ -36232,7 +36256,7 @@
       "source_location": "L816",
       "_origin": "ast",
       "id": "src_pipeline_localparts",
-      "community": 204,
+      "community": 148,
       "norm_label": "localparts()"
     },
     {
@@ -36242,7 +36266,7 @@
       "source_location": "L833",
       "_origin": "ast",
       "id": "src_pipeline_safereaddirectories",
-      "community": 204,
+      "community": 67,
       "norm_label": "safereaddirectories()"
     },
     {
@@ -38872,7 +38896,7 @@
       "source_location": "L311",
       "_origin": "ast",
       "id": "src_index_start",
-      "community": 162,
+      "community": 184,
       "norm_label": "start()"
     },
     {
@@ -38882,7 +38906,7 @@
       "source_location": "L318",
       "_origin": "ast",
       "id": "src_index_readprofiles",
-      "community": 4,
+      "community": 184,
       "norm_label": "readprofiles()"
     },
     {
@@ -38892,7 +38916,7 @@
       "source_location": "L330",
       "_origin": "ast",
       "id": "src_index_readprofile",
-      "community": 4,
+      "community": 184,
       "norm_label": "readprofile()"
     },
     {
@@ -38902,7 +38926,7 @@
       "source_location": "L334",
       "_origin": "ast",
       "id": "src_index_readslsprofiles",
-      "community": 4,
+      "community": 184,
       "norm_label": "readslsprofiles()"
     },
     {
@@ -38912,7 +38936,7 @@
       "source_location": "L343",
       "_origin": "ast",
       "id": "src_index_readstats",
-      "community": 162,
+      "community": 184,
       "norm_label": "readstats()"
     },
     {
@@ -38952,7 +38976,7 @@
       "source_location": "L420",
       "_origin": "ast",
       "id": "src_index_ensurecustomstate",
-      "community": 162,
+      "community": 184,
       "norm_label": "ensurecustomstate()"
     },
     {
@@ -38962,7 +38986,7 @@
       "source_location": "L432",
       "_origin": "ast",
       "id": "src_index_readcustomstate",
-      "community": 162,
+      "community": 184,
       "norm_label": "readcustomstate()"
     },
     {
@@ -38972,7 +38996,7 @@
       "source_location": "L440",
       "_origin": "ast",
       "id": "src_index_writecustomstate",
-      "community": 162,
+      "community": 184,
       "norm_label": "writecustomstate()"
     },
     {
@@ -39022,7 +39046,7 @@
       "source_location": "L492",
       "_origin": "ast",
       "id": "src_index_upstreamjson",
-      "community": 96,
+      "community": 162,
       "norm_label": "upstreamjson()"
     },
     {
@@ -39032,7 +39056,7 @@
       "source_location": "L500",
       "_origin": "ast",
       "id": "src_index_upstreamfetch",
-      "community": 96,
+      "community": 162,
       "norm_label": "upstreamfetch()"
     },
     {
@@ -43842,6 +43866,66 @@
       "id": "frame_auth_readme_frame_auth",
       "community": 181,
       "norm_label": "frame auth"
+    },
+    {
+      "label": "Who This Is For",
+      "file_type": "document",
+      "source_file": "services/frame-auth/README.md",
+      "source_location": "L7",
+      "_origin": "ast",
+      "id": "frame_auth_readme_who_this_is_for",
+      "community": 181,
+      "norm_label": "who this is for"
+    },
+    {
+      "label": "What You Use It For",
+      "file_type": "document",
+      "source_file": "services/frame-auth/README.md",
+      "source_location": "L22",
+      "_origin": "ast",
+      "id": "frame_auth_readme_what_you_use_it_for",
+      "community": 181,
+      "norm_label": "what you use it for"
+    },
+    {
+      "label": "How To Install",
+      "file_type": "document",
+      "source_file": "services/frame-auth/README.md",
+      "source_location": "L47",
+      "_origin": "ast",
+      "id": "frame_auth_readme_how_to_install",
+      "community": 181,
+      "norm_label": "how to install"
+    },
+    {
+      "label": "How To Operate",
+      "file_type": "document",
+      "source_file": "services/frame-auth/README.md",
+      "source_location": "L64",
+      "_origin": "ast",
+      "id": "frame_auth_readme_how_to_operate",
+      "community": 181,
+      "norm_label": "how to operate"
+    },
+    {
+      "label": "Relies Upon",
+      "file_type": "document",
+      "source_file": "services/frame-auth/README.md",
+      "source_location": "L80",
+      "_origin": "ast",
+      "id": "frame_auth_readme_relies_upon",
+      "community": 181,
+      "norm_label": "relies upon"
+    },
+    {
+      "label": "Notes For Operators",
+      "file_type": "document",
+      "source_file": "services/frame-auth/README.md",
+      "source_location": "L91",
+      "_origin": "ast",
+      "id": "frame_auth_readme_notes_for_operators",
+      "community": 181,
+      "norm_label": "notes for operators"
     },
     {
       "label": "README.md",
@@ -64842,6 +64926,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "installer/stack.ps1",
+      "source_location": "L213",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "installer_stack_ps1_installer_stack",
+      "target": "installer_stack_configure_authsessiondays"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "installer/stack.ps1",
       "source_location": "L294",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -65282,6 +65376,16 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "installer/stack.ps1",
+      "source_location": "L214",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "installer_stack_configure_authsessiondays",
+      "target": "installer_stack_get_envmap"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "installer/stack.ps1",
       "source_location": "L295",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -65482,6 +65586,16 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "installer/stack.ps1",
+      "source_location": "L215",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "installer_stack_configure_authsessiondays",
+      "target": "installer_stack_ps1_installer_stack_read_default"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "installer/stack.ps1",
       "source_location": "L308",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -65607,6 +65721,36 @@
       "confidence_score": 1.0,
       "source": "installer_stack_resolve_setupissues",
       "target": "installer_stack_read_photoftppassivehost"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "installer/stack.ps1",
+      "source_location": "L216",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "installer_stack_configure_authsessiondays",
+      "target": "installer_stack_invoke_install"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "installer/stack.ps1",
+      "source_location": "L505",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "installer_stack_ps1_installer_stack_configure_credentials",
+      "target": "installer_stack_configure_authsessiondays"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "installer/stack.ps1",
+      "source_location": "L453",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "installer_stack_resolve_setupissues",
+      "target": "installer_stack_configure_authsessiondays"
     },
     {
       "relation": "calls",
@@ -66012,6 +66156,16 @@
       "relation": "defines",
       "confidence": "EXTRACTED",
       "source_file": "installer/stack.sh",
+      "source_location": "L154",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "installer_stack_sh_installer_stack",
+      "target": "installer_stack_configure_auth_session_days"
+    },
+    {
+      "relation": "defines",
+      "confidence": "EXTRACTED",
+      "source_file": "installer/stack.sh",
       "source_location": "L195",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -66273,6 +66427,17 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "installer/stack.sh",
+      "source_location": "L600",
+      "weight": 1.0,
+      "context": "call",
+      "confidence_score": 1.0,
+      "source": "d_userfiles_documents_syronius_frame_installer_stack_sh__entry",
+      "target": "installer_stack_configure_auth_session_days"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "installer/stack.sh",
       "source_location": "L483",
       "weight": 1.0,
       "context": "call",
@@ -66449,6 +66614,17 @@
       "relation": "calls",
       "confidence": "EXTRACTED",
       "source_file": "installer/stack.sh",
+      "source_location": "L155",
+      "weight": 1.0,
+      "context": "call",
+      "confidence_score": 1.0,
+      "source": "installer_stack_configure_auth_session_days",
+      "target": "installer_stack_sh_installer_stack_read_default"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "installer/stack.sh",
       "source_location": "L216",
       "weight": 1.0,
       "context": "call",
@@ -66543,6 +66719,28 @@
       "confidence_score": 1.0,
       "source": "installer_stack_resolve_setup_issues",
       "target": "installer_stack_read_photo_ftp_passive_host"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "installer/stack.sh",
+      "source_location": "L156",
+      "weight": 1.0,
+      "context": "call",
+      "confidence_score": 1.0,
+      "source": "installer_stack_configure_auth_session_days",
+      "target": "installer_stack_run_install"
+    },
+    {
+      "relation": "calls",
+      "confidence": "EXTRACTED",
+      "source_file": "installer/stack.sh",
+      "source_location": "L423",
+      "weight": 1.0,
+      "context": "call",
+      "confidence_score": 1.0,
+      "source": "installer_stack_sh_installer_stack_configure_credentials",
+      "target": "installer_stack_configure_auth_session_days"
     },
     {
       "relation": "calls",
@@ -114172,6 +114370,66 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "services/frame-auth/README.md",
+      "source_location": "L47",
+      "weight": 1.0,
+      "source": "frame_auth_readme_frame_auth",
+      "target": "frame_auth_readme_how_to_install",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-auth/README.md",
+      "source_location": "L64",
+      "weight": 1.0,
+      "source": "frame_auth_readme_frame_auth",
+      "target": "frame_auth_readme_how_to_operate",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-auth/README.md",
+      "source_location": "L91",
+      "weight": 1.0,
+      "source": "frame_auth_readme_frame_auth",
+      "target": "frame_auth_readme_notes_for_operators",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-auth/README.md",
+      "source_location": "L80",
+      "weight": 1.0,
+      "source": "frame_auth_readme_frame_auth",
+      "target": "frame_auth_readme_relies_upon",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-auth/README.md",
+      "source_location": "L22",
+      "weight": 1.0,
+      "source": "frame_auth_readme_frame_auth",
+      "target": "frame_auth_readme_what_you_use_it_for",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-auth/README.md",
+      "source_location": "L7",
+      "weight": 1.0,
+      "source": "frame_auth_readme_frame_auth",
+      "target": "frame_auth_readme_who_this_is_for",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "services/frame-edge/README.md",
       "source_location": "L1",
       "weight": 1.0,
@@ -114185,9 +114443,9 @@
       "source_file": "services/frame-edge/README.md",
       "source_location": "L39",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "frame_edge_readme_frame_edge",
-      "target": "frame_edge_readme_how_to_install",
-      "confidence_score": 1.0
+      "target": "frame_edge_readme_how_to_install"
     },
     {
       "relation": "contains",
@@ -114195,9 +114453,9 @@
       "source_file": "services/frame-edge/README.md",
       "source_location": "L57",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "frame_edge_readme_frame_edge",
-      "target": "frame_edge_readme_how_to_operate",
-      "confidence_score": 1.0
+      "target": "frame_edge_readme_how_to_operate"
     },
     {
       "relation": "contains",
@@ -114205,9 +114463,9 @@
       "source_file": "services/frame-edge/README.md",
       "source_location": "L93",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "frame_edge_readme_frame_edge",
-      "target": "frame_edge_readme_notes_for_operators",
-      "confidence_score": 1.0
+      "target": "frame_edge_readme_notes_for_operators"
     },
     {
       "relation": "contains",
@@ -114215,9 +114473,9 @@
       "source_file": "services/frame-edge/README.md",
       "source_location": "L75",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "frame_edge_readme_frame_edge",
-      "target": "frame_edge_readme_relies_upon",
-      "confidence_score": 1.0
+      "target": "frame_edge_readme_relies_upon"
     },
     {
       "relation": "contains",
@@ -114225,9 +114483,9 @@
       "source_file": "services/frame-edge/README.md",
       "source_location": "L20",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "frame_edge_readme_frame_edge",
-      "target": "frame_edge_readme_what_you_use_it_for",
-      "confidence_score": 1.0
+      "target": "frame_edge_readme_what_you_use_it_for"
     },
     {
       "relation": "contains",
@@ -114235,9 +114493,9 @@
       "source_file": "services/frame-edge/README.md",
       "source_location": "L8",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "frame_edge_readme_frame_edge",
-      "target": "frame_edge_readme_who_this_is_for",
-      "confidence_score": 1.0
+      "target": "frame_edge_readme_who_this_is_for"
     },
     {
       "relation": "contains",
@@ -114991,5 +115249,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "b39007272571fa0758851d48c1b5906cc4d85f4a"
+  "built_at_commit": "9dad2d49ea616a384e6c3561e1b6b645a41f3867"
 }

@@ -45,18 +45,18 @@
     "semantic_hash": ""
   },
   "installer/frame-installer.mjs": {
-    "mtime": 1782503722.14265,
-    "ast_hash": "c902f24c7a5be3e234f0ba4b0ab5ec77",
+    "mtime": 1782510640.366678,
+    "ast_hash": "6a81cd79fd2639013918039a6e9ac5d9",
     "semantic_hash": ""
   },
   "installer/stack.ps1": {
-    "mtime": 1782508762.3304956,
-    "ast_hash": "b92fb83baf945c8f7d6a38af344179b5",
+    "mtime": 1782510755.465621,
+    "ast_hash": "67dfaf581733850d94ec93893c7b742d",
     "semantic_hash": ""
   },
   "installer/stack.sh": {
-    "mtime": 1782508768.7444372,
-    "ast_hash": "b46d3fdca98fafe04e6eda95165f0938",
+    "mtime": 1782510702.973803,
+    "ast_hash": "e73196407103cf1a9c8fddc2a8116650",
     "semantic_hash": ""
   },
   "services/frame-audio-bridge/cloudflare-worker.js": {
@@ -975,8 +975,8 @@
     "semantic_hash": ""
   },
   "services/frame-auth/README.md": {
-    "mtime": 1781831283.245628,
-    "ast_hash": "c95e958500bc317a022ac9a6cc8fd108",
+    "mtime": 1782510961.783082,
+    "ast_hash": "251ebcdd923c05a98d9acf590faa856f",
     "semantic_hash": ""
   },
   "services/frame-gallery/public/admin.html": {
