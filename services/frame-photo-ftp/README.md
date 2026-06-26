@@ -1,47 +1,100 @@
 # FRAME Photo FTP
 
-A camera-friendly Pure-FTPd input with a required completion gate. Camera uploads land in `/data/inbox`.
-When a file's size and modification time remain unchanged for three seconds, it moves atomically to
-`/data/staging` for the Photo Pipeline.
+FRAME Photo FTP lets cameras send photos directly into FRAME over FTP. It is meant for experienced
+users who are comfortable configuring camera FTP settings, router port forwarding, and firewall
+rules.
 
-The FTP service is LAN-only. Configure `PHOTO_FTP_PASSIVE_HOST` to the FRAME host's LAN address and
-open the configured FTP and passive port range on the host firewall.
+## Who This Is For
 
-## Connection flow and ports
+FRAME Photo FTP is for operators using cameras with built-in FTP upload support.
 
-1. A camera connects to `PHOTO_FTP_PORT` (`2121/tcp` by default), authenticates, and keeps that
-   control connection open for FTP commands.
-2. For each directory listing or upload, Pure-FTPd selects one temporary passive data port from
-   `PHOTO_FTP_PASSIVE_MIN` through `PHOTO_FTP_PASSIVE_MAX` (`30000-30009/tcp` by default).
-3. Completed bytes land in `/data/inbox`. The FRAME stability gate checks the file every
-   `PHOTO_FTP_SCAN_MS` and atomically moves it to `/data/staging` after its size and modification
-   time remain unchanged for `PHOTO_FTP_STABLE_MS`.
-4. The Photo Pipeline claims the staged file, validates and normalizes it, then publishes the
-   gallery image and sidecars.
+Use it if you want to:
 
-`3737/tcp` is the container's internal health/status endpoint. Compose does not publish it to the
-host. The ten-port passive range permits several simultaneous data operations without exposing a
-large arbitrary port range.
+- Send photos straight from a camera to FRAME.
+- Let a camera upload from outside your local network using forwarded ports.
+- Queue camera photos for the FRAME gallery and Today tools.
+- Avoid manually copying camera files after an event.
 
-`PHOTO_FTP_PASSIVE_HOST` must be an address the camera can reach. `127.0.0.1` works only for an FTP
-client running on the FRAME host itself; LAN cameras should use the FRAME host's stable LAN IP.
+If you want the simpler external upload path, use FRAME Photo Upload with FRAME Tunnel instead.
 
-`PHOTO_FTP_MIN_PASSWORD_LENGTH` defaults to `5`. `PHOTO_FTP_MAX_SESSIONS` and
-`PHOTO_FTP_MAX_SESSIONS_PER_IP` default to `10`, which allows several camera/browser FTP operations
-without leaving the service unbounded.
+## What You Use It For
 
-The container starts `syslogd` so Pure-FTPd messages appear in `docker logs frame-photo-ftp`.
-For deeper diagnostics, temporarily set `PHOTO_FTP_VERBOSE_LOG=true`, rebuild/restart the service,
-and then set it back to `false` after testing.
+Use Photo FTP when a camera should automatically send finished photos into FRAME.
 
-## Camera troubleshooting
+Common uses:
 
-If a camera connects but times out during or after upload:
+- Event cameras sending photos to the FRAME computer.
+- Remote cameras uploading through router port forwarding.
+- Photo workflows where a camera operator keeps shooting while FRAME processes in the background.
 
-1. Use plain `FTP`, not `FTPS`, unless you have configured certificates for the camera.
-2. Set the camera's FTP server address to the FRAME host's LAN IP, not `127.0.0.1`.
-3. Set `PHOTO_FTP_PASSIVE_HOST` to that same LAN IP and restart the FTP container.
-4. Enable passive mode on the camera.
-5. Make sure the FTP control port and the full passive range are reachable through the host firewall.
-6. Prefer the camera's root target folder while testing.
-7. Disable FTP power saving on the camera while debugging intermittent timeouts.
+Photo FTP does not publish photos by itself. It receives completed camera uploads, then the Photo
+Pipeline validates, converts, and publishes them.
+
+## How To Install
+
+Photo FTP is part of the normal FRAME stack.
+
+Recommended setup:
+
+1. Open the FRAME folder.
+2. Run `stack.cmd`.
+3. Choose **Guided setup**.
+4. Enable **Camera FTP Upload**.
+5. Enable the photo workflow tools you want, such as Photo Gallery and Today Tools.
+6. Set an FTP username and password.
+7. Set the FTP passive host to the address the camera will use.
+8. Start the stack.
+
+For local cameras, the passive host is usually the FRAME computer's LAN IP address.
+
+For external cameras, the passive host is usually your public IP address or public DNS name. You
+must also forward the FTP port and passive port range from your router to the FRAME computer.
+
+## How To Operate
+
+In your camera's FTP settings, use:
+
+| Setting | Use |
+| --- | --- |
+| Server | FRAME LAN IP, public IP, or public DNS name |
+| Protocol | FTP |
+| Port | `2121` unless changed in FRAME settings |
+| Username | The FTP username from FRAME setup |
+| Password | The FTP password from FRAME setup |
+| Passive mode | Enabled |
+| Target folder | Root folder, unless your camera requires a folder |
+
+For external uploads, forward these to the FRAME computer:
+
+- The FTP control port
+- The full passive port range
+
+After upload, FRAME waits until the file is finished before handing it to the Photo Pipeline.
+
+## Relies Upon
+
+Photo FTP relies on:
+
+- FRAME shared data storage
+- FRAME Photo Pipeline
+- A camera or device that supports FTP upload
+- Local firewall access
+- Router port forwarding for external camera uploads
+
+Optional connections:
+
+| Feature | Relies Upon |
+| --- | --- |
+| Published gallery photos | FRAME Photo Gallery |
+| Today viewer and remote | FRAME Today |
+| Upload-progress overlays | FRAME Overlays, when FTP progress support is added |
+
+## Notes For Operators
+
+This tool is for experienced users. Incorrect port forwarding can expose your FTP service to the
+public internet.
+
+Use a strong FTP password. If your camera and network support encrypted FTP, prefer that for
+external uploads.
+
+For less technical uploaders, use FRAME Photo Upload with FRAME Tunnel instead.
