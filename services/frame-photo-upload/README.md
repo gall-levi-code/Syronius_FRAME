@@ -14,7 +14,7 @@ Use it if you want to:
 - Drag and drop multiple photos from a browser.
 - Let trusted people upload photos from outside your local network.
 - Watch per-file upload progress.
-- Queue photos for the FRAME gallery and Today tools.
+- Queue photos for the FRAME gallery and Photo Stage.
 - Avoid setting up camera FTP.
 
 ## What You Use It For
@@ -43,7 +43,7 @@ Recommended setup:
 3. Choose **Guided setup**.
 4. Enable **Browser Photo Upload**.
 5. Enable **FRAME Tunnel** if trusted people need to upload from outside your local network.
-6. Enable the photo workflow tools you want, such as Photo Gallery and Today Tools.
+6. Enable the photo workflow tools you want, such as Photo Gallery and Photo Stage.
 7. Start the stack.
 8. Open Photo Upload:
 
@@ -70,7 +70,7 @@ To upload photos:
 3. Check the listed files before sending.
 4. Start the upload.
 5. Wait for each file to show accepted or failed.
-6. Open the Gallery or Today tools after processing finishes.
+6. Open the Gallery or Photo Stage after processing finishes.
 
 The upload page shows the current file and session limits. Large files or too many selected files
 may be rejected depending on your FRAME settings.
@@ -98,7 +98,7 @@ Optional connections:
 | --- | --- |
 | Outside-network uploads | FRAME Tunnel |
 | Published gallery photos | FRAME Photo Gallery |
-| Today viewer and remote | FRAME Today |
+| Photo Stage viewer and remote | FRAME Photo Stage |
 | Upload-progress overlays | FRAME Overlays |
 
 ## Notes For Operators

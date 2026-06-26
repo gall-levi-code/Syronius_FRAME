@@ -11,7 +11,7 @@ embedded browser panels used by streaming tools. Each service also prompted inde
 the collection of FRAME tools feel fragmented.
 
 Some FRAME routes must remain available without an interactive login, including OBS overlays,
-audio listeners, galleries, Today viewers, and other explicitly public or tokenized resources.
+audio listeners, galleries, Photo Stage viewers, and other explicitly public or tokenized resources.
 
 ## Decision
 

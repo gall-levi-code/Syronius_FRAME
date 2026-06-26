@@ -45,8 +45,8 @@
     "semantic_hash": ""
   },
   "installer/frame-installer.mjs": {
-    "mtime": 1782340011.5605657,
-    "ast_hash": "b237aa38f14e961bb447bfa128190dcb",
+    "mtime": 1782503722.14265,
+    "ast_hash": "c902f24c7a5be3e234f0ba4b0ab5ec77",
     "semantic_hash": ""
   },
   "installer/stack.ps1": {
@@ -285,8 +285,8 @@
     "semantic_hash": ""
   },
   "services/frame-portal/src/stackConfig.ts": {
-    "mtime": 1782322906.775452,
-    "ast_hash": "05ee61dbdf9339c08119369141175ce7",
+    "mtime": 1782503702.0090098,
+    "ast_hash": "5eedc00c8f76149b871ca801243102eb",
     "semantic_hash": ""
   },
   "services/frame-portal/src/statusCollector.ts": {
@@ -350,8 +350,8 @@
     "semantic_hash": ""
   },
   "README.md": {
-    "mtime": 1782323116.9871802,
-    "ast_hash": "5f7f25ad1d400f0c18607e7ea49075c3",
+    "mtime": 1782503728.6694162,
+    "ast_hash": "e90cdca952d11a931c65f168db1d9de5",
     "semantic_hash": ""
   },
   "docker_container_samples/Docker_OBS_Overlays/public/index.html": {
@@ -365,13 +365,13 @@
     "semantic_hash": ""
   },
   "docs/TODO.md": {
-    "mtime": 1782322906.709125,
-    "ast_hash": "50a18b2d89d3777955de9820ef740fbd",
+    "mtime": 1782503747.8075635,
+    "ast_hash": "a6b813db2dbdbf7b505908e1006cd5c7",
     "semantic_hash": ""
   },
   "docs/adr/0001-stack-config-source-of-truth.md": {
-    "mtime": 1780780640.2242877,
-    "ast_hash": "95532e7aef02980e272b8686baf60bc5",
+    "mtime": 1782503766.2382019,
+    "ast_hash": "fe2121c16268f198a01a2cf0db6fa16c",
     "semantic_hash": ""
   },
   "docs/adr/0002-discord-audio-bridge-service.md": {
@@ -565,13 +565,13 @@
     "semantic_hash": ""
   },
   "docs/STABILIZATION.md": {
-    "mtime": 1781326298.0727296,
-    "ast_hash": "0cf7f68f64bccc10582c6ca3f408a031",
+    "mtime": 1782503762.6093843,
+    "ast_hash": "426913a462ddd817fe436d37bf89e351",
     "semantic_hash": ""
   },
   "docs/adr/0006-photo-pipeline-activation.md": {
-    "mtime": 1781326298.0988913,
-    "ast_hash": "4241965c61996f01c9da6cb742af3a6d",
+    "mtime": 1782503769.9131162,
+    "ast_hash": "d907fa378a81ec3128e0909f7fb52932",
     "semantic_hash": ""
   },
   "docs/schemas/photo-error.schema.json": {
@@ -690,18 +690,18 @@
     "semantic_hash": ""
   },
   "services/frame-photo-ftp/README.md": {
-    "mtime": 1782500862.3946872,
-    "ast_hash": "00d26b1e87274077e7a436cbe76019cb",
+    "mtime": 1782503737.6656194,
+    "ast_hash": "92045df0d37a378601e228749566b163",
     "semantic_hash": ""
   },
   "services/frame-photo-upload/README.md": {
-    "mtime": 1782500252.6106453,
-    "ast_hash": "3536ba275510eda1b5332bc4bd4cc3ac",
+    "mtime": 1782503732.9624138,
+    "ast_hash": "df53cef47b00e635c163df3d2c836661",
     "semantic_hash": ""
   },
   "services/frame-photo-upload/public/index.html": {
-    "mtime": 1782322906.7674103,
-    "ast_hash": "120244ef73c8fd5f5ade47e96caa89bb",
+    "mtime": 1782503698.4950464,
+    "ast_hash": "9b8415911baf2785325b8cdb609b3d0a",
     "semantic_hash": ""
   },
   "services/frame-pipeline-photos/README.md": {
@@ -755,8 +755,8 @@
     "semantic_hash": ""
   },
   "services/frame-gallery/README.md": {
-    "mtime": 1782503091.8307526,
-    "ast_hash": "0b20c6d1dac2f8361408a5862d983790",
+    "mtime": 1782503740.7516985,
+    "ast_hash": "a5b7b95cede8b26378a16ae37eeb134e",
     "semantic_hash": ""
   },
   "services/frame-gallery/public/index.html": {
@@ -820,18 +820,18 @@
     "semantic_hash": ""
   },
   "services/frame-today/README.md": {
-    "mtime": 1781831284.1379256,
-    "ast_hash": "2a93b7a6246018042cb3033692e0f3e8",
+    "mtime": 1782503675.2393792,
+    "ast_hash": "6c84219698970e44ab764adf81cee682",
     "semantic_hash": ""
   },
   "services/frame-today/public/remote.html": {
-    "mtime": 1782322906.7809484,
-    "ast_hash": "30fb2ca372e95d8468f68d1e9ae4e648",
+    "mtime": 1782503688.4894297,
+    "ast_hash": "7d33a71e8bdaf004d7ac314dc4fc366e",
     "semantic_hash": ""
   },
   "services/frame-today/public/viewer.html": {
-    "mtime": 1781831284.261759,
-    "ast_hash": "93c5873d1c83311b46950a6d1787d915",
+    "mtime": 1782503693.8747647,
+    "ast_hash": "ef9af999e413a750a8bc6d6fa0960090",
     "semantic_hash": ""
   },
   "services/frame-today/public/frame-logo-square.svg": {
@@ -960,13 +960,13 @@
     "semantic_hash": ""
   },
   "docs/adr/0009-shared-frame-auth-session.md": {
-    "mtime": 1781831282.7806382,
-    "ast_hash": "083ac4826b9e3e88ddd8398789a3de78",
+    "mtime": 1782503773.0847564,
+    "ast_hash": "bd9ee6dd7a560be61be330796fbd3514",
     "semantic_hash": ""
   },
   "docs/adr/0010-reversible-photo-publication-trash.md": {
-    "mtime": 1781831282.7831874,
-    "ast_hash": "a16aba41883fe129a2883c5299be25f6",
+    "mtime": 1782503777.0687852,
+    "ast_hash": "ec4305e178a5f9621395bbff5edc2519",
     "semantic_hash": ""
   },
   "docs/adr/0011-overlay-engine-v2.md": {
@@ -985,8 +985,8 @@
     "semantic_hash": ""
   },
   "services/frame-today/public/dashboard.html": {
-    "mtime": 1782322906.779948,
-    "ast_hash": "b552c32d3d9f3e416212b4d8d7454487",
+    "mtime": 1782503682.5340765,
+    "ast_hash": "fe9559f13dd7bc5c2298f3d408ad73b1",
     "semantic_hash": ""
   },
   "services/frame-overlays/public/wizard-core.js": {
@@ -1125,8 +1125,8 @@
     "semantic_hash": ""
   },
   "apps/frame-setup/src/main.js": {
-    "mtime": 1782340143.351849,
-    "ast_hash": "e12e874e109f35724798eca5199ab711",
+    "mtime": 1782503714.8098507,
+    "ast_hash": "bba79203c1171b11584f1456090a4848",
     "semantic_hash": ""
   },
   "apps/frame-setup/vite.config.js": {

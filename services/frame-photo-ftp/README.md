@@ -12,7 +12,7 @@ Use it if you want to:
 
 - Send photos straight from a camera to FRAME.
 - Let a camera upload from outside your local network using forwarded ports.
-- Queue camera photos for the FRAME gallery and Today tools.
+- Queue camera photos for the FRAME gallery and Photo Stage.
 - Avoid manually copying camera files after an event.
 
 If you want the simpler external upload path, use FRAME Photo Upload with FRAME Tunnel instead.
@@ -40,7 +40,7 @@ Recommended setup:
 2. Run `stack.cmd`.
 3. Choose **Guided setup**.
 4. Enable **Camera FTP Upload**.
-5. Enable the photo workflow tools you want, such as Photo Gallery and Today Tools.
+5. Enable the photo workflow tools you want, such as Photo Gallery and Photo Stage.
 6. Set an FTP username and password.
 7. Set the FTP passive host to the address the camera will use.
 8. Start the stack.
@@ -86,7 +86,7 @@ Optional connections:
 | Feature | Relies Upon |
 | --- | --- |
 | Published gallery photos | FRAME Photo Gallery |
-| Today viewer and remote | FRAME Today |
+| Photo Stage viewer and remote | FRAME Photo Stage |
 | Upload-progress overlays | FRAME Overlays, when FTP progress support is added |
 
 ## Notes For Operators

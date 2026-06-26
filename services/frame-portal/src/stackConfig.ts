@@ -69,8 +69,8 @@ const TOOL_DEFINITIONS: Array<
   },
   {
     id: "today",
-    name: "Today Tools",
-    description: "Manage today's gallery, viewer, remote, and photo workflow.",
+    name: "Photo Stage",
+    description: "Present the current photo day in OBS and control it from a remote.",
     routeKey: "today_dashboard",
     capability: "frame-photo-todaytools",
     serviceName: "frame-today",

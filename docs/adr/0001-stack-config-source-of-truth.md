@@ -5,7 +5,7 @@
 
 ## Context
 
-The FRAME stack has multiple modules (Portal, tunnel generation, overlays, today tools, audio tools) that must agree on:
+The FRAME stack has multiple modules (Portal, tunnel generation, overlays, Photo Stage, audio tools) that must agree on:
 - enabled capabilities
 - route paths for navigation
 - which routes may be exposed publicly in HYBRID mode

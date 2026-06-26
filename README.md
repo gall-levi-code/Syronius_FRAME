@@ -8,7 +8,7 @@ FRAME is a modular, Docker-based streaming appliance for IRL and live production
 The official project name is FRAME; the full styled name is Syronius' F.R.A.M.E.
 
 This repository is the platform stack: a shared portal, routing edge, video relay, OBS overlays,
-photo upload and gallery tools, Today viewer controls, audio tools, and optional Discord audio
+photo upload and gallery tools, Photo Stage controls, audio tools, and optional Discord audio
 bridge. Each service has its own README under `services/` for deeper setup and operating details.
 
 Current release target: `v1.0.0-Alpha`.
@@ -62,7 +62,7 @@ For a first install:
    - Overlays
    - Browser Photo Upload
    - Photo Gallery
-   - Today Tools
+   - Photo Stage
 4. Leave the other optional services disabled for now.
 5. Let the installer validate and verify the setup.
 6. When it offers to reconcile the Docker Compose stack, choose yes.
@@ -83,8 +83,8 @@ Useful first pages:
 - Overlay Wizard: `http://localhost/overlays/setup`
 - Browser Photo Upload: `http://localhost/photos/upload`
 - Photo Gallery: `http://localhost/today/gallery`
-- OBS Today Viewer: `http://localhost/today/viewer`
-- Phone Today Remote: `http://localhost/today/remote`
+- OBS Photo Stage Viewer: `http://localhost/today/viewer`
+- Phone Photo Stage Remote: `http://localhost/today/remote`
 
 Check status or logs:
 
@@ -158,7 +158,7 @@ Start with the service README when you want to understand, operate, or customize
 | Camera FTP upload | [`services/frame-photo-ftp/`](services/frame-photo-ftp/README.md) |
 | Photo processing | [`services/frame-pipeline-photos/`](services/frame-pipeline-photos/README.md) |
 | Gallery | [`services/frame-gallery/`](services/frame-gallery/README.md) |
-| Today viewer and remote | [`services/frame-today/`](services/frame-today/README.md) |
+| Photo Stage viewer and remote | [`services/frame-today/`](services/frame-today/README.md) |
 | Audio monitor | [`services/frame-audio/`](services/frame-audio/README.md) |
 | Discord audio bridge | [`services/frame-audio-bridge/`](services/frame-audio-bridge/README.md) |
 
@@ -172,7 +172,7 @@ The public-facing backlog for the alpha release line:
 **Overlay System**
 
 - Add FTP/BELABOX upload-progress adapters and photo-pipeline correlation.
-- Add latest-photo overlay and Today Tools integration.
+- Add latest-photo overlay and Photo Stage integration.
 
 **Audio Monitor**
 

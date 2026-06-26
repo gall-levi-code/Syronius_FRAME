@@ -5,7 +5,7 @@
 
 ## Context
 
-Operators need to remove individual photos or complete albums from the Gallery, Today viewer, and
+Operators need to remove individual photos or complete albums from the Gallery, Photo Stage viewer, and
 remote without immediately destroying the publication. Restoring a photo must not recreate its
 `.ready` manifest because host-side StreamerBot workflows may treat a new `.ready` write as a new
 photo event.
@@ -35,7 +35,7 @@ management changes. `latest_photo_at` retains the publication time of `latest_ba
 ## Consequences
 
 - Restore is instant and cannot emit a second `.ready` event.
-- Public Gallery, Today Remote, Today Viewer, and the Today wrapper converge through the same
+- Public Gallery, Photo Stage Remote, Photo Stage Viewer, and the Photo Stage wrapper converge through the same
   visibility rule.
 - Album covers, counts, and duration spans recalculate from visible publications.
 - Permanent deletion is deliberately a two-step trash-then-delete operation.

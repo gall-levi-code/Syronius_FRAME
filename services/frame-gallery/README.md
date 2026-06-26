@@ -103,7 +103,7 @@ Optional connections:
 | --- | --- |
 | Browser photo uploads | FRAME Photo Upload |
 | Camera FTP uploads | FRAME Photo FTP |
-| Today viewer and remote | FRAME Today |
+| Photo Stage viewer and remote | FRAME Photo Stage |
 | Public gallery access | FRAME Tunnel or configured public FRAME access |
 
 ## Notes For Operators
