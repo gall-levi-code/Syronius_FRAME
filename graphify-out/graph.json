@@ -4570,7 +4570,7 @@
       "source_location": "L18",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_defs_photo",
-      "community": 226,
+      "community": 217,
       "norm_label": "photo"
     },
     {
@@ -4580,7 +4580,7 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_photo_type",
-      "community": 226,
+      "community": 217,
       "norm_label": "type"
     },
     {
@@ -4590,7 +4590,7 @@
       "source_location": "L20",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_photo_additionalproperties",
-      "community": 226,
+      "community": 217,
       "norm_label": "additionalproperties"
     },
     {
@@ -4600,7 +4600,7 @@
       "source_location": "L21",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_photo_required",
-      "community": 226,
+      "community": 217,
       "norm_label": "required"
     },
     {
@@ -4900,7 +4900,7 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_properties_background",
-      "community": 161,
+      "community": 121,
       "norm_label": "background"
     },
     {
@@ -4910,7 +4910,7 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_background_type",
-      "community": 161,
+      "community": 121,
       "norm_label": "type"
     },
     {
@@ -4920,7 +4920,7 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_background_pattern",
-      "community": 161,
+      "community": 121,
       "norm_label": "pattern"
     },
     {
@@ -4960,7 +4960,7 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_properties_text",
-      "community": 239,
+      "community": 121,
       "norm_label": "text"
     },
     {
@@ -4970,7 +4970,7 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_text_type",
-      "community": 239,
+      "community": 121,
       "norm_label": "type"
     },
     {
@@ -4980,7 +4980,7 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_text_pattern",
-      "community": 239,
+      "community": 121,
       "norm_label": "pattern"
     },
     {
@@ -5170,7 +5170,7 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_properties_muted",
-      "community": 217,
+      "community": 121,
       "norm_label": "muted"
     },
     {
@@ -5180,7 +5180,7 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_muted_type",
-      "community": 217,
+      "community": 121,
       "norm_label": "type"
     },
     {
@@ -5190,7 +5190,7 @@
       "source_location": "L73",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_muted_pattern",
-      "community": 217,
+      "community": 121,
       "norm_label": "pattern"
     },
     {
@@ -5290,7 +5290,7 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_properties_lightboxtext",
-      "community": 204,
+      "community": 121,
       "norm_label": "lightboxtext"
     },
     {
@@ -5300,7 +5300,7 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_lightboxtext_type",
-      "community": 204,
+      "community": 121,
       "norm_label": "type"
     },
     {
@@ -5310,7 +5310,7 @@
       "source_location": "L77",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_lightboxtext_pattern",
-      "community": 204,
+      "community": 121,
       "norm_label": "pattern"
     },
     {
@@ -5470,7 +5470,7 @@
       "source_location": "L88",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_properties_palettes",
-      "community": 168,
+      "community": 161,
       "norm_label": "palettes"
     },
     {
@@ -5480,7 +5480,7 @@
       "source_location": "L89",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_palettes_type",
-      "community": 168,
+      "community": 161,
       "norm_label": "type"
     },
     {
@@ -5490,7 +5490,7 @@
       "source_location": "L90",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_palettes_additionalproperties",
-      "community": 168,
+      "community": 161,
       "norm_label": "additionalproperties"
     },
     {
@@ -5500,7 +5500,7 @@
       "source_location": "L91",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_palettes_required",
-      "community": 168,
+      "community": 161,
       "norm_label": "required"
     },
     {
@@ -5510,7 +5510,7 @@
       "source_location": "L92",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_palettes_properties",
-      "community": 168,
+      "community": 161,
       "norm_label": "properties"
     },
     {
@@ -5520,7 +5520,7 @@
       "source_location": "L93",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_properties_day",
-      "community": 168,
+      "community": 161,
       "norm_label": "day"
     },
     {
@@ -5530,7 +5530,7 @@
       "source_location": "L93",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_day_ref",
-      "community": 168,
+      "community": 161,
       "norm_label": "$ref"
     },
     {
@@ -5540,7 +5540,7 @@
       "source_location": "L94",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_properties_night",
-      "community": 168,
+      "community": 161,
       "norm_label": "night"
     },
     {
@@ -5550,7 +5550,7 @@
       "source_location": "L94",
       "_origin": "ast",
       "id": "schemas_gallery_api_schema_night_ref",
-      "community": 168,
+      "community": 161,
       "norm_label": "$ref"
     },
     {
@@ -11880,7 +11880,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "schemas_status_schema_properties_health",
-      "community": 27,
+      "community": 239,
       "norm_label": "health"
     },
     {
@@ -11890,7 +11890,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "schemas_status_schema_health_type",
-      "community": 27,
+      "community": 239,
       "norm_label": "type"
     },
     {
@@ -11900,7 +11900,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "schemas_status_schema_health_enum",
-      "community": 27,
+      "community": 239,
       "norm_label": "enum"
     },
     {
@@ -17852,7 +17852,7 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "voice_mixer_pcmaudioframe",
-      "community": 272,
+      "community": 128,
       "norm_label": "pcmaudioframe"
     },
     {
@@ -18332,7 +18332,7 @@
       "source_location": "L258",
       "_origin": "ast",
       "id": "voice_voicemanager_voicemanager_handleaudioframe",
-      "community": 272,
+      "community": 128,
       "norm_label": ".handleaudioframe()"
     },
     {
@@ -18382,7 +18382,7 @@
       "source_location": "L454",
       "_origin": "ast",
       "id": "voice_voicemanager_voicemanager_calculateaudiolevel",
-      "community": 272,
+      "community": 128,
       "norm_label": ".calculateaudiolevel()"
     },
     {
@@ -18652,7 +18652,7 @@
       "source_location": "L72",
       "_origin": "ast",
       "id": "web_websocket_bridgewebsocketserver_constructor",
-      "community": 24,
+      "community": 272,
       "norm_label": ".constructor()"
     },
     {
@@ -35638,7 +35638,7 @@
       "source_location": "L108",
       "_origin": "ast",
       "id": "src_pipeline_photopipeline_init",
-      "community": 67,
+      "community": 204,
       "norm_label": ".init()"
     },
     {
@@ -35678,7 +35678,7 @@
       "source_location": "L158",
       "_origin": "ast",
       "id": "src_pipeline_photopipeline_listtrash",
-      "community": 67,
+      "community": 98,
       "norm_label": ".listtrash()"
     },
     {
@@ -35688,7 +35688,7 @@
       "source_location": "L181",
       "_origin": "ast",
       "id": "src_pipeline_photopipeline_managephotos",
-      "community": 89,
+      "community": 67,
       "norm_label": ".managephotos()"
     },
     {
@@ -35718,7 +35718,7 @@
       "source_location": "L226",
       "_origin": "ast",
       "id": "src_pipeline_photopipeline_processclaim",
-      "community": 89,
+      "community": 67,
       "norm_label": ".processclaim()"
     },
     {
@@ -35728,7 +35728,7 @@
       "source_location": "L339",
       "_origin": "ast",
       "id": "src_pipeline_photopipeline_getorcreatepublication",
-      "community": 89,
+      "community": 67,
       "norm_label": ".getorcreatepublication()"
     },
     {
@@ -35748,7 +35748,7 @@
       "source_location": "L370",
       "_origin": "ast",
       "id": "src_pipeline_photopipeline_recoverpublishedclaim",
-      "community": 89,
+      "community": 67,
       "norm_label": ".recoverpublishedclaim()"
     },
     {
@@ -35758,7 +35758,7 @@
       "source_location": "L386",
       "_origin": "ast",
       "id": "src_pipeline_photopipeline_readpublication",
-      "community": 89,
+      "community": 67,
       "norm_label": ".readpublication()"
     },
     {
@@ -35788,7 +35788,7 @@
       "source_location": "L429",
       "_origin": "ast",
       "id": "src_pipeline_photopipeline_writelatest",
-      "community": 67,
+      "community": 204,
       "norm_label": ".writelatest()"
     },
     {
@@ -35798,7 +35798,7 @@
       "source_location": "L448",
       "_origin": "ast",
       "id": "src_pipeline_photopipeline_reconcilelatest",
-      "community": 67,
+      "community": 204,
       "norm_label": ".reconcilelatest()"
     },
     {
@@ -35808,7 +35808,7 @@
       "source_location": "L453",
       "_origin": "ast",
       "id": "src_pipeline_photopipeline_hasreadypublications",
-      "community": 67,
+      "community": 98,
       "norm_label": ".hasreadypublications()"
     },
     {
@@ -35818,7 +35818,7 @@
       "source_location": "L461",
       "_origin": "ast",
       "id": "src_pipeline_photopipeline_recalculatelatest",
-      "community": 67,
+      "community": 204,
       "norm_label": ".recalculatelatest()"
     },
     {
@@ -35828,7 +35828,7 @@
       "source_location": "L488",
       "_origin": "ast",
       "id": "src_pipeline_photopipeline_nextrevisiontimestamp",
-      "community": 67,
+      "community": 204,
       "norm_label": ".nextrevisiontimestamp()"
     },
     {
@@ -35868,7 +35868,7 @@
       "source_location": "L548",
       "_origin": "ast",
       "id": "src_pipeline_photopipeline_purgepublication",
-      "community": 98,
+      "community": 67,
       "norm_label": ".purgepublication()"
     },
     {
@@ -35878,7 +35878,7 @@
       "source_location": "L566",
       "_origin": "ast",
       "id": "src_pipeline_photopipeline_clearthumbnail",
-      "community": 98,
+      "community": 67,
       "norm_label": ".clearthumbnail()"
     },
     {
@@ -35888,7 +35888,7 @@
       "source_location": "L570",
       "_origin": "ast",
       "id": "src_pipeline_photopipeline_ensurecurrentgallery",
-      "community": 67,
+      "community": 204,
       "norm_label": ".ensurecurrentgallery()"
     },
     {
@@ -35898,7 +35898,7 @@
       "source_location": "L577",
       "_origin": "ast",
       "id": "src_pipeline_photopipeline_withpublishlock",
-      "community": 89,
+      "community": 67,
       "norm_label": ".withpublishlock()"
     },
     {
@@ -35948,7 +35948,7 @@
       "source_location": "L602",
       "_origin": "ast",
       "id": "src_pipeline_failure",
-      "community": 89,
+      "community": 67,
       "norm_label": "failure()"
     },
     {
@@ -35958,7 +35958,7 @@
       "source_location": "L606",
       "_origin": "ast",
       "id": "src_pipeline_failurereason",
-      "community": 89,
+      "community": 67,
       "norm_label": "failurereason()"
     },
     {
@@ -35968,7 +35968,7 @@
       "source_location": "L610",
       "_origin": "ast",
       "id": "src_pipeline_outputfiles",
-      "community": 89,
+      "community": 148,
       "norm_label": "outputfiles()"
     },
     {
@@ -36048,7 +36048,7 @@
       "source_location": "L677",
       "_origin": "ast",
       "id": "src_pipeline_isdatefolder",
-      "community": 67,
+      "community": 98,
       "norm_label": "isdatefolder()"
     },
     {
@@ -36208,7 +36208,7 @@
       "source_location": "L816",
       "_origin": "ast",
       "id": "src_pipeline_localparts",
-      "community": 148,
+      "community": 204,
       "norm_label": "localparts()"
     },
     {
@@ -36218,7 +36218,7 @@
       "source_location": "L833",
       "_origin": "ast",
       "id": "src_pipeline_safereaddirectories",
-      "community": 67,
+      "community": 98,
       "norm_label": "safereaddirectories()"
     },
     {
@@ -43940,34 +43940,74 @@
       "norm_label": "readme.md"
     },
     {
-      "label": "FRAME Overlays V2",
+      "label": "FRAME Overlays",
       "file_type": "document",
       "source_file": "services/frame-overlays/README.md",
       "source_location": "L1",
       "_origin": "ast",
-      "id": "frame_overlays_readme_frame_overlays_v2",
+      "id": "frame_overlays_readme_frame_overlays",
       "community": 245,
-      "norm_label": "frame overlays v2"
+      "norm_label": "frame overlays"
     },
     {
-      "label": "Runtime behavior",
+      "label": "Who This Is For",
       "file_type": "document",
       "source_file": "services/frame-overlays/README.md",
-      "source_location": "L13",
+      "source_location": "L6",
       "_origin": "ast",
-      "id": "frame_overlays_readme_runtime_behavior",
+      "id": "frame_overlays_readme_who_this_is_for",
       "community": 245,
-      "norm_label": "runtime behavior"
+      "norm_label": "who this is for"
     },
     {
-      "label": "Validation",
+      "label": "What You Use It For",
       "file_type": "document",
       "source_file": "services/frame-overlays/README.md",
-      "source_location": "L49",
+      "source_location": "L18",
       "_origin": "ast",
-      "id": "frame_overlays_readme_validation",
+      "id": "frame_overlays_readme_what_you_use_it_for",
       "community": 245,
-      "norm_label": "validation"
+      "norm_label": "what you use it for"
+    },
+    {
+      "label": "How To Install",
+      "file_type": "document",
+      "source_file": "services/frame-overlays/README.md",
+      "source_location": "L35",
+      "_origin": "ast",
+      "id": "frame_overlays_readme_how_to_install",
+      "community": 245,
+      "norm_label": "how to install"
+    },
+    {
+      "label": "How To Operate",
+      "file_type": "document",
+      "source_file": "services/frame-overlays/README.md",
+      "source_location": "L77",
+      "_origin": "ast",
+      "id": "frame_overlays_readme_how_to_operate",
+      "community": 245,
+      "norm_label": "how to operate"
+    },
+    {
+      "label": "Relies Upon",
+      "file_type": "document",
+      "source_file": "services/frame-overlays/README.md",
+      "source_location": "L105",
+      "_origin": "ast",
+      "id": "frame_overlays_readme_relies_upon",
+      "community": 245,
+      "norm_label": "relies upon"
+    },
+    {
+      "label": "Notes For Operators",
+      "file_type": "document",
+      "source_file": "services/frame-overlays/README.md",
+      "source_location": "L122",
+      "_origin": "ast",
+      "id": "frame_overlays_readme_notes_for_operators",
+      "community": 245,
+      "norm_label": "notes for operators"
     },
     {
       "label": "README.md",
@@ -113689,29 +113729,69 @@
       "source_file": "services/frame-overlays/README.md",
       "source_location": "L1",
       "weight": 1.0,
-      "confidence_score": 1.0,
       "source": "frame_overlays_readme",
-      "target": "frame_overlays_readme_frame_overlays_v2"
+      "target": "frame_overlays_readme_frame_overlays",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "services/frame-overlays/README.md",
-      "source_location": "L13",
+      "source_location": "L35",
       "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "frame_overlays_readme_frame_overlays_v2",
-      "target": "frame_overlays_readme_runtime_behavior"
+      "source": "frame_overlays_readme_frame_overlays",
+      "target": "frame_overlays_readme_how_to_install",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "services/frame-overlays/README.md",
-      "source_location": "L30",
+      "source_location": "L77",
       "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "frame_overlays_readme_frame_overlays_v2",
-      "target": "frame_overlays_readme_validation"
+      "source": "frame_overlays_readme_frame_overlays",
+      "target": "frame_overlays_readme_how_to_operate",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-overlays/README.md",
+      "source_location": "L122",
+      "weight": 1.0,
+      "source": "frame_overlays_readme_frame_overlays",
+      "target": "frame_overlays_readme_notes_for_operators",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-overlays/README.md",
+      "source_location": "L105",
+      "weight": 1.0,
+      "source": "frame_overlays_readme_frame_overlays",
+      "target": "frame_overlays_readme_relies_upon",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-overlays/README.md",
+      "source_location": "L18",
+      "weight": 1.0,
+      "source": "frame_overlays_readme_frame_overlays",
+      "target": "frame_overlays_readme_what_you_use_it_for",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "services/frame-overlays/README.md",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "frame_overlays_readme_frame_overlays",
+      "target": "frame_overlays_readme_who_this_is_for",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -113859,9 +113939,9 @@
       "source_file": "services/frame-streams/README.md",
       "source_location": "L32",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "frame_streams_readme_frame_stream_management",
-      "target": "frame_streams_readme_how_to_install",
-      "confidence_score": 1.0
+      "target": "frame_streams_readme_how_to_install"
     },
     {
       "relation": "contains",
@@ -113869,9 +113949,9 @@
       "source_file": "services/frame-streams/README.md",
       "source_location": "L67",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "frame_streams_readme_frame_stream_management",
-      "target": "frame_streams_readme_how_to_operate",
-      "confidence_score": 1.0
+      "target": "frame_streams_readme_how_to_operate"
     },
     {
       "relation": "contains",
@@ -113879,9 +113959,9 @@
       "source_file": "services/frame-streams/README.md",
       "source_location": "L121",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "frame_streams_readme_frame_stream_management",
-      "target": "frame_streams_readme_notes_for_operators",
-      "confidence_score": 1.0
+      "target": "frame_streams_readme_notes_for_operators"
     },
     {
       "relation": "contains",
@@ -113889,9 +113969,9 @@
       "source_file": "services/frame-streams/README.md",
       "source_location": "L103",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "frame_streams_readme_frame_stream_management",
-      "target": "frame_streams_readme_relies_upon",
-      "confidence_score": 1.0
+      "target": "frame_streams_readme_relies_upon"
     },
     {
       "relation": "contains",
@@ -113899,9 +113979,9 @@
       "source_file": "services/frame-streams/README.md",
       "source_location": "L19",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "frame_streams_readme_frame_stream_management",
-      "target": "frame_streams_readme_what_you_use_it_for",
-      "confidence_score": 1.0
+      "target": "frame_streams_readme_what_you_use_it_for"
     },
     {
       "relation": "contains",
@@ -113909,9 +113989,9 @@
       "source_file": "services/frame-streams/README.md",
       "source_location": "L6",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "frame_streams_readme_frame_stream_management",
-      "target": "frame_streams_readme_who_this_is_for",
-      "confidence_score": 1.0
+      "target": "frame_streams_readme_who_this_is_for"
     },
     {
       "relation": "contains",
@@ -113945,5 +114025,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "b29ae3556bc689e39c8eadc65595fc748df2a866"
+  "built_at_commit": "d93ef41bae6629374ed2b56b3c8630fd643488b6"
 }
