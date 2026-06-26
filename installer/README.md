@@ -124,6 +124,7 @@ Protected FRAME routes use `/auth/login` through FRAME Edge. A successful Portal
 signed, `HttpOnly` session cookie for the current hostname and returns the browser to its original
 URL. The session lasts seven days by default and unlocks all protected panels on that hostname.
 Change `FRAME_AUTH_SESSION_DAYS` in `.env` to a value from 1 to 30, then restart the stack.
+Guided setup prompts for these credentials before the stack can start.
 
 Public OBS viewers, gallery pages, overlay views, listener links, and tokenized Audio Bridge pages
 do not require this shared login. Direct service ports retain their existing service-level
@@ -167,10 +168,9 @@ Before `stack start` will proceed:
    `frame-public-gateway:8080`.
 3. Run `stack.cmd tunnel-token` or `./stack.sh tunnel-token` and paste the token from Cloudflare's
    connector install command. Store only the `eyJ...` token, not the entire command.
-4. Run `stack.cmd portal-auth` or `./stack.sh portal-auth` to set the required Portal credentials.
-5. Run `stack validate --for-start`, then `stack start`.
+4. Run `stack validate --for-start`, then `stack start`.
 
-Both credential commands hide typed input. The tunnel token is mounted into `frame-tunnel` as a read-only file and is not stored in container
+Credential prompts hide typed input. The tunnel token is mounted into `frame-tunnel` as a read-only file and is not stored in container
 environment variables. Cloudflare Tunnel supports WebSockets, which are required by Audio Bridge.
 The generated `public-routes.yml` remains the final local allowlist even if the Cloudflare
 Published application route is broad.
@@ -208,9 +208,10 @@ Generated files and `/data` are ignored by Git. Configuration files are written 
 
 ## Safety behavior
 
+- `stack start` refuses to launch until Portal credentials are configured.
 - `stack start` refuses to launch an enabled Audio Bridge with placeholder Discord credentials.
 - `stack start` waits for enabled services to report healthy and fails after a bounded timeout.
-- Hybrid startup is refused until its hostname, tunnel token, and Portal credentials are configured.
+- Hybrid startup is refused until its hostname and tunnel token are configured.
 - Hybrid public traffic passes through an internal-only allowlist gateway before FRAME Edge.
 - Optional services are disabled on fresh installs until explicitly enabled.
 - Traefik discovers only services explicitly labeled for FRAME Edge.

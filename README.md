@@ -64,8 +64,9 @@ For a first install:
    - Photo Gallery
    - Photo Stage
 4. Leave the other optional services disabled for now.
-5. Let the installer validate and verify the setup.
-6. When it offers to reconcile the Docker Compose stack, choose yes.
+5. Set the required Portal username, password, and shared login session length when prompted.
+6. Let the installer validate and verify the setup.
+7. When it offers to reconcile the Docker Compose stack, choose yes.
 
 If you return to the main menu before starting containers, choose **Start or update stack**.
 
@@ -99,11 +100,11 @@ same menu.
 
 ## Optional Setup
 
-Set a shared Portal login for protected tools:
+Change the shared Portal login later:
 
 - Open `stack.cmd`.
 - Choose **Credentials and security**.
-- Set the Portal username and password.
+- Update the Portal username, password, or session length.
 
 Use a host-visible data path for StreamerBot `.ready` watchers:
 

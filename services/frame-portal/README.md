@@ -23,7 +23,7 @@ Use Portal as the control room for FRAME.
 
 Common uses:
 
-- Open Stream Management, Overlays, Photo Upload, Gallery, Today tools, or Audio tools.
+- Open Stream Management, Overlays, Photo Upload, Gallery, Photo Stage, or Audio tools.
 - Check whether FRAME containers are healthy.
 - See disk space warnings before photo or video storage fills up.
 - View live logs for troubleshooting.

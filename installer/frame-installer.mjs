@@ -229,10 +229,10 @@ async function install(options) {
   ) {
     console.warn("  StreamerBot setup: set FRAME_HOST_DATA_ROOT to the host-visible FRAME data path before using .ready manifests.");
   }
+  if (!env.PORTAL_USERNAME || !env.PORTAL_PASSWORD) {
+    console.warn("  Setup needed: run stack portal-auth before starting FRAME.");
+  }
   if (mode === "HYBRID") {
-    if (!env.PORTAL_USERNAME || !env.PORTAL_PASSWORD) {
-      console.warn("  Setup needed: add PORTAL_USERNAME and PORTAL_PASSWORD to .env before starting Hybrid mode.");
-    }
     if (!(await hasConfiguredTunnelToken(dataRoot))) {
       console.warn(`  Setup needed: replace ${env.FRAME_DATA_ROOT}/${TUNNEL_TOKEN_FILE} with the Cloudflare tunnel token.`);
     }
@@ -634,9 +634,9 @@ function validateEnvironment(env, config, forStart) {
     if (env.CLOUDFLARE_TUNNEL_ORIGIN !== "http://frame-public-gateway:8080") {
       throw new Error("CLOUDFLARE_TUNNEL_ORIGIN must be http://frame-public-gateway:8080.");
     }
-    if (forStart && (!String(env.PORTAL_USERNAME ?? "").trim() || !String(env.PORTAL_PASSWORD ?? "").trim())) {
-      throw new Error("PORTAL_USERNAME and PORTAL_PASSWORD are required before starting HYBRID mode.");
-    }
+  }
+  if (forStart && (!String(env.PORTAL_USERNAME ?? "").trim() || !String(env.PORTAL_PASSWORD ?? "").trim())) {
+    throw new Error("PORTAL_USERNAME and PORTAL_PASSWORD are required before starting FRAME.");
   }
   if (!forStart || !config.capabilities["frame-discord-audio-bridge"]) {
     if (config.capabilities["frame-video-relay"] && (env.SLS_API_KEY ?? "").length < 32) {

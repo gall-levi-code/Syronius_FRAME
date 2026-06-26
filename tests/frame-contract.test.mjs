@@ -325,15 +325,21 @@ test("Windows and Unix wrappers preserve direct commands while offering the numb
   assert.ok(installer.includes("CUSTOMIZABLE_ENV_KEYS"));
   assert.ok(installer.includes("setDiscordAuth"));
   assert.ok(installer.includes("setServiceAuth"));
+  assert.ok(installer.includes("PORTAL_USERNAME and PORTAL_PASSWORD are required before starting FRAME."));
   assert.ok(installer.includes("value = JSON.parse(value)"), "quoted .env values must remain idempotent");
   assert.ok(!powershell.includes("$(if"), "PowerShell wrapper must not execute inline if expressions as commands");
   assert.ok(!powershell.includes("= if ("), "PowerShell wrapper must remain compatible with Windows PowerShell 5");
   assert.ok(!powershell.includes("return if ("), "PowerShell wrapper must not return an if expression");
+  const oldPhotoBranding = ["Today", "Tools"].join(" ");
+  assert.ok(!powershell.includes(oldPhotoBranding), "Windows wrapper should avoid old photo branding");
+  assert.ok(!shell.includes(oldPhotoBranding), "Unix wrapper should avoid old photo branding");
   assert.ok(powershell.includes("Get-HostLanIPv4Candidates"), "Windows wrapper must detect host LAN IP candidates for passive FTP");
   assert.ok(powershell.includes("Read-PhotoFtpPassiveHost"), "Windows wrapper must prompt with a passive FTP LAN host helper");
+  assert.ok(powershell.includes("Portal login needs setup."), "Windows setup must require Portal credentials in every mode");
   assert.ok(powershell.includes('$current -and $current -ne "127.0.0.1"'), "Passive FTP prompt must not preserve loopback as the default");
   assert.ok(shell.includes("lan_ipv4_candidates"), "Unix wrapper must detect host LAN IP candidates for passive FTP");
   assert.ok(shell.includes("read_photo_ftp_passive_host"), "Unix wrapper must prompt with a passive FTP LAN host helper");
+  assert.ok(shell.includes("Portal login needs setup."), "Unix setup must require Portal credentials in every mode");
   assert.ok(shell.includes('[ "$current" != "127.0.0.1" ]'), "Unix passive FTP prompt must not preserve loopback as the default");
 });
 

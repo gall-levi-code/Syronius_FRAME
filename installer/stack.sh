@@ -156,6 +156,20 @@ configure_auth_session_days() {
   run_install --set "FRAME_AUTH_SESSION_DAYS=$REPLY"
 }
 
+ensure_portal_auth() {
+  if [ -n "$(env_value PORTAL_USERNAME "")" ] && [ -n "$(env_value PORTAL_PASSWORD "")" ]; then
+    return
+  fi
+  echo "Portal login is required before FRAME can start."
+  read_default "Portal username" "$(env_value PORTAL_USERNAME "")"
+  username=$REPLY
+  read_secret "Portal password (input hidden)"
+  password=$REPLY
+  configure_auth_session_days
+  printf "%s\n%s\n" "$username" "$password" | runtime set-portal-auth
+  unset username password
+}
+
 read_timezone() {
   current=$1
   [ -n "$current" ] || current=America/Chicago
@@ -273,7 +287,7 @@ configure_services() {
   configure_capability "frame-photo-ftp" "Photo FTP Ingest"
   configure_capability "frame-photo-webupload" "Browser Photo Upload"
   configure_capability "frame-photo-gallery" "Photo Gallery"
-  configure_capability "frame-photo-todaytools" "Today Tools"
+  configure_capability "frame-photo-todaytools" "Photo Stage"
 }
 
 configure_capability() {
@@ -316,6 +330,7 @@ configure_network_storage() {
 configure_standard() {
   configure_network_storage
   configure_services
+  ensure_portal_auth
   if profile_enabled photo-ftp; then
     read_photo_ftp_passive_host
     run_install --set "PHOTO_FTP_PASSIVE_HOST=$REPLY"
@@ -337,13 +352,13 @@ show_setup_issues() {
     echo "- Host-visible photo data path is not configured for StreamerBot."
     ISSUE_COUNT=$((ISSUE_COUNT + 1))
   fi
+  if [ -z "$(env_value PORTAL_USERNAME "")" ] || [ -z "$(env_value PORTAL_PASSWORD "")" ]; then
+    echo "- Portal login needs setup."
+    ISSUE_COUNT=$((ISSUE_COUNT + 1))
+  fi
   if [ "$(env_value FRAME_MODE LAN)" = "HYBRID" ]; then
     if [ -z "$(env_value CLOUDFLARE_PUBLIC_HOSTNAME "")" ]; then
       echo "- Hybrid mode needs a public hostname."
-      ISSUE_COUNT=$((ISSUE_COUNT + 1))
-    fi
-    if [ -z "$(env_value PORTAL_USERNAME "")" ] || [ -z "$(env_value PORTAL_PASSWORD "")" ]; then
-      echo "- Hybrid mode needs Portal credentials."
       ISSUE_COUNT=$((ISSUE_COUNT + 1))
     fi
     data_root=$(env_value FRAME_DATA_ROOT ./data)
@@ -379,6 +394,9 @@ resolve_setup_issues() {
   if { profile_enabled photo-ftp || profile_enabled photo-webupload; } && [ "$(env_value FRAME_HOST_DATA_ROOT /data)" = "/data" ]; then
     read_default "Host-visible FRAME data path" "$ROOT_DIR/data"
     run_install --host-data-root "$REPLY"
+  fi
+  if [ -z "$(env_value PORTAL_USERNAME "")" ] || [ -z "$(env_value PORTAL_PASSWORD "")" ]; then
+    ensure_portal_auth
   fi
   if [ "$(env_value FRAME_MODE LAN)" = "HYBRID" ] && yes_no "Review Hybrid credentials now?"; then
     configure_credentials
@@ -493,7 +511,7 @@ guided_setup() {
   if [ "$level" = "2" ]; then
     while yes_no "Change an advanced setting?"; do advanced_setting; done
   fi
-  if yes_no "Review credentials and security now?"; then configure_credentials; fi
+  if yes_no "Review optional credentials and security now?"; then configure_credentials; fi
   readiness_flow
 }
 

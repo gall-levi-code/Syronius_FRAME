@@ -25,7 +25,7 @@ $Capabilities = @(
   [pscustomobject]@{ Key = "frame-photo-ftp"; Name = "Photo FTP Ingest"; Description = "Accept completed camera uploads through FTP." },
   [pscustomobject]@{ Key = "frame-photo-webupload"; Name = "Browser Photo Upload"; Description = "Upload photos from a protected browser page." },
   [pscustomobject]@{ Key = "frame-photo-gallery"; Name = "Photo Gallery"; Description = "Publish multi-day photo galleries. Requires a photo input." },
-  [pscustomobject]@{ Key = "frame-photo-todaytools"; Name = "Today Tools"; Description = "Provide Today dashboard, OBS viewer, and remote. Requires Gallery and a photo input." }
+  [pscustomobject]@{ Key = "frame-photo-todaytools"; Name = "Photo Stage"; Description = "Provide Photo Stage dashboard, OBS viewer, and remote. Requires Gallery and a photo input." }
 )
 
 $AdvancedSettings = @(
@@ -218,6 +218,16 @@ function Configure-AuthSessionDays {
   Invoke-Install @("--set", "FRAME_AUTH_SESSION_DAYS=$days")
 }
 
+function Ensure-PortalAuth {
+  $env = Get-EnvMap
+  if ($env.PORTAL_USERNAME -and $env.PORTAL_PASSWORD) { return }
+  Write-Host "Portal login is required before FRAME can start." -ForegroundColor Cyan
+  $username = Read-Default "Portal username" $env.PORTAL_USERNAME
+  $password = Read-PlainTextSecret "Portal password (input hidden)"
+  Configure-AuthSessionDays
+  Invoke-RuntimeInput @("set-portal-auth") "$username`n$password"
+}
+
 function Read-Timezone {
   param([string]$Current)
   if ([string]::IsNullOrWhiteSpace($Current)) { $Current = "America/Chicago" }
@@ -322,8 +332,8 @@ function Get-SetupIssues {
       $issues.Add("Hybrid mode needs a Cloudflare tunnel token.")
     }
   }
-  if ($config.mode -eq "HYBRID" -and (-not $env.PORTAL_USERNAME -or -not $env.PORTAL_PASSWORD)) {
-    $issues.Add("Hybrid mode needs Portal credentials.")
+  if (-not $env.PORTAL_USERNAME -or -not $env.PORTAL_PASSWORD) {
+    $issues.Add("Portal login needs setup.")
   }
   if ((Test-CapabilityEnabled $config "frame-photo-ftp") -and $env.PHOTO_FTP_PASSIVE_HOST -eq "127.0.0.1") {
     $issues.Add("Photo FTP passive host still points at 127.0.0.1.")
@@ -431,6 +441,7 @@ function Configure-NetworkStorage {
 function Configure-StandardSettings {
   Configure-NetworkStorage
   Select-Capabilities
+  Ensure-PortalAuth
   $env = Get-EnvMap
   $config = Get-StackConfig
   if (Test-CapabilityEnabled $config "frame-photo-ftp") {
@@ -449,11 +460,9 @@ function Resolve-SetupIssues {
     Invoke-Install @("--mode", "HYBRID", "--public-hostname", (Read-Default "Cloudflare public hostname" ""))
     $env = Get-EnvMap
   }
-  if ($config.mode -eq "HYBRID" -and (-not $env.PORTAL_USERNAME -or -not $env.PORTAL_PASSWORD)) {
-    $username = Read-Default "Portal username" $env.PORTAL_USERNAME
-    $password = Read-PlainTextSecret "Portal password (input hidden)"
-    Configure-AuthSessionDays
-    Invoke-RuntimeInput @("set-portal-auth") "$username`n$password"
+  if (-not $env.PORTAL_USERNAME -or -not $env.PORTAL_PASSWORD) {
+    Ensure-PortalAuth
+    $env = Get-EnvMap
   }
   if ($config.mode -eq "HYBRID" -and (@(Get-SetupIssues) -contains "Hybrid mode needs a Cloudflare tunnel token.")) {
     $token = Read-PlainTextSecret "Cloudflare tunnel token (input hidden)"
@@ -567,7 +576,7 @@ function Invoke-GuidedSetup {
   if ($level -eq "2") {
     while (Read-YesNo "Change an advanced setting?") { Configure-AdvancedSetting }
   }
-  if (Read-YesNo "Review credentials and security now?") { Configure-Credentials }
+  if (Read-YesNo "Review optional credentials and security now?") { Configure-Credentials }
   Invoke-ReadinessFlow
 }
 
