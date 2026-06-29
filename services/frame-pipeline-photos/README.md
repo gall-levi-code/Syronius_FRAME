@@ -57,6 +57,9 @@ latest-photo state automatically.
 
 Use Photo Gallery Admin to hide, restore, permanently delete, or empty trashed gallery photos.
 
+Open `/pipeline` from FRAME Portal to set the published JPG long edge, quality, and maximum output
+file size. These settings apply to new photos only.
+
 For StreamerBot or other host-side watchers, watch:
 
 ```text
@@ -90,7 +93,7 @@ IMG_1234_2026-06-26_14_30_05.ready
 | --- | --- |
 | `.jpg` | The published gallery image. FRAME converts accepted photos into JPG. |
 | `.json` | Photo details such as original filename, size, format, publish time, and available camera metadata. |
-| `.txt` | Plain camera and exposure text for tools that want a simple text file. |
+| `.txt` | StreamerBot-style camera text, for example `Shot on Camera with the Lens @ 35mm` plus exposure settings. |
 | `.orientation` | `1` for portrait, `0` for landscape or square. |
 | `.ready` | The final "this photo is complete" signal. Watch this file for automation. |
 
@@ -110,8 +113,8 @@ the published files.
 
 FRAME accepts files that are recognized as images and can be converted into JPG.
 
-Common accepted examples include normal camera or phone image formats such as JPG, PNG, WebP, and
-other image formats supported by the runtime.
+Common accepted examples include JPG, PNG, TIFF, BMP, WebP, HEIC, and HEIF when the runtime can
+decode them.
 
 FRAME rejects:
 

@@ -59,7 +59,7 @@ services:
       traefik.http.routers.frame-auth.service: frame-auth
       traefik.http.routers.frame-public-deny.entrypoints: web
       traefik.http.routers.frame-public-deny.priority: "1000"
-      traefik.http.routers.frame-public-deny.rule: (Host(`${CLOUDFLARE_PUBLIC_HOSTNAME:-frame.invalid}`) || HeaderRegexp(`Cf-Ray`, `.+`)) && (Path(`/audio`) || Path(`/audio/admin`) || PathPrefix(`/audio/admin/`) || Path(`/audio/capture`) || PathPrefix(`/audio/capture/`) || Path(`/audio/api`) || PathPrefix(`/audio/api/`) || Path(`/slsui`) || PathPrefix(`/slsui/`) || Path(`/overlays`) || Path(`/overlays/setup`) || PathPrefix(`/overlays/setup/`) || Path(`/overlays/api`) || PathPrefix(`/overlays/api/`))
+      traefik.http.routers.frame-public-deny.rule: (Host(`${CLOUDFLARE_PUBLIC_HOSTNAME:-frame.invalid}`) || HeaderRegexp(`Cf-Ray`, `.+`)) && (Path(`/audio`) || Path(`/audio/admin`) || PathPrefix(`/audio/admin/`) || Path(`/audio/capture`) || PathPrefix(`/audio/capture/`) || Path(`/audio/api`) || PathPrefix(`/audio/api/`) || Path(`/slsui`) || PathPrefix(`/slsui/`) || Path(`/pipeline`) || PathPrefix(`/pipeline/`) || Path(`/overlays`) || Path(`/overlays/setup`) || PathPrefix(`/overlays/setup/`) || Path(`/overlays/api`) || PathPrefix(`/overlays/api/`))
       traefik.http.routers.frame-public-deny.middlewares: frame-public-deny-path
       traefik.http.routers.frame-public-deny.service: frame-auth
       traefik.http.services.frame-auth.loadbalancer.server.port: "3740"
@@ -142,6 +142,8 @@ services:
       REQUEST_TIMEOUT_MS: ${REQUEST_TIMEOUT_MS:-3000}
       AUDIO_BRIDGE_STATUS_URL: http://frame-audio-bridge:3728/api/internal/portal-status
       AUDIO_BRIDGE_STATUS_TOKEN: ${PORTAL_SERVICE_TOKEN}
+      PHOTO_PIPELINE_URL: http://frame-pipeline-photos:3735
+      PHOTO_PIPELINE_TOKEN: ${PORTAL_SERVICE_TOKEN}
       PORTAL_USERNAME: ${PORTAL_USERNAME:-}
       PORTAL_PASSWORD: ${PORTAL_PASSWORD:-}
       PORTAL_REALM: ${PORTAL_REALM:-FRAME Portal}

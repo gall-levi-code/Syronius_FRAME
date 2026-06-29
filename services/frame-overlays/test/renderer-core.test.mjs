@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { QUALITY, QualityStabilizer, canvasPixelSize, normalizedTelemetryBlockWidth, normalizedTelemetryColumns, qualityStatusText, resolvedTelemetryColumnCount, shouldResetRuntimeState, telemetryAvailability, telemetryGridPixelWidth, telemetryIsStale } from "../public/renderer-core.js";
+import { QUALITY, QualityStabilizer, ServiceReloadWatchdog, canvasPixelSize, compactTelemetryBlockWidth, normalizedTelemetryBlockWidth, normalizedTelemetryColumns, qualityStatusText, resolvedTelemetryColumnCount, shouldResetRuntimeState, telemetryAvailability, telemetryGridPixelWidth, telemetryIsStale } from "../public/renderer-core.js";
 import { clampBitrateLevels, clampNumericValue, clampRttLevels, samplingWindowLabel } from "../public/wizard-core.js";
 import { deriveUploadView, uploadSummary } from "../public/upload-renderer-core.js";
 
@@ -15,6 +15,20 @@ test("quality requires a streak before showing BAD and avoids initial BAD flicke
 test("visual-only revisions preserve runtime state while binding changes reset it", () => {
   assert.equal(shouldResetRuntimeState({ telemetry_identity:"a", revision:"1" }, { telemetry_identity:"a", revision:"2" }), false);
   assert.equal(shouldResetRuntimeState({ telemetry_identity:"a" }, { telemetry_identity:"b" }), true);
+});
+
+test("service reload watchdog reloads once after an outage recovers", () => {
+  let reloads = 0;
+  const watchdog = new ServiceReloadWatchdog({ reload:() => reloads += 1, schedule:(callback) => callback() });
+  watchdog.markOffline();
+  assert.equal(watchdog.markOnline(), false);
+  assert.equal(reloads, 0);
+  watchdog.markOffline();
+  watchdog.markOffline();
+  assert.equal(watchdog.markOnline(), true);
+  assert.equal(reloads, 1);
+  assert.equal(watchdog.markOnline(), false);
+  assert.equal(reloads, 1);
 });
 
 test("staleness and high-DPI canvas dimensions are time and pixel aware", () => {
@@ -41,6 +55,11 @@ test("compact GOOD status includes bitrate without opening the bitrate card", ()
   assert.equal(qualityStatusText(QUALITY.GOOD, { bitrate:7200 }, config, true), "GOOD · 7.20 Mbps");
   assert.equal(qualityStatusText(QUALITY.GOOD, { bitrate:7200 }, { ...config, show_bitrate_in_good:false }, true), "GOOD");
   assert.equal(qualityStatusText(QUALITY.GOOD, { bitrate:7200 }, config, false), "GOOD");
+});
+
+test("compact telemetry block width keeps configured width as the floor", () => {
+  assert.equal(compactTelemetryBlockWidth(160, 90, 42), 160);
+  assert.equal(compactTelemetryBlockWidth(160, 180, 42), 222);
 });
 
 test("sampling history reports the visible time window", () => {

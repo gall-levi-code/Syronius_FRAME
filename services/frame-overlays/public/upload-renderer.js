@@ -1,4 +1,5 @@
 import { deriveUploadView, formatBytes, formatDuration, uploadSummary } from "./upload-renderer-core.js";
+import { ServiceReloadWatchdog } from "./renderer-core.js";
 
 let payload = window.FRAME_OVERLAY;
 let preset = payload.preset;
@@ -9,6 +10,7 @@ let restTimer;
 let settingsTimer;
 let restInflight = false;
 let lastSnapshot;
+const reloadWatchdog = new ServiceReloadWatchdog();
 const previewMode = new URLSearchParams(location.search).has("preview");
 const widget = document.querySelector("#widget");
 const status = document.querySelector("#upload-status");
@@ -54,8 +56,8 @@ function connectEvents() {
   eventSource?.close();
   if (!payload.events_url || !("EventSource" in window)) return startRestFallback();
   eventSource = new EventSource(payload.events_url);
-  eventSource.addEventListener("open", stopRestFallback);
-  eventSource.addEventListener("telemetry", (event) => { stopRestFallback(); acceptSnapshot(JSON.parse(event.data)); });
+  eventSource.addEventListener("open", () => { reloadWatchdog.markOnline(); stopRestFallback(); });
+  eventSource.addEventListener("telemetry", (event) => { reloadWatchdog.markOnline(); stopRestFallback(); acceptSnapshot(JSON.parse(event.data)); });
   eventSource.addEventListener("config", (event) => applyPayload(JSON.parse(event.data)));
   eventSource.onerror = startRestFallback;
   clearInterval(settingsTimer);
@@ -71,12 +73,13 @@ function stopRestFallback() { clearInterval(restTimer); restTimer = undefined; }
 async function refreshTelemetry() {
   if (restInflight || !payload.stats_url) return;
   restInflight = true;
-  try { const response = await fetch(payload.stats_url,{cache:"no-store"}); if(response.ok) acceptSnapshot(await response.json()); }
+  try { const response = await fetch(payload.stats_url,{cache:"no-store"}); if(response.ok){reloadWatchdog.markOnline();acceptSnapshot(await response.json());} }
+  catch { reloadWatchdog.markOffline(); }
   finally { restInflight = false; }
 }
 async function refreshSettings() {
-  try { const response=await fetch(payload.settings_url,{cache:"no-store"}); if(response.ok){const next=await response.json();if(next.revision!==payload.revision)applyPayload(next);} }
-  catch { /* Keep last-known configuration while SSE reconnects. */ }
+  try { const response=await fetch(payload.settings_url,{cache:"no-store"}); if(response.ok){reloadWatchdog.markOnline();const next=await response.json();if(next.revision!==payload.revision)applyPayload(next);} }
+  catch { reloadWatchdog.markOffline(); }
 }
 function acceptSnapshot(snapshot) { if(lastSnapshot && snapshot.sequence < lastSnapshot.sequence)return; lastSnapshot=snapshot; render(); }
 

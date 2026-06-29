@@ -23,7 +23,7 @@
         } catch {}
       })();
     </script>
-    <link rel="stylesheet" href="/assets/styles.css?v=frame-theme-tab" />
+    <link rel="stylesheet" href="/assets/styles.css?v=photo-pipeline-settings" />
   </head>
   <body>
     <script>
@@ -56,6 +56,7 @@
       <nav class="portal-nav" aria-label="FRAME Portal">
         <a href="/dashboard" data-portal-nav="dashboard">Dashboard</a>
         <a href="/status" data-portal-nav="status">Status</a>
+        <a href="/pipeline" data-portal-nav="pipeline" hidden>Pipeline</a>
         <a href="/theme" data-portal-nav="theme">Theme</a>
       </nav>
 
@@ -184,6 +185,42 @@
         </div>
       </section>
 
+      <section id="pipeline-settings" class="portal-section pipeline-settings" data-portal-view="pipeline">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Photo processing</p>
+            <h2>Pipeline</h2>
+          </div>
+          <span id="pipeline-state" class="pill pill-idle">Loading</span>
+        </div>
+        <form id="pipeline-form" class="pipeline-form">
+          <label>Long edge
+            <input id="pipeline-long-edge" type="number" min="0" max="12000" step="1">
+          </label>
+          <label>Quality
+            <span class="pipeline-quality-row">
+              <input id="pipeline-quality" type="range" min="40" max="100" step="1">
+              <output id="pipeline-quality-value" for="pipeline-quality">92</output>
+            </span>
+          </label>
+          <div class="pipeline-presets" aria-label="Quality presets">
+            <button type="button" data-quality-preset="75">Small</button>
+            <button type="button" data-quality-preset="85">Balanced</button>
+            <button type="button" data-quality-preset="92">High</button>
+            <button type="button" data-quality-preset="98">Max</button>
+          </div>
+          <label>Maximum file size
+            <span class="pipeline-size-row">
+              <input id="pipeline-max-output" type="number" min="0" max="500" step="0.1">
+              <span>MB</span>
+            </span>
+          </label>
+          <div class="pipeline-actions">
+            <button id="pipeline-save" class="text-button primary-text-button" type="submit">Save</button>
+          </div>
+        </form>
+      </section>
+
       <footer class="portal-footer">
         <span>FRAME Portal</span>
         <span id="footer-state">Connecting to status API</span>
@@ -264,6 +301,6 @@
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script src="/assets/portal.js?v=frame-theme-tab"></script>
+    <script src="/assets/portal.js?v=photo-pipeline-settings"></script>
   </body>
 </html>

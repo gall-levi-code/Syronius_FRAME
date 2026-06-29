@@ -125,6 +125,7 @@
     "/audio/capture",
     "/overlays/setup",
     "/overlays/api",
+    "/pipeline",
     "/slsui"
   ]
 }

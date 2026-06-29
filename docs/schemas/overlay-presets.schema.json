@@ -108,6 +108,7 @@
         "show_latency": { "type": "boolean" },
         "show_buffer": { "type": "boolean" },
         "show_chart": { "type": "boolean" },
+        "show_chart_legend": { "type": "boolean" },
         "show_meter": { "type": "boolean" },
         "show_server": { "type": "boolean" },
         "show_dropped": { "type": "boolean" },

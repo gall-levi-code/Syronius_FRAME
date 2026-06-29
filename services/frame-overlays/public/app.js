@@ -12,7 +12,7 @@ import {
 const defaultOrder = ["header", "bitrate", "rtt", "latency", "buffer", "server", "dropped", "uptime", "meter", "chart", "recovery"];
 const connectivityLayoutRangeFields = [["layout.pad", "Padding", 0, 200, 1], ["layout.scale", "Scale", .5, 3, .05]];
 const uploadLayoutRangeFields = [["layout.pad", "Padding", 0, 200, 1], ["layout.scale", "Scale", .5, 3, .05], ["config.width_px", "Card width", 280, 1200, 10]];
-const blockSizeRangeFields = [["config.telemetry_block_width_px", "Block width", 120, 280, 1]];
+const blockSizeRangeFields = [["config.telemetry_block_width_px", "Block width", 120, 280, 1], ["config.telemetry_block_height_px", "Block height", 40, 400, 1]];
 const samplingRangeFields = [["config.poll_ms", "Poll interval (ms)", 20, 2000, 20], ["config.history_len", "Poll history count", 2, 120, 1]];
 const blockThemeColorFields = [["text_color", "Text color"], ["muted_color", "Subheader color"]];
 const blockThemeShapeRangeFields = [["theme.border_radius_px", "Corner radius", 0, 50, 1], ["theme.font_size_base_px", "Font size", 10, 32, 1]];
@@ -25,6 +25,7 @@ const uploadAdapterOptions = [
 ];
 const dockLabels = { tl:"Top left",t:"Top",tr:"Top right",l:"Left",c:"Center",r:"Right",bl:"Bottom left",b:"Bottom",br:"Bottom right" };
 const blockDensityOptions = [["compact", "Compact", 56], ["normal", "Normal", 72], ["spacious", "Spacious", 104]];
+const fakePreviewStorageKey = "frame-overlays-fake-preview";
 const telemetryBlockFields = [
   ["header", "Header", ["show_name", "show_status"]],
   ["bitrate", "Bitrate", ["show_bitrate"]],
@@ -54,7 +55,7 @@ const state = {
   selectedSourceId: null,
   sourceDraft: null,
   designDraft: null,
-  fakePreview: true,
+  fakePreview: readStoredFakePreview(),
   previewFrameSize: null,
   create: null,
   pendingSave: new Set(),
@@ -87,8 +88,10 @@ initializeTheme();
 themeToggle.addEventListener("click", toggleTheme);
 fakePreviewToggle.addEventListener("change", () => {
   state.fakePreview = fakePreviewToggle.checked;
+  writeStoredFakePreview(state.fakePreview);
   renderPreview();
 });
+fakePreviewToggle.checked = state.fakePreview;
 preview.addEventListener("load", sendPreview);
 window.addEventListener("resize", applyPreviewScale);
 window.addEventListener("storage", (event) => {
@@ -97,6 +100,11 @@ window.addEventListener("storage", (event) => {
     return;
   }
   if (event.key === "frame-theme" && (event.newValue === "day" || event.newValue === "night")) setThemeMode(event.newValue, false);
+  if (event.key === fakePreviewStorageKey) {
+    state.fakePreview = readStoredFakePreview();
+    fakePreviewToggle.checked = state.fakePreview;
+    renderPreview();
+  }
 });
 window.addEventListener("message", (event) => {
   if (!isTrustedPreviewOrigin(event.origin) || event.data?.type !== "frame-preview-size") return;
@@ -149,6 +157,20 @@ function readStoredTheme() {
     if (stored === "day" || stored === "night") return stored;
   } catch {}
   return "night";
+}
+
+function readStoredFakePreview() {
+  try {
+    return localStorage.getItem(fakePreviewStorageKey) !== "false";
+  } catch {
+    return true;
+  }
+}
+
+function writeStoredFakePreview(value) {
+  try {
+    localStorage.setItem(fakePreviewStorageKey, value ? "true" : "false");
+  } catch {}
 }
 
 async function load(preserveSelection = false) {
@@ -535,7 +557,7 @@ function connectivityTelemetryMarkup(draft) {
 
 function advancedTimingMarkup(draft) {
   const template = templateForDraft(draft);
-  return `<details id="chart-timing-section" class="settings-section" open ${draft.config.show_chart === false ? "hidden" : ""}><summary>Advanced timing</summary><div class="settings-body"><div class="sampling-group"><div class="sampling-head"><h3>Chart Sample Rates</h3><span id="sampling-window">${escapeHtml(samplingWindowLabel(draft.config.poll_ms, draft.config.history_len))} visible history</span></div><div class="range-list">${samplingRangeFields.map((field) => rangeControl(field, draft, template)).join("")}</div></div></div></details>`;
+  return `<details id="chart-timing-section" class="settings-section" open ${draft.config.show_chart === false ? "hidden" : ""}><summary>Advanced timing</summary><div class="settings-body"><div class="toggle-grid"><label><input type="checkbox" data-toggle="show_chart_legend" ${draft.config.show_chart_legend !== false ? "checked" : ""}>Show chart legend</label></div><div class="sampling-group"><div class="sampling-head"><h3>Chart Sample Rates</h3><span id="sampling-window">${escapeHtml(samplingWindowLabel(draft.config.poll_ms, draft.config.history_len))} visible history</span></div><div class="range-list">${samplingRangeFields.map((field) => rangeControl(field, draft, template)).join("")}</div></div></div></details>`;
 }
 
 function bindDesignControls(type) {
@@ -560,6 +582,7 @@ function bindDesignControls(type) {
     setPath(state.designDraft, path, value);
     setRangeInputs(path, value);
     updateSamplingWindow();
+    if (path === "config.telemetry_block_height_px") syncBlockDensityButtons();
     designChanged(0);
   }));
   mainContent.querySelectorAll("[data-color]").forEach((input) => input.addEventListener("input", () => {
@@ -583,7 +606,9 @@ function bindDesignControls(type) {
     });
     mainContent.querySelector("[data-telemetry-columns-range]")?.addEventListener("pointerup", () => queueAutosave("design", 0));
     mainContent.querySelectorAll("[data-block-density]").forEach((button) => button.addEventListener("click", () => {
-      state.designDraft.config.telemetry_block_height_px = Number(button.dataset.blockHeight);
+      const height = Number(button.dataset.blockHeight);
+      state.designDraft.config.telemetry_block_height_px = height;
+      setRangeInputs("config.telemetry_block_height_px", height);
       syncBlockDensityButtons();
       designChanged(0);
     }));
@@ -614,6 +639,7 @@ function updateRangeInput(input, saveNow) {
   setPath(state.designDraft, path, value);
   setRangeInputs(path, value);
   updateSamplingWindow();
+  if (path === "config.telemetry_block_height_px") syncBlockDensityButtons();
   designChanged(saveNow ? 0 : null);
 }
 
@@ -699,8 +725,13 @@ function renderPreview() {
 }
 
 function sendPreview() {
-  if (!state.fakePreview || !state.designDraft) return;
-  preview.contentWindow?.postMessage({ type:"frame-preview", preset:state.designDraft, telemetry_identity:"preview", stream_display_name:state.sourceDraft?.display_name || state.designDraft.name }, location.origin);
+  if (!state.designDraft) return;
+  preview.contentWindow?.postMessage({
+    type:"frame-preview",
+    preset:state.designDraft,
+    stream_display_name:state.sourceDraft?.display_name || state.designDraft.name,
+    ...(state.sourceDraft ? { source:state.sourceDraft } : {}),
+  }, previewTargetOrigin());
 }
 
 function updatePreviewCaption() {
@@ -841,7 +872,15 @@ function previewPresetUrl(presetId) {
 }
 
 function previewSourceUrl(source) {
-  return `${sourceUrl(source)}?elementPreview=1`;
+  return `/overlays/view/${encodeURIComponent(source.slug)}/${encodeURIComponent(source.source_key)}?elementPreview=1`;
+}
+
+function previewTargetOrigin() {
+  try {
+    return new URL(preview.getAttribute("src") || location.href, location.href).origin;
+  } catch {
+    return location.origin;
+  }
 }
 
 function isTrustedPreviewOrigin(origin) {

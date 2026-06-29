@@ -63,6 +63,7 @@
         "show_latency": false,
         "show_buffer": false,
         "show_chart": true,
+        "show_chart_legend": true,
         "show_meter": true,
         "show_server": true,
         "show_dropped": true,
