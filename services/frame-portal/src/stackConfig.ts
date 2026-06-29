@@ -159,6 +159,12 @@ export function buildPortalTools(
   });
 }
 
+export function isPhotoPipelineEnabled(loadedStackConfig: LoadedStackConfig): boolean {
+  return Object.entries(loadedStackConfig.config.capabilities).some(
+    ([name, enabled]) => enabled === true && name.startsWith("frame-photo-"),
+  );
+}
+
 function routeIsPublic(route: string, publicPrefixes: string[]): boolean {
   const path = route.split("#", 1)[0] || "/";
   return publicPrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));

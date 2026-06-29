@@ -520,6 +520,64 @@ h3 {
   gap: 12px;
 }
 
+.pipeline-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.pipeline-form label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--frame-label);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.pipeline-quality-row,
+.pipeline-size-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.pipeline-quality-row input {
+  min-width: 140px;
+}
+
+.pipeline-quality-row output,
+.pipeline-size-row span {
+  min-width: 34px;
+  color: var(--frame-text);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.pipeline-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pipeline-presets button {
+  min-height: 38px;
+  padding: 6px 9px;
+  border: 1px solid var(--frame-border);
+  border-radius: 6px;
+  background: var(--frame-panel-strong);
+  color: var(--frame-text);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.pipeline-presets button:hover,
+.pipeline-presets button:focus-visible {
+  border-color: var(--frame-accent-border);
+  color: var(--frame-accent-strong);
+}
+
 .theme-control-panel {
   border: 1px solid var(--frame-border);
   border-radius: 7px;
@@ -1061,6 +1119,10 @@ body.theme-day {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .pipeline-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .activity-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1134,7 +1196,8 @@ body.theme-day {
 
   .theme-choice-grid,
   .theme-editor-grid,
-  .theme-color-grid {
+  .theme-color-grid,
+  .pipeline-form {
     grid-template-columns: 1fr;
   }
 

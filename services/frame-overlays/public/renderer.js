@@ -1,4 +1,4 @@
-import { QUALITY, QualityStabilizer, canvasPixelSize, normalizedTelemetryBlockWidth, normalizedTelemetryOrder, qualityStatusText, resolvedTelemetryColumnCount, shouldResetRuntimeState, telemetryAvailability, telemetryGridPixelWidth, telemetryIsStale } from "./renderer-core.js";
+import { QUALITY, QualityStabilizer, ServiceReloadWatchdog, canvasPixelSize, compactTelemetryBlockWidth, normalizedTelemetryBlockWidth, normalizedTelemetryOrder, qualityStatusText, resolvedTelemetryColumnCount, shouldResetRuntimeState, telemetryAvailability, telemetryGridPixelWidth, telemetryIsStale } from "./renderer-core.js";
 
 let payload = window.FRAME_OVERLAY;
 let preset = payload.preset;
@@ -11,6 +11,7 @@ let restTimer;
 let settingsTimer;
 let restInflight = false;
 let lastTelemetry;
+const reloadWatchdog = new ServiceReloadWatchdog();
 const history = [];
 const defaultOrder = ["header", "bitrate", "rtt", "latency", "buffer", "server", "dropped", "uptime", "meter", "chart", "recovery"];
 const telemetryGridGapPx = 7;
@@ -22,6 +23,8 @@ const statusValue = document.querySelector("#status-value");
 const streamName = document.querySelector("#stream-name");
 const meterFill = document.querySelector("#meter-fill");
 const chart = document.querySelector("#chart");
+const chartBlock = document.querySelector("#chart-block");
+const chartLegend = document.querySelector(".chart-legend");
 const chartWarnValue = document.querySelector("#chart-warn-value");
 const chartRttValue = document.querySelector("#chart-rtt-value");
 const chartRttLegend = document.querySelector(".rtt-line");
@@ -31,6 +34,8 @@ const values = new Map([...layout.querySelectorAll("[data-value]")].map((element
 const query = new URLSearchParams(location.search);
 const previewMode = query.has("preview");
 const elementPreviewMode = query.has("elementPreview");
+let chartHasRtt = false;
+let compactGoodActive = false;
 
 if (previewMode) document.body.classList.add("preview");
 if (elementPreviewMode) document.body.classList.add("element-preview");
@@ -79,8 +84,8 @@ function connectEvents() {
   eventSource?.close();
   if (!payload.events_url || !("EventSource" in window)) return startRestFallback();
   eventSource = new EventSource(payload.events_url);
-  eventSource.addEventListener("open", stopRestFallback);
-  eventSource.addEventListener("telemetry", (event) => { stopRestFallback(); acceptTelemetry(JSON.parse(event.data)); });
+  eventSource.addEventListener("open", () => { reloadWatchdog.markOnline(); stopRestFallback(); });
+  eventSource.addEventListener("telemetry", (event) => { reloadWatchdog.markOnline(); stopRestFallback(); acceptTelemetry(JSON.parse(event.data)); });
   eventSource.addEventListener("config", (event) => applyPayload(JSON.parse(event.data)));
   eventSource.addEventListener("source-error", (event) => renderNoSignal(JSON.parse(event.data).error || "SOURCE UNAVAILABLE"));
   eventSource.onerror = startRestFallback;
@@ -104,7 +109,9 @@ async function refreshTelemetry() {
   restInflight = true;
   try {
     const response = await fetch(payload.stats_url, { cache: "no-store" });
-    if (response.ok) acceptTelemetry(await response.json());
+    if (response.ok) { reloadWatchdog.markOnline(); acceptTelemetry(await response.json()); }
+  } catch {
+    reloadWatchdog.markOffline();
   } finally { restInflight = false; }
 }
 
@@ -112,9 +119,12 @@ async function refreshSettings() {
   try {
     const response = await fetch(payload.settings_url, { cache: "no-store" });
     if (!response.ok) return;
+    reloadWatchdog.markOnline();
     const next = await response.json();
     if (next.revision !== payload.revision) applyPayload(next);
-  } catch { /* Last-known configuration remains active while SSE reconnects. */ }
+  } catch {
+    reloadWatchdog.markOffline();
+  }
 }
 
 function acceptTelemetry(snapshot) {
@@ -167,6 +177,7 @@ function renderNoSignal(label, confirmed = true) {
   document.documentElement.style.setProperty("--widget-opacity", String(confirmed ? theme.bg_opacity_bad ?? 0.72 : theme.bg_opacity_warn ?? 0.5));
   statusValue.textContent = label;
   streamName.textContent = streamDisplayName;
+  compactGoodActive = false;
   applyHeaderVisibility();
   for (const [id, block] of blocks) block.hidden = id !== "header";
   applyBlockOrder();
@@ -184,6 +195,7 @@ function applyHeaderVisibility(forceStatus = false) {
 }
 
 function applyBlockVisibility(compact, stableQuality, stats) {
+  compactGoodActive = Boolean(compact);
   const available = telemetryAvailability(stats);
   const showCompactBitrate = compact
     && stableQuality === QUALITY.GOOD
@@ -204,7 +216,10 @@ function applyBlockVisibility(compact, stableQuality, stats) {
     chart: config.show_chart && available.chart,
   };
   for (const [id, isVisible] of Object.entries(visible)) blocks.get(id).hidden = compact || !isVisible;
-  chartRttLegend.hidden = !available.rtt;
+  chartHasRtt = available.rtt;
+  chartBlock.classList.toggle("legend-hidden", config.show_chart_legend === false);
+  chartLegend.hidden = config.show_chart_legend === false;
+  chartRttLegend.hidden = !chartHasRtt;
   applyTelemetryColumns();
 }
 
@@ -231,7 +246,7 @@ function drawChart() {
   const rttMax = Math.min(5000, Math.max(500, config.chart_rtt_max || (config.rtt_bad_max || 3500) * 1.25));
   drawGuide(config.bitrate_warn_min ?? 2500, bitrateMax, theme.warn_color || "#ffd166", rect.width, rect.height);
   drawLine("bitrate", bitrateMax, theme.plot_primary || "#2cb4fb", rect.width, rect.height);
-  if (!chartRttLegend.hidden) drawLine("rtt", rttMax, theme.plot_secondary || "#8de7ff", rect.width, rect.height);
+  if (chartHasRtt) drawLine("rtt", rttMax, theme.plot_secondary || "#8de7ff", rect.width, rect.height);
   chartWarnValue.textContent = formatBitrate(config.bitrate_warn_min ?? 2500);
   chartRttValue.textContent = `0–${formatMilliseconds(rttMax)}`;
   context.globalAlpha = 1;
@@ -286,11 +301,26 @@ function applyLayout() {
 
 function applyTelemetryColumns() {
   const visibleCount = [...blocks.values()].filter((block) => !block.hidden).length || 1;
-  const blockWidth = normalizedTelemetryBlockWidth(config.telemetry_block_width_px ?? 160);
+  const baseBlockWidth = normalizedTelemetryBlockWidth(config.telemetry_block_width_px ?? 160);
+  const blockWidth = compactGoodActive
+    ? compactTelemetryBlockWidth(baseBlockWidth, statusValue.scrollWidth, compactHeaderChromeWidth())
+    : baseBlockWidth;
   const availableWidth = Math.max(blockWidth, window.innerWidth - ((preset.layout.pad ?? 20) * 2) - telemetryWidgetChromePx);
   const columns = resolvedTelemetryColumnCount(config.telemetry_columns, visibleCount, blockWidth, availableWidth, telemetryGridGapPx);
   layout.style.gridTemplateColumns = `repeat(${columns}, minmax(0, ${blockWidth}px))`;
   widget.style.width = `${telemetryGridPixelWidth(columns, blockWidth, telemetryGridGapPx, telemetryWidgetChromePx)}px`;
+}
+
+function compactHeaderChromeWidth() {
+  const style = getComputedStyle(widgetHead);
+  const dot = widgetHead.querySelector(".signal-dot");
+  const dotWidth = dot.hidden ? 0 : dot.getBoundingClientRect().width;
+  const gap = dotWidth ? pixels(style.columnGap || style.gap) : 0;
+  return pixels(style.paddingLeft) + pixels(style.paddingRight) + dotWidth + gap;
+}
+
+function pixels(value) {
+  return Number.parseFloat(value) || 0;
 }
 
 function publishPreviewSize() {

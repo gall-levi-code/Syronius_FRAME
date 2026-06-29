@@ -12,6 +12,13 @@ export interface PipelineConfig {
   maxPixels: number;
   conversionAttempts: number;
   archiveOriginals: boolean;
+  defaultSettings: PipelineProcessingSettings;
+}
+
+export interface PipelineProcessingSettings {
+  long_edge_px: number;
+  jpeg_quality: number;
+  max_output_mb: number;
 }
 
 export function loadConfig(): PipelineConfig {
@@ -26,6 +33,11 @@ export function loadConfig(): PipelineConfig {
     maxPixels: integer("PHOTO_MAX_MEGAPIXELS", 80, 1, 1000) * 1_000_000,
     conversionAttempts: integer("PHOTO_CONVERSION_ATTEMPTS", 3, 1, 10),
     archiveOriginals: boolean("PHOTO_ARCHIVE_ORIGINALS", true),
+    defaultSettings: {
+      long_edge_px: integer("PHOTO_LONG_EDGE_PX", 0, 0, 12000),
+      jpeg_quality: integer("PHOTO_JPEG_QUALITY", 92, 40, 100),
+      max_output_mb: decimal("PHOTO_MAX_OUTPUT_MB", 0, 0, 500),
+    },
   };
 }
 
@@ -43,4 +55,12 @@ function boolean(name: string, fallback: boolean): boolean {
   if (value === "true") return true;
   if (value === "false") return false;
   throw new Error(`${name} must be true or false.`);
+}
+
+function decimal(name: string, fallback: number, minimum: number, maximum: number): number {
+  const value = Number.parseFloat(process.env[name]?.trim() || String(fallback));
+  if (!Number.isFinite(value) || value < minimum || value > maximum) {
+    throw new Error(`${name} must be a number from ${minimum} to ${maximum}.`);
+  }
+  return value;
 }

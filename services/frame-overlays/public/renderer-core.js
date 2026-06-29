@@ -30,6 +30,13 @@ export function qualityStatusText(stable, stats, config, compact) {
   return label;
 }
 
+export function compactTelemetryBlockWidth(baseBlockWidth, contentWidth, chromeWidth = 0) {
+  const base = normalizedTelemetryBlockWidth(baseBlockWidth);
+  const content = Math.max(0, Math.ceil(Number(contentWidth) || 0));
+  const chrome = Math.max(0, Math.ceil(Number(chromeWidth) || 0));
+  return Math.max(base, content + chrome);
+}
+
 export class QualityStabilizer {
   constructor(initial = QUALITY.UNKNOWN) {
     this.stable = initial;
@@ -44,6 +51,29 @@ export class QualityStabilizer {
     if (candidate === QUALITY.WARN && this.warnStreak >= Math.max(config.bitrate_streak_warn || 1, config.rtt_streak_warn || 1)) this.stable = QUALITY.WARN;
     if (candidate === QUALITY.BAD && this.badStreak >= Math.max(config.bitrate_streak_bad || 1, config.rtt_streak_bad || 1)) this.stable = QUALITY.BAD;
     return this.stable;
+  }
+}
+
+export class ServiceReloadWatchdog {
+  constructor({ failureThreshold = 2, reloadDelayMs = 500, reload = () => location.reload(), schedule = (callback, delay) => setTimeout(callback, delay) } = {}) {
+    this.failureThreshold = Math.max(1, Math.floor(Number(failureThreshold) || 1));
+    this.reloadDelayMs = Math.max(0, Number(reloadDelayMs) || 0);
+    this.reload = reload;
+    this.schedule = schedule;
+    this.failures = 0;
+    this.wasOffline = false;
+    this.reloadQueued = false;
+  }
+  markOffline() {
+    this.failures += 1;
+    if (this.failures >= this.failureThreshold) this.wasOffline = true;
+  }
+  markOnline() {
+    this.failures = 0;
+    if (!this.wasOffline || this.reloadQueued) return false;
+    this.reloadQueued = true;
+    this.schedule(this.reload, this.reloadDelayMs);
+    return true;
   }
 }
 

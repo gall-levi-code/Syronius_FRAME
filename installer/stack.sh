@@ -78,11 +78,23 @@ assert_docker() {
 }
 
 runtime() {
-  docker run --rm -i \
-    --user "$(id -u):$(id -g)" \
-    --mount "type=bind,source=$ROOT_DIR,target=/workspace" \
-    -w /workspace \
-    "$RUNTIME_IMAGE" node installer/frame-installer.mjs "$@"
+  data_root=$(runtime_data_root "$@")
+  if is_absolute_path "$data_root"; then
+    mkdir -p "$data_root"
+    docker run --rm -i \
+      --user "$(id -u):$(id -g)" \
+      --mount "type=bind,source=$ROOT_DIR,target=/workspace" \
+      --mount "type=bind,source=$data_root,target=/frame-data" \
+      --env FRAME_INSTALLER_DATA_ROOT=/frame-data \
+      -w /workspace \
+      "$RUNTIME_IMAGE" node installer/frame-installer.mjs "$@"
+  else
+    docker run --rm -i \
+      --user "$(id -u):$(id -g)" \
+      --mount "type=bind,source=$ROOT_DIR,target=/workspace" \
+      -w /workspace \
+      "$RUNTIME_IMAGE" node installer/frame-installer.mjs "$@"
+  fi
 }
 
 verify() {
@@ -240,6 +252,41 @@ env_value() {
   printf "%s" "$default"
 }
 
+argument_value() {
+  wanted=$1
+  shift
+  previous=
+  for argument in "$@"; do
+    if [ "$previous" = "$wanted" ]; then
+      printf "%s" "$argument"
+      return
+    fi
+    previous=$argument
+  done
+}
+
+is_absolute_path() {
+  case "$1" in
+    /*|?:/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+host_data_path() {
+  data_root=$1
+  if is_absolute_path "$data_root"; then
+    printf "%s" "$data_root"
+  else
+    printf "%s/%s" "$ROOT_DIR" "${data_root#./}"
+  fi
+}
+
+runtime_data_root() {
+  data_root=$(argument_value --data-root "$@")
+  [ -n "$data_root" ] || data_root=$(env_value FRAME_DATA_ROOT ./data)
+  printf "%s" "$data_root"
+}
+
 profile_enabled() {
   profiles=$(env_value COMPOSE_PROFILES "")
   case ",$profiles," in
@@ -310,21 +357,23 @@ configure_network_storage() {
     2) mode=HYBRID ;;
     *) mode=$current_mode ;;
   esac
+  hostname=
   if [ "$mode" = "HYBRID" ]; then
     read_default "Cloudflare public hostname" "$(env_value CLOUDFLARE_PUBLIC_HOSTNAME "")"
     hostname=$REPLY
-    run_install --mode HYBRID --public-hostname "$hostname"
-  else
-    run_install --mode LAN
   fi
 
   read_default "FRAME Edge HTTP port" "$(env_value EDGE_HTTP_PORT 80)"
   edge_port=$REPLY
-  read_default "Host-visible FRAME data path" "$(env_value FRAME_HOST_DATA_ROOT "$ROOT_DIR/data")"
-  host_data=$REPLY
+  read_default "FRAME data folder" "$(env_value FRAME_DATA_ROOT "$ROOT_DIR/data")"
+  data_root=$REPLY
   read_timezone "$(env_value TIMEZONE America/Chicago)"
   timezone=$REPLY
-  run_install --edge-http-port "$edge_port" --host-data-root "$host_data" --set "TIMEZONE=$timezone"
+  if [ "$mode" = "HYBRID" ]; then
+    run_install --mode HYBRID --public-hostname "$hostname" --edge-http-port "$edge_port" --data-root "$data_root" --set "TIMEZONE=$timezone"
+  else
+    run_install --mode LAN --edge-http-port "$edge_port" --data-root "$data_root" --set "TIMEZONE=$timezone"
+  fi
 }
 
 configure_standard() {
@@ -362,7 +411,7 @@ show_setup_issues() {
       ISSUE_COUNT=$((ISSUE_COUNT + 1))
     fi
     data_root=$(env_value FRAME_DATA_ROOT ./data)
-    token_file="$ROOT_DIR/${data_root#./}/state/cloudflare-tunnel-token"
+    token_file="$(host_data_path "$data_root")/state/cloudflare-tunnel-token"
     token=""
     [ ! -f "$token_file" ] || token=$(cat "$token_file")
     if [ "${#token}" -lt 100 ] || [ "$token" = "paste_cloudflare_tunnel_token_here" ]; then
@@ -392,8 +441,7 @@ resolve_setup_issues() {
     run_install --set "PHOTO_FTP_PASSIVE_HOST=$REPLY"
   fi
   if { profile_enabled photo-ftp || profile_enabled photo-webupload; } && [ "$(env_value FRAME_HOST_DATA_ROOT /data)" = "/data" ]; then
-    read_default "Host-visible FRAME data path" "$ROOT_DIR/data"
-    run_install --host-data-root "$REPLY"
+    run_install --host-data-root "$(host_data_path "$(env_value FRAME_DATA_ROOT ./data)")"
   fi
   if [ -z "$(env_value PORTAL_USERNAME "")" ] || [ -z "$(env_value PORTAL_PASSWORD "")" ]; then
     ensure_portal_auth

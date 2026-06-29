@@ -106,16 +106,17 @@ Change the shared Portal login later:
 - Choose **Credentials and security**.
 - Update the Portal username, password, or session length.
 
-Use a host-visible data path for StreamerBot `.ready` watchers:
+Choose where FRAME stores generated data and expose that same path to StreamerBot `.ready`
+watchers:
 
 - Open `stack.cmd`.
 - Choose **Configure network/storage**.
-- Set the host data root to the Windows path that backs FRAME's `data` folder.
+- Set the FRAME data folder to the storage location you want, such as `E:\FRAME_DATA`.
 
 Then watch:
 
 ```text
-<host-data-root>\galleries
+<FRAME_DATA_ROOT>\galleries
 ```
 
 Include subfolders and process only files whose names end exactly in `.ready`.
@@ -244,7 +245,6 @@ The public-facing backlog for the alpha release line:
 
 - Add host-port conflict preflight detection.
 - Add LAN HTTPS and optional Cloudflare Access policy automation.
-- Define cross-platform external data-root mounting and reset boundaries.
 
 **Photo Workflow**
 

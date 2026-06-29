@@ -3,7 +3,7 @@ import { timingSafeEqual } from "node:crypto";
 import path from "node:path";
 import { loadConfig } from "./config";
 import { DockerClient } from "./dockerClient";
-import { buildPortalTools, loadStackConfig } from "./stackConfig";
+import { buildPortalTools, isPhotoPipelineEnabled, loadStackConfig } from "./stackConfig";
 import { StatusCollector } from "./statusCollector";
 
 const appConfig = loadConfig();
@@ -64,6 +64,7 @@ app.get("/api/portal", async (request, response, next) => {
       mode: stackConfig.config.mode,
       access_context: accessContext,
       config_source: stackConfig.source,
+      pipeline_enabled: isPhotoPipelineEnabled(stackConfig),
       tools: buildPortalTools(stackConfig, status.services, accessContext),
       restarts_enabled: appConfig.enableContainerRestarts,
       refresh_ms: appConfig.statusRefreshMs,
@@ -93,6 +94,24 @@ app.post("/status/services/:name/restart", async (request, response) => {
     response.status(202).json({ ok: true });
   } catch (error) {
     response.status(400).json({ error: errorMessage(error) });
+  }
+});
+
+app.get("/pipeline/api/settings", async (_request, response, next) => {
+  try {
+    response.setHeader("Cache-Control", "no-store");
+    response.json(await photoPipelineRequest("/api/internal/photo-pipeline/settings"));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/pipeline/api/settings", async (request, response, next) => {
+  try {
+    response.setHeader("Cache-Control", "no-store");
+    response.json(await photoPipelineRequest("/api/internal/photo-pipeline/settings", request.body));
+  } catch (error) {
+    next(error);
   }
 });
 
@@ -129,6 +148,23 @@ app.get(["/dashboard", "/status", "/theme"], (_request, response) => {
   response.sendFile(path.join(publicDir, "index.html"));
 });
 
+app.get("/pipeline", async (request, response, next) => {
+  try {
+    const stackConfig = await loadStackConfig(appConfig);
+    const accessContext = isPublicRequest(request.header("host"), appConfig.publicHostname)
+      ? "public"
+      : "lan";
+    if (!isPhotoPipelineEnabled(stackConfig) || accessContext !== "lan") {
+      response.redirect(302, "/dashboard");
+      return;
+    }
+    response.setHeader("Cache-Control", "no-store");
+    response.sendFile(path.join(publicDir, "index.html"));
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.use(
   (
     error: unknown,
@@ -136,8 +172,11 @@ app.use(
     response: express.Response,
     _next: express.NextFunction,
   ) => {
-    console.error("[portal]", error);
-    response.status(500).json({ error: "FRAME Portal request failed." });
+    const status = typeof (error as { status?: unknown }).status === "number"
+      ? Number((error as { status: number }).status)
+      : 500;
+    if (status === 500) console.error("[portal]", error);
+    response.status(status).json({ error: status === 500 ? "FRAME Portal request failed." : errorMessage(error) });
   },
 );
 
@@ -150,6 +189,42 @@ app.listen(appConfig.port, () => {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+async function photoPipelineRequest(pathname: string, body?: unknown): Promise<unknown> {
+  if (!isPhotoPipelineEnabled(await loadStackConfig(appConfig))) {
+    const error = new Error("Photo Pipeline is not enabled.");
+    Object.assign(error, { status: 404 });
+    throw error;
+  }
+  if (!appConfig.photoPipelineUrl || !appConfig.photoPipelineToken) {
+    const error = new Error("Photo Pipeline is not configured.");
+    Object.assign(error, { status: 503 });
+    throw error;
+  }
+  let response;
+  try {
+    response = await fetch(`${appConfig.photoPipelineUrl.replace(/\/+$/, "")}${pathname}`, {
+      method: body === undefined ? "GET" : "PUT",
+      headers: {
+        accept: "application/json",
+        "x-frame-service-token": appConfig.photoPipelineToken,
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch {
+    const error = new Error("Photo Pipeline is unavailable.");
+    Object.assign(error, { status: 503 });
+    throw error;
+  }
+  const result = await response.json().catch(() => ({ error: `Photo Pipeline request failed (${response.status}).` })) as { error?: unknown };
+  if (!response.ok) {
+    const error = new Error(typeof result.error === "string" ? result.error : `Photo Pipeline request failed (${response.status}).`);
+    Object.assign(error, { status: response.status });
+    throw error;
+  }
+  return result;
 }
 
 function readBasicCredentials(authorization: string | undefined): {

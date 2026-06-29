@@ -18,6 +18,8 @@ export interface AppConfig {
   requestTimeoutMs: number;
   audioBridgeStatusUrl?: string;
   audioBridgeStatusToken?: string;
+  photoPipelineUrl?: string;
+  photoPipelineToken?: string;
   portalUsername?: string;
   portalPassword?: string;
   portalRealm: string;
@@ -87,6 +89,8 @@ export function loadConfig(): AppConfig {
     requestTimeoutMs: readInt("REQUEST_TIMEOUT_MS", 3_000, 250),
     audioBridgeStatusUrl: process.env.AUDIO_BRIDGE_STATUS_URL?.trim() || undefined,
     audioBridgeStatusToken: process.env.AUDIO_BRIDGE_STATUS_TOKEN?.trim() || undefined,
+    photoPipelineUrl: process.env.PHOTO_PIPELINE_URL?.trim() || undefined,
+    photoPipelineToken: process.env.PHOTO_PIPELINE_TOKEN?.trim() || undefined,
     portalUsername,
     portalPassword,
     portalRealm: process.env.PORTAL_REALM?.trim() || "FRAME Portal",

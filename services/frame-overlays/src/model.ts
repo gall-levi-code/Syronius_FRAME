@@ -54,6 +54,7 @@ export interface ConnectivityConfig {
   show_latency?: boolean;
   show_buffer?: boolean;
   show_chart?: boolean;
+  show_chart_legend?: boolean;
   show_meter?: boolean;
   show_server?: boolean;
   show_dropped?: boolean;

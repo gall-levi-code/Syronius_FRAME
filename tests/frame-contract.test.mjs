@@ -215,6 +215,20 @@ test("photo pipeline is internal and activated by every photo capability", () =>
   }
 });
 
+test("Portal hides pipeline settings unless photo pipeline capabilities are enabled", async () => {
+  const [stackConfig, portalServer, frontend, html] = await Promise.all([
+    readFile("services/frame-portal/src/stackConfig.ts", "utf8"),
+    readFile("services/frame-portal/src/index.ts", "utf8"),
+    readFile("services/frame-portal/public/portal.js", "utf8"),
+    readFile("services/frame-portal/public/index.html", "utf8"),
+  ]);
+  assert.ok(stackConfig.includes("isPhotoPipelineEnabled"));
+  assert.ok(stackConfig.includes('name.startsWith("frame-photo-")'));
+  assert.ok(portalServer.includes("pipeline_enabled: isPhotoPipelineEnabled"));
+  assert.ok(frontend.includes("portalConfig?.pipeline_enabled === true"));
+  assert.ok(html.includes('data-portal-nav="pipeline" hidden'));
+});
+
 test("shared login route is always available through Hybrid routing", () => {
   assert.ok(PUBLIC_PREFIXES.includes("/auth"));
   const capabilities = Object.fromEntries(CAPABILITIES.map((name) => [name, false]));
@@ -270,7 +284,7 @@ test("Hybrid exposes unauthenticated read-only stream stats without exposing Str
 test("FRAME Edge denies management surfaces when a tunnel bypasses the public gateway", async () => {
   const composeTemplate = await readFile("installer/templates/docker-compose.yml", "utf8");
   assert.ok(composeTemplate.includes("traefik.http.routers.frame-public-deny.rule"));
-  for (const route of ["/slsui", "/audio/admin", "/audio/capture", "/audio/api", "/overlays/setup", "/overlays/api"]) {
+  for (const route of ["/slsui", "/pipeline", "/audio/admin", "/audio/capture", "/audio/api", "/overlays/setup", "/overlays/api"]) {
     assert.ok(composeTemplate.includes(`Path(\`${route}\`)`), `${route} is missing from the Edge deny router`);
   }
 });

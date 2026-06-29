@@ -57,6 +57,13 @@ const elements = {
   themeConfirmCopy: document.getElementById("theme-confirm-copy"),
   themeConfirmCancel: document.getElementById("theme-confirm-cancel"),
   themeConfirmAccept: document.getElementById("theme-confirm-accept"),
+  pipelineState: document.getElementById("pipeline-state"),
+  pipelineForm: document.getElementById("pipeline-form"),
+  pipelineLongEdge: document.getElementById("pipeline-long-edge"),
+  pipelineQuality: document.getElementById("pipeline-quality"),
+  pipelineQualityValue: document.getElementById("pipeline-quality-value"),
+  pipelineMaxOutput: document.getElementById("pipeline-max-output"),
+  pipelineSave: document.getElementById("pipeline-save"),
 };
 
 let portalConfig = null;
@@ -68,6 +75,7 @@ let currentView = "dashboard";
 let themeSettings = null;
 let themePresetDraftKind = "color";
 let themeConfirmResolve = null;
+let pipelineSettingsLoaded = false;
 const MAX_LOG_LINES = 1000;
 const DEFAULT_THEME_PROFILE_ID = "frame-blue";
 const THEME_MODE_KEY = "frame-theme";
@@ -113,6 +121,8 @@ initialize();
 async function initialize() {
   try {
     portalConfig = await fetchJson("/api/portal");
+    renderPortalNav();
+    initializeView();
     renderAccessContext();
     renderTools(portalConfig.tools);
     scheduleRefresh(portalConfig.refresh_ms);
@@ -173,6 +183,14 @@ function bindEvents() {
   elements.themeConfirmDialog.addEventListener("cancel", (event) => {
     event.preventDefault();
     resolveThemeConfirm(false);
+  });
+  elements.pipelineForm.addEventListener("submit", savePipelineSettings);
+  elements.pipelineQuality.addEventListener("input", updatePipelineQualityLabel);
+  document.querySelectorAll("[data-quality-preset]").forEach((button) => {
+    button.addEventListener("click", () => {
+      elements.pipelineQuality.value = button.dataset.qualityPreset;
+      updatePipelineQualityLabel();
+    });
   });
   document.addEventListener("click", (event) => {
     if (elements.themePresetMenu.hidden) return;
@@ -310,9 +328,24 @@ function renderAccessContext() {
     : "<strong>LAN dashboard</strong><span>This browser can open both local management tools and public-safe presentation links.</span>";
 }
 
+function renderPortalNav() {
+  document.querySelectorAll("[data-portal-nav=\"pipeline\"]").forEach((link) => {
+    link.hidden = !pipelineVisible();
+  });
+}
+
+function pipelineVisible() {
+  return portalConfig?.pipeline_enabled === true && portalConfig?.access_context !== "public";
+}
+
 function initializeView() {
   const path = window.location.pathname.replace(/\/+$/, "") || "/dashboard";
-  currentView = path === "/status" ? "status" : path === "/theme" ? "theme" : "dashboard";
+  if (path === "/pipeline" && portalConfig && !pipelineVisible()) {
+    window.history.replaceState({}, "", "/dashboard");
+    currentView = "dashboard";
+  } else {
+    currentView = path === "/status" ? "status" : path === "/theme" ? "theme" : path === "/pipeline" ? "pipeline" : "dashboard";
+  }
   document.querySelectorAll("[data-portal-view]").forEach((element) => {
     element.hidden = !element.dataset.portalView.split(/\s+/).includes(currentView);
   });
@@ -322,7 +355,65 @@ function initializeView() {
     if (active) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   });
-  elements.pageTitle.textContent = currentView === "status" ? "System Status" : currentView === "theme" ? "Theme" : "Dashboard";
+  elements.pageTitle.textContent = currentView === "status"
+    ? "System Status"
+    : currentView === "theme" ? "Theme" : currentView === "pipeline" ? "Pipeline" : "Dashboard";
+  if (currentView === "pipeline" && pipelineVisible()) void loadPipelineSettings();
+}
+
+async function loadPipelineSettings() {
+  if (pipelineSettingsLoaded) return;
+  setPipelineState("Loading", "pill-idle");
+  try {
+    const payload = await fetchJson("/pipeline/api/settings");
+    renderPipelineSettings(payload.settings);
+    pipelineSettingsLoaded = true;
+    setPipelineState("Ready", "pill-ok");
+  } catch (error) {
+    setPipelineState("Unavailable", "pill-bad");
+    showToast(error.message || "Pipeline settings unavailable.");
+  }
+}
+
+function renderPipelineSettings(settings) {
+  elements.pipelineLongEdge.value = String(settings?.long_edge_px ?? 0);
+  elements.pipelineQuality.value = String(settings?.jpeg_quality ?? 92);
+  elements.pipelineMaxOutput.value = String(settings?.max_output_mb ?? 0);
+  updatePipelineQualityLabel();
+}
+
+async function savePipelineSettings(event) {
+  event.preventDefault();
+  elements.pipelineSave.disabled = true;
+  setPipelineState("Saving", "pill-warn");
+  try {
+    const payload = await fetchJson("/pipeline/api/settings", {
+      method: "PUT",
+      headers: { accept: "application/json", "content-type": "application/json" },
+      body: JSON.stringify({
+        long_edge_px: Number.parseInt(elements.pipelineLongEdge.value || "0", 10),
+        jpeg_quality: Number.parseInt(elements.pipelineQuality.value || "92", 10),
+        max_output_mb: Number.parseFloat(elements.pipelineMaxOutput.value || "0"),
+      }),
+    });
+    renderPipelineSettings(payload.settings);
+    setPipelineState("Saved", "pill-ok");
+    showToast("Pipeline settings saved.");
+  } catch (error) {
+    setPipelineState("Error", "pill-bad");
+    showToast(error.message || "Pipeline settings were not saved.");
+  } finally {
+    elements.pipelineSave.disabled = false;
+  }
+}
+
+function updatePipelineQualityLabel() {
+  elements.pipelineQualityValue.textContent = elements.pipelineQuality.value;
+}
+
+function setPipelineState(label, className) {
+  elements.pipelineState.textContent = label;
+  elements.pipelineState.className = `pill ${className}`;
 }
 
 function renderAlerts(alerts) {
