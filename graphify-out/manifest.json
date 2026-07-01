@@ -555,8 +555,8 @@
     "semantic_hash": ""
   },
   "tests/frame-contract.test.mjs": {
-    "mtime": 1782762670.2251787,
-    "ast_hash": "084983b565d80b719e110caad4068673",
+    "mtime": 1782919526.0385604,
+    "ast_hash": "7fdbcac487a547ba6b3cf31b0daf4687",
     "semantic_hash": ""
   },
   ".github/workflows/verify.yml": {

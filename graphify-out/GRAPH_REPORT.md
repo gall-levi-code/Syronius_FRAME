@@ -1,16 +1,16 @@
 # Graph Report - Syronius_FRAME  (2026-07-01)
 
 ## Corpus Check
-- 197 files · ~188,354 words
+- 197 files · ~188,367 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 4768 nodes · 7225 edges · 412 communities (386 shown, 26 thin omitted)
+- 4768 nodes · 7225 edges · 414 communities (388 shown, 26 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 45 edges (avg confidence: 0.8)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `83053ae1`
+- Built from commit: `1325ba32`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -382,14 +382,17 @@
 - [[_COMMUNITY_Community 376|Community 376]]
 - [[_COMMUNITY_Community 377|Community 377]]
 - [[_COMMUNITY_Community 378|Community 378]]
+- [[_COMMUNITY_Community 379|Community 379]]
 - [[_COMMUNITY_Community 380|Community 380]]
 - [[_COMMUNITY_Community 381|Community 381]]
+- [[_COMMUNITY_Community 382|Community 382]]
 - [[_COMMUNITY_Community 383|Community 383]]
 - [[_COMMUNITY_Community 384|Community 384]]
 - [[_COMMUNITY_Community 385|Community 385]]
 - [[_COMMUNITY_Community 386|Community 386]]
 - [[_COMMUNITY_Community 387|Community 387]]
 - [[_COMMUNITY_Community 388|Community 388]]
+- [[_COMMUNITY_Community 389|Community 389]]
 - [[_COMMUNITY_Community 390|Community 390]]
 - [[_COMMUNITY_Community 392|Community 392]]
 - [[_COMMUNITY_Community 393|Community 393]]
@@ -399,7 +402,6 @@
 - [[_COMMUNITY_Community 397|Community 397]]
 - [[_COMMUNITY_Community 398|Community 398]]
 - [[_COMMUNITY_Community 399|Community 399]]
-- [[_COMMUNITY_Community 400|Community 400]]
 - [[_COMMUNITY_Community 401|Community 401]]
 - [[_COMMUNITY_Community 402|Community 402]]
 - [[_COMMUNITY_Community 408|Community 408]]
@@ -442,7 +444,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (412 total, 26 thin omitted)
+## Communities (414 total, 26 thin omitted)
 
 ### Community 0 - "Community 0"
 Cohesion: 0.05
@@ -553,8 +555,8 @@ Cohesion: 0.08
 Nodes (25): additionalProperties, description, minimum, type, description, pattern, type, description (+17 more)
 
 ### Community 27 - "Community 27"
-Cohesion: 0.07
-Nodes (28): type, type, enum, type, type, enum, type, properties (+20 more)
+Cohesion: 0.09
+Nodes (22): type, type, enum, type, type, properties, enum, type (+14 more)
 
 ### Community 28 - "Community 28"
 Cohesion: 0.05
@@ -593,8 +595,8 @@ Cohesion: 0.09
 Nodes (22): additionalProperties, type, oneOf, $defs, connectivity_config, data_source, layout, preset (+14 more)
 
 ### Community 37 - "Community 37"
-Cohesion: 0.08
-Nodes (24): additionalProperties, type, oneOf, $defs, connectivity_config, data_source, design, preset (+16 more)
+Cohesion: 0.11
+Nodes (19): additionalProperties, type, oneOf, $defs, connectivity_config, data_source, preset, source (+11 more)
 
 ### Community 38 - "Community 38"
 Cohesion: 0.12
@@ -634,7 +636,7 @@ Nodes (11): createDiscordClient(), audioAdminCommand, audioCommand, registerComm
 
 ### Community 47 - "Community 47"
 Cohesion: 0.06
-Nodes (36): enum, enum, minimum, type, properties, enum, enum, chart_bitrate_line_style (+28 more)
+Nodes (36): enum, enum, minimum, type, enum, properties, enum, enum (+28 more)
 
 ### Community 48 - "Community 48"
 Cohesion: 0.07
@@ -662,7 +664,7 @@ Nodes (10): $ref, additionalProperties, properties, type, $ref, connectivity, de
 
 ### Community 54 - "Community 54"
 Cohesion: 0.12
-Nodes (16): pattern, type, pattern, type, pattern, type, audio_admin, overlays_wizard (+8 more)
+Nodes (16): pattern, type, pattern, type, audio_admin, overlays_wizard, theme, today_dashboard (+8 more)
 
 ### Community 55 - "Community 55"
 Cohesion: 0.17
@@ -721,8 +723,8 @@ Cohesion: 0.25
 Nodes (7): FRAME Portal, How To Install, How To Operate, Notes For Operators, Relies Upon, What You Use It For, Who This Is For
 
 ### Community 69 - "Community 69"
-Cohesion: 0.10
-Nodes (21): type, maxLength, type, properties, type, $ref, maxLength, minLength (+13 more)
+Cohesion: 0.09
+Nodes (23): type, design, maxLength, type, allOf, properties, required, type (+15 more)
 
 ### Community 70 - "Community 70"
 Cohesion: 0.08
@@ -1257,8 +1259,8 @@ Cohesion: 0.42
 Nodes (8): compareTransfers(), deriveUploadView(), finite(), focusTransfer(), formatBytes(), formatDuration(), timestamp(), transferPercent()
 
 ### Community 210 - "Community 210"
-Cohesion: 0.10
-Nodes (20): format, type, $ref, maxLength, minLength, type, $ref, created_at (+12 more)
+Cohesion: 0.09
+Nodes (22): format, type, $ref, maxLength, minLength, type, type, $ref (+14 more)
 
 ### Community 211 - "Community 211"
 Cohesion: 0.09
@@ -1317,8 +1319,8 @@ Cohesion: 0.33
 Nodes (6): 7.0 - Resource Planning, A) CPU, B) RAM, C) Disk, D) Network, E) Retention & Cleanup Defaults (V1)
 
 ### Community 225 - "Community 225"
-Cohesion: 0.33
-Nodes (5): additionalProperties, required, $schema, title, type
+Cohesion: 0.40
+Nodes (5): source_id, maxLength, minLength, pattern, type
 
 ### Community 226 - "Community 226"
 Cohesion: 0.12
@@ -1597,8 +1599,8 @@ Cohesion: 0.50
 Nodes (4): default, description, type, local
 
 ### Community 307 - "Community 307"
-Cohesion: 0.67
-Nodes (3): theme, pattern, type
+Cohesion: 0.50
+Nodes (4): routes, additionalProperties, required, type
 
 ### Community 308 - "Community 308"
 Cohesion: 0.67
@@ -1617,8 +1619,8 @@ Cohesion: 0.50
 Nodes (4): maximum, minimum, type, bg_opacity_good
 
 ### Community 312 - "Community 312"
-Cohesion: 0.17
-Nodes (12): additionalProperties, required, type, enum, type, properties, capabilities, mode (+4 more)
+Cohesion: 0.14
+Nodes (13): additionalProperties, additionalProperties, required, type, enum, type, properties, capabilities (+5 more)
 
 ### Community 313 - "Community 313"
 Cohesion: 0.50
@@ -1673,8 +1675,8 @@ Cohesion: 0.17
 Nodes (11): compilerOptions, esModuleInterop, forceConsistentCasingInFileNames, module, moduleResolution, outDir, rootDir, skipLibCheck (+3 more)
 
 ### Community 327 - "Community 327"
-Cohesion: 0.50
-Nodes (4): source, additionalProperties, required, type
+Cohesion: 0.67
+Nodes (3): pattern, type, photo_upload
 
 ### Community 328 - "Community 328"
 Cohesion: 0.50
@@ -1782,7 +1784,7 @@ Nodes (4): maximum, minimum, type, glow_offset_y_px
 
 ### Community 359 - "Community 359"
 Cohesion: 0.67
-Nodes (3): enum, type, level
+Nodes (3): today_remote, pattern, type
 
 ### Community 360 - "Community 360"
 Cohesion: 0.50
@@ -1820,6 +1822,10 @@ Nodes (3): maxLength, type, font_family
 Cohesion: 0.67
 Nodes (3): maxLength, type, good_color
 
+### Community 369 - "Community 369"
+Cohesion: 0.67
+Nodes (3): enum, type, health
+
 ### Community 370 - "Community 370"
 Cohesion: 0.67
 Nodes (3): maxLength, type, plot_primary
@@ -1844,6 +1850,10 @@ Nodes (3): text_color, maxLength, type
 Cohesion: 0.67
 Nodes (3): warn_color, maxLength, type
 
+### Community 379 - "Community 379"
+Cohesion: 0.67
+Nodes (3): minimum, type, listener_count
+
 ### Community 380 - "Community 380"
 Cohesion: 0.50
 Nodes (4): maximum, minimum, type, panel_bg_alpha
@@ -1851,6 +1861,10 @@ Nodes (4): maximum, minimum, type, panel_bg_alpha
 ### Community 381 - "Community 381"
 Cohesion: 0.50
 Nodes (4): maximum, minimum, type, panel_padding_px
+
+### Community 382 - "Community 382"
+Cohesion: 0.67
+Nodes (3): uptime_seconds, minimum, type
 
 ### Community 383 - "Community 383"
 Cohesion: 0.67
@@ -1907,10 +1921,6 @@ Nodes (3): pattern, type, lightboxBackground
 ### Community 398 - "Community 398"
 Cohesion: 0.67
 Nodes (3): secondary, pattern, type
-
-### Community 400 - "Community 400"
-Cohesion: 0.67
-Nodes (3): video_relay_ui, pattern, type
 
 ### Community 401 - "Community 401"
 Cohesion: 0.67

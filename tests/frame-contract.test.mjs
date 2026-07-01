@@ -133,9 +133,10 @@ test("Overlay Wizard presents OBS sources as the only editable objects", async (
   assert.ok(frontend.includes("Reset to base template"));
   assert.ok(frontend.includes("Blocks per row"), "Layout controls should expose telemetry wrapping as blocks per row");
   assert.ok(!frontend.includes("Overlay width"), "Connectivity overlay width should be automatic from block width and blocks per row");
-  assert.ok(frontend.includes("Block theme"), "Block sizing, typography, and neutral colors should share one section");
+  assert.ok(frontend.includes("<summary>Theme</summary>"), "Theme controls should share one section");
+  assert.ok(["Panel", "Block", "Text", "Subheader", "Plot"].every((name) => frontend.includes(`themeGroup("${name}"`)), "Theme controls should keep their grouped panels");
   assert.ok(frontend.includes("State coloring"), "Quality colors should live in a renamed state coloring section");
-  assert.ok(frontend.includes("Subheader color"), "Muted overlay copy should be labeled as subheader color");
+  assert.ok(frontend.includes('colorControl("muted_color", "Color"'), "Muted overlay copy color should stay editable in the subheader group");
   assert.ok(!frontend.includes("Block sizing"), "Old block sizing section should not return");
   assert.ok(frontend.includes('data-telemetry-columns-range'), "Blocks per row should use the auto-to-all slider");
   assert.ok(frontend.includes('sliderValueToTelemetryColumns'), "Blocks per row slider should persist to a concrete telemetry column setting");
@@ -171,7 +172,7 @@ test("Overlay Wizard presents OBS sources as the only editable objects", async (
   assert.ok(renderer.includes("elementPreviewMode"), "Connectivity renderer must support element-sized preview mode");
   assert.ok(renderer.includes("resolvedTelemetryColumnCount"), "Connectivity renderer must resolve fixed telemetry columns without clipping");
   assert.ok(renderer.includes("telemetryGridPixelWidth"), "Connectivity renderer must calculate widget width from block width and columns");
-  assert.ok(renderer.includes("widget.style.width = `${telemetryGridPixelWidth"), "Connectivity renderer width must follow the telemetry grid");
+  assert.ok(renderer.includes("widget.style.width = `${layoutWidth || telemetryGridPixelWidth"), "Connectivity renderer width must follow the telemetry grid");
   assert.ok(rendererStyles.includes("max-width: none"), "Renderer widget must not clamp wide telemetry rows to the viewport max width");
   assert.ok(uploadRenderer.includes("elementPreviewMode"), "Upload renderer must support element-sized preview mode");
   assert.ok(rendererStyles.includes("body.element-preview"), "Renderer stylesheet must detach preview mode from the full OBS canvas");

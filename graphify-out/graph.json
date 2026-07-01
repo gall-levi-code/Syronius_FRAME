@@ -6750,7 +6750,7 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_defs_source_id",
-      "community": 37,
+      "community": 225,
       "norm_label": "source_id"
     },
     {
@@ -6760,7 +6760,7 @@
       "source_location": "L48",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_source_id_type",
-      "community": 37,
+      "community": 225,
       "norm_label": "type"
     },
     {
@@ -6770,7 +6770,7 @@
       "source_location": "L49",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_source_id_pattern",
-      "community": 37,
+      "community": 225,
       "norm_label": "pattern"
     },
     {
@@ -6780,7 +6780,7 @@
       "source_location": "L50",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_source_id_minlength",
-      "community": 37,
+      "community": 225,
       "norm_label": "minlength"
     },
     {
@@ -6790,7 +6790,7 @@
       "source_location": "L51",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_source_id_maxlength",
-      "community": 37,
+      "community": 225,
       "norm_label": "maxlength"
     },
     {
@@ -10150,7 +10150,7 @@
       "source_location": "L197",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_defs_design",
-      "community": 37,
+      "community": 69,
       "norm_label": "design"
     },
     {
@@ -10160,7 +10160,7 @@
       "source_location": "L198",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_design_type",
-      "community": 37,
+      "community": 69,
       "norm_label": "type"
     },
     {
@@ -10170,7 +10170,7 @@
       "source_location": "L199",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_design_required",
-      "community": 37,
+      "community": 69,
       "norm_label": "required"
     },
     {
@@ -10330,7 +10330,7 @@
       "source_location": "L209",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_properties_enabled",
-      "community": 69,
+      "community": 210,
       "norm_label": "enabled"
     },
     {
@@ -10340,7 +10340,7 @@
       "source_location": "L209",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_enabled_type",
-      "community": 69,
+      "community": 210,
       "norm_label": "type"
     },
     {
@@ -10460,7 +10460,7 @@
       "source_location": "L216",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_design_allof",
-      "community": 37,
+      "community": 69,
       "norm_label": "allof"
     },
     {
@@ -10550,7 +10550,7 @@
       "source_location": "L302",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_defs_source",
-      "community": 327,
+      "community": 37,
       "norm_label": "source"
     },
     {
@@ -10560,7 +10560,7 @@
       "source_location": "L303",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_source_type",
-      "community": 327,
+      "community": 37,
       "norm_label": "type"
     },
     {
@@ -10570,7 +10570,7 @@
       "source_location": "L304",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_source_additionalproperties",
-      "community": 327,
+      "community": 37,
       "norm_label": "additionalproperties"
     },
     {
@@ -10580,7 +10580,7 @@
       "source_location": "L305",
       "_origin": "ast",
       "id": "schemas_overlay_presets_schema_source_required",
-      "community": 327,
+      "community": 37,
       "norm_label": "required"
     },
     {
@@ -11720,7 +11720,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "schemas_stack_config_schema",
-      "community": 225,
+      "community": 312,
       "norm_label": "stack-config.schema.json"
     },
     {
@@ -11730,7 +11730,7 @@
       "source_location": "L2",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_schema",
-      "community": 225,
+      "community": 312,
       "norm_label": "$schema"
     },
     {
@@ -11740,7 +11740,7 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_title",
-      "community": 225,
+      "community": 312,
       "norm_label": "title"
     },
     {
@@ -11750,7 +11750,7 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_type",
-      "community": 225,
+      "community": 312,
       "norm_label": "type"
     },
     {
@@ -11760,7 +11760,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_additionalproperties",
-      "community": 225,
+      "community": 312,
       "norm_label": "additionalproperties"
     },
     {
@@ -11770,7 +11770,7 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_required",
-      "community": 225,
+      "community": 312,
       "norm_label": "required"
     },
     {
@@ -12050,7 +12050,7 @@
       "source_location": "L64",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_properties_routes",
-      "community": 312,
+      "community": 307,
       "norm_label": "routes"
     },
     {
@@ -12060,7 +12060,7 @@
       "source_location": "L65",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_routes_type",
-      "community": 312,
+      "community": 307,
       "norm_label": "type"
     },
     {
@@ -12070,7 +12070,7 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_routes_additionalproperties",
-      "community": 312,
+      "community": 307,
       "norm_label": "additionalproperties"
     },
     {
@@ -12080,7 +12080,7 @@
       "source_location": "L67",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_routes_required",
-      "community": 312,
+      "community": 307,
       "norm_label": "required"
     },
     {
@@ -12160,7 +12160,7 @@
       "source_location": "L96",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_properties_theme",
-      "community": 307,
+      "community": 54,
       "norm_label": "theme"
     },
     {
@@ -12170,7 +12170,7 @@
       "source_location": "L97",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_theme_type",
-      "community": 307,
+      "community": 54,
       "norm_label": "type"
     },
     {
@@ -12180,7 +12180,7 @@
       "source_location": "L98",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_theme_pattern",
-      "community": 307,
+      "community": 54,
       "norm_label": "pattern"
     },
     {
@@ -12190,7 +12190,7 @@
       "source_location": "L100",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_properties_video_relay_ui",
-      "community": 400,
+      "community": 54,
       "norm_label": "video_relay_ui"
     },
     {
@@ -12200,7 +12200,7 @@
       "source_location": "L101",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_video_relay_ui_type",
-      "community": 400,
+      "community": 54,
       "norm_label": "type"
     },
     {
@@ -12210,7 +12210,7 @@
       "source_location": "L102",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_video_relay_ui_pattern",
-      "community": 400,
+      "community": 54,
       "norm_label": "pattern"
     },
     {
@@ -12310,7 +12310,7 @@
       "source_location": "L116",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_properties_photo_upload",
-      "community": 54,
+      "community": 327,
       "norm_label": "photo_upload"
     },
     {
@@ -12320,7 +12320,7 @@
       "source_location": "L117",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_photo_upload_type",
-      "community": 54,
+      "community": 327,
       "norm_label": "type"
     },
     {
@@ -12330,7 +12330,7 @@
       "source_location": "L118",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_photo_upload_pattern",
-      "community": 54,
+      "community": 327,
       "norm_label": "pattern"
     },
     {
@@ -12460,7 +12460,7 @@
       "source_location": "L136",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_properties_today_remote",
-      "community": 54,
+      "community": 359,
       "norm_label": "today_remote"
     },
     {
@@ -12470,7 +12470,7 @@
       "source_location": "L137",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_today_remote_type",
-      "community": 54,
+      "community": 359,
       "norm_label": "type"
     },
     {
@@ -12480,7 +12480,7 @@
       "source_location": "L138",
       "_origin": "ast",
       "id": "schemas_stack_config_schema_today_remote_pattern",
-      "community": 54,
+      "community": 359,
       "norm_label": "pattern"
     },
     {
@@ -12970,7 +12970,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "schemas_status_schema_properties_health",
-      "community": 27,
+      "community": 369,
       "norm_label": "health"
     },
     {
@@ -12980,7 +12980,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "schemas_status_schema_health_type",
-      "community": 27,
+      "community": 369,
       "norm_label": "type"
     },
     {
@@ -12990,7 +12990,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "schemas_status_schema_health_enum",
-      "community": 27,
+      "community": 369,
       "norm_label": "enum"
     },
     {
@@ -13000,7 +13000,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "schemas_status_schema_properties_uptime_seconds",
-      "community": 27,
+      "community": 382,
       "norm_label": "uptime_seconds"
     },
     {
@@ -13010,7 +13010,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "schemas_status_schema_uptime_seconds_type",
-      "community": 27,
+      "community": 382,
       "norm_label": "type"
     },
     {
@@ -13020,7 +13020,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "schemas_status_schema_uptime_seconds_minimum",
-      "community": 27,
+      "community": 382,
       "norm_label": "minimum"
     },
     {
@@ -13230,7 +13230,7 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "schemas_status_schema_properties_listener_count",
-      "community": 27,
+      "community": 379,
       "norm_label": "listener_count"
     },
     {
@@ -13240,7 +13240,7 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "schemas_status_schema_listener_count_type",
-      "community": 27,
+      "community": 379,
       "norm_label": "type"
     },
     {
@@ -13250,7 +13250,7 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "schemas_status_schema_listener_count_minimum",
-      "community": 27,
+      "community": 379,
       "norm_label": "minimum"
     },
     {
@@ -13780,7 +13780,7 @@
       "source_location": "L125",
       "_origin": "ast",
       "id": "schemas_status_schema_properties_level",
-      "community": 359,
+      "community": 27,
       "norm_label": "level"
     },
     {
@@ -13790,7 +13790,7 @@
       "source_location": "L125",
       "_origin": "ast",
       "id": "schemas_status_schema_level_type",
-      "community": 359,
+      "community": 27,
       "norm_label": "type"
     },
     {
@@ -13800,7 +13800,7 @@
       "source_location": "L125",
       "_origin": "ast",
       "id": "schemas_status_schema_level_enum",
-      "community": 359,
+      "community": 27,
       "norm_label": "enum"
     },
     {
@@ -29278,7 +29278,7 @@
       "source_location": "L126",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_chart_warn_line_style",
-      "community": 369,
+      "community": 47,
       "norm_label": "chart_warn_line_style"
     },
     {
@@ -29288,7 +29288,7 @@
       "source_location": "L126",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_chart_warn_line_style_enum",
-      "community": 369,
+      "community": 47,
       "norm_label": "enum"
     },
     {
@@ -29798,7 +29798,7 @@
       "source_location": "L147",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_properties_show_recovery",
-      "community": 47,
+      "community": 389,
       "norm_label": "show_recovery"
     },
     {
@@ -29808,7 +29808,7 @@
       "source_location": "L147",
       "_origin": "ast",
       "id": "config_overlay_presets_schema_show_recovery_type",
-      "community": 47,
+      "community": 389,
       "norm_label": "type"
     },
     {
@@ -44021,7 +44021,7 @@
       "label": "assertSameFile()",
       "file_type": "code",
       "source_file": "tests/frame-contract.test.mjs",
-      "source_location": "L445",
+      "source_location": "L446",
       "_origin": "ast",
       "id": "tests_frame_contract_test_assertsamefile",
       "community": 1,
@@ -44031,7 +44031,7 @@
       "label": "composeServiceBlock()",
       "file_type": "code",
       "source_file": "tests/frame-contract.test.mjs",
-      "source_location": "L453",
+      "source_location": "L454",
       "_origin": "ast",
       "id": "tests_frame_contract_test_composeserviceblock",
       "community": 1,
@@ -59577,9 +59577,9 @@
       "source_file": "docs/schemas/overlay-presets.schema.json",
       "source_location": "L84",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "schemas_overlay_presets_schema_theme_properties",
-      "target": "schemas_overlay_presets_schema_properties_block_bg_alpha",
-      "confidence_score": 1.0
+      "target": "schemas_overlay_presets_schema_properties_block_bg_alpha"
     },
     {
       "relation": "contains",
@@ -60137,9 +60137,9 @@
       "source_file": "docs/schemas/overlay-presets.schema.json",
       "source_location": "L84",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "schemas_overlay_presets_schema_properties_block_bg_alpha",
-      "target": "schemas_overlay_presets_schema_block_bg_alpha_maximum",
-      "confidence_score": 1.0
+      "target": "schemas_overlay_presets_schema_block_bg_alpha_maximum"
     },
     {
       "relation": "contains",
@@ -60147,9 +60147,9 @@
       "source_file": "docs/schemas/overlay-presets.schema.json",
       "source_location": "L84",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "schemas_overlay_presets_schema_properties_block_bg_alpha",
-      "target": "schemas_overlay_presets_schema_block_bg_alpha_minimum",
-      "confidence_score": 1.0
+      "target": "schemas_overlay_presets_schema_block_bg_alpha_minimum"
     },
     {
       "relation": "contains",
@@ -60157,9 +60157,9 @@
       "source_file": "docs/schemas/overlay-presets.schema.json",
       "source_location": "L84",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "schemas_overlay_presets_schema_properties_block_bg_alpha",
-      "target": "schemas_overlay_presets_schema_block_bg_alpha_type",
-      "confidence_score": 1.0
+      "target": "schemas_overlay_presets_schema_block_bg_alpha_type"
     },
     {
       "relation": "contains",
@@ -93282,9 +93282,9 @@
       "source_file": "services/frame-overlays/config/overlay-presets.schema.json",
       "source_location": "L84",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "config_overlay_presets_schema_theme_properties",
-      "target": "config_overlay_presets_schema_properties_block_bg_alpha",
-      "confidence_score": 1.0
+      "target": "config_overlay_presets_schema_properties_block_bg_alpha"
     },
     {
       "relation": "contains",
@@ -93842,9 +93842,9 @@
       "source_file": "services/frame-overlays/config/overlay-presets.schema.json",
       "source_location": "L84",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "config_overlay_presets_schema_properties_block_bg_alpha",
-      "target": "config_overlay_presets_schema_block_bg_alpha_maximum",
-      "confidence_score": 1.0
+      "target": "config_overlay_presets_schema_block_bg_alpha_maximum"
     },
     {
       "relation": "contains",
@@ -93852,9 +93852,9 @@
       "source_file": "services/frame-overlays/config/overlay-presets.schema.json",
       "source_location": "L84",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "config_overlay_presets_schema_properties_block_bg_alpha",
-      "target": "config_overlay_presets_schema_block_bg_alpha_minimum",
-      "confidence_score": 1.0
+      "target": "config_overlay_presets_schema_block_bg_alpha_minimum"
     },
     {
       "relation": "contains",
@@ -93862,9 +93862,9 @@
       "source_file": "services/frame-overlays/config/overlay-presets.schema.json",
       "source_location": "L84",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "config_overlay_presets_schema_properties_block_bg_alpha",
-      "target": "config_overlay_presets_schema_block_bg_alpha_type",
-      "confidence_score": 1.0
+      "target": "config_overlay_presets_schema_block_bg_alpha_type"
     },
     {
       "relation": "contains",
@@ -101728,9 +101728,9 @@
       "source_file": "services/frame-overlays/public/renderer.js",
       "source_location": "L424",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "public_renderer",
-      "target": "public_renderer_blockalpha",
-      "confidence_score": 1.0
+      "target": "public_renderer_blockalpha"
     },
     {
       "relation": "contains",
@@ -102726,9 +102726,9 @@
       "source_file": "services/frame-overlays/public/renderer.js",
       "source_location": "L307",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "public_renderer_applytheme",
-      "target": "public_renderer_blockalpha",
-      "confidence_score": 1.0
+      "target": "public_renderer_blockalpha"
     },
     {
       "relation": "calls",
@@ -102847,9 +102847,9 @@
       "source_file": "services/frame-overlays/public/renderer.js",
       "source_location": "L419",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "public_renderer_applystatetheme",
-      "target": "public_renderer_blockalpha",
-      "confidence_score": 1.0
+      "target": "public_renderer_blockalpha"
     },
     {
       "relation": "calls",
@@ -103238,9 +103238,9 @@
       "source_file": "services/frame-overlays/public/upload-renderer.js",
       "source_location": "L160",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "public_upload_renderer",
-      "target": "public_upload_renderer_blockalpha",
-      "confidence_score": 1.0
+      "target": "public_upload_renderer_blockalpha"
     },
     {
       "relation": "contains",
@@ -103719,9 +103719,9 @@
       "source_file": "services/frame-overlays/public/upload-renderer.js",
       "source_location": "L138",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "public_upload_renderer_render",
-      "target": "public_upload_renderer_blockalpha",
-      "confidence_score": 1.0
+      "target": "public_upload_renderer_blockalpha"
     },
     {
       "relation": "calls",
@@ -103796,9 +103796,9 @@
       "source_file": "services/frame-overlays/public/upload-renderer.js",
       "source_location": "L144",
       "weight": 1.0,
+      "confidence_score": 1.0,
       "source": "public_upload_renderer_applytheme",
-      "target": "public_upload_renderer_blockalpha",
-      "confidence_score": 1.0
+      "target": "public_upload_renderer_blockalpha"
     },
     {
       "relation": "calls",
@@ -122614,5 +122614,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "83053ae1080aa830cb70e487766b9e31e2b11638"
+  "built_at_commit": "1325ba3204fd7ce13abf57f710545adfdfda9b6a"
 }
