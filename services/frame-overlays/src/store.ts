@@ -68,20 +68,28 @@ export class OverlayStore {
       const migrationBackup = `${this.statePath}.v1-${safeTimestamp(this.now())}.bak`;
       await copyFile(this.statePath, migrationBackup);
       await this.atomicWrite(migrated, false);
-    } else if (isOverlayDocumentV2(raw) && (
-      raw.default_template_id !== this.stockDocument.default_template_id
-      || JSON.stringify(raw.default_template_ids ?? {}) !== JSON.stringify(this.stockDocument.default_template_ids)
-      || JSON.stringify(raw.templates) !== JSON.stringify(this.stockDocument.templates)
-    )) {
-      const synchronized = {
-        ...raw,
-        revision: raw.revision + 1,
-        default_template_id: this.stockDocument.default_template_id,
-        default_template_ids: clone(this.stockDocument.default_template_ids),
-        templates: clone(this.stockDocument.templates),
-      };
-      this.assertValid(synchronized);
-      await this.atomicWrite(synchronized, true);
+    } else if (isOverlayDocumentV2(raw)) {
+      let synchronized = raw;
+      let changed = false;
+      if (
+        raw.default_template_id !== this.stockDocument.default_template_id
+        || JSON.stringify(raw.default_template_ids ?? {}) !== JSON.stringify(this.stockDocument.default_template_ids)
+        || JSON.stringify(raw.templates) !== JSON.stringify(this.stockDocument.templates)
+      ) {
+        synchronized = {
+          ...raw,
+          default_template_id: this.stockDocument.default_template_id,
+          default_template_ids: clone(this.stockDocument.default_template_ids),
+          templates: clone(this.stockDocument.templates),
+        };
+        changed = true;
+      }
+      changed = clampConnectivityPolls(synchronized, this.now()) || changed;
+      if (changed) {
+        synchronized.revision += 1;
+        this.assertValid(synchronized);
+        await this.atomicWrite(synchronized, true);
+      }
     }
     return this.read();
   }
@@ -247,6 +255,19 @@ function validOverlayType(value: unknown): value is OverlayType {
 
 function objectValue(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? clone(value as Record<string, unknown>) : {};
+}
+
+function clampConnectivityPolls(document: OverlayDocumentV2, now: Date): boolean {
+  const timestamp = now.toISOString();
+  let changed = false;
+  for (const preset of document.presets) {
+    if (preset.type !== "connectivity" || Number(preset.config.poll_ms) >= 200) continue;
+    preset.config.poll_ms = 200;
+    preset.revision += 1;
+    preset.updated_at = timestamp;
+    changed = true;
+  }
+  return changed;
 }
 
 function safeTimestamp(date: Date): string {

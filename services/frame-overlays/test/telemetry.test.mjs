@@ -44,6 +44,25 @@ test("brief upstream errors retain the last normalized sample without immediatel
   hub.stop();
 });
 
+test("stream polling clamps unsafe intervals", async () => {
+  let now = new Date("2026-06-20T12:00:00Z");
+  let calls = 0;
+  const hub = new TelemetryHub(async () => {
+    calls += 1;
+    return { publisher: { connected:true, bitrate:7000 } };
+  }, () => now);
+  const first = await hub.snapshot("stream-1", 20);
+  now = new Date("2026-06-20T12:00:00.100Z");
+  const second = await hub.snapshot("stream-1", 20);
+  now = new Date("2026-06-20T12:00:00.201Z");
+  const third = await hub.snapshot("stream-1", 20);
+  assert.equal(first.sequence, 1);
+  assert.equal(second.sequence, 1);
+  assert.equal(third.sequence, 2);
+  assert.equal(calls, 2);
+  hub.stop();
+});
+
 test("normalization preserves unavailable BELABOX metrics as null", () => {
   assert.deepEqual(normalizePublisher({ publisher: {
     connected: true,

@@ -1,4 +1,4 @@
-import { QUALITY, QualityStabilizer, ServiceReloadWatchdog, canvasPixelSize, compactTelemetryBlockWidth, normalizedTelemetryBlockWidth, normalizedTelemetryOrder, qualityStatusText, resolvedTelemetryColumnCount, shouldResetRuntimeState, telemetryAvailability, telemetryGridPixelWidth, telemetryIsStale } from "./renderer-core.js";
+import { QUALITY, QualityStabilizer, ServiceReloadWatchdog, canvasPixelSize, compactTelemetryBlockWidth, formatTelemetryDuration, layoutGrowth, normalizedTelemetryBlockWidth, normalizedTelemetryOrder, previewElementSize, qualityStatusText, resolvedTelemetryColumnCount, shouldResetRuntimeState, telemetryAvailability, telemetryGridPixelWidth, telemetryIsStale } from "./renderer-core.js";
 
 let payload = window.FRAME_OVERLAY;
 let preset = payload.preset;
@@ -14,7 +14,6 @@ let lastTelemetry;
 const reloadWatchdog = new ServiceReloadWatchdog();
 const history = [];
 const defaultOrder = ["header", "bitrate", "rtt", "latency", "buffer", "server", "dropped", "uptime", "meter", "chart", "recovery"];
-const telemetryGridGapPx = 7;
 const telemetryWidgetChromePx = 30;
 const widget = document.querySelector("#widget");
 const layout = document.querySelector("#telemetry-layout");
@@ -96,7 +95,7 @@ function connectEvents() {
 function startRestFallback() {
   if (restTimer) return;
   void refreshTelemetry();
-  restTimer = setInterval(refreshTelemetry, config.poll_ms || 1000);
+  restTimer = setInterval(refreshTelemetry, pollIntervalMs());
 }
 
 function stopRestFallback() {
@@ -137,7 +136,7 @@ function renderLastTelemetry() {
   if (preset.enabled === false || payload.source?.enabled === false) return widget.classList.add("hidden");
   if (!lastTelemetry) return renderNoSignal("CONNECTING", false);
   if (lastTelemetry.error?.includes("not bound")) return renderNoSignal("UNBOUND");
-  if ((!previewMode && telemetryIsStale(lastTelemetry, config.poll_ms || 1000)) || !lastTelemetry.publisher || lastTelemetry.publisher.connected === false) {
+  if ((!previewMode && telemetryIsStale(lastTelemetry, pollIntervalMs())) || !lastTelemetry.publisher || lastTelemetry.publisher.connected === false) {
     return renderNoSignal(config.no_signal_label || "NO SIGNAL");
   }
   renderStats(lastTelemetry.publisher);
@@ -148,8 +147,7 @@ function renderStats(stats) {
   const stable = quality.update(stats, config);
   const display = stable === QUALITY.UNKNOWN ? QUALITY.WARN : stable;
   const compactGood = config.compact_when_good && stable === QUALITY.GOOD;
-  document.documentElement.style.setProperty("--quality", colorFor(display));
-  document.documentElement.style.setProperty("--widget-opacity", String(opacityFor(display)));
+  applyStateTheme(display);
   statusValue.textContent = qualityStatusText(stable, stats, config, compactGood);
   streamName.textContent = streamDisplayName;
   values.get("bitrate").textContent = formatBitrate(stats.bitrate);
@@ -158,9 +156,9 @@ function renderStats(stats) {
   values.get("buffer").textContent = formatMilliseconds(stats.buffer);
   values.get("server").textContent = payload.server_name || "FRAME";
   values.get("dropped").textContent = String(stats.dropped_pkts ?? 0);
-  values.get("uptime").textContent = formatDuration(stats.uptime ?? 0);
+  values.get("uptime").textContent = formatTelemetryDuration(stats.uptime ?? 0);
   values.get("recovery").textContent = formatRecovery(stats.recovery_rate);
-  meterFill.style.width = `${Math.min(100, Math.max(0, (Number(stats.bitrate || 0) / (config.bitrate_meter_max || 12000)) * 100))}%`;
+  updateMeter(stats.bitrate);
   applyBlockVisibility(compactGood, stable, stats);
   applyBlockOrder();
   history.push({ bitrate: Number(stats.bitrate || 0), rtt: Number.isFinite(Number(stats.rtt)) ? Number(stats.rtt) : null });
@@ -173,8 +171,7 @@ function renderStats(stats) {
 function renderNoSignal(label, confirmed = true) {
   if (confirmed && config.no_signal_behavior === "hide") return widget.classList.add("hidden");
   widget.classList.remove("hidden");
-  document.documentElement.style.setProperty("--quality", confirmed ? theme.bad_color || "#ff5f6d" : theme.warn_color || "#ffd166");
-  document.documentElement.style.setProperty("--widget-opacity", String(confirmed ? theme.bg_opacity_bad ?? 0.72 : theme.bg_opacity_warn ?? 0.5));
+  applyStateTheme(confirmed ? QUALITY.BAD : QUALITY.WARN);
   statusValue.textContent = label;
   streamName.textContent = streamDisplayName;
   compactGoodActive = false;
@@ -183,6 +180,16 @@ function renderNoSignal(label, confirmed = true) {
   applyBlockOrder();
   applyTelemetryColumns();
   publishPreviewSize();
+}
+
+function updateMeter(bitrate) {
+  const max = config.bitrate_meter_max || config.chart_bitrate_max || 12000;
+  const warnStop = Math.min(100, Math.max(0, ((config.bitrate_warn_min ?? 2500) / max) * 100));
+  const goodStop = Math.min(100, Math.max(warnStop, ((config.bitrate_good_min ?? 5000) / max) * 100));
+  const percent = Math.min(100, Math.max(0, (Number(bitrate || 0) / max) * 100));
+  meterFill.style.setProperty("--meter-percent", `${percent}%`);
+  meterFill.style.setProperty("--meter-warn-stop", `${warnStop}%`);
+  meterFill.style.setProperty("--meter-good-stop", `${goodStop}%`);
 }
 
 function applyHeaderVisibility(forceStatus = false) {
@@ -254,13 +261,18 @@ function drawChart() {
 
 function drawGuide(value, max, color, width, height) {
   const y = height - Math.min(1, value / max) * (height - 8) - 4;
-  context.save(); context.globalAlpha = .75; context.strokeStyle = color; context.lineWidth = 1.5; context.setLineDash([6,4]);
+  context.save(); context.globalAlpha = .75; context.strokeStyle = color; context.lineWidth = config.chart_warn_line_width_px ?? 1.5; context.setLineDash(lineDashFor(config.chart_warn_line_style ?? "dashed"));
   context.beginPath(); context.moveTo(0,y); context.lineTo(width,y); context.stroke(); context.restore();
 }
 
 function drawLine(key, max, color, width, height) {
   if (history.length < 2) return;
-  context.globalAlpha = 0.95; context.strokeStyle = color; context.lineWidth = 3; context.beginPath();
+  context.save();
+  context.globalAlpha = 0.95;
+  context.strokeStyle = color;
+  context.lineWidth = key === "rtt" ? config.chart_rtt_line_width_px ?? 3 : config.chart_bitrate_line_width_px ?? 3;
+  context.setLineDash(lineDashFor(key === "rtt" ? config.chart_rtt_line_style : config.chart_bitrate_line_style));
+  context.beginPath();
   let started = false;
   history.forEach((sample, index) => {
     if (!Number.isFinite(sample[key])) return;
@@ -269,11 +281,53 @@ function drawLine(key, max, color, width, height) {
     if (!started) { context.moveTo(x, y); started = true; } else context.lineTo(x, y);
   });
   if (started) context.stroke();
+  context.restore();
+}
+
+function lineDashFor(style) {
+  if (style === "dotted") return [1, 6];
+  if (style === "dashed") return [8, 5];
+  return [];
 }
 
 function applyTheme() {
   const root = document.documentElement;
-  const variables = { "--text": theme.text_color || "#eef8ff", "--muted": theme.muted_color || "#9fc6dc", "--good": theme.good_color || "#2cb4fb", "--warn": theme.warn_color || "#ffd166", "--bad": theme.bad_color || "#ff5f6d", "--plot-primary": theme.plot_primary || "rgba(44, 180, 251, 0.95)", "--plot-secondary": theme.plot_secondary || "#8de7ff", "--radius": `${theme.border_radius_px ?? 8}px`, "--blur": `${theme.backdrop_blur_px ?? 2}px`, "--font-size": `${theme.font_size_base_px ?? 16}px`, "--scale": String(preset.layout.scale ?? 1), "--transition": `${config.transition_ms ?? 250}ms` };
+  const variables = {
+    "--text": theme.text_color || "#eef8ff",
+    "--muted": theme.muted_color || "#9fc6dc",
+    "--good": theme.good_color || "#2cb4fb",
+    "--warn": theme.warn_color || "#ffd166",
+    "--bad": theme.bad_color || "#ff5f6d",
+    "--plot-primary": theme.plot_primary || "rgba(44, 180, 251, 0.95)",
+    "--plot-secondary": theme.plot_secondary || "#8de7ff",
+    "--widget-opacity": String(theme.bg_opacity_warn ?? 0.5),
+    "--panel-bg": colorWithAlpha(theme.panel_bg_color || "#000000", panelAlpha(1)),
+    "--panel-border": theme.panel_border_color || "color-mix(in srgb, var(--plot-primary, #2cb4fb) 40%, transparent)",
+    "--panel-glow": theme.panel_glow_color || "#000000",
+    "--block-bg": colorWithAlpha(theme.block_bg_color || "#132f3d", blockAlpha(1)),
+    "--block-border": theme.block_border_color || "transparent",
+    "--radius": `${theme.border_radius_px ?? 8}px`,
+    "--blur": `${theme.backdrop_blur_px ?? 2}px`,
+    "--panel-padding": `${theme.panel_padding_px ?? 14}px`,
+    "--block-padding": `${theme.block_padding_px ?? 8}px`,
+    "--block-gap": `${blockGapPx()}px`,
+    "--panel-border-width": `${theme.panel_border_width_px ?? 1}px`,
+    "--block-border-width": `${theme.block_border_width_px ?? 0}px`,
+    "--glow-blur": `${theme.glow_blur_px ?? 50}px`,
+    "--shadow-spread": `${theme.glow_spread_px ?? 0}px`,
+    "--shadow-x": `${theme.glow_offset_x_px ?? 0}px`,
+    "--shadow-y": `${theme.glow_offset_y_px ?? 16}px`,
+    "--meter-height": `${config.bitrate_meter_height_px ?? 14}px`,
+    "--meter-radius": `${config.bitrate_meter_radius_px ?? 999}px`,
+    "--font-size": `${theme.font_size_base_px ?? 16}px`,
+    "--font-family": theme.font_family || "Inter, system-ui, sans-serif",
+    "--font-weight": String(theme.font_weight ?? 400),
+    "--subheader-font-family": theme.subheader_font_family || theme.font_family || "Inter, system-ui, sans-serif",
+    "--subheader-font-size": `${theme.subheader_font_size_px ?? 12}px`,
+    "--subheader-font-weight": String(theme.subheader_font_weight ?? 500),
+    "--scale": String(preset.layout.scale ?? 1),
+    "--transition": `${config.transition_ms ?? 250}ms`,
+  };
   for (const [name, value] of Object.entries(variables)) root.style.setProperty(name, value);
 }
 
@@ -295,20 +349,35 @@ function applyLayout() {
   document.documentElement.style.setProperty("--block-width", `${config.telemetry_block_width_px ?? 160}px`);
   document.documentElement.style.setProperty("--block-height", `${config.telemetry_block_height_px ?? 72}px`);
   document.documentElement.style.setProperty("--origin", origin);
+  applyGrowthDirection();
   applyBlockOrder();
   applyTelemetryColumns();
 }
 
 function applyTelemetryColumns() {
+  const growth = layoutGrowth(preset.layout);
   const visibleCount = [...blocks.values()].filter((block) => !block.hidden).length || 1;
   const baseBlockWidth = normalizedTelemetryBlockWidth(config.telemetry_block_width_px ?? 160);
+  const blockGap = blockGapPx();
   const blockWidth = compactGoodActive
     ? compactTelemetryBlockWidth(baseBlockWidth, statusValue.scrollWidth, compactHeaderChromeWidth())
     : baseBlockWidth;
-  const availableWidth = Math.max(blockWidth, window.innerWidth - ((preset.layout.pad ?? 20) * 2) - telemetryWidgetChromePx);
-  const columns = resolvedTelemetryColumnCount(config.telemetry_columns, visibleCount, blockWidth, availableWidth, telemetryGridGapPx);
+  const layoutWidth = Number(preset.layout.width_px) > 0 ? Number(preset.layout.width_px) : 0;
+  const availableWidth = Math.max(blockWidth, (layoutWidth || (elementPreviewMode ? 520 : window.innerWidth)) - ((preset.layout.pad ?? 20) * 2) - telemetryWidgetChromePx);
+  const columns = resolvedTelemetryColumnCount(config.telemetry_columns, visibleCount, blockWidth, availableWidth, blockGap);
   layout.style.gridTemplateColumns = `repeat(${columns}, minmax(0, ${blockWidth}px))`;
-  widget.style.width = `${telemetryGridPixelWidth(columns, blockWidth, telemetryGridGapPx, telemetryWidgetChromePx)}px`;
+  layout.style.justifyContent = growth.x === "left" ? "end" : growth.x === "center" ? "center" : "start";
+  layout.style.alignContent = growth.y === "up" ? "end" : growth.y === "center" ? "center" : "start";
+  widget.style.width = `${layoutWidth || telemetryGridPixelWidth(columns, blockWidth, blockGap, telemetryWidgetChromePx)}px`;
+}
+
+function applyGrowthDirection() {
+  const growth = layoutGrowth(preset.layout);
+  const flipX = growth.x === "left";
+  const flipY = growth.y === "up";
+  const transform = flipX || flipY ? `scale(${flipX ? -1 : 1}, ${flipY ? -1 : 1})` : "";
+  layout.style.transform = transform;
+  for (const block of blocks.values()) block.style.transform = transform;
 }
 
 function compactHeaderChromeWidth() {
@@ -323,24 +392,45 @@ function pixels(value) {
   return Number.parseFloat(value) || 0;
 }
 
+function blockGapPx() {
+  return Math.max(0, Number(theme.block_gap_px ?? 7) || 0);
+}
+
+function pollIntervalMs() {
+  const value = Number(config.poll_ms);
+  return Number.isFinite(value) ? Math.min(2000, Math.max(200, value)) : 1000;
+}
+
 function publishPreviewSize() {
   if (!elementPreviewMode || window.parent === window) return;
   requestAnimationFrame(() => {
-    const rect = widget.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-    window.parent.postMessage({
-      type: "frame-preview-size",
-      width: Math.ceil(rect.width + 28),
-      height: Math.ceil(rect.height + 28),
-      content_width: Math.ceil(rect.width),
-      content_height: Math.ceil(rect.height),
-    }, "*");
+    const size = previewElementSize(widget);
+    if (!size.content_width || !size.content_height) return;
+    window.parent.postMessage({ type: "frame-preview-size", ...size }, "*");
   });
 }
 
 function colorFor(value) { return value === QUALITY.GOOD ? theme.good_color || "#2cb4fb" : value === QUALITY.WARN ? theme.warn_color || "#ffd166" : theme.bad_color || "#ff5f6d"; }
 function opacityFor(value) { return value === QUALITY.GOOD ? theme.bg_opacity_good ?? 0.3 : value === QUALITY.WARN ? theme.bg_opacity_warn ?? 0.5 : theme.bg_opacity_bad ?? 0.72; }
+function applyStateTheme(value) {
+  document.documentElement.style.setProperty("--quality", colorFor(value));
+  document.documentElement.style.setProperty("--widget-opacity", String(opacityFor(value)));
+  document.documentElement.style.setProperty("--panel-bg", colorWithAlpha(theme.panel_bg_color || "#000000", panelAlpha(1)));
+  document.documentElement.style.setProperty("--block-bg", colorWithAlpha(theme.block_bg_color || "#132f3d", blockAlpha(1)));
+}
+function panelAlpha(fallback) {
+  return Number.isFinite(Number(theme.panel_bg_alpha)) ? Number(theme.panel_bg_alpha) : fallback;
+}
+function blockAlpha(fallback) {
+  return Number.isFinite(Number(theme.block_bg_alpha)) ? Number(theme.block_bg_alpha) : fallback;
+}
+function colorWithAlpha(color, alpha) {
+  const safeAlpha = Math.min(1, Math.max(0, Number(alpha) || 0));
+  const hex = String(color || "").trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)?.[1];
+  if (!hex) return color;
+  const full = hex.length === 3 ? [...hex].map((digit) => digit + digit).join("") : hex;
+  return `rgba(${Number.parseInt(full.slice(0, 2), 16)}, ${Number.parseInt(full.slice(2, 4), 16)}, ${Number.parseInt(full.slice(4, 6), 16)}, ${safeAlpha})`;
+}
 function formatBitrate(value) { return value >= 1000 ? `${(value / 1000).toFixed(2)} Mbps` : `${value} kbps`; }
 function formatMilliseconds(value) { return Number.isFinite(Number(value)) && value !== null ? `${Number(value).toFixed(1)} ms` : "--"; }
 function formatRecovery(value) { return Number.isFinite(Number(value)) && value !== null ? `${Number(value).toFixed(1)}%` : "--"; }
-function formatDuration(seconds) { const h = Math.floor(seconds / 3600); const m = Math.floor((seconds % 3600) / 60); return `${h}h ${m}m`; }

@@ -63,3 +63,30 @@ test("a shipped template revision replaces the persisted stock catalog without c
   assert.deepEqual(upgraded.presets, original.presets);
   assert.ok(await readFile(`${statePath}.bak`, "utf8"));
 });
+
+test("startup clamps persisted connectivity polling to the safe floor", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-overlay-poll-upgrade-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const statePath = path.join(root, "overlay-presets.json");
+  const options = await storeFixtureOptions(statePath);
+  const document = structuredClone(options.stockDocument);
+  document.revision = 7;
+  document.presets.push({
+    id:"too-fast",
+    template_id:"default-connectivity",
+    revision:1,
+    created_at:"2026-06-20T12:00:00.000Z",
+    updated_at:"2026-06-20T12:00:00.000Z",
+    name:"Too Fast",
+    enabled:true,
+    type:"connectivity",
+    layout:{dock:"br",pad:20},
+    theme:{},
+    config:{poll_ms:20},
+  });
+  await writeFile(statePath, JSON.stringify(document));
+  const store = new OverlayStore(options);
+  const upgraded = await store.init();
+  assert.equal(upgraded.presets.find((preset) => preset.id === "too-fast").config.poll_ms, 200);
+  assert.equal(upgraded.revision, 8);
+});

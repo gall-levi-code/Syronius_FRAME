@@ -4,7 +4,7 @@ html, body {
   margin: 0;
   overflow: hidden;
   background: transparent;
-  font-family: Inter, system-ui, sans-serif;
+  font-family: var(--font-family, Inter, system-ui, sans-serif);
 }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -28,7 +28,7 @@ body.element-preview {
   min-height: 100%;
   display: grid;
   place-items: center;
-  padding: 14px;
+  padding: var(--panel-padding, 14px);
 }
 body.element-preview .overlay-root {
   position: static;
@@ -45,39 +45,44 @@ body.element-preview .widget {
   min-width: 0;
   max-width: none;
   color: var(--text, #eef8ff);
-  background: rgba(0, 0, 0, 0.72);
-  border: 1px solid color-mix(in srgb, var(--plot-primary, #2cb4fb) 40%, transparent);
+  background: var(--panel-bg, rgba(0, 0, 0, 0.72));
+  border: var(--panel-border-width, 1px) solid var(--panel-border, color-mix(in srgb, var(--plot-primary, #2cb4fb) 40%, transparent));
   border-radius: var(--radius, 8px);
-  padding: 14px;
+  padding: var(--panel-padding, 14px);
   transform-origin: var(--origin, bottom right);
   transform: scale(var(--scale, 1));
   transition: opacity var(--transition, 250ms), background-color var(--transition, 250ms), transform var(--transition, 250ms);
   backdrop-filter: blur(var(--blur, 2px));
-  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.28);
+  box-shadow: var(--shadow-x, 0) var(--shadow-y, 16px) var(--glow-blur, 50px) var(--shadow-spread, 0) color-mix(in srgb, var(--panel-glow, #000) 44%, transparent);
   font-size: var(--font-size, 16px);
-  opacity: var(--widget-opacity, 0.72);
+  font-family: var(--font-family, Inter, system-ui, sans-serif);
+  font-weight: var(--font-weight, 400);
+  opacity: var(--widget-opacity, 1);
 }
 .widget.hidden { opacity: 0; }
 .telemetry-layout {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(0, var(--block-width, 160px)));
-  gap: 7px;
+  gap: var(--block-gap, 7px);
   align-items: stretch;
+  transform-origin: center;
 }
 .telemetry-block {
   min-width: 0;
   height: var(--block-height, 72px);
   min-height: 0;
   overflow: hidden;
+  transform-origin: center;
 }
 .widget-head {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 10px;
   align-items: center;
-  background: rgba(255,255,255,0.06);
+  background: var(--block-bg, rgba(255,255,255,0.06));
+  border: var(--block-border-width, 0) solid var(--block-border, transparent);
   border-radius: 6px;
-  padding: 8px;
+  padding: var(--block-padding, 8px);
 }
 .widget-head > div {
   min-width: 0;
@@ -99,22 +104,27 @@ body.element-preview .widget {
 }
 .widget-head span {
   color: var(--muted, #9fc6dc);
-  font-size: 0.78em;
+  font-size: var(--subheader-font-size, 12px);
+  font-family: var(--subheader-font-family, Inter, system-ui, sans-serif);
+  font-weight: var(--subheader-font-weight, 500);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .detail {
-  background: rgba(255,255,255,0.06);
+  background: var(--block-bg, rgba(255,255,255,0.06));
+  border: var(--block-border-width, 0) solid var(--block-border, transparent);
   border-radius: 6px;
-  padding: 8px;
+  padding: var(--block-padding, 8px);
   display: grid;
   align-content: center;
 }
 .detail span {
   display: block;
   color: var(--muted, #9fc6dc);
-  font-size: 0.68em;
+  font-size: var(--subheader-font-size, 12px);
+  font-family: var(--subheader-font-family, Inter, system-ui, sans-serif);
+  font-weight: var(--subheader-font-weight, 500);
 }
 .detail strong {
   font-variant-numeric: tabular-nums;
@@ -123,21 +133,37 @@ body.element-preview .widget {
 .meter {
   display: flex;
   align-items: center;
-  padding: 8px;
-  background: rgba(255,255,255,0.06);
+  position: relative;
+  padding: var(--block-padding, 8px);
+  background: var(--block-bg, rgba(255,255,255,0.06));
+  border: var(--block-border-width, 0) solid var(--block-border, transparent);
   border-radius: 6px;
   overflow: hidden;
 }
 .meter > div {
-  width: 0%;
-  height: 8px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--plot-primary, #2cb4fb), var(--plot-secondary, #8de7ff));
-  transition: width var(--transition, 250ms);
+  position: relative;
+  width: 100%;
+  height: var(--meter-height, 14px);
+  border-radius: var(--meter-radius, 999px);
+  background: linear-gradient(90deg, var(--bad, #ff5f6d) 0 var(--meter-warn-stop, 22%), var(--warn, #ffd166) var(--meter-warn-stop, 22%) var(--meter-good-stop, 42%), var(--good, #2cb4fb) var(--meter-good-stop, 42%) 100%);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.2), inset 0 4px 12px rgba(0,0,0,.28);
 }
-.chart-block { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 5px; padding: 8px; }
+.meter > div::after {
+  content: "";
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  left: clamp(0px, var(--meter-percent, 0%), calc(100% - 4px));
+  width: 4px;
+  border-radius: 999px;
+  background: var(--text, #eef8ff);
+  box-shadow: 0 0 12px rgba(255,255,255,.8);
+  transform: translateX(-2px);
+  transition: left var(--transition, 250ms);
+}
+.chart-block { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 5px; padding: var(--block-padding, 8px); background: var(--block-bg, rgba(255,255,255,0.06)); border: var(--block-border-width, 0) solid var(--block-border, transparent); border-radius: 6px; }
 .chart-block.legend-hidden { grid-template-rows: minmax(0, 1fr); gap: 0; }
-.chart-legend { display: flex; flex-wrap: wrap; gap: 10px; overflow: hidden; color: var(--muted); font-size: 10px; line-height: 1.2; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 10px; overflow: hidden; color: var(--muted); font-size: var(--subheader-font-size, 12px); font-family: var(--subheader-font-family, Inter, system-ui, sans-serif); font-weight: var(--subheader-font-weight, 500); line-height: 1.2; }
 .chart-legend span { display: inline-flex; align-items: center; gap: 4px; }
 .chart-legend span::before { content: ""; width: 12px; height: 3px; border-radius: 999px; background: var(--plot-primary, #2cb4fb); }
 .chart-legend .warn-line::before { height: 0; border-top: 2px dashed var(--warn, #ffd166); background: transparent; }
@@ -148,6 +174,6 @@ canvas {
   width: 100%;
   height: 100%;
   min-height: 0;
-  background: rgba(255,255,255,0.06);
+  background: color-mix(in srgb, var(--block-bg, rgba(255,255,255,0.06)) 70%, transparent);
   border-radius: 6px;
 }
