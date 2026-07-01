@@ -146,3 +146,35 @@ export function telemetryGridPixelWidth(columns = 1, blockWidth = 160, gap = 7, 
   const safeChrome = Math.max(0, Number(horizontalChrome) || 0);
   return (safeColumns * safeBlockWidth) + ((safeColumns - 1) * safeGap) + safeChrome;
 }
+
+export function layoutGrowth(layout = {}) {
+  const dock = layout?.dock || "br";
+  const defaults = {
+    x: dock.includes("r") ? "left" : dock.includes("l") ? "right" : "center",
+    y: dock.startsWith("b") ? "up" : dock.startsWith("t") ? "down" : "center",
+  };
+  return {
+    x: ["left", "right", "center"].includes(layout?.growth_x) ? layout.growth_x : defaults.x,
+    y: ["up", "down", "center"].includes(layout?.growth_y) ? layout.growth_y : defaults.y,
+  };
+}
+
+export function previewElementSize(element, padding = 28) {
+  const rect = element?.getBoundingClientRect?.() || {};
+  const width = Math.max(element?.offsetWidth || 0, element?.scrollWidth || 0);
+  const height = Math.max(element?.offsetHeight || 0, element?.scrollHeight || 0);
+  return {
+    width: Math.ceil((rect.width || width) + padding),
+    height: Math.ceil((rect.height || height) + padding),
+    content_width: Math.ceil(width),
+    content_height: Math.ceil(height),
+  };
+}
+
+export function formatTelemetryDuration(seconds) {
+  const total = Math.max(0, Math.floor(Number(seconds) || 0));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return h ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`;
+}

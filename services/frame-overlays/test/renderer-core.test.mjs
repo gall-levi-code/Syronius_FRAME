@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { QUALITY, QualityStabilizer, ServiceReloadWatchdog, canvasPixelSize, compactTelemetryBlockWidth, normalizedTelemetryBlockWidth, normalizedTelemetryColumns, qualityStatusText, resolvedTelemetryColumnCount, shouldResetRuntimeState, telemetryAvailability, telemetryGridPixelWidth, telemetryIsStale } from "../public/renderer-core.js";
+import { QUALITY, QualityStabilizer, ServiceReloadWatchdog, canvasPixelSize, compactTelemetryBlockWidth, formatTelemetryDuration, layoutGrowth, normalizedTelemetryBlockWidth, normalizedTelemetryColumns, previewElementSize, qualityStatusText, resolvedTelemetryColumnCount, shouldResetRuntimeState, telemetryAvailability, telemetryGridPixelWidth, telemetryIsStale } from "../public/renderer-core.js";
 import { clampBitrateLevels, clampNumericValue, clampRttLevels, samplingWindowLabel } from "../public/wizard-core.js";
 import { deriveUploadView, uploadSummary } from "../public/upload-renderer-core.js";
 
@@ -63,14 +63,14 @@ test("compact telemetry block width keeps configured width as the floor", () => 
 });
 
 test("sampling history reports the visible time window", () => {
-  assert.equal(samplingWindowLabel(20, 20), "400 ms");
+  assert.equal(samplingWindowLabel(200, 20), "4 sec");
   assert.equal(samplingWindowLabel(1000, 20), "20 sec");
 });
 
 test("numeric sampling controls honor their min, max, and step", () => {
-  assert.equal(clampNumericValue(10, 20, 2000, 20), 20);
-  assert.equal(clampNumericValue(2200, 20, 2000, 20), 2000);
-  assert.equal(clampNumericValue(57, 20, 2000, 20), 60);
+  assert.equal(clampNumericValue(10, 200, 2000, 100), 200);
+  assert.equal(clampNumericValue(2200, 200, 2000, 100), 2000);
+  assert.equal(clampNumericValue(257, 200, 2000, 100), 300);
 });
 
 test("telemetry column wrapping supports auto, fixed counts, and all visible blocks", () => {
@@ -85,6 +85,24 @@ test("telemetry column wrapping supports auto, fixed counts, and all visible blo
   assert.equal(resolvedTelemetryColumnCount("all", 8, 160, 400), 8);
   assert.equal(resolvedTelemetryColumnCount("auto", 8, 160, 520), 3);
   assert.equal(telemetryGridPixelWidth(3, 160), 524);
+});
+
+test("layout growth defaults inward from anchors and preview size separates viewport from content", () => {
+  assert.deepEqual(layoutGrowth({ dock:"br" }), { x:"left", y:"up" });
+  assert.deepEqual(layoutGrowth({ dock:"tl" }), { x:"right", y:"down" });
+  assert.deepEqual(layoutGrowth({ dock:"c", growth_x:"left", growth_y:"down" }), { x:"left", y:"down" });
+  assert.deepEqual(previewElementSize({ offsetWidth:200, scrollWidth:180, offsetHeight:80, scrollHeight:120, getBoundingClientRect:() => ({ width:300, height:180 }) }, 28), {
+    width: 328,
+    height: 208,
+    content_width: 200,
+    content_height: 120,
+  });
+});
+
+test("telemetry uptime shows minutes and seconds before hours", () => {
+  assert.equal(formatTelemetryDuration(59), "0m 59s");
+  assert.equal(formatTelemetryDuration(3599), "59m 59s");
+  assert.equal(formatTelemetryDuration(3661), "1h 1m 1s");
 });
 
 test("unavailable feed telemetry is omitted while supported values remain visible", () => {
