@@ -16,14 +16,29 @@ test("moves a file only after its size and mtime remain stable", async () => {
   await writeFile(source, "part");
 
   await gate.runOnce(0);
+  let progress = gate.progressSnapshot(0);
+  assert.equal(progress.transfers.length, 1);
+  assert.equal(progress.transfers[0].adapter, "ftp");
+  assert.equal(progress.transfers[0].phase, "receiving");
+  assert.equal(progress.transfers[0].filename, "Camera Photo.JPG");
+  assert.equal(progress.transfers[0].bytes_received, 4);
+  assert.equal(progress.transfers[0].bytes_total, null);
   await gate.runOnce(2000);
   assert.deepEqual(await readdir(staging), []);
   await appendFile(source, "more");
   await gate.runOnce(2500);
+  progress = gate.progressSnapshot(2500);
+  assert.equal(progress.transfers[0].phase, "receiving");
+  assert.equal(progress.transfers[0].bytes_received, 8);
+  assert.equal(progress.transfers[0].speed_bps, 8);
   await gate.runOnce(5000);
   assert.deepEqual(await readdir(staging), []);
   await gate.runOnce(5500);
   assert.deepEqual(await readdir(staging), ["Camera_Photo.jpg"]);
+  progress = gate.progressSnapshot(5500);
+  assert.equal(progress.transfers[0].phase, "queued");
+  assert.equal(progress.transfers[0].bytes_received, 8);
+  assert.match(progress.transfers[0].status_text, /Staged as Camera_Photo\.jpg/);
 });
 
 test("ignores explicit uploading files", async () => {

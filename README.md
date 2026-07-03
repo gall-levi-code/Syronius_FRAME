@@ -162,6 +162,7 @@ Start with the service README when you want to understand, operate, or customize
 | Photo Stage viewer and remote | [`services/frame-today/`](services/frame-today/README.md) |
 | Audio monitor | [`services/frame-audio/`](services/frame-audio/README.md) |
 | Discord audio bridge | [`services/frame-audio-bridge/`](services/frame-audio-bridge/README.md) |
+| Belabox manager | [`services/frame-belabox-manager/`](services/frame-belabox-manager/README.md) |
 
 ## Container Breakdown
 
@@ -217,6 +218,7 @@ flowchart TD
 | `frame-overlays` | Overlays | OBS overlay sources and the Overlay Wizard. |
 | `frame-audio` | Audio Monitor | Browser capture, audio relay, listen pages, and HLS output. |
 | `frame-audio-bridge` | Discord Audio Bridge | Discord voice audio, OBS mixes, speaking overlay, and controls. |
+| `frame-belabox-manager` | Belabox Manager | Authenticated MQTT/WSS telemetry scaffold for roaming Belabox devices; SSH is maintenance-only. |
 | `frame-photo-upload` | Browser Photo Upload | Protected browser/phone upload page. |
 | `frame-photo-ftp` | Photo FTP Ingest | Camera FTP upload intake. |
 | `frame-pipeline-photos` | Any photo feature | Photo validation, conversion, sidecars, `.ready` files, and archive output. |

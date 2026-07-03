@@ -9,6 +9,8 @@ export type DockPosition = "tl" | "t" | "tr" | "l" | "c" | "r" | "bl" | "b" | "b
 export interface OverlayLayout {
   dock: DockPosition;
   pad: number;
+  growth_x?: "left" | "right" | "center";
+  growth_y?: "up" | "down" | "center";
   scale?: number;
   width_px?: number;
   height_px?: number;
@@ -22,12 +24,33 @@ export interface OverlayTheme {
   bad_color?: string;
   plot_primary?: string;
   plot_secondary?: string;
+  panel_bg_color?: string;
+  panel_border_color?: string;
+  panel_glow_color?: string;
+  block_bg_color?: string;
+  block_border_color?: string;
+  panel_bg_alpha?: number;
+  block_bg_alpha?: number;
   bg_opacity_good?: number;
   bg_opacity_warn?: number;
   bg_opacity_bad?: number;
   border_radius_px?: number;
   backdrop_blur_px?: number;
+  panel_padding_px?: number;
+  block_padding_px?: number;
+  block_gap_px?: number;
+  panel_border_width_px?: number;
+  block_border_width_px?: number;
+  glow_blur_px?: number;
+  glow_spread_px?: number;
+  glow_offset_x_px?: number;
+  glow_offset_y_px?: number;
   font_size_base_px?: number;
+  font_family?: string;
+  font_weight?: number;
+  subheader_font_family?: string;
+  subheader_font_size_px?: number;
+  subheader_font_weight?: number;
 }
 
 export interface ConnectivityConfig {
@@ -37,8 +60,16 @@ export interface ConnectivityConfig {
   rtt_warn_max?: number;
   rtt_bad_max?: number;
   bitrate_meter_max?: number;
+  bitrate_meter_height_px?: number;
+  bitrate_meter_radius_px?: number;
   chart_bitrate_max?: number;
   chart_rtt_max?: number;
+  chart_bitrate_line_width_px?: number;
+  chart_rtt_line_width_px?: number;
+  chart_warn_line_width_px?: number;
+  chart_bitrate_line_style?: "solid" | "dashed" | "dotted";
+  chart_rtt_line_style?: "solid" | "dashed" | "dotted";
+  chart_warn_line_style?: "solid" | "dashed" | "dotted";
   history_len?: number;
   bitrate_streak_warn?: number;
   bitrate_streak_bad?: number;
@@ -54,6 +85,7 @@ export interface ConnectivityConfig {
   show_latency?: boolean;
   show_buffer?: boolean;
   show_chart?: boolean;
+  show_chart_legend?: boolean;
   show_meter?: boolean;
   show_server?: boolean;
   show_dropped?: boolean;

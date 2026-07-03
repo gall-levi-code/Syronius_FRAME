@@ -1,6 +1,6 @@
 export function deriveUploadView(transfers, completeHideMs = 5000, now = Date.now()) {
   const visible = (Array.isArray(transfers) ? transfers : []).filter((transfer) => {
-    if (transfer.phase !== "queued" && transfer.phase !== "published") return true;
+    if (transfer.phase !== "published") return true;
     return now - Date.parse(transfer.updated_at) <= Math.max(0, completeHideMs);
   }).sort(compareTransfers);
   const phase = (name) => visible.filter((transfer) => transfer.phase === name);
@@ -15,7 +15,7 @@ export function deriveUploadView(transfers, completeHideMs = 5000, now = Date.no
   const bytesReceived = receiving.reduce((total, transfer) => total + finite(transfer.bytes_received), 0);
   const bytesTotal = knownTotals ? receiving.reduce((total, transfer) => total + finite(transfer.bytes_total), 0) : null;
   const speeds = receiving.map((transfer) => transfer.speed_bps).filter(Number.isFinite);
-  const completeCount = queued.length + processing.length + published.length + failed.length;
+  const completeCount = published.length + failed.length;
   const overallTotal = visible.length;
   const currentPercent = focus ? transferPercent(focus) : null;
   const currentBytesTotal = focus && finite(focus.bytes_total) > 0 ? finite(focus.bytes_total) : null;
@@ -46,7 +46,7 @@ export function uploadSummary(view) {
   const parts = [];
   if (view.receiving) parts.push(`${view.receiving} uploading`);
   if (view.processing) parts.push(`${view.processing} processing`);
-  if (view.queued) parts.push(`${view.queued} accepted`);
+  if (view.queued) parts.push(`${view.queued} waiting`);
   if (view.published) parts.push(`${view.published} published`);
   if (view.failed) parts.push(`${view.failed} failed`);
   return parts.join(" - ");
@@ -81,7 +81,9 @@ function focusTransfer(groups) {
 }
 
 function transferPercent(transfer) {
-  if (transfer.phase === "queued" || transfer.phase === "processing" || transfer.phase === "published") return 100;
+  if (transfer.phase === "published") return 100;
+  if (transfer.phase === "queued") return 0;
+  if (transfer.phase === "processing") return finite(transfer.bytes_received) > 0 ? 100 : null;
   const total = finite(transfer.bytes_total);
   if (total <= 0) return null;
   return Math.min(100, (finite(transfer.bytes_received) / total) * 100);

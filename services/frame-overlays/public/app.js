@@ -8,23 +8,60 @@ import {
   clampRttLevels,
   samplingWindowLabel,
 } from "./wizard-core.js";
+import { layoutGrowth } from "./renderer-core.js";
 
 const defaultOrder = ["header", "bitrate", "rtt", "latency", "buffer", "server", "dropped", "uptime", "meter", "chart", "recovery"];
-const connectivityLayoutRangeFields = [["layout.pad", "Padding", 0, 200, 1], ["layout.scale", "Scale", .5, 3, .05]];
+const connectivityLayoutRangeFields = [["layout.pad", "Padding", 0, 200, 1], ["layout.scale", "Scale", .5, 3, .05], ["layout.width_px", "Layout width", 0, 1200, 10], ["layout.height_px", "Min height", 0, 1000, 10]];
 const uploadLayoutRangeFields = [["layout.pad", "Padding", 0, 200, 1], ["layout.scale", "Scale", .5, 3, .05], ["config.width_px", "Card width", 280, 1200, 10]];
-const blockSizeRangeFields = [["config.telemetry_block_width_px", "Block width", 120, 280, 1]];
-const samplingRangeFields = [["config.poll_ms", "Poll interval (ms)", 20, 2000, 20], ["config.history_len", "Poll history count", 2, 120, 1]];
-const blockThemeColorFields = [["text_color", "Text color"], ["muted_color", "Subheader color"]];
-const blockThemeShapeRangeFields = [["theme.border_radius_px", "Corner radius", 0, 50, 1], ["theme.font_size_base_px", "Font size", 10, 32, 1]];
+const blockSizeRangeFields = [["config.telemetry_block_width_px", "Block width", 80, 600, 1], ["config.telemetry_block_height_px", "Block height", 40, 400, 1]];
+const samplingRangeFields = [["config.poll_ms", "Poll interval (ms)", 200, 2000, 100], ["config.history_len", "Poll history count", 2, 120, 1]];
+const panelColorFields = [["panel_bg_color", "Background"], ["panel_border_color", "Border"], ["panel_glow_color", "Shadow"]];
+const blockColorFields = [["block_bg_color", "Background"], ["block_border_color", "Border"]];
+const plotColorFields = [["plot_primary", "Bitrate"], ["plot_secondary", "RTT"]];
+const panelRangeFields = [["theme.panel_bg_alpha", "Background opacity", 0, 1, .01], ["theme.panel_padding_px", "Widget padding", 0, 60, 1], ["theme.border_radius_px", "Corner radius", 0, 50, 1], ["theme.backdrop_blur_px", "Backdrop blur", 0, 50, 1], ["theme.panel_border_width_px", "Border width", 0, 8, 1], ["theme.glow_blur_px", "Shadow blur", 0, 80, 1], ["theme.glow_spread_px", "Shadow spread", -20, 80, 1], ["theme.glow_offset_x_px", "Shadow X", -80, 80, 1], ["theme.glow_offset_y_px", "Shadow Y", -80, 80, 1]];
+const blockRangeFields = [["theme.block_bg_alpha", "Background opacity", 0, 1, .01], ["theme.block_gap_px", "Block gap", 0, 40, 1], ["theme.block_padding_px", "Inner padding", 0, 40, 1], ["theme.block_border_width_px", "Border width", 0, 8, 1]];
+const textRangeFields = [["theme.font_size_base_px", "Size", 10, 32, 1], ["theme.font_weight", "Weight", 100, 900, 100]];
+const subheaderRangeFields = [["theme.subheader_font_size_px", "Size", 8, 24, 1], ["theme.subheader_font_weight", "Weight", 100, 900, 100]];
+const plotRangeFields = [["config.bitrate_meter_height_px", "Meter thickness", 4, 40, 1], ["config.bitrate_meter_radius_px", "Meter radius", 0, 30, 1], ["config.chart_bitrate_line_width_px", "Bitrate thickness", .5, 12, .5], ["config.chart_rtt_line_width_px", "RTT thickness", .5, 12, .5], ["config.chart_warn_line_width_px", "Warn thickness", .5, 12, .5]];
 const themeStateFields = [["good", "Good", "good_color", "theme.bg_opacity_good"], ["warn", "Warn", "warn_color", "theme.bg_opacity_warn"], ["bad", "Bad", "bad_color", "theme.bg_opacity_bad"]];
-const uploadRangeFields = [["config.active_poll_ms", "Upload refresh rate (ms)", 200, 2000, 100], ["config.idle_poll_ms", "Idle check rate", 200, 10000, 100], ["config.complete_hide_ms", "Show completed for", 0, 30000, 250]];
+const uploadRangeFields = [["config.active_poll_ms", "Upload refresh rate (ms)", 200, 2000, 100], ["config.idle_poll_ms", "Idle check rate", 200, 10000, 100], ["config.complete_hide_ms", "Complete flash (ms)", 0, 500, 50]];
+const fontFamilyOptions = [
+  ["Inter, system-ui, sans-serif", "Inter / System"],
+  ["system-ui, sans-serif", "System UI"],
+  ["Arial, Helvetica, sans-serif", "Arial"],
+  ["Verdana, Geneva, sans-serif", "Verdana"],
+  ["Tahoma, Geneva, sans-serif", "Tahoma"],
+  ["Trebuchet MS, sans-serif", "Trebuchet"],
+  ["Georgia, serif", "Georgia"],
+  ["Times New Roman, Times, serif", "Times New Roman"],
+  ["Consolas, monospace", "Consolas"],
+  ["Courier New, monospace", "Courier New"],
+];
+const lineStyleOptions = [["solid", "Solid"], ["dashed", "Dashed"], ["dotted", "Dotted"]];
 const uploadAdapterOptions = [
   ["web_upload", "Web upload", false],
-  ["ftp", "FTP (coming soon)", true],
-  ["belabox_agent", "BELABOX agent (coming soon)", true],
+  ["ftp", "FTP ingest", false],
+  ["belabox_agent", "Belabox FTP connector", false],
 ];
 const dockLabels = { tl:"Top left",t:"Top",tr:"Top right",l:"Left",c:"Center",r:"Right",bl:"Bottom left",b:"Bottom",br:"Bottom right" };
+const growthDirectionLabels = [["up", "Up", "&uarr;"], ["left", "Left", "&larr;"], ["auto", "Auto", "&bull;"], ["right", "Right", "&rarr;"], ["down", "Down", "&darr;"]];
+const customTelemetryBlocks = new Set(["header", "bitrate", "rtt", "buffer", "server", "dropped", "uptime", "meter", "chart"]);
 const blockDensityOptions = [["compact", "Compact", 56], ["normal", "Normal", 72], ["spacious", "Spacious", 104]];
+const fakePreviewStorageKey = "frame-overlays-fake-preview";
+const THEME_MODE_KEY = "frame-theme";
+const LEGACY_PORTAL_THEME_KEY = "frame-portal-theme";
+const THEME_PROFILE_ID_KEY = "frame-theme-profile-id";
+const THEME_PROFILE_KEY = "frame-theme-profile";
+const THEME_CUSTOM_PROFILES_KEY = "frame-theme-custom-profiles";
+const COMPAT_THEME_KEYS = ["frame-gallery-theme-mode", "frame-audio-bridge-color-mode"];
+const THEME_STORAGE_KEYS = new Set([
+  THEME_MODE_KEY,
+  LEGACY_PORTAL_THEME_KEY,
+  THEME_PROFILE_ID_KEY,
+  THEME_PROFILE_KEY,
+  THEME_CUSTOM_PROFILES_KEY,
+  ...COMPAT_THEME_KEYS,
+]);
 const telemetryBlockFields = [
   ["header", "Header", ["show_name", "show_status"]],
   ["bitrate", "Bitrate", ["show_bitrate"]],
@@ -54,7 +91,7 @@ const state = {
   selectedSourceId: null,
   sourceDraft: null,
   designDraft: null,
-  fakePreview: true,
+  fakePreview: readStoredFakePreview(),
   previewFrameSize: null,
   create: null,
   pendingSave: new Set(),
@@ -75,6 +112,7 @@ const fakePreviewToggle = document.querySelector("#fake-preview-toggle");
 const notice = document.querySelector("#notice");
 const saveStatus = document.querySelector("#save-status");
 const receiverStatus = document.querySelector("#receiver-status");
+const dashboardLink = document.querySelector("#dashboard-link");
 const themeToggle = document.querySelector("#theme-toggle");
 const confirmDialog = document.querySelector("#confirm-dialog");
 const confirmTitle = document.querySelector("#confirm-title");
@@ -87,16 +125,22 @@ initializeTheme();
 themeToggle.addEventListener("click", toggleTheme);
 fakePreviewToggle.addEventListener("change", () => {
   state.fakePreview = fakePreviewToggle.checked;
+  writeStoredFakePreview(state.fakePreview);
   renderPreview();
 });
+fakePreviewToggle.checked = state.fakePreview;
 preview.addEventListener("load", sendPreview);
 window.addEventListener("resize", applyPreviewScale);
 window.addEventListener("storage", (event) => {
-  if (event.key === "frame-theme-profile") {
+  if (THEME_STORAGE_KEYS.has(event.key)) {
     setThemeMode(readStoredTheme(), false);
     return;
   }
-  if (event.key === "frame-theme" && (event.newValue === "day" || event.newValue === "night")) setThemeMode(event.newValue, false);
+  if (event.key === fakePreviewStorageKey) {
+    state.fakePreview = readStoredFakePreview();
+    fakePreviewToggle.checked = state.fakePreview;
+    renderPreview();
+  }
 });
 window.addEventListener("message", (event) => {
   if (!isTrustedPreviewOrigin(event.origin) || event.data?.type !== "frame-preview-size") return;
@@ -133,22 +177,40 @@ function toggleTheme() {
 function setThemeMode(nextMode, persist) {
   const mode = nextMode === "day" ? "day" : "night";
   document.documentElement.dataset.theme = mode;
+  document.documentElement.dataset.themeMode = mode;
+  document.body.classList.toggle("theme-day", mode === "day");
   window.FrameTheme?.apply(mode);
   const nextLabel = mode === "day" ? "Switch to night mode" : "Switch to day mode";
   themeToggle.setAttribute("aria-label", nextLabel);
   themeToggle.title = nextLabel;
   themeToggle.setAttribute("aria-pressed", String(mode === "day"));
   if (persist) {
-    try { localStorage.setItem("frame-theme", mode); } catch {}
+    try { localStorage.setItem(THEME_MODE_KEY, mode); } catch {}
   }
 }
 
 function readStoredTheme() {
   try {
-    const stored = localStorage.getItem("frame-theme");
+    const stored = localStorage.getItem(THEME_MODE_KEY)
+      || localStorage.getItem(LEGACY_PORTAL_THEME_KEY)
+      || COMPAT_THEME_KEYS.map((key) => localStorage.getItem(key)).find(Boolean);
     if (stored === "day" || stored === "night") return stored;
   } catch {}
   return "night";
+}
+
+function readStoredFakePreview() {
+  try {
+    return localStorage.getItem(fakePreviewStorageKey) !== "false";
+  } catch {
+    return true;
+  }
+}
+
+function writeStoredFakePreview(value) {
+  try {
+    localStorage.setItem(fakePreviewStorageKey, value ? "true" : "false");
+  } catch {}
 }
 
 async function load(preserveSelection = false) {
@@ -162,6 +224,7 @@ async function load(preserveSelection = false) {
     state.catalog = catalog;
     state.streams = (streams.streams || []).slice().sort(compareStream);
     state.config = config;
+    if (dashboardLink) dashboardLink.href = dashboardUrl();
     receiverStatus.textContent = streamsAvailable ? "Telemetry ready" : "Telemetry unavailable";
     receiverStatus.classList.toggle("live", streamsAvailable);
     const sources = sortedSources();
@@ -250,8 +313,8 @@ function renderCreateDataSource() {
           <p>Show browser or ingest transfer progress inside OBS.</p>
           <div class="choice-list">
             ${sourceChoice({ key:"upload:web_upload", title:"Web upload", detail:"Browser and mobile upload telemetry", active:selectedKey === "upload:web_upload" })}
-            ${sourceChoice({ key:"upload:ftp", title:"FTP (coming soon)", detail:"Adapter listed now; telemetry fetcher is not wired yet.", disabled:true })}
-            ${sourceChoice({ key:"upload:belabox_agent", title:"BELABOX agent (coming soon)", detail:"Adapter listed now; telemetry fetcher is not wired yet.", disabled:true })}
+            ${sourceChoice({ key:"upload:ftp", title:"FTP ingest", detail:"Live file-growth and staged-camera-upload telemetry", active:selectedKey === "upload:ftp" })}
+            ${sourceChoice({ key:"upload:belabox_agent", title:"Belabox FTP connector", detail:"Live progress from Belabox MQTT telemetry", active:selectedKey === "upload:belabox_agent" })}
           </div>
         </section>
       </div>
@@ -276,6 +339,10 @@ function selectCreateDataSource(choice) {
     state.create.dataSource = { type:"connectivity", label:stream?.description || streamId, data_source:{ kind:"stream", stream_profile_id:streamId } };
   } else if (choice === "upload:web_upload") {
     state.create.dataSource = { type:"upload_progress", label:"Web upload", data_source:{ kind:"upload_progress", adapters:["web_upload"] } };
+  } else if (choice === "upload:ftp") {
+    state.create.dataSource = { type:"upload_progress", label:"FTP ingest", data_source:{ kind:"upload_progress", adapters:["ftp"] } };
+  } else if (choice === "upload:belabox_agent") {
+    state.create.dataSource = { type:"upload_progress", label:"Belabox FTP connector", data_source:{ kind:"upload_progress", adapters:["belabox_agent"] } };
   }
   renderCreateDataSource();
 }
@@ -389,6 +456,7 @@ function renderSelectedSource() {
   const preset = findPreset(source.preset_id);
   state.sourceDraft = structuredClone(source);
   state.designDraft = structuredClone(preset);
+  state.designDraft.theme ??= {};
   const type = preset.type;
   const unbound = source.data_source.kind === "stream" && !source.data_source.stream_profile_id;
   const url = sourceUrl(source);
@@ -427,8 +495,7 @@ function sourceDetailsMarkup(source, preset) {
       <div class="settings-body">
         <div class="form-grid">
           <label>Display name<input id="source-name" maxlength="80" value="${escapeAttr(source.display_name)}"></label>
-          <label>Enabled<select id="source-enabled"><option value="true" ${source.enabled ? "selected" : ""}>Enabled</option><option value="false" ${!source.enabled ? "selected" : ""}>Disabled</option></select></label>
-          <label class="wide">Permanent slug<input readonly value="${escapeAttr(source.slug)}"></label>
+          <label>Permanent slug<input readonly value="${escapeAttr(source.slug)}"></label>
           ${binding}
         </div>
         ${type === "connectivity" ? sourceCapabilityNotice(dataSource.stream_profile_id) : ""}
@@ -443,17 +510,13 @@ function streamBindingMarkup(selected) {
 
 function uploadAdapterMarkup(selectedAdapters) {
   const selected = new Set(Array.isArray(selectedAdapters) && selectedAdapters.length ? selectedAdapters : ["web_upload"]);
-  return `<div class="wide"><strong>Upload adapters</strong><div class="toggle-grid">${uploadAdapterOptions.map(([id,label,disabled]) => `<label class="${disabled ? "disabled" : ""}"><input type="checkbox" data-upload-adapter value="${escapeAttr(id)}" ${selected.has(id) ? "checked" : ""} ${disabled ? "disabled" : ""}>${escapeHtml(label)}</label>`).join("")}</div><small>Multiple adapters are part of the long-term source model. Only Web upload is active today.</small></div>`;
+  return `<div class="wide"><strong>Upload adapters</strong><div class="toggle-grid">${uploadAdapterOptions.map(([id,label,disabled]) => `<label class="${disabled ? "disabled" : ""}"><input type="checkbox" data-upload-adapter value="${escapeAttr(id)}" ${selected.has(id) ? "checked" : ""} ${disabled ? "disabled" : ""}>${escapeHtml(label)}</label>`).join("")}</div><small>FTP ingest reports live bytes and speed from file growth; percent appears only when a sender reports total size.</small></div>`;
 }
 
 function bindSourceDetails(type) {
   mainContent.querySelector("#source-name").addEventListener("input", (event) => {
     state.sourceDraft.display_name = event.target.value;
     queueAutosave("source", 800);
-  });
-  mainContent.querySelector("#source-enabled").addEventListener("change", (event) => {
-    state.sourceDraft.enabled = event.target.value === "true";
-    queueAutosave("source", 0);
   });
   if (type === "connectivity") {
     mainContent.querySelector("#source-stream").addEventListener("change", (event) => {
@@ -501,7 +564,23 @@ function uploadDesignMarkup(draft) {
 function layoutSectionMarkup(draft, includeTelemetryColumns) {
   const template = templateForDraft(draft);
   const fields = draft.type === "upload_progress" ? uploadLayoutRangeFields : connectivityLayoutRangeFields;
-  return `<details class="settings-section" open><summary>Layout</summary><div class="settings-body"><div class="layout-editor"><div class="dock-grid" aria-label="Overlay anchor">${Object.entries(dockLabels).map(([id,label]) => `<button class="secondary ${draft.layout.dock === id ? "active" : ""}" data-dock="${id}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}" type="button">${anchorIcon(id)}<span class="sr-only">${escapeHtml(label)}</span></button>`).join("")}</div><div class="range-list">${fields.map((field) => rangeControl(field, draft, template)).join("")}${includeTelemetryColumns ? telemetryColumnsMarkup(draft) : ""}</div></div></div></details>`;
+  const growth = layoutGrowth(draft.layout);
+  return `<details class="settings-section" open><summary>Layout</summary><div class="settings-body"><div class="layout-editor"><div class="layout-control-row"><div class="layout-control-group"><span class="layout-control-label">Anchor</span><div class="dock-grid" aria-label="Overlay anchor">${Object.entries(dockLabels).map(([id,label]) => `<button class="secondary ${draft.layout.dock === id ? "active" : ""}" data-dock="${id}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}" type="button">${anchorIcon(id)}<span class="sr-only">${escapeHtml(label)}</span></button>`).join("")}</div></div><div class="layout-control-group"><span class="layout-control-label">Growth direction</span>${growthDpadMarkup(draft.layout, growth)}</div></div><div class="range-list">${fields.map((field) => rangeControl(field, draft, template)).join("")}${includeTelemetryColumns ? telemetryColumnsMarkup(draft) : ""}</div></div></div></details>`;
+}
+
+function growthDpadMarkup(layout, growth) {
+  const active = activeGrowthDirection(layout, growth);
+  return `<div class="growth-grid" role="group" aria-label="Overlay growth direction">${growthDirectionLabels.map(([id,label,icon]) => `<button class="secondary growth-button ${active === id ? "active" : ""}" data-growth-direction="${escapeAttr(id)}" title="${escapeAttr(id === "auto" ? "Auto growth from anchor" : `Grow ${label.toLowerCase()}`)}" aria-label="${escapeAttr(id === "auto" ? "Auto growth from anchor" : `Grow ${label.toLowerCase()}`)}" type="button" style="grid-area:${escapeAttr(id === "auto" ? "middle" : id)}"><span aria-hidden="true">${icon}</span><span class="sr-only">${escapeHtml(label)}</span></button>`).join("")}</div>`;
+}
+
+function activeGrowthDirection(layout, growth) {
+  if (!layout.growth_x && !layout.growth_y) return "auto";
+  if (growth.x === "center" && growth.y === "up") return "up";
+  if (growth.x === "center" && growth.y === "down") return "down";
+  if (growth.x === "left" && growth.y === "center") return "left";
+  if (growth.x === "right" && growth.y === "center") return "right";
+  if (growth.x === "center" && growth.y === "center") return "auto";
+  return "";
 }
 
 function telemetryColumnsMarkup(draft) {
@@ -511,8 +590,45 @@ function telemetryColumnsMarkup(draft) {
 
 function blockThemeSectionMarkup(draft, includeBlockSizing) {
   const template = templateForDraft(draft);
-  const rangeFields = includeBlockSizing ? [...blockSizeRangeFields, ...blockThemeShapeRangeFields] : blockThemeShapeRangeFields;
-  return `<details class="settings-section" open><summary>Block theme</summary><div class="settings-body"><div class="block-theme-grid"><div class="theme-neutral-grid">${blockThemeColorFields.map(([field,label]) => `<label>${escapeHtml(label)}<input type="color" data-color="${field}" value="${escapeAttr(draft.theme[field])}"></label>`).join("")}</div><div class="range-list block-theme-ranges">${rangeFields.map((field) => rangeControl(field, draft, template)).join("")}</div>${includeBlockSizing ? blockDensityMarkup(draft) : ""}</div></div></details>`;
+  const blockRanges = includeBlockSizing ? [...blockSizeRangeFields, ...blockRangeFields] : blockRangeFields;
+  return `<details class="settings-section" open><summary>Theme</summary><div class="settings-body"><div class="theme-group-grid">
+    ${themeGroup("Panel", `<div class="theme-neutral-grid">${panelColorFields.map(([field,label]) => colorControl(field, label, draft, template)).join("")}</div><div class="range-list">${panelRangeFields.map((field) => rangeControl(field, draft, template)).join("")}</div>`)}
+    ${themeGroup("Block", `<div class="theme-neutral-grid">${blockColorFields.map(([field,label]) => colorControl(field, label, draft, template)).join("")}</div><div class="range-list">${blockRanges.map((field) => rangeControl(field, draft, template)).join("")}</div>${includeBlockSizing ? blockDensityMarkup(draft) : ""}`)}
+    ${themeGroup("Text", `${fontSelectControl("theme.font_family", "Font family", draft, template)}${colorControl("text_color", "Color", draft, template)}<div class="range-list">${textRangeFields.map((field) => rangeControl(field, draft, template)).join("")}</div>`)}
+    ${themeGroup("Subheader", `${fontSelectControl("theme.subheader_font_family", "Font family", draft, template, "Inter, system-ui, sans-serif")}${colorControl("muted_color", "Color", draft, template)}<div class="range-list">${subheaderRangeFields.map((field) => rangeControl(field, draft, template)).join("")}</div>`)}
+    ${draft.type === "connectivity" ? plotThemeMarkup(draft, template) : ""}
+  </div></div></details>`;
+}
+
+function colorControl(field, label, draft, template) {
+  return `<label>${escapeHtml(label)}<input type="color" data-color="${field}" value="${escapeAttr(colorInputValue(draft.theme[field] ?? template.theme?.[field]))}"></label>`;
+}
+
+function themeGroup(title, body) {
+  return `<section class="theme-group"><h3>${escapeHtml(title)}</h3>${body}</section>`;
+}
+
+function fontSelectControl(path, label, draft, template, fallback = "Inter, system-ui, sans-serif") {
+  const value = getPath(draft, path) ?? getPath(template, path) ?? fallback;
+  return selectControl(path, label, fontFamilyOptions, value);
+}
+
+function plotThemeMarkup(draft, template) {
+  return themeGroup("Plot", `<div class="theme-neutral-grid">${plotColorFields.map(([field,label]) => colorControl(field, label, draft, template)).join("")}</div><div class="range-list">${plotRangeFields.map((field) => rangeControl(field, draft, template)).join("")}</div><div class="form-grid plot-style-grid">${selectControl("config.chart_bitrate_line_style", "Bitrate line", lineStyleOptions, draft.config.chart_bitrate_line_style ?? template.config.chart_bitrate_line_style ?? "solid")}${selectControl("config.chart_rtt_line_style", "RTT line", lineStyleOptions, draft.config.chart_rtt_line_style ?? template.config.chart_rtt_line_style ?? "solid")}${selectControl("config.chart_warn_line_style", "Warn line", lineStyleOptions, draft.config.chart_warn_line_style ?? template.config.chart_warn_line_style ?? "dashed")}</div>`);
+}
+
+function selectControl(path, label, options, value) {
+  return `<label>${escapeHtml(label)}<select data-select="${escapeAttr(path)}">${options.map(([id, name]) => `<option value="${escapeAttr(id)}" ${id === value ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select></label>`;
+}
+
+function colorInputValue(value, fallback = "#ffffff") {
+  const text = String(value ?? fallback).trim();
+  if (/^#[0-9a-f]{6}$/i.test(text)) return text;
+  const short = text.match(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i);
+  if (short) return `#${short.slice(1).map((digit) => digit + digit).join("")}`;
+  const rgb = text.match(/^rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+  if (!rgb) return fallback;
+  return `#${rgb.slice(1, 4).map((part) => Math.min(255, Number(part)).toString(16).padStart(2, "0")).join("")}`;
 }
 
 function blockDensityMarkup(draft) {
@@ -526,7 +642,7 @@ function stateColoringSectionMarkup(draft) {
 }
 
 function stateThemeRowMarkup([stateId, label, colorField, opacityPath], draft, template) {
-  return `<div class="state-theme-row" data-theme-state="${escapeAttr(stateId)}"><label>${escapeHtml(label)} color<input type="color" data-color="${escapeAttr(colorField)}" value="${escapeAttr(draft.theme[colorField])}"></label>${rangeControl([opacityPath, `${label} opacity`, 0, 1, .01], draft, template)}</div>`;
+  return `<div class="state-theme-row" data-theme-state="${escapeAttr(stateId)}"><label>${escapeHtml(label)} color<input type="color" data-color="${escapeAttr(colorField)}" value="${escapeAttr(colorInputValue(draft.theme[colorField] ?? template.theme?.[colorField]))}"></label>${rangeControl([opacityPath, `${label} opacity`, 0, 1, .01], draft, template)}</div>`;
 }
 
 function connectivityTelemetryMarkup(draft) {
@@ -535,7 +651,7 @@ function connectivityTelemetryMarkup(draft) {
 
 function advancedTimingMarkup(draft) {
   const template = templateForDraft(draft);
-  return `<details id="chart-timing-section" class="settings-section" open ${draft.config.show_chart === false ? "hidden" : ""}><summary>Advanced timing</summary><div class="settings-body"><div class="sampling-group"><div class="sampling-head"><h3>Chart Sample Rates</h3><span id="sampling-window">${escapeHtml(samplingWindowLabel(draft.config.poll_ms, draft.config.history_len))} visible history</span></div><div class="range-list">${samplingRangeFields.map((field) => rangeControl(field, draft, template)).join("")}</div></div></div></details>`;
+  return `<details id="chart-timing-section" class="settings-section" open ${draft.config.show_chart === false ? "hidden" : ""}><summary>Advanced timing</summary><div class="settings-body"><div class="toggle-grid"><label><input type="checkbox" data-toggle="show_chart_legend" ${draft.config.show_chart_legend !== false ? "checked" : ""}>Show chart legend</label></div><div class="sampling-group"><div class="sampling-head"><h3>Chart Sample Rates</h3><span id="sampling-window">${escapeHtml(samplingWindowLabel(draft.config.poll_ms, draft.config.history_len))} visible history</span></div><div class="range-list">${samplingRangeFields.map((field) => rangeControl(field, draft, template)).join("")}</div></div></div></details>`;
 }
 
 function bindDesignControls(type) {
@@ -544,10 +660,30 @@ function bindDesignControls(type) {
     setPath(state.designDraft, input.dataset.path, input.value);
     designChanged(800);
   }));
+  mainContent.querySelectorAll("[data-select]").forEach((input) => input.addEventListener("change", () => {
+    setPath(state.designDraft, input.dataset.select, input.value);
+    designChanged(0);
+  }));
   mainContent.querySelectorAll("[data-dock]").forEach((button) => button.addEventListener("click", () => {
     state.designDraft.layout.dock = button.dataset.dock;
+    delete state.designDraft.layout.growth_x;
+    delete state.designDraft.layout.growth_y;
     designChanged(0);
-    renderSelectedSource();
+    syncLayoutButtons();
+  }));
+  mainContent.querySelectorAll("[data-growth-direction]").forEach((button) => button.addEventListener("click", () => {
+    const direction = button.dataset.growthDirection;
+    const map = {
+      up: { growth_x:"center", growth_y:"up" },
+      down: { growth_x:"center", growth_y:"down" },
+      left: { growth_x:"left", growth_y:"center" },
+      right: { growth_x:"right", growth_y:"center" },
+    };
+    delete state.designDraft.layout.growth_x;
+    delete state.designDraft.layout.growth_y;
+    if (map[direction]) Object.assign(state.designDraft.layout, map[direction]);
+    designChanged(0);
+    syncLayoutButtons();
   }));
   mainContent.querySelectorAll("[data-range],[data-number]").forEach((input) => {
     input.addEventListener("input", () => updateRangeInput(input, false));
@@ -556,10 +692,12 @@ function bindDesignControls(type) {
   });
   mainContent.querySelectorAll("[data-reset]").forEach((button) => button.addEventListener("click", () => {
     const path = button.dataset.reset;
-    const value = getPath(template, path);
+    const resetRange = mainContent.querySelector(`[data-range="${path}"]`);
+    const value = getPath(template, path) ?? rangeFallback(path, state.designDraft, template, Number(resetRange?.min ?? 0));
     setPath(state.designDraft, path, value);
     setRangeInputs(path, value);
     updateSamplingWindow();
+    if (path === "config.telemetry_block_height_px") syncBlockDensityButtons();
     designChanged(0);
   }));
   mainContent.querySelectorAll("[data-color]").forEach((input) => input.addEventListener("input", () => {
@@ -583,7 +721,9 @@ function bindDesignControls(type) {
     });
     mainContent.querySelector("[data-telemetry-columns-range]")?.addEventListener("pointerup", () => queueAutosave("design", 0));
     mainContent.querySelectorAll("[data-block-density]").forEach((button) => button.addEventListener("click", () => {
-      state.designDraft.config.telemetry_block_height_px = Number(button.dataset.blockHeight);
+      const height = Number(button.dataset.blockHeight);
+      state.designDraft.config.telemetry_block_height_px = height;
+      setRangeInputs("config.telemetry_block_height_px", height);
       syncBlockDensityButtons();
       designChanged(0);
     }));
@@ -614,6 +754,7 @@ function updateRangeInput(input, saveNow) {
   setPath(state.designDraft, path, value);
   setRangeInputs(path, value);
   updateSamplingWindow();
+  if (path === "config.telemetry_block_height_px") syncBlockDensityButtons();
   designChanged(saveNow ? 0 : null);
 }
 
@@ -622,6 +763,13 @@ function setRangeInputs(path, value) {
   const number = mainContent.querySelector(`[data-number="${path}"]`);
   if (range) range.value = value;
   if (number) number.value = value;
+}
+
+function syncLayoutButtons() {
+  const growth = layoutGrowth(state.designDraft.layout);
+  mainContent.querySelectorAll("[data-dock]").forEach((button) => button.classList.toggle("active", state.designDraft.layout.dock === button.dataset.dock));
+  const active = activeGrowthDirection(state.designDraft.layout, growth);
+  mainContent.querySelectorAll("[data-growth-direction]").forEach((button) => button.classList.toggle("active", active === button.dataset.growthDirection));
 }
 
 function designChanged(delay) {
@@ -699,8 +847,13 @@ function renderPreview() {
 }
 
 function sendPreview() {
-  if (!state.fakePreview || !state.designDraft) return;
-  preview.contentWindow?.postMessage({ type:"frame-preview", preset:state.designDraft, telemetry_identity:"preview", stream_display_name:state.sourceDraft?.display_name || state.designDraft.name }, location.origin);
+  if (!state.designDraft) return;
+  preview.contentWindow?.postMessage({
+    type:"frame-preview",
+    preset:state.designDraft,
+    stream_display_name:state.sourceDraft?.display_name || state.designDraft.name,
+    ...(state.sourceDraft ? { source:state.sourceDraft } : {}),
+  }, previewTargetOrigin());
 }
 
 function updatePreviewCaption() {
@@ -793,9 +946,7 @@ function resolveConfirm(value) {
 }
 
 function openAddStream() {
-  const url = new URL("/slsui", state.config.public_base_url || window.location.origin);
-  url.hash = "add-stream";
-  window.location.href = url.toString();
+  window.location.href = "/slsui#add-stream";
 }
 
 function sortedSources() {
@@ -836,12 +987,28 @@ function sourceUrl(source) {
   return `${state.config.public_base_url}/overlays/view/${encodeURIComponent(source.slug)}/${encodeURIComponent(source.source_key)}`;
 }
 
+function dashboardUrl() {
+  try {
+    return new URL("/dashboard", state.config.public_base_url || location.origin).href;
+  } catch {
+    return "/dashboard";
+  }
+}
+
 function previewPresetUrl(presetId) {
   return `/overlays/api/preview/${encodeURIComponent(presetId)}?preview=1&elementPreview=1`;
 }
 
 function previewSourceUrl(source) {
-  return `${sourceUrl(source)}?elementPreview=1`;
+  return `/overlays/view/${encodeURIComponent(source.slug)}/${encodeURIComponent(source.source_key)}?elementPreview=1`;
+}
+
+function previewTargetOrigin() {
+  try {
+    return new URL(preview.getAttribute("src") || location.href, location.href).origin;
+  } catch {
+    return location.origin;
+  }
 }
 
 function isTrustedPreviewOrigin(origin) {
@@ -979,8 +1146,13 @@ function levelPercent(value) { return (Number(value) / BITRATE_LEVEL_MAX) * 100;
 function rttLevelPercent(value) { return (Number(value) / RTT_LEVEL_MAX) * 100; }
 
 function rangeControl([path,label,min,max,step], draft, template) {
-  const value = getPath(draft, path) ?? getPath(template, path) ?? min;
+  const value = getPath(draft, path) ?? getPath(template, path) ?? rangeFallback(path, draft, template, min);
   return `<div class="range-row"><label>${escapeHtml(label)}</label><input type="range" min="${min}" max="${max}" step="${step}" value="${escapeAttr(value)}" data-range="${escapeAttr(path)}"><input type="number" min="${min}" max="${max}" step="${step}" value="${escapeAttr(value)}" data-number="${escapeAttr(path)}" aria-label="${escapeAttr(label)} value"><button class="icon-reset" data-reset="${escapeAttr(path)}" title="Reset ${escapeAttr(label)}" aria-label="Reset ${escapeAttr(label)}" type="button">${icons.reset}</button></div>`;
+}
+
+function rangeFallback(path, draft, template, min) {
+  if (path === "theme.panel_bg_alpha" || path === "theme.block_bg_alpha") return 1;
+  return min;
 }
 
 function updateSamplingWindow() {
@@ -989,7 +1161,8 @@ function updateSamplingWindow() {
 }
 
 function renderOrder() {
-  const order = [...new Set([...(state.designDraft.config.telemetry_order || []), ...defaultOrder])];
+  const available = telemetryBlocksForSelectedSource();
+  const order = [...new Set([...(state.designDraft.config.telemetry_order || []), ...defaultOrder])].filter((id) => available.has(id));
   state.designDraft.config.telemetry_order = order;
   const list = mainContent.querySelector("#order-list");
   if (!list) return;
@@ -1005,6 +1178,12 @@ function renderOrder() {
     designChanged(0);
   }));
   bindTelemetryDrag(list);
+}
+
+function telemetryBlocksForSelectedSource() {
+  const streamId = state.sourceDraft?.data_source?.kind === "stream" ? state.sourceDraft.data_source.stream_profile_id : null;
+  const stream = state.streams.find((item) => item.player === streamId);
+  return stream?.source_type === "custom" ? customTelemetryBlocks : new Set(defaultOrder);
 }
 
 function moveOrder(index, delta) {

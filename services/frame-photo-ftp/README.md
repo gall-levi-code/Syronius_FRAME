@@ -87,7 +87,7 @@ Optional connections:
 | --- | --- |
 | Published gallery photos | FRAME Photo Gallery |
 | Photo Stage viewer and remote | FRAME Photo Stage |
-| Upload-progress overlays | FRAME Overlays, when FTP progress support is added |
+| Upload-progress overlays | FRAME Overlays |
 
 ## Notes For Operators
 

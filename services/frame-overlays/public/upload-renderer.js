@@ -1,4 +1,4 @@
-import { deriveUploadView, formatBytes, formatDuration, uploadSummary } from "./upload-renderer-core.js";
+import { deriveUploadView, formatBytes, formatDuration, uploadSummary } from "./upload-renderer-core.js?v=20260702-upload-polish-v3";
 
 let payload = window.FRAME_OVERLAY;
 let preset = payload.preset;
@@ -9,6 +9,8 @@ let restTimer;
 let settingsTimer;
 let restInflight = false;
 let lastSnapshot;
+let displayedPercent = null;
+let displayedTransferId = null;
 const previewMode = new URLSearchParams(location.search).has("preview");
 const widget = document.querySelector("#widget");
 const status = document.querySelector("#upload-status");
@@ -78,11 +80,16 @@ async function refreshSettings() {
   try { const response=await fetch(payload.settings_url,{cache:"no-store"}); if(response.ok){const next=await response.json();if(next.revision!==payload.revision)applyPayload(next);} }
   catch { /* Keep last-known configuration while SSE reconnects. */ }
 }
-function acceptSnapshot(snapshot) { if(lastSnapshot && snapshot.sequence < lastSnapshot.sequence)return; lastSnapshot=snapshot; render(); }
+function acceptSnapshot(snapshot) {
+  if(lastSnapshot && snapshot.sequence < lastSnapshot.sequence)return;
+  lastSnapshot=snapshot;
+  render();
+}
 
 function render() {
   if (preset.enabled === false || payload.source?.enabled === false) return widget.classList.add("hidden");
-  const view = deriveUploadView(lastSnapshot?.transfers, config.complete_hide_ms ?? 5000);
+  const completeFlashMs = Math.min(500, Math.max(0, Number(config.complete_hide_ms ?? 500) || 0));
+  const view = deriveUploadView(lastSnapshot?.transfers, completeFlashMs);
   if (!view.focus) {
     status.textContent = lastSnapshot?.error ? "UNAVAILABLE" : config.idle_label || "WAITING FOR UPLOAD";
     sourceName.textContent = payload.source?.display_name || preset.name;
@@ -97,13 +104,30 @@ function render() {
     overallProgressValue.textContent = "0/0";
     overallProgressTrack.classList.remove("indeterminate");
     overallProgressFill.style.width = "0%";
+    sentDetail.hidden = true;
+    speedDetail.hidden = true;
+    elapsedDetail.hidden = true;
+    sentValue.textContent = "0 B";
+    speedValue.textContent = "--";
+    elapsedValue.textContent = "--";
     errorValue.hidden = true;
+    errorValue.textContent = "";
+    displayedPercent = null;
+    displayedTransferId = null;
     widget.classList.toggle("hidden", !lastSnapshot?.error && config.idle_behavior !== "show_idle");
     return;
   }
   const focus = view.focus;
+  const targetPercent = view.current_percent ?? (focus.phase === "published" ? 100 : 0);
+  if (displayedTransferId !== focus.transfer_id || view.current_percent === null) {
+    displayedTransferId = focus.transfer_id;
+    displayedPercent = targetPercent;
+  } else {
+    const next = displayedPercent === null ? targetPercent : displayedPercent + ((targetPercent - displayedPercent) * .45);
+    displayedPercent = Math.abs(next - targetPercent) < .5 ? targetPercent : next;
+  }
   widget.classList.remove("hidden");
-  status.textContent = phaseStatus(focus.phase);
+  status.textContent = focus.phase === "queued" ? phaseStatus(focus.phase) : focus.status_text || phaseStatus(focus.phase);
   sourceName.textContent = payload.source?.display_name || preset.name;
   adapterLabel.textContent = adapterLabelFor(view.adapters.length ? view.adapters : [focus.adapter]);
   focusName.textContent = focusOrdinal(view);
@@ -111,8 +135,8 @@ function render() {
   currentProgressName.textContent = focus.filename || "Unnamed transfer";
   currentProgressName.title = focus.filename || "";
   currentProgressValue.textContent = percentText(view.current_percent);
-  currentProgressTrack.classList.toggle("indeterminate", focus.phase === "receiving" && view.current_percent === null);
-  currentProgressFill.style.width = `${view.current_percent ?? (focus.phase === "queued" || focus.phase === "processing" || focus.phase === "published" ? 100 : 0)}%`;
+  currentProgressTrack.classList.toggle("indeterminate", focus.phase !== "queued" && view.current_percent === null);
+  currentProgressFill.style.width = `${displayedPercent ?? 0}%`;
   overallProgressValue.textContent = `${view.overall_complete}/${view.overall_total}`;
   overallProgressTrack.classList.remove("indeterminate");
   overallProgressFill.style.width = `${view.overall_percent}%`;
@@ -122,7 +146,8 @@ function render() {
   sentValue.textContent = view.current_bytes_total === null ? formatBytes(view.current_bytes_received) : `${formatBytes(view.current_bytes_received)} / ${formatBytes(view.current_bytes_total)}`;
   speedValue.textContent = view.speed_bps === null ? "--" : `${formatBytes(view.speed_bps)}/s`;
   elapsedValue.textContent = formatDuration(focus.elapsed_ms);
-  errorValue.hidden = focus.phase !== "failed"; errorValue.textContent = focus.error || "Upload failed";
+  errorValue.hidden = focus.phase !== "failed";
+  errorValue.textContent = focus.phase === "failed" ? focus.error || "Upload failed" : "";
   const stateColor = focus.phase === "failed" ? theme.bad_color || "#ff5f6d" : focus.phase === "receiving" ? theme.good_color || "#2cb4fb" : theme.warn_color || "#ffd166";
   const stateOpacity = focus.phase === "failed"
     ? theme.bg_opacity_bad ?? .72
@@ -153,7 +178,8 @@ function publishPreviewSize(){
 }
 function phaseStatus(phase) {
   if (phase === "receiving") return "UPLOADING";
-  if (phase === "queued") return "ACCEPTED";
+  if (phase === "queued") return "WAITING";
+  if (phase === "processing") return "PREPARING";
   return phase.toUpperCase();
 }
 function focusOrdinal(view) {

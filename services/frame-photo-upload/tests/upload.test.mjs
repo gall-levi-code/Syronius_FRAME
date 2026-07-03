@@ -49,6 +49,44 @@ test("streams one completed upload into staging", async () => {
   server.close();
 });
 
+test("stages a completed internal upload with the service token", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-upload-internal-"));
+  const app = await createApp({
+    dataRoot: root,
+    maxInputBytes: 1024,
+    maxFiles: 10,
+    maxSessions: 10,
+    publicDir: path.resolve("public"),
+    auth: { username: "frame", password: "secret", realm: "FRAME Test" },
+    serviceToken: "test-service-token",
+  });
+  const server = app.listen(0);
+  await once(server, "listening");
+  const address = server.address();
+
+  assert.equal((await fetch(`http://127.0.0.1:${address.port}/api/internal/photo-upload/stage`, {
+    method: "POST",
+    body: "no token",
+  })).status, 401);
+
+  const response = await fetch(`http://127.0.0.1:${address.port}/api/internal/photo-upload/stage`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer test-service-token",
+      "content-type": "application/octet-stream",
+      "x-frame-transfer-id": "internal-transfer",
+      "x-frame-file-size": "13",
+      "x-frame-filename": "Belabox Test.JPG",
+    },
+    body: "internal file",
+  });
+  assert.equal(response.status, 202);
+  assert.equal((await response.json()).transfer_id, "internal-transfer");
+  assert.deepEqual(await readdir(path.join(root, "staging")), ["Belabox_Test.jpg"]);
+  assert.equal(await readFile(path.join(root, "staging", "Belabox_Test.jpg"), "utf8"), "internal file");
+  server.close();
+});
+
 test("reports limits and accepts multiple files in one upload request", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-upload-"));
   const app = await createApp({

@@ -59,7 +59,7 @@ services:
       traefik.http.routers.frame-auth.service: frame-auth
       traefik.http.routers.frame-public-deny.entrypoints: web
       traefik.http.routers.frame-public-deny.priority: "1000"
-      traefik.http.routers.frame-public-deny.rule: (Host(`${CLOUDFLARE_PUBLIC_HOSTNAME:-frame.invalid}`) || HeaderRegexp(`Cf-Ray`, `.+`)) && (Path(`/audio`) || Path(`/audio/admin`) || PathPrefix(`/audio/admin/`) || Path(`/audio/capture`) || PathPrefix(`/audio/capture/`) || Path(`/audio/api`) || PathPrefix(`/audio/api/`) || Path(`/slsui`) || PathPrefix(`/slsui/`) || Path(`/overlays`) || Path(`/overlays/setup`) || PathPrefix(`/overlays/setup/`) || Path(`/overlays/api`) || PathPrefix(`/overlays/api/`))
+      traefik.http.routers.frame-public-deny.rule: (Host(`${CLOUDFLARE_PUBLIC_HOSTNAME:-frame.invalid}`) || HeaderRegexp(`Cf-Ray`, `.+`)) && (Path(`/audio`) || Path(`/audio/admin`) || PathPrefix(`/audio/admin/`) || Path(`/audio/capture`) || PathPrefix(`/audio/capture/`) || Path(`/audio/api`) || PathPrefix(`/audio/api/`) || Path(`/belabox`) || PathPrefix(`/belabox/`) || Path(`/pipeline`) || PathPrefix(`/pipeline/`) || Path(`/slsui`) || PathPrefix(`/slsui/`) || Path(`/overlays`) || Path(`/overlays/setup`) || PathPrefix(`/overlays/setup/`) || Path(`/overlays/api`) || PathPrefix(`/overlays/api/`))
       traefik.http.routers.frame-public-deny.middlewares: frame-public-deny-path
       traefik.http.routers.frame-public-deny.service: frame-auth
       traefik.http.services.frame-auth.loadbalancer.server.port: "3740"
@@ -142,6 +142,8 @@ services:
       REQUEST_TIMEOUT_MS: ${REQUEST_TIMEOUT_MS:-3000}
       AUDIO_BRIDGE_STATUS_URL: http://frame-audio-bridge:3728/api/internal/portal-status
       AUDIO_BRIDGE_STATUS_TOKEN: ${PORTAL_SERVICE_TOKEN}
+      PHOTO_PIPELINE_URL: http://frame-pipeline-photos:3735
+      PHOTO_PIPELINE_TOKEN: ${PORTAL_SERVICE_TOKEN}
       PORTAL_USERNAME: ${PORTAL_USERNAME:-}
       PORTAL_PASSWORD: ${PORTAL_PASSWORD:-}
       PORTAL_REALM: ${PORTAL_REALM:-FRAME Portal}
@@ -221,6 +223,136 @@ services:
       traefik.http.routers.frame-audio-bridge.priority: "100"
       traefik.http.routers.frame-audio-bridge.rule: PathPrefix(`/bridge`)
       traefik.http.services.frame-audio-bridge.loadbalancer.server.port: "3728"
+    networks:
+      - frame-internal
+
+  frame-belabox-broker:
+    profiles: ["belabox"]
+    image: eclipse-mosquitto@sha256:6f8d8a947c506f8a2290ec65cd4bd2bc7cb4d43fb5f6271f861cb013e2ef9797
+    container_name: frame-belabox-broker
+    restart: unless-stopped
+    user: root
+    environment:
+      BELABOX_MQTT_USERNAME: ${BELABOX_MQTT_USERNAME:-frame-belabox}
+      BELABOX_MQTT_PASSWORD: ${BELABOX_MQTT_PASSWORD:-}
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        mkdir -p /mosquitto/config /mosquitto/data /mosquitto/log
+        if [ ! -s /mosquitto/data/passwords ]; then
+          if [ -n "$${BELABOX_MQTT_PASSWORD:-}" ]; then
+            mosquitto_passwd -H sha512-pbkdf2 -b -c /mosquitto/data/passwords "$${BELABOX_MQTT_USERNAME:-frame-belabox}" "$${BELABOX_MQTT_PASSWORD}"
+          else
+            mosquitto_passwd -H sha512-pbkdf2 -b -c /mosquitto/data/passwords "__disabled__" "$$(head -c 32 /dev/urandom | base64)"
+          fi
+        fi
+        if [ ! -s /mosquitto/data/acl ]; then
+          printf 'user %s\ntopic read frame/belabox/+/status\ntopic read frame/belabox/+/heartbeat\ntopic read frame/belabox/+/telemetry\ntopic read frame/belabox/+/logs\ntopic read frame/belabox/+/agent/version\ntopic write frame/belabox/+/cmd/request\ntopic read frame/belabox/+/cmd/response\n' "$${BELABOX_MQTT_USERNAME:-frame-belabox}" > /mosquitto/data/acl
+        fi
+        chown mosquitto:mosquitto /mosquitto/data/passwords /mosquitto/data /mosquitto/log
+        chown mosquitto:mosquitto /mosquitto/data/acl
+        chmod 0640 /mosquitto/data/passwords
+        mosquitto -c /mosquitto/config/mosquitto.conf &
+        pid=$$!
+        stamp=""
+        while kill -0 "$$pid" 2>/dev/null; do
+          next="$$(stat -c '%Y:%s' /mosquitto/data/passwords /mosquitto/data/acl 2>/dev/null | tr '\n' ':')"
+          if [ -n "$$stamp" ] && [ "$$next" != "$$stamp" ]; then kill -HUP "$$pid"; fi
+          stamp="$$next"
+          sleep 5
+        done
+        wait "$$pid"
+    volumes:
+      - ./services/frame-belabox-broker/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - ${FRAME_DATA_ROOT:-./data}/belabox-broker:/mosquitto/data
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.frame-belabox-mqtt.entrypoints: web
+      traefik.http.routers.frame-belabox-mqtt.priority: "250"
+      traefik.http.routers.frame-belabox-mqtt.rule: Path(`/mqtt`) || PathPrefix(`/mqtt/`)
+      traefik.http.routers.frame-belabox-mqtt.service: frame-belabox-mqtt
+      traefik.http.services.frame-belabox-mqtt.loadbalancer.server.port: "9001"
+    healthcheck:
+      test: ["CMD-SHELL", "pidof mosquitto >/dev/null"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+    networks:
+      - frame-internal
+
+  frame-belabox-manager:
+    profiles: ["belabox"]
+    build:
+      context: ./services/frame-belabox-manager
+    container_name: frame-belabox-manager
+    restart: unless-stopped
+    environment:
+      PORT: 3741
+      DATA_ROOT: /data
+      BELABOX_HOST: ${BELABOX_HOST:-}
+      BELABOX_USER: ${BELABOX_USER:-user}
+      BELABOX_PORT: ${BELABOX_PORT:-22}
+      BELABOX_SSH_KEY_PATH: ${BELABOX_SSH_KEY_PATH:-}
+      BELABOX_SSH_CREDENTIAL_KEY: ${BELABOX_SSH_CREDENTIAL_KEY:-}
+      BELABOX_PASSWORD: ${BELABOX_PASSWORD:-}
+      BELABOX_AGENT_REMOTE_PATH: ${BELABOX_AGENT_REMOTE_PATH:-/tmp/frame-belabox-agent.sh}
+      BELABOX_SSH_ENABLED: ${BELABOX_SSH_ENABLED:-false}
+      BELABOX_AGENT_COMMANDS_ENABLED: ${BELABOX_AGENT_COMMANDS_ENABLED:-false}
+      BELABOX_AGENT_INSTALL_ENABLED: ${BELABOX_AGENT_INSTALL_ENABLED:-false}
+      BELABOX_MQTT_HOST: ${BELABOX_MQTT_HOST:-http://localhost}
+      BELABOX_MQTT_INTERNAL_URL: ${BELABOX_MQTT_INTERNAL_URL:-mqtt://frame-belabox-broker:1883}
+      BELABOX_MQTT_WS_PATH: ${BELABOX_MQTT_WS_PATH:-/mqtt}
+      BELABOX_MQTT_USERNAME: ${BELABOX_MQTT_USERNAME:-frame-belabox}
+      BELABOX_MQTT_PASSWORD: ${BELABOX_MQTT_PASSWORD:-}
+      BELABOX_MQTT_CLIENT_ID_PREFIX: ${BELABOX_MQTT_CLIENT_ID_PREFIX:-frame-belabox}
+      BELABOX_MQTT_RECONNECT_MS: ${BELABOX_MQTT_RECONNECT_MS:-5000}
+      BELABOX_DEVICE_ID: ${BELABOX_DEVICE_ID:-belabox-1}
+      BELABOX_MQTT_KEEPALIVE: ${BELABOX_MQTT_KEEPALIVE:-30}
+      BELABOX_HEARTBEAT_INTERVAL_MS: ${BELABOX_HEARTBEAT_INTERVAL_MS:-10000}
+      BELABOX_TELEMETRY_INTERVAL_MS: ${BELABOX_TELEMETRY_INTERVAL_MS:-30000}
+      BELABOX_ACTIVE_PHOTO_TELEMETRY_INTERVAL_MS: ${BELABOX_ACTIVE_PHOTO_TELEMETRY_INTERVAL_MS:-500}
+      BELABOX_BROKER_DATA_DIR: /broker-data
+      PHOTO_FTP_PASSIVE_HOST: ${PHOTO_FTP_PASSIVE_HOST:-127.0.0.1}
+      PHOTO_FTP_PORT: ${PHOTO_FTP_PORT:-2121}
+      PHOTO_FTP_USERNAME: ${PHOTO_FTP_USERNAME:-frame}
+      PHOTO_FTP_PASSWORD: ${PHOTO_FTP_PASSWORD:-}
+      BELABOX_FTP_TARGET_HOST: ${BELABOX_FTP_TARGET_HOST:-}
+      BELABOX_FTP_TARGET_PORT: ${BELABOX_FTP_TARGET_PORT:-}
+      BELABOX_FTP_TARGET_USERNAME: ${BELABOX_FTP_TARGET_USERNAME:-}
+      BELABOX_FTP_TARGET_PASSWORD: ${BELABOX_FTP_TARGET_PASSWORD:-}
+      BELABOX_FTP_TARGET_DIR: ${BELABOX_FTP_TARGET_DIR:-/}
+      BELABOX_CAMERA_FTP_USERNAME: ${BELABOX_CAMERA_FTP_USERNAME:-framecam}
+      BELABOX_CAMERA_FTP_PORT: ${BELABOX_CAMERA_FTP_PORT:-2121}
+      BELABOX_CHUNK_UPLOAD_URL: ${BELABOX_CHUNK_UPLOAD_URL:-}
+      BELABOX_CHUNK_SIZE_BYTES: ${BELABOX_CHUNK_SIZE_BYTES:-4194304}
+      BELABOX_DIAGNOSTIC_UPLOAD_BYTES: ${BELABOX_DIAGNOSTIC_UPLOAD_BYTES:-8388608}
+      BELABOX_DIAGNOSTIC_MAX_UPLOAD_BYTES: ${BELABOX_DIAGNOSTIC_MAX_UPLOAD_BYTES:-67108864}
+      BELABOX_DIAGNOSTIC_PARALLEL_STREAMS: ${BELABOX_DIAGNOSTIC_PARALLEL_STREAMS:-1}
+      PHOTO_MAX_INPUT_MB: ${PHOTO_MAX_INPUT_MB:-50}
+      PHOTO_UPLOAD_API_URL: http://frame-photo-upload:3736
+      PORTAL_SERVICE_TOKEN: ${PORTAL_SERVICE_TOKEN:-}
+      REQUEST_TIMEOUT_MS: ${REQUEST_TIMEOUT_MS:-3000}
+    volumes:
+      - ${FRAME_DATA_ROOT:-./data}/belabox-manager:/data
+      - ${FRAME_DATA_ROOT:-./data}/belabox-broker:/broker-data
+    depends_on:
+      frame-belabox-broker:
+        condition: service_healthy
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.frame-belabox.entrypoints: web
+      traefik.http.routers.frame-belabox.priority: "200"
+      traefik.http.routers.frame-belabox.rule: Path(`/belabox`) || PathPrefix(`/belabox/`)
+      traefik.http.routers.frame-belabox.middlewares: frame-sso
+      traefik.http.routers.frame-belabox.service: frame-belabox
+      traefik.http.routers.frame-belabox-chunks.entrypoints: web
+      traefik.http.routers.frame-belabox-chunks.priority: "260"
+      traefik.http.routers.frame-belabox-chunks.rule: Path(`/belabox-chunks`) || PathPrefix(`/belabox-chunks/`)
+      traefik.http.routers.frame-belabox-chunks.service: frame-belabox
+      traefik.http.services.frame-belabox.loadbalancer.server.port: "3741"
     networks:
       - frame-internal
 
@@ -350,6 +482,7 @@ services:
       PHOTO_FTP_PASSIVE_MAX: ${PHOTO_FTP_PASSIVE_MAX:-30019}
       PHOTO_FTP_STABLE_MS: ${PHOTO_FTP_STABLE_MS:-3000}
       PHOTO_FTP_SCAN_MS: ${PHOTO_FTP_SCAN_MS:-1000}
+      PORTAL_SERVICE_TOKEN: ${PORTAL_SERVICE_TOKEN}
     ports:
       - "${PHOTO_FTP_PORT:-2121}:2121"
       - "${PHOTO_FTP_PASSIVE_MIN:-30000}-${PHOTO_FTP_PASSIVE_MAX:-30019}:${PHOTO_FTP_PASSIVE_MIN:-30000}-${PHOTO_FTP_PASSIVE_MAX:-30019}"
@@ -490,6 +623,8 @@ services:
       DATA_ROOT: /data
       STREAMS_API_URL: http://frame-streams:3732
       PHOTO_UPLOAD_API_URL: http://frame-photo-upload:3736
+      PHOTO_FTP_API_URL: http://frame-photo-ftp:3737
+      BELABOX_MANAGER_API_URL: http://frame-belabox-manager:3741
       SLS_API_KEY: ${SLS_API_KEY}
       PORTAL_SERVICE_TOKEN: ${PORTAL_SERVICE_TOKEN}
       PUBLIC_BASE_URL: ${OVERLAYS_PUBLIC_BASE_URL:-http://localhost}

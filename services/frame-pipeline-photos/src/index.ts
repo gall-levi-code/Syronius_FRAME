@@ -30,6 +30,20 @@ app.get("/api/internal/photo-pipeline/trash", requireServiceToken, async (_reque
   }
 });
 
+app.get("/api/internal/photo-pipeline/settings", requireServiceToken, (_request, response) => {
+  response.setHeader("Cache-Control", "no-store");
+  response.json({ settings: pipeline.getSettings() });
+});
+
+app.put("/api/internal/photo-pipeline/settings", requireServiceToken, async (request, response, next) => {
+  try {
+    response.setHeader("Cache-Control", "no-store");
+    response.json({ settings: await pipeline.updateSettings(request.body) });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/internal/photo-pipeline/manage", requireServiceToken, async (request, response, next) => {
   try {
     const candidate = typeof request.body?.action === "string" ? request.body.action : "";

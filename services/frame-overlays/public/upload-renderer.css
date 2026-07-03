@@ -10,7 +10,7 @@
 .upload-progress-label span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .upload-progress-label strong { color:var(--text,#eef8ff); font-variant-numeric:tabular-nums; }
 .upload-progress { position:relative; height:12px; overflow:hidden; border-radius:999px; background:rgba(255,255,255,.12); }
-.upload-progress>div { width:0; height:100%; border-radius:inherit; background:var(--plot-primary,#2cb4fb); transition:width 180ms linear; }
+.upload-progress>div { width:0; height:100%; border-radius:inherit; background:var(--plot-primary,#2cb4fb); transition:width 420ms linear; }
 .upload-progress-current>div { background:var(--quality,var(--plot-primary,#2cb4fb)); }
 .upload-progress-overall { height:9px; }
 .upload-progress-overall>div { background:color-mix(in srgb,var(--plot-primary,#2cb4fb) 72%,var(--text,#eef8ff)); }

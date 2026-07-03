@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FRAME Belabox Manager</title>
+    <meta name="theme-color" content="#06131d">
+    <link rel="icon" href="/belabox/assets/frame-logo-square.svg" type="image/svg+xml">
+    <script>
+      (() => {
+        try {
+          const THEME_MODE_KEY = "frame-theme";
+          const LEGACY_PORTAL_THEME_KEY = "frame-portal-theme";
+          const THEME_PROFILE_KEY = "frame-theme-profile";
+          const COMPAT_THEME_KEYS = ["frame-gallery-theme-mode", "frame-audio-bridge-color-mode"];
+          const root = document.documentElement;
+          const key = (value) => String(value).replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+          const aliases = { page: ["page", "bg", "background"], panel: ["panel", "topbar"], panelStrong: ["panel-2", "surface", "surface-strong", "control"], panelMuted: ["panel-muted", "queue"], border: ["border", "line"], borderSoft: ["border-soft"], label: ["label", "muted"], text: ["text", "control-text"], accent: ["accent"], accentStrong: ["accent-strong"], accentSoft: ["accent-soft"], accentBorder: ["accent-border"], accentContrast: ["accent-contrast", "action-text"], danger: ["danger", "bad"], warning: ["warning", "warn"], good: ["good"], toggleNightBg: ["toggle-night-bg"], toggleNightText: ["toggle-night-text"], toggleDayBg: ["toggle-day-bg"], toggleDayText: ["toggle-day-text"] };
+          const readMode = (mode) => {
+            const stored = mode || localStorage.getItem(THEME_MODE_KEY) || localStorage.getItem(LEGACY_PORTAL_THEME_KEY) || COMPAT_THEME_KEYS.map((themeKey) => localStorage.getItem(themeKey)).find(Boolean);
+            return stored === "day" || stored === "night" ? stored : "night";
+          };
+          window.FrameTheme = { apply(mode) {
+            const theme = readMode(mode);
+            root.dataset.theme = theme;
+            root.dataset.themeMode = theme;
+            document.body?.classList.toggle("theme-day", theme === "day");
+            const palette = JSON.parse(localStorage.getItem(THEME_PROFILE_KEY) || "null")?.palettes?.[theme];
+            if (!palette) return;
+            Object.entries(palette).forEach(([name, color]) => {
+              root.style.setProperty(`--frame-${key(name)}`, color);
+              (aliases[name] || []).forEach((alias) => root.style.setProperty(`--${alias}`, color));
+            });
+            document.querySelector('meta[name="theme-color"]')?.setAttribute("content", palette.page || "#06131d");
+            return theme;
+          } };
+          window.FrameTheme.apply();
+        } catch {}
+      })();
+    </script>
+    <link rel="stylesheet" href="/belabox/assets/styles.css?v=portal-theme-v1">
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand brand-link" href="/dashboard" aria-label="Open FRAME dashboard">
+        <img src="/belabox/assets/frame-logo-square.svg" alt="" aria-hidden="true">
+        <div><strong>Belabox Manager</strong><span>MQTT device controls and setup</span></div>
+      </a>
+      <div class="top-actions">
+        <span id="header-status" class="status-pill">Loading</span>
+        <button id="theme-toggle" class="icon-button theme-toggle" type="button" aria-label="Switch to day mode" title="Switch to day mode">
+          <svg class="moon-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"/></svg>
+          <svg class="sun-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <main class="shell">
+      <div id="notice" class="notice hidden" role="status"></div>
+      <section class="summary">
+        <div>
+          <span>MQTT</span>
+          <strong id="mqtt-state">Loading</strong>
+        </div>
+        <div>
+          <span>Devices</span>
+          <strong id="device-count">0</strong>
+        </div>
+        <div>
+          <span>Heartbeat</span>
+          <strong id="heartbeat-state">Waiting</strong>
+        </div>
+        <div>
+          <span>Commands</span>
+          <strong id="command-state">Disabled</strong>
+        </div>
+      </section>
+
+      <section class="manager-layout">
+        <div id="device-tabs" class="device-tabs" role="tablist" aria-label="Belabox devices"></div>
+        <article id="device-panel" class="device-panel"></article>
+      </section>
+    </main>
+    <script src="/belabox/assets/app.js?v=portal-theme-v1"></script>
+  </body>
+</html>

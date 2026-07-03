@@ -20,6 +20,8 @@ const config = {
   dataRoot: path.resolve(process.env.DATA_ROOT?.trim() || "./data"),
   streamsApiUrl: stripTrailingSlash(process.env.STREAMS_API_URL?.trim() || "http://frame-streams:3732"),
   photoUploadApiUrl: stripTrailingSlash(process.env.PHOTO_UPLOAD_API_URL?.trim() || "http://frame-photo-upload:3736"),
+  photoFtpApiUrl: stripTrailingSlash(process.env.PHOTO_FTP_API_URL?.trim() || "http://frame-photo-ftp:3737"),
+  belaboxManagerApiUrl: stripTrailingSlash(process.env.BELABOX_MANAGER_API_URL?.trim() || "http://frame-belabox-manager:3741"),
   slsApiKey: required("SLS_API_KEY"),
   ingestApiToken: required("PORTAL_SERVICE_TOKEN"),
   publicBaseUrl: stripTrailingSlash(process.env.PUBLIC_BASE_URL?.trim() || "http://localhost:3733"),
@@ -73,7 +75,32 @@ const photoUploadFetch = async (route: string, init: RequestInit = {}): Promise<
   }
 };
 
-const runtime = await createFrameOverlaysApp({ config, store, publicDir, streamsFetch, photoUploadFetch });
+const photoFtpFetch = async (route: string, init: RequestInit = {}): Promise<Response> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), config.requestTimeoutMs);
+  const headers = new Headers(init.headers);
+  headers.set("Accept", "application/json");
+  headers.set("Authorization", `Bearer ${config.ingestApiToken}`);
+  try {
+    return await fetch(`${config.photoFtpApiUrl}${route}`, { ...init, headers, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+const belaboxManagerFetch = async (route: string, init: RequestInit = {}): Promise<Response> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), config.requestTimeoutMs);
+  const headers = new Headers(init.headers);
+  headers.set("Accept", "application/json");
+  try {
+    return await fetch(`${config.belaboxManagerApiUrl}${route}`, { ...init, headers, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
+const runtime = await createFrameOverlaysApp({ config, store, publicDir, streamsFetch, photoUploadFetch, photoFtpFetch, belaboxManagerFetch });
 const server = runtime.app.listen(config.port, () => {
   console.log(`[overlays] FRAME Overlays v2 listening on port ${config.port}`);
 });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { QUALITY, QualityStabilizer, canvasPixelSize, normalizedTelemetryBlockWidth, normalizedTelemetryColumns, qualityStatusText, resolvedTelemetryColumnCount, shouldResetRuntimeState, telemetryAvailability, telemetryGridPixelWidth, telemetryIsStale } from "../public/renderer-core.js";
+import { QUALITY, QualityStabilizer, ServiceReloadWatchdog, canvasPixelSize, compactTelemetryBlockWidth, formatTelemetryDuration, layoutGrowth, normalizedTelemetryBlockWidth, normalizedTelemetryColumns, previewElementSize, qualityStatusText, resolvedTelemetryColumnCount, shouldResetRuntimeState, telemetryAvailability, telemetryGridPixelWidth, telemetryIsStale } from "../public/renderer-core.js";
 import { clampBitrateLevels, clampNumericValue, clampRttLevels, samplingWindowLabel } from "../public/wizard-core.js";
 import { deriveUploadView, uploadSummary } from "../public/upload-renderer-core.js";
 
@@ -15,6 +15,20 @@ test("quality requires a streak before showing BAD and avoids initial BAD flicke
 test("visual-only revisions preserve runtime state while binding changes reset it", () => {
   assert.equal(shouldResetRuntimeState({ telemetry_identity:"a", revision:"1" }, { telemetry_identity:"a", revision:"2" }), false);
   assert.equal(shouldResetRuntimeState({ telemetry_identity:"a" }, { telemetry_identity:"b" }), true);
+});
+
+test("service reload watchdog reloads once after an outage recovers", () => {
+  let reloads = 0;
+  const watchdog = new ServiceReloadWatchdog({ reload:() => reloads += 1, schedule:(callback) => callback() });
+  watchdog.markOffline();
+  assert.equal(watchdog.markOnline(), false);
+  assert.equal(reloads, 0);
+  watchdog.markOffline();
+  watchdog.markOffline();
+  assert.equal(watchdog.markOnline(), true);
+  assert.equal(reloads, 1);
+  assert.equal(watchdog.markOnline(), false);
+  assert.equal(reloads, 1);
 });
 
 test("staleness and high-DPI canvas dimensions are time and pixel aware", () => {
@@ -43,15 +57,20 @@ test("compact GOOD status includes bitrate without opening the bitrate card", ()
   assert.equal(qualityStatusText(QUALITY.GOOD, { bitrate:7200 }, config, false), "GOOD");
 });
 
+test("compact telemetry block width keeps configured width as the floor", () => {
+  assert.equal(compactTelemetryBlockWidth(160, 90, 42), 160);
+  assert.equal(compactTelemetryBlockWidth(160, 180, 42), 222);
+});
+
 test("sampling history reports the visible time window", () => {
-  assert.equal(samplingWindowLabel(20, 20), "400 ms");
+  assert.equal(samplingWindowLabel(200, 20), "4 sec");
   assert.equal(samplingWindowLabel(1000, 20), "20 sec");
 });
 
 test("numeric sampling controls honor their min, max, and step", () => {
-  assert.equal(clampNumericValue(10, 20, 2000, 20), 20);
-  assert.equal(clampNumericValue(2200, 20, 2000, 20), 2000);
-  assert.equal(clampNumericValue(57, 20, 2000, 20), 60);
+  assert.equal(clampNumericValue(10, 200, 2000, 100), 200);
+  assert.equal(clampNumericValue(2200, 200, 2000, 100), 2000);
+  assert.equal(clampNumericValue(257, 200, 2000, 100), 300);
 });
 
 test("telemetry column wrapping supports auto, fixed counts, and all visible blocks", () => {
@@ -66,6 +85,24 @@ test("telemetry column wrapping supports auto, fixed counts, and all visible blo
   assert.equal(resolvedTelemetryColumnCount("all", 8, 160, 400), 8);
   assert.equal(resolvedTelemetryColumnCount("auto", 8, 160, 520), 3);
   assert.equal(telemetryGridPixelWidth(3, 160), 524);
+});
+
+test("layout growth defaults inward from anchors and preview size separates viewport from content", () => {
+  assert.deepEqual(layoutGrowth({ dock:"br" }), { x:"left", y:"up" });
+  assert.deepEqual(layoutGrowth({ dock:"tl" }), { x:"right", y:"down" });
+  assert.deepEqual(layoutGrowth({ dock:"c", growth_x:"left", growth_y:"down" }), { x:"left", y:"down" });
+  assert.deepEqual(previewElementSize({ offsetWidth:200, scrollWidth:180, offsetHeight:80, scrollHeight:120, getBoundingClientRect:() => ({ width:300, height:180 }) }, 28), {
+    width: 328,
+    height: 208,
+    content_width: 200,
+    content_height: 120,
+  });
+});
+
+test("telemetry uptime shows minutes and seconds before hours", () => {
+  assert.equal(formatTelemetryDuration(59), "0m 59s");
+  assert.equal(formatTelemetryDuration(3599), "59m 59s");
+  assert.equal(formatTelemetryDuration(3661), "1h 1m 1s");
 });
 
 test("unavailable feed telemetry is omitted while supported values remain visible", () => {
@@ -103,9 +140,33 @@ test("upload renderer focuses the most complete active file and does not invent 
   assert.equal(view.current_percent,90);
   assert.equal(view.percent,null);
   assert.equal(view.speed_bps,225);
-  assert.equal(view.overall_complete,1);
+  assert.equal(view.overall_complete,0);
   assert.equal(view.overall_total,4);
-  assert.equal(Math.round(view.overall_percent),25);
+  assert.equal(Math.round(view.overall_percent),0);
   assert.deepEqual(view.adapters, ["web_upload", "ftp"]);
-  assert.equal(uploadSummary(view),"3 uploading - 1 accepted");
+  assert.equal(uploadSummary(view),"3 uploading - 1 waiting");
+});
+
+test("upload renderer treats waiting and preparing as active states, not completed uploads", () => {
+  const transfers=[
+    {transfer_id:"queued",adapter:"belabox_agent",phase:"queued",bytes_received:0,bytes_total:1000,speed_bps:null,started_at:"2026-06-21T12:00:00Z",updated_at:"2026-06-21T12:00:01Z"},
+    {transfer_id:"preparing",adapter:"belabox_agent",phase:"processing",bytes_received:0,bytes_total:2000,speed_bps:0,started_at:"2026-06-21T12:00:01Z",updated_at:"2026-06-21T12:00:01Z"},
+  ];
+  const view=deriveUploadView(transfers,1000,Date.parse("2026-06-21T12:00:01.500Z"));
+  assert.equal(view.focus.transfer_id,"preparing");
+  assert.equal(view.current_percent,null);
+  assert.equal(view.overall_complete,0);
+  assert.equal(view.overall_total,2);
+  assert.equal(view.overall_percent,0);
+});
+
+test("upload renderer only flashes published files briefly", () => {
+  const transfer={transfer_id:"done",adapter:"belabox_agent",phase:"published",bytes_received:1000,bytes_total:1000,speed_bps:null,started_at:"2026-06-21T12:00:00Z",updated_at:"2026-06-21T12:00:01Z"};
+  assert.equal(deriveUploadView([transfer],1000,Date.parse("2026-06-21T12:00:01.500Z")).focus.transfer_id,"done");
+  assert.equal(deriveUploadView([transfer],1000,Date.parse("2026-06-21T12:00:02.500Z")).focus,null);
+});
+
+test("upload renderer keeps queued files visible while waiting to start", () => {
+  const transfer={transfer_id:"queued",adapter:"belabox_agent",phase:"queued",bytes_received:0,bytes_total:1000,speed_bps:null,started_at:"2026-06-21T12:00:00Z",updated_at:"2026-06-21T12:00:01Z"};
+  assert.equal(deriveUploadView([transfer],1000,Date.parse("2026-06-21T12:00:32Z")).focus.transfer_id,"queued");
 });

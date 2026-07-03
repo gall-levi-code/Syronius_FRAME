@@ -44,6 +44,32 @@ const IMPORTABLE_ENV_KEYS = new Set([
   "TIMEZONE",
   "FRAME_HOST_DATA_ROOT",
   "PHOTO_FTP_PASSIVE_HOST",
+  "BELABOX_HOST",
+  "BELABOX_USER",
+  "BELABOX_PORT",
+  "BELABOX_SSH_KEY_PATH",
+  "BELABOX_SSH_CREDENTIAL_KEY",
+  "BELABOX_PASSWORD",
+  "BELABOX_AGENT_REMOTE_PATH",
+  "BELABOX_SSH_ENABLED",
+  "BELABOX_AGENT_COMMANDS_ENABLED",
+  "BELABOX_AGENT_INSTALL_ENABLED",
+  "BELABOX_MQTT_HOST",
+  "BELABOX_MQTT_INTERNAL_URL",
+  "BELABOX_MQTT_WS_PATH",
+  "BELABOX_MQTT_USERNAME",
+  "BELABOX_MQTT_PASSWORD",
+  "BELABOX_MQTT_CLIENT_ID_PREFIX",
+  "BELABOX_MQTT_RECONNECT_MS",
+  "BELABOX_DEVICE_ID",
+  "BELABOX_MQTT_KEEPALIVE",
+  "BELABOX_HEARTBEAT_INTERVAL_MS",
+  "BELABOX_TELEMETRY_INTERVAL_MS",
+  "BELABOX_CHUNK_UPLOAD_URL",
+  "BELABOX_CHUNK_SIZE_BYTES",
+  "BELABOX_DIAGNOSTIC_UPLOAD_BYTES",
+  "BELABOX_DIAGNOSTIC_MAX_UPLOAD_BYTES",
+  "BELABOX_DIAGNOSTIC_PARALLEL_STREAMS",
   "PHOTO_FTP_MIN_PASSWORD_LENGTH",
   "PHOTO_FTP_MAX_SESSIONS",
   "PHOTO_FTP_MAX_SESSIONS_PER_IP",
@@ -75,6 +101,29 @@ const CUSTOMIZABLE_ENV_KEYS = new Set([
   "PHOTO_FTP_SCAN_MS",
   "PHOTO_UPLOAD_MAX_FILES",
   "PHOTO_UPLOAD_MAX_SESSIONS",
+  "BELABOX_HOST",
+  "BELABOX_USER",
+  "BELABOX_PORT",
+  "BELABOX_SSH_KEY_PATH",
+  "BELABOX_AGENT_REMOTE_PATH",
+  "BELABOX_SSH_ENABLED",
+  "BELABOX_AGENT_COMMANDS_ENABLED",
+  "BELABOX_AGENT_INSTALL_ENABLED",
+  "BELABOX_MQTT_HOST",
+  "BELABOX_MQTT_INTERNAL_URL",
+  "BELABOX_MQTT_WS_PATH",
+  "BELABOX_MQTT_USERNAME",
+  "BELABOX_MQTT_CLIENT_ID_PREFIX",
+  "BELABOX_MQTT_RECONNECT_MS",
+  "BELABOX_DEVICE_ID",
+  "BELABOX_MQTT_KEEPALIVE",
+  "BELABOX_HEARTBEAT_INTERVAL_MS",
+  "BELABOX_TELEMETRY_INTERVAL_MS",
+  "BELABOX_CHUNK_UPLOAD_URL",
+  "BELABOX_CHUNK_SIZE_BYTES",
+  "BELABOX_DIAGNOSTIC_UPLOAD_BYTES",
+  "BELABOX_DIAGNOSTIC_MAX_UPLOAD_BYTES",
+  "BELABOX_DIAGNOSTIC_PARALLEL_STREAMS",
   "PIPELINE_POLL_MS",
   "PIPELINE_CONCURRENCY",
   "PHOTO_MAX_INPUT_MB",
@@ -199,6 +248,7 @@ async function install(options) {
   console.log(`  Mode: ${mode}`);
   console.log(`  Data: ${env.FRAME_DATA_ROOT}`);
   console.log(`  Audio Bridge: ${capabilities["frame-discord-audio-bridge"] ? "enabled" : "disabled"}`);
+  console.log(`  Belabox Manager: ${capabilities["frame-belabox-manager"] ? "enabled" : "disabled"}`);
   console.log(`  Audio Monitor: ${capabilities["frame-audio-relay"] ? "enabled" : "disabled"}`);
   console.log(`  Video Relay: ${capabilities["frame-video-relay"] ? "enabled" : "disabled"}`);
   console.log(`  Overlays: ${capabilities["frame-overlays"] ? "enabled" : "disabled"}`);
@@ -219,6 +269,9 @@ async function install(options) {
     (isPlaceholder(env.DISCORD_TOKEN) || isPlaceholder(env.DISCORD_CLIENT_ID))
   ) {
     console.warn("  Setup needed: add Discord credentials to the generated .env before running stack start.");
+  }
+  if (capabilities["frame-belabox-manager"] && !env.BELABOX_HOST) {
+    console.warn("  Optional: set BELABOX_HOST before using Belabox SSH install or diagnostic checks.");
   }
   if (capabilities["frame-photo-ftp"] && env.PHOTO_FTP_PASSIVE_HOST === "127.0.0.1") {
     console.warn("  Setup needed: set PHOTO_FTP_PASSIVE_HOST to this FRAME host's LAN address for camera FTP.");
@@ -286,6 +339,11 @@ async function status() {
   console.log(
     `  Audio Monitor: ${
       config.capabilities["frame-audio-relay"] ? `${env.EDGE_LAN_BASE_URL}/audio/admin` : "disabled"
+    }`,
+  );
+  console.log(
+    `  Belabox Manager: ${
+      config.capabilities["frame-belabox-manager"] ? `${env.EDGE_LAN_BASE_URL}/belabox` : "disabled"
     }`,
   );
   console.log(
@@ -445,6 +503,14 @@ function buildEnvironment(existing, options, mode, capabilities) {
   const srtlaPort = normalizePort(setting(existing, "SRTLA_PORT", "5000"), "SRTLA port");
   const srtPlayerPort = normalizePort(setting(existing, "SRT_PLAYER_PORT", "4000"), "SRT player port");
   const srtSenderPort = normalizePort(setting(existing, "SRT_SENDER_PORT", "4001"), "SRT sender port");
+  const belaboxPort = normalizePort(setting(existing, "BELABOX_PORT", "22"), "Belabox SSH port");
+  const belaboxMqttWsPath = normalizeMqttPath(setting(existing, "BELABOX_MQTT_WS_PATH", "/mqtt"));
+  const belaboxMqttClientIdPrefix = normalizeMqttName(setting(existing, "BELABOX_MQTT_CLIENT_ID_PREFIX", "frame-belabox"), "BELABOX_MQTT_CLIENT_ID_PREFIX");
+  const belaboxDeviceId = normalizeMqttName(setting(existing, "BELABOX_DEVICE_ID", "belabox-1"), "BELABOX_DEVICE_ID");
+  const belaboxMqttReconnectMs = normalizeInteger(setting(existing, "BELABOX_MQTT_RECONNECT_MS", "5000"), "Belabox MQTT reconnect interval", 1000, 60000);
+  const belaboxMqttKeepalive = normalizeInteger(setting(existing, "BELABOX_MQTT_KEEPALIVE", "30"), "Belabox MQTT keepalive", 5, 300);
+  const belaboxHeartbeatMs = normalizeInteger(setting(existing, "BELABOX_HEARTBEAT_INTERVAL_MS", "10000"), "Belabox heartbeat interval", 5000, 300000);
+  const belaboxTelemetryMs = normalizeInteger(setting(existing, "BELABOX_TELEMETRY_INTERVAL_MS", "30000"), "Belabox telemetry interval", 10000, 600000);
   assertPortSet([
     ["FRAME Edge", edgePort, true],
     ["Portal", portalPort, true],
@@ -509,6 +575,32 @@ function buildEnvironment(existing, options, mode, capabilities) {
     GALLERY_THUMB_QUALITY: setting(existing, "GALLERY_THUMB_QUALITY", "82"),
     TODAY_DEFAULT_INTERVAL_MS: setting(existing, "TODAY_DEFAULT_INTERVAL_MS", "10000"),
     TODAY_REFRESH_MS: setting(existing, "TODAY_REFRESH_MS", "1000"),
+    BELABOX_HOST: existing.BELABOX_HOST ?? "",
+    BELABOX_USER: setting(existing, "BELABOX_USER", "user"),
+    BELABOX_PORT: belaboxPort,
+    BELABOX_SSH_KEY_PATH: existing.BELABOX_SSH_KEY_PATH ?? "",
+    BELABOX_SSH_CREDENTIAL_KEY: preserveSecret(existing.BELABOX_SSH_CREDENTIAL_KEY, 32),
+    BELABOX_PASSWORD: existing.BELABOX_PASSWORD ?? "",
+    BELABOX_AGENT_REMOTE_PATH: setting(existing, "BELABOX_AGENT_REMOTE_PATH", "/tmp/frame-belabox-agent.sh"),
+    BELABOX_SSH_ENABLED: setting(existing, "BELABOX_SSH_ENABLED", "false"),
+    BELABOX_AGENT_COMMANDS_ENABLED: setting(existing, "BELABOX_AGENT_COMMANDS_ENABLED", "false"),
+    BELABOX_AGENT_INSTALL_ENABLED: setting(existing, "BELABOX_AGENT_INSTALL_ENABLED", "false"),
+    BELABOX_MQTT_HOST: setting(existing, "BELABOX_MQTT_HOST", edgePublicBaseUrl),
+    BELABOX_MQTT_INTERNAL_URL: setting(existing, "BELABOX_MQTT_INTERNAL_URL", "mqtt://frame-belabox-broker:1883"),
+    BELABOX_MQTT_WS_PATH: belaboxMqttWsPath,
+    BELABOX_MQTT_USERNAME: setting(existing, "BELABOX_MQTT_USERNAME", "frame-belabox"),
+    BELABOX_MQTT_PASSWORD: preserveSecret(existing.BELABOX_MQTT_PASSWORD, 32),
+    BELABOX_MQTT_CLIENT_ID_PREFIX: belaboxMqttClientIdPrefix,
+    BELABOX_MQTT_RECONNECT_MS: belaboxMqttReconnectMs,
+    BELABOX_DEVICE_ID: belaboxDeviceId,
+    BELABOX_MQTT_KEEPALIVE: belaboxMqttKeepalive,
+    BELABOX_HEARTBEAT_INTERVAL_MS: belaboxHeartbeatMs,
+    BELABOX_TELEMETRY_INTERVAL_MS: belaboxTelemetryMs,
+    BELABOX_CHUNK_UPLOAD_URL: setting(existing, "BELABOX_CHUNK_UPLOAD_URL", ""),
+    BELABOX_CHUNK_SIZE_BYTES: setting(existing, "BELABOX_CHUNK_SIZE_BYTES", "4194304"),
+    BELABOX_DIAGNOSTIC_UPLOAD_BYTES: setting(existing, "BELABOX_DIAGNOSTIC_UPLOAD_BYTES", "8388608"),
+    BELABOX_DIAGNOSTIC_MAX_UPLOAD_BYTES: setting(existing, "BELABOX_DIAGNOSTIC_MAX_UPLOAD_BYTES", "67108864"),
+    BELABOX_DIAGNOSTIC_PARALLEL_STREAMS: setting(existing, "BELABOX_DIAGNOSTIC_PARALLEL_STREAMS", "1"),
     FRAME_AUTH_SESSION_SECRET: preserveSecret(existing.FRAME_AUTH_SESSION_SECRET, 32),
     FRAME_AUTH_SESSION_DAYS: setting(existing, "FRAME_AUTH_SESSION_DAYS", "7"),
     PORTAL_SERVICE_TOKEN: preserveSecret(existing.PORTAL_SERVICE_TOKEN, 32),
@@ -572,6 +664,21 @@ function validateEnvironment(env, config, forStart) {
   const srtlaPort = normalizePort(defaultIfBlank(env.SRTLA_PORT, "5000"), "SRTLA port");
   const srtPlayerPort = normalizePort(defaultIfBlank(env.SRT_PLAYER_PORT, "4000"), "SRT player port");
   const srtSenderPort = normalizePort(defaultIfBlank(env.SRT_SENDER_PORT, "4001"), "SRT sender port");
+  normalizePort(defaultIfBlank(env.BELABOX_PORT, "22"), "Belabox SSH port");
+  assertBooleanSetting(env.BELABOX_SSH_ENABLED, "BELABOX_SSH_ENABLED");
+  assertBooleanSetting(env.BELABOX_AGENT_COMMANDS_ENABLED, "BELABOX_AGENT_COMMANDS_ENABLED");
+  assertBooleanSetting(env.BELABOX_AGENT_INSTALL_ENABLED, "BELABOX_AGENT_INSTALL_ENABLED");
+  normalizeMqttPath(defaultIfBlank(env.BELABOX_MQTT_WS_PATH, "/mqtt"));
+  normalizeMqttName(defaultIfBlank(env.BELABOX_MQTT_CLIENT_ID_PREFIX, "frame-belabox"), "BELABOX_MQTT_CLIENT_ID_PREFIX");
+  normalizeMqttName(defaultIfBlank(env.BELABOX_DEVICE_ID, "belabox-1"), "BELABOX_DEVICE_ID");
+  normalizeInteger(setting(env, "BELABOX_MQTT_RECONNECT_MS", "5000"), "Belabox MQTT reconnect interval", 1000, 60000);
+  normalizeInteger(setting(env, "BELABOX_MQTT_KEEPALIVE", "30"), "Belabox MQTT keepalive", 5, 300);
+  normalizeInteger(setting(env, "BELABOX_HEARTBEAT_INTERVAL_MS", "10000"), "Belabox heartbeat interval", 5000, 300000);
+  normalizeInteger(setting(env, "BELABOX_TELEMETRY_INTERVAL_MS", "30000"), "Belabox telemetry interval", 10000, 600000);
+  normalizeInteger(setting(env, "BELABOX_CHUNK_SIZE_BYTES", "4194304"), "Belabox chunk size", 262144, 67108864);
+  normalizeInteger(setting(env, "BELABOX_DIAGNOSTIC_UPLOAD_BYTES", "8388608"), "Belabox diagnostic upload size", 65536, 67108864);
+  normalizeInteger(setting(env, "BELABOX_DIAGNOSTIC_MAX_UPLOAD_BYTES", "67108864"), "Belabox diagnostic max upload size", 65536, 268435456);
+  normalizeInteger(setting(env, "BELABOX_DIAGNOSTIC_PARALLEL_STREAMS", "1"), "Belabox diagnostic parallel streams", 1, 8);
   assertPortSet([
     ["FRAME Edge", edgePort, true],
     ["Portal", portalPort, true],
@@ -625,6 +732,18 @@ function validateEnvironment(env, config, forStart) {
   }
   if (config.capabilities["frame-video-relay"] && env.STREAMS_PUBLIC_BASE_URL !== env.EDGE_PUBLIC_BASE_URL) {
     throw new Error("STREAMS_PUBLIC_BASE_URL must match EDGE_PUBLIC_BASE_URL. Re-run stack install.");
+  }
+  if (config.capabilities["frame-belabox-manager"]) {
+    validateRemotePath(defaultIfBlank(env.BELABOX_AGENT_REMOTE_PATH, "/tmp/frame-belabox-agent.sh"));
+    if (!isHttpUrl(env.BELABOX_MQTT_HOST)) {
+      throw new Error("BELABOX_MQTT_HOST must be a valid http:// or https:// URL.");
+    }
+    if (!isMqttUrl(env.BELABOX_MQTT_INTERNAL_URL)) {
+      throw new Error("BELABOX_MQTT_INTERNAL_URL must be a valid mqtt:// or ws:// URL.");
+    }
+    if (!String(env.BELABOX_MQTT_USERNAME ?? "").trim() || String(env.BELABOX_MQTT_PASSWORD ?? "").length < 32) {
+      throw new Error("BELABOX_MQTT_USERNAME and BELABOX_MQTT_PASSWORD are required. Re-run stack install.");
+    }
   }
   if (config.mode === "HYBRID") {
     const hostname = normalizeHostname(env.CLOUDFLARE_PUBLIC_HOSTNAME, true);
@@ -825,7 +944,7 @@ async function readStandardInput() {
 }
 
 async function ensureDataDirectories(dataRoot) {
-  for (const directory of ["state", "audio-bridge", "audio-monitor", "video-relay", "overlays", "logs", "inbox", "staging", "processing", "galleries", "gallery-cache", "gallery-branding", "archive", "quarantine"]) {
+  for (const directory of ["state", "audio-bridge", "audio-monitor", "belabox-manager", "video-relay", "overlays", "logs", "inbox", "staging", "processing", "galleries", "gallery-cache", "gallery-branding", "archive", "quarantine"]) {
     await mkdir(path.join(dataRoot, directory), { recursive: true });
   }
 }
@@ -941,6 +1060,35 @@ function assertCredentialPair(username, password, label) {
   }
 }
 
+function assertBooleanSetting(value, label) {
+  const text = defaultIfBlank(value, "false");
+  if (text !== "true" && text !== "false") {
+    throw new Error(`${label} must be true or false.`);
+  }
+}
+
+function validateRemotePath(value) {
+  if (!/^\/[A-Za-z0-9._/@+-]{1,200}$/.test(value)) {
+    throw new Error("BELABOX_AGENT_REMOTE_PATH must be an absolute path without spaces.");
+  }
+}
+
+function normalizeMqttPath(value) {
+  const pathValue = String(value ?? "").trim();
+  if (!/^\/[A-Za-z0-9/_-]{1,80}$/.test(pathValue)) {
+    throw new Error("BELABOX_MQTT_WS_PATH must be a URL path without spaces.");
+  }
+  return pathValue;
+}
+
+function normalizeMqttName(value, label) {
+  const text = String(value ?? "").trim();
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(text)) {
+    throw new Error(`${label} must use only letters, numbers, underscores, and dashes.`);
+  }
+  return text;
+}
+
 function isPlaceholder(value) {
   return PLACEHOLDERS.has(String(value ?? "").trim());
 }
@@ -949,6 +1097,15 @@ function isHttpUrl(value) {
   try {
     const parsed = new URL(value);
     return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function isMqttUrl(value) {
+  try {
+    const parsed = new URL(value);
+    return ["mqtt:", "mqtts:", "ws:", "wss:"].includes(parsed.protocol);
   } catch {
     return false;
   }
@@ -1128,6 +1285,37 @@ function serializeEnv(env) {
       ["PORTAL_PORT", "AUDIO_BRIDGE_PORT", "AUDIO_MONITOR_PORT", "STREAMS_PORT", "OVERLAYS_PORT", "PHOTO_UPLOAD_PORT", "PHOTO_FTP_PORT", "GALLERY_PORT", "TODAY_PORT"],
     ],
     ["Audio Monitor", ["AUDIO_PUBLIC_BASE_URL", "AUDIO_CAPTURE_BASE_URL"]],
+    [
+      "Belabox Manager",
+      [
+        "BELABOX_HOST",
+        "BELABOX_USER",
+        "BELABOX_PORT",
+        "BELABOX_SSH_KEY_PATH",
+        "BELABOX_SSH_CREDENTIAL_KEY",
+        "BELABOX_PASSWORD",
+        "BELABOX_AGENT_REMOTE_PATH",
+        "BELABOX_SSH_ENABLED",
+        "BELABOX_AGENT_COMMANDS_ENABLED",
+        "BELABOX_AGENT_INSTALL_ENABLED",
+        "BELABOX_MQTT_HOST",
+        "BELABOX_MQTT_INTERNAL_URL",
+        "BELABOX_MQTT_WS_PATH",
+        "BELABOX_MQTT_USERNAME",
+        "BELABOX_MQTT_PASSWORD",
+        "BELABOX_MQTT_CLIENT_ID_PREFIX",
+        "BELABOX_MQTT_RECONNECT_MS",
+        "BELABOX_DEVICE_ID",
+        "BELABOX_MQTT_KEEPALIVE",
+        "BELABOX_HEARTBEAT_INTERVAL_MS",
+        "BELABOX_TELEMETRY_INTERVAL_MS",
+        "BELABOX_CHUNK_UPLOAD_URL",
+        "BELABOX_CHUNK_SIZE_BYTES",
+        "BELABOX_DIAGNOSTIC_UPLOAD_BYTES",
+        "BELABOX_DIAGNOSTIC_MAX_UPLOAD_BYTES",
+        "BELABOX_DIAGNOSTIC_PARALLEL_STREAMS",
+      ],
+    ],
     [
       "Photo workflow",
       [

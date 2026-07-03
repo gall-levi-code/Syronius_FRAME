@@ -12,13 +12,15 @@ import path from "node:path";
 import exifReader from "exif-reader";
 import { fileTypeFromFile } from "file-type";
 import sharp, { type Metadata } from "sharp";
-import type { PipelineConfig } from "./config.js";
+import type { PipelineConfig, PipelineProcessingSettings } from "./config.js";
 import { atomicWrite, atomicWriteJson, hostJoin, sanitizeBase } from "./fsUtils.js";
 
 const RAW_EXTENSIONS = new Set([
   ".3fr", ".arw", ".cr2", ".cr3", ".dng", ".erf", ".kdc", ".mos", ".mrw", ".nef",
   ".nrw", ".orf", ".pef", ".raf", ".raw", ".rw2", ".sr2", ".srf", ".x3f",
 ]);
+const RASTER_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp", ".heic", ".heif"]);
+const SETTINGS_FILE = "photo-pipeline-settings.json";
 
 export interface PipelineStatus {
   running: boolean;
@@ -85,6 +87,7 @@ export class PhotoPipeline {
   private processing = new Set<string>();
   private scanning = false;
   private publishLock: Promise<void> = Promise.resolve();
+  private settings: PipelineProcessingSettings;
 
   constructor(readonly config: PipelineConfig) {
     this.directories = Object.fromEntries(
@@ -103,12 +106,14 @@ export class PhotoPipeline {
       last_error: null,
       heic_supported: Boolean(sharp.format.heif?.input?.buffer),
     };
+    this.settings = normalizeSettings(config.defaultSettings, config.defaultSettings);
   }
 
   async init(): Promise<void> {
     for (const directory of Object.values(this.directories)) {
       await mkdir(directory, { recursive: true });
     }
+    await this.loadSettings();
     await this.ensureCurrentGallery();
     await this.reconcileLatest();
   }
@@ -187,6 +192,23 @@ export class PhotoPipeline {
     });
   }
 
+  getSettings(): PipelineProcessingSettings {
+    return { ...this.settings };
+  }
+
+  async updateSettings(candidate: unknown): Promise<PipelineProcessingSettings> {
+    this.settings = normalizeSettings(candidate, this.config.defaultSettings);
+    await atomicWriteJson(path.join(this.directories.state, SETTINGS_FILE), this.settings);
+    return this.getSettings();
+  }
+
+  private async loadSettings(): Promise<void> {
+    this.settings = normalizeSettings(
+      await readJsonOrNull(path.join(this.directories.state, SETTINGS_FILE)),
+      this.config.defaultSettings,
+    );
+  }
+
   private async claimStagedFiles(): Promise<void> {
     const entries = await readdir(this.directories.staging, { withFileTypes: true });
     for (const entry of entries) {
@@ -236,12 +258,14 @@ export class PhotoPipeline {
         throw failure("PPL-03", "RAW_UNSUPPORTED", "Camera RAW files are not supported in V1.");
       }
 
+      const sourceExtension = path.extname(claim.originalName).toLowerCase();
+      const allowedRasterExtension = RASTER_EXTENSIONS.has(sourceExtension);
       const detected = await fileTypeFromFile(claim.source);
       detectedMime = detected?.mime ?? detectedMime;
-      if (!detected || !detected.mime.startsWith("image/")) {
+      if ((!detected || !detected.mime.startsWith("image/")) && !allowedRasterExtension) {
         throw failure("PPL-01", "NOT_IMAGE", "Detected file type is not an image.", detectedMime);
       }
-      if ((detected.ext === "heic" || detected.ext === "heif") && !this.status.heic_supported) {
+      if ((detected?.ext === "heic" || detected?.ext === "heif" || sourceExtension === ".heic" || sourceExtension === ".heif") && !this.status.heic_supported) {
         throw failure("PPL-02", "CONVERT_FAILED", "HEIC decoding is unavailable in this runtime.", detectedMime);
       }
 
@@ -263,15 +287,15 @@ export class PhotoPipeline {
       await cleanupPartialPublication(files);
 
       let finalMetadata: Metadata | null = null;
+      let outputQuality = this.settings.jpeg_quality;
+      let outputSizeBytes = 0;
       for (attempts = 1; attempts <= this.config.conversionAttempts; attempts += 1) {
         try {
           const temporaryJpg = path.join(claim.directory, "normalized.jpg.tmp");
           await rm(temporaryJpg, { force: true });
-          await sharp(claim.source, { failOn: "error" })
-            .rotate()
-            .jpeg({ quality: 94, mozjpeg: true })
-            .withMetadata()
-            .toFile(temporaryJpg);
+          const result = await writeNormalizedJpg(claim.source, temporaryJpg, this.settings);
+          outputQuality = result.quality;
+          outputSizeBytes = result.sizeBytes;
           await rename(temporaryJpg, files.jpg);
           finalMetadata = await sharp(files.jpg).metadata();
           break;
@@ -293,10 +317,14 @@ export class PhotoPipeline {
         base,
         original_name: claim.originalName,
         detected_mime: detectedMime,
-        detected_format: detected.ext,
+        detected_format: detected?.ext ?? sourceExtension.replace(/^\./, ""),
         width: finalMetadata.width,
         height: finalMetadata.height,
         orientation,
+        output_size_bytes: outputSizeBytes,
+        jpeg_quality: outputQuality,
+        long_edge_px: this.settings.long_edge_px,
+        max_output_mb: this.settings.max_output_mb,
         processed_at: processedAt,
         date_folder: dateFolder,
         exif,
@@ -607,6 +635,64 @@ function failureReason(code: string, reason: string, detail: string, detectedMim
   return { code, reason, detail, detectedMime, attempts };
 }
 
+function normalizeSettings(candidate: unknown, fallback: PipelineProcessingSettings): PipelineProcessingSettings {
+  const source = isRecord(candidate) ? candidate : {};
+  return {
+    long_edge_px: boundedInteger(source.long_edge_px, fallback.long_edge_px, 0, 12000),
+    jpeg_quality: boundedInteger(source.jpeg_quality, fallback.jpeg_quality, 40, 100),
+    max_output_mb: boundedNumber(source.max_output_mb, fallback.max_output_mb, 0, 500),
+  };
+}
+
+function boundedInteger(value: unknown, fallback: number, minimum: number, maximum: number): number {
+  const parsed = Number.parseInt(String(value ?? fallback), 10);
+  if (!Number.isInteger(parsed) || parsed < minimum || parsed > maximum) {
+    throw new PhotoManagementError(`Value must be an integer from ${minimum} to ${maximum}.`, 400);
+  }
+  return parsed;
+}
+
+function boundedNumber(value: unknown, fallback: number, minimum: number, maximum: number): number {
+  const parsed = Number.parseFloat(String(value ?? fallback));
+  if (!Number.isFinite(parsed) || parsed < minimum || parsed > maximum) {
+    throw new PhotoManagementError(`Value must be a number from ${minimum} to ${maximum}.`, 400);
+  }
+  return Math.round(parsed * 1000) / 1000;
+}
+
+async function writeNormalizedJpg(source: string, target: string, settings: PipelineProcessingSettings): Promise<{
+  quality: number;
+  sizeBytes: number;
+}> {
+  const maxBytes = settings.max_output_mb > 0 ? Math.floor(settings.max_output_mb * 1024 * 1024) : 0;
+  for (let quality = settings.jpeg_quality; quality >= 40; quality = Math.max(quality - 5, quality === 40 ? -1 : 40)) {
+    await rm(target, { force: true });
+    let image = sharp(source, { failOn: "error" })
+      .rotate()
+      .flatten({ background: "#ffffff" });
+    if (settings.long_edge_px > 0) {
+      image = image.resize({
+        width: settings.long_edge_px,
+        height: settings.long_edge_px,
+        fit: "inside",
+        withoutEnlargement: true,
+      });
+    }
+    await image
+      .jpeg({ quality, mozjpeg: true })
+      .withMetadata()
+      .toFile(target);
+    const sizeBytes = (await stat(target)).size;
+    if (!maxBytes || sizeBytes <= maxBytes || quality === 40) {
+      if (maxBytes && sizeBytes > maxBytes) {
+        throw new Error(`Output exceeds ${settings.max_output_mb} MB at minimum quality.`);
+      }
+      return { quality, sizeBytes };
+    }
+  }
+  throw new Error("Unable to write compressed JPG.");
+}
+
 function outputFiles(directory: string, base: string): Record<"jpg" | "json" | "txt" | "orientation" | "ready", string> {
   return Object.fromEntries(["jpg", "json", "txt", "orientation", "ready"].map((extension) => [
     extension,
@@ -709,18 +795,30 @@ function readExif(buffer: Buffer | undefined): Record<string, unknown> {
     const image = pickExifFields(childRecord(parsed, "Image"), [
       "Make",
       "Model",
+      "CameraModelName",
       "Software",
       "DateTime",
       "Orientation",
     ]);
     const photo = pickExifFields(childRecord(parsed, "Photo"), [
       "ExposureTime",
+      "ShutterSpeed",
+      "ShutterSpeedValue",
       "FNumber",
+      "Aperture",
+      "ApertureValue",
+      "ISO",
       "ISOSpeedRatings",
       "DateTimeOriginal",
       "FocalLength",
+      "FocalLength35efl",
+      "FocalLengthIn35mmFormat",
       "LensMake",
       "LensModel",
+      "Lens",
+      "LensID",
+      "LensType",
+      "LensSpec",
       "ExposureBiasValue",
       "Flash",
       "WhiteBalance",
@@ -737,49 +835,59 @@ function readExif(buffer: Buffer | undefined): Record<string, unknown> {
 function formatCameraText(exif: Record<string, unknown>): string {
   const image = childRecord(exif, "Image");
   const photo = childRecord(exif, "Photo");
-  const make = textValue(image.Make);
-  const model = textValue(image.Model);
-  const camera = [make, model].filter(Boolean).join(" ") || "(unknown)";
-  const lens = textValue(photo.LensModel) || textValue(image.LensModel) || "(unknown)";
-  return [
-    `Camera: ${camera}`,
-    `Lens: ${lens}`,
-    `Exposure: ${formatExposure(photo.ExposureTime)}`,
-    `Aperture: ${formatAperture(photo.FNumber)}`,
-    `ISO: ${numberText(photo.ISOSpeedRatings)}`,
-    `Focal length: ${formatFocalLength(photo.FocalLength)}`,
-  ].join("\n");
+  let model = firstText(image.Model, image.CameraModelName) || "Unknown Camera";
+  const make = firstText(image.Make);
+  const lens = firstText(photo.LensModel, photo.Lens, photo.LensID, photo.LensType, photo.LensSpec) || "Unknown Lens";
+  const focal = formatMm(firstText(photo.FocalLength, photo.FocalLength35efl, photo.FocalLengthIn35mmFormat));
+  const exposure = formatStreamerExposure(firstText(photo.ExposureTime, photo.ShutterSpeed, photo.ShutterSpeedValue));
+  const aperture = formatStreamerAperture(firstText(photo.FNumber, photo.Aperture, photo.ApertureValue));
+  const iso = firstText(photo.ISO, photo.ISOSpeedRatings);
+
+  if (model === "Unknown Camera" && make) model = make;
+  const line1 = focal
+    ? `Shot on ${model} with the ${lens} @ ${focal}`
+    : `Shot on ${model} with the ${lens}`;
+  const line2 = [exposure, aperture, iso ? `ISO ${iso}` : ""].filter(Boolean).join(" • ");
+  return [line1, line2].filter(Boolean).join("\n");
 }
 
-function formatExposure(value: unknown): string {
-  const exposure = numberValue(value);
-  if (!exposure) return "(unknown)";
-  if (exposure < 1) return `1/${Math.round(1 / exposure)} sec`;
-  return `${trimNumber(exposure)} sec`;
+function firstText(...values: unknown[]): string {
+  for (const value of values) {
+    const text = valueText(value);
+    if (text) return text;
+  }
+  return "";
 }
 
-function formatAperture(value: unknown): string {
-  const aperture = numberValue(value);
-  return aperture ? `f/${trimNumber(aperture)}` : "(unknown)";
-}
-
-function formatFocalLength(value: unknown): string {
-  const focalLength = numberValue(value);
-  return focalLength ? `${trimNumber(focalLength)} mm` : "(unknown)";
-}
-
-function numberText(value: unknown): string {
-  const number = numberValue(value);
-  return number ? trimNumber(number) : "(unknown)";
-}
-
-function numberValue(value: unknown): number | null {
+function valueText(value: unknown): string {
   const candidate = Array.isArray(value) ? value[0] : value;
-  return typeof candidate === "number" && Number.isFinite(candidate) && candidate > 0 ? candidate : null;
+  if (typeof candidate === "number" && Number.isFinite(candidate)) return String(candidate);
+  if (typeof candidate === "string") return candidate.trim();
+  return "";
 }
 
-function textValue(value: unknown): string {
-  return typeof value === "string" ? value.trim() : "";
+function formatMm(value: string): string {
+  const match = value.match(/([\d.]+)/);
+  if (!match) return value;
+  const parsed = Number.parseFloat(match[1]);
+  if (!Number.isFinite(parsed)) return value;
+  return `${trimNumber(parsed)}mm`;
+}
+
+function formatStreamerExposure(value: string): string {
+  if (!value) return "";
+  if (value.endsWith("s")) return value;
+  if (value.includes("/")) return `${value}s`;
+  if (/^\d+(\.\d+)?$/.test(value)) {
+    const parsed = Number.parseFloat(value);
+    if (parsed > 0 && parsed < 1) return `1/${Math.round(1 / parsed)}s`;
+    if (Number.isFinite(parsed)) return `${trimNumber(parsed)}s`;
+  }
+  return value;
+}
+
+function formatStreamerAperture(value: string): string {
+  return value && !value.startsWith("f/") ? `f/${value}` : value;
 }
 
 function trimNumber(value: number): string {

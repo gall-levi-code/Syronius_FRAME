@@ -6,3 +6,7 @@
 /apps/*/node_modules/
 /apps/*/dist/
 /apps/*/src-tauri/target/
+/services/*/node_modules/
+/services/*/dist/
+__pycache__/
+*.pyc

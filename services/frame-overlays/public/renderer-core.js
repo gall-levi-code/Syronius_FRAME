@@ -30,6 +30,13 @@ export function qualityStatusText(stable, stats, config, compact) {
   return label;
 }
 
+export function compactTelemetryBlockWidth(baseBlockWidth, contentWidth, chromeWidth = 0) {
+  const base = normalizedTelemetryBlockWidth(baseBlockWidth);
+  const content = Math.max(0, Math.ceil(Number(contentWidth) || 0));
+  const chrome = Math.max(0, Math.ceil(Number(chromeWidth) || 0));
+  return Math.max(base, content + chrome);
+}
+
 export class QualityStabilizer {
   constructor(initial = QUALITY.UNKNOWN) {
     this.stable = initial;
@@ -44,6 +51,29 @@ export class QualityStabilizer {
     if (candidate === QUALITY.WARN && this.warnStreak >= Math.max(config.bitrate_streak_warn || 1, config.rtt_streak_warn || 1)) this.stable = QUALITY.WARN;
     if (candidate === QUALITY.BAD && this.badStreak >= Math.max(config.bitrate_streak_bad || 1, config.rtt_streak_bad || 1)) this.stable = QUALITY.BAD;
     return this.stable;
+  }
+}
+
+export class ServiceReloadWatchdog {
+  constructor({ failureThreshold = 2, reloadDelayMs = 500, reload = () => location.reload(), schedule = (callback, delay) => setTimeout(callback, delay) } = {}) {
+    this.failureThreshold = Math.max(1, Math.floor(Number(failureThreshold) || 1));
+    this.reloadDelayMs = Math.max(0, Number(reloadDelayMs) || 0);
+    this.reload = reload;
+    this.schedule = schedule;
+    this.failures = 0;
+    this.wasOffline = false;
+    this.reloadQueued = false;
+  }
+  markOffline() {
+    this.failures += 1;
+    if (this.failures >= this.failureThreshold) this.wasOffline = true;
+  }
+  markOnline() {
+    this.failures = 0;
+    if (!this.wasOffline || this.reloadQueued) return false;
+    this.reloadQueued = true;
+    this.schedule(this.reload, this.reloadDelayMs);
+    return true;
   }
 }
 
@@ -115,4 +145,36 @@ export function telemetryGridPixelWidth(columns = 1, blockWidth = 160, gap = 7, 
   const safeGap = Math.max(0, Number(gap) || 0);
   const safeChrome = Math.max(0, Number(horizontalChrome) || 0);
   return (safeColumns * safeBlockWidth) + ((safeColumns - 1) * safeGap) + safeChrome;
+}
+
+export function layoutGrowth(layout = {}) {
+  const dock = layout?.dock || "br";
+  const defaults = {
+    x: dock.includes("r") ? "left" : dock.includes("l") ? "right" : "center",
+    y: dock.startsWith("b") ? "up" : dock.startsWith("t") ? "down" : "center",
+  };
+  return {
+    x: ["left", "right", "center"].includes(layout?.growth_x) ? layout.growth_x : defaults.x,
+    y: ["up", "down", "center"].includes(layout?.growth_y) ? layout.growth_y : defaults.y,
+  };
+}
+
+export function previewElementSize(element, padding = 28) {
+  const rect = element?.getBoundingClientRect?.() || {};
+  const width = Math.max(element?.offsetWidth || 0, element?.scrollWidth || 0);
+  const height = Math.max(element?.offsetHeight || 0, element?.scrollHeight || 0);
+  return {
+    width: Math.ceil((rect.width || width) + padding),
+    height: Math.ceil((rect.height || height) + padding),
+    content_width: Math.ceil(width),
+    content_height: Math.ceil(height),
+  };
+}
+
+export function formatTelemetryDuration(seconds) {
+  const total = Math.max(0, Math.floor(Number(seconds) || 0));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return h ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`;
 }

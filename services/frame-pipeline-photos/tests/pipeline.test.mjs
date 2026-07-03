@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { watch } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -70,8 +71,7 @@ test("extracts camera EXIF into the reusable camera information sidecar", async 
   const gallery = path.join(root, "galleries", latest.date_folder);
   const cameraText = await readFile(path.join(gallery, `${latest.latest_base}.txt`), "utf8");
   const sidecar = JSON.parse(await readFile(path.join(gallery, `${latest.latest_base}.json`), "utf8"));
-  assert.match(cameraText, /Camera: FRAME Test Camera/);
-  assert.match(cameraText, /ISO: 200/);
+  assert.equal(cameraText, "Shot on Test Camera with the Unknown Lens @ 35mm\n1/125s • f/2.8 • ISO 200\n");
   assert.ok(Object.keys(sidecar.exif).length > 0);
 });
 
@@ -131,6 +131,28 @@ test("concurrent claims reserve distinct publication bases", async () => {
   const ready = (await readdir(path.join(root, "galleries", latest.date_folder))).filter((name) => name.endsWith(".ready"));
   assert.equal(ready.length, 2);
   assert.equal(new Set(ready).size, 2);
+});
+
+test("pipeline settings resize output and enforce maximum published size", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-pipeline-"));
+  const pipeline = new PhotoPipeline(config(root));
+  await pipeline.init();
+  await pipeline.updateSettings({ long_edge_px: 300, jpeg_quality: 85, max_output_mb: 0.05 });
+  await sharp(randomBytes(900 * 600 * 3), { raw: { width: 900, height: 600, channels: 3 } })
+    .png()
+    .toFile(path.join(root, "staging", "Noisy Photo.bmp"));
+
+  await pipeline.processOnce();
+
+  const persisted = JSON.parse(await readFile(path.join(root, "state", "photo-pipeline-settings.json"), "utf8"));
+  assert.equal(persisted.long_edge_px, 300);
+  const latest = JSON.parse(await readFile(path.join(root, "state", "latest.json"), "utf8"));
+  const gallery = path.join(root, "galleries", latest.date_folder);
+  const metadata = await sharp(path.join(gallery, `${latest.latest_base}.jpg`)).metadata();
+  const sidecar = JSON.parse(await readFile(path.join(gallery, `${latest.latest_base}.json`), "utf8"));
+  assert.equal(Math.max(metadata.width, metadata.height), 300);
+  assert.ok(sidecar.output_size_bytes <= 0.05 * 1024 * 1024);
+  assert.ok(sidecar.jpeg_quality <= 85);
 });
 
 test("trash and restore preserve ready while every management change advances latest state", async () => {
@@ -202,6 +224,11 @@ function config(dataRoot) {
     maxPixels: 80_000_000,
     conversionAttempts: 3,
     archiveOriginals: true,
+    defaultSettings: {
+      long_edge_px: 0,
+      jpeg_quality: 92,
+      max_output_mb: 0,
+    },
   };
 }
 

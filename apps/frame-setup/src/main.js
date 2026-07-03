@@ -81,6 +81,18 @@ const SERVICES = [
     defaultEnabled: false,
   },
   {
+    id: "frame-belabox-manager",
+    label: "Belabox Manager",
+    summary: "Outbound Belabox MQTT/WSS telemetry with SSH maintenance scaffolding.",
+    guided: {
+      what: "Adds a local FRAME page plus an authenticated MQTT-over-WebSockets path for roaming Belabox agents.",
+      why: "Use this when FRAME should collect Belabox health, stream, network, temperature, uptime, disk, and log data while the Belabox changes networks.",
+      ports: "Does not expose a separate host port. The page stays local; agents connect outbound through the existing HTTPS tunnel at /mqtt.",
+      setup: "In localhost/setup you will review MQTT settings and optionally set SSH details for install, diagnostics, or removal.",
+    },
+    defaultEnabled: false,
+  },
+  {
     id: "frame-photo-ftp",
     label: "Photo FTP Ingest",
     summary: "Camera FTP input with completed-upload stability checks.",
@@ -159,6 +171,13 @@ const ADVANCED_SETTINGS = [
   ["PUBLIC_RELAY_HOST", "Hostname stream senders should target for relay services."],
   ["PORTAL_USERNAME/PASSWORD", "Shared login for protected setup and operator panels."],
   ["DISCORD_CLIENT_ID/TOKEN", "Only needed when Discord Audio Bridge is enabled."],
+  ["BELABOX_HOST/USER/PORT", "Optional Belabox SSH target for install, diagnostics, or removal."],
+  ["BELABOX_SSH_KEY_PATH", "Optional key path used by the Belabox Manager for manual SSH checks."],
+  ["BELABOX_MQTT_HOST/PATH", "Public HTTPS host and WebSocket path used by outbound Belabox agents."],
+  ["BELABOX_DEVICE_ID", "Default device identifier used by the sample Belabox agent."],
+  ["BELABOX_MQTT_RECONNECT_MS", "Agent and manager MQTT reconnect interval."],
+  ["BELABOX_CHUNK_UPLOAD_URL", "Optional override for Belabox chunked photo upload endpoint."],
+  ["BELABOX_CHUNK_SIZE_BYTES", "Chunk size for Belabox chunked photo uploads."],
 ];
 
 const ADVANCED_VALUE_FIELDS = [
