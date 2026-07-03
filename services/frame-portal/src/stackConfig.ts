@@ -137,7 +137,7 @@ export async function loadStackConfig(appConfig: AppConfig): Promise<LoadedStack
           "frame-discord-audio-bridge": false,
         },
         routes: { ...FALLBACK_ROUTES },
-        public_route_prefixes: ["/dashboard", "/status", "/theme"],
+        public_route_prefixes: ["/dashboard", "/status", "/theme", "/assets", "/api/portal", "/api/theme"],
       },
     };
   }

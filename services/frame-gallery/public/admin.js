@@ -1126,6 +1126,7 @@ function writeStoredTheme(mode) {
   try {
     localStorage.setItem("frame-theme", mode);
   } catch {}
+  window.FrameTheme?.saveMode?.(mode);
 }
 
 function selectedProfile() {

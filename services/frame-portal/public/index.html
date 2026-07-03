@@ -6,23 +6,7 @@
     <meta name="theme-color" content="#07111b" />
     <title>FRAME Control Center</title>
     <link rel="icon" type="image/svg+xml" href="/assets/frame-logo-square.svg?v=2026-06-07-hardening" />
-    <script>
-      (() => {
-        try {
-          const storedMode = localStorage.getItem("frame-theme") || localStorage.getItem("frame-portal-theme");
-          const mode = storedMode === "day" || storedMode === "night" ? storedMode : "night";
-          document.documentElement.dataset.theme = mode;
-          const profile = JSON.parse(localStorage.getItem("frame-theme-profile") || "null");
-          const palette = profile?.palettes?.[mode];
-          if (palette) {
-            Object.entries(palette).forEach(([key, value]) => {
-              const cssKey = key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
-              document.documentElement.style.setProperty(`--frame-${cssKey}`, value);
-            });
-          }
-        } catch {}
-      })();
-    </script>
+    <script src="/assets/frame-theme.js?v=global-theme-v1"></script>
     <link rel="stylesheet" href="/assets/styles.css?v=photo-pipeline-settings" />
   </head>
   <body>

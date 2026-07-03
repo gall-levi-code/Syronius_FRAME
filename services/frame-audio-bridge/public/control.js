@@ -293,7 +293,7 @@
     renderSectionMoveButtons();
   }
 
-  function setColorMode(nextMode) {
+  function setColorMode(nextMode, persist = false) {
     colorMode = nextMode === "day" ? "day" : "night";
     document.documentElement.dataset.theme = colorMode;
     window.FrameTheme?.apply(colorMode);
@@ -309,6 +309,7 @@
     } catch {
       // Local storage can be unavailable in hardened embedded browsers.
     }
+    if (persist) window.FrameTheme?.saveMode?.(colorMode);
   }
 
   function buildOverlayButtons() {
@@ -1831,7 +1832,7 @@
   });
 
   elements.themeToggle.addEventListener("click", () => {
-    setColorMode(colorMode === "day" ? "night" : "day");
+    setColorMode(colorMode === "day" ? "night" : "day", true);
   });
   window.addEventListener("storage", (event) => {
     if (event.key === "frame-theme-profile") {

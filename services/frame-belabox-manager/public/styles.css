@@ -1,5 +1,6 @@
 :root {
   color-scheme: dark;
+  background: var(--bg);
   --bg: #06131d;
   --panel: #0b2231;
   --panel-2: #0e2b3c;

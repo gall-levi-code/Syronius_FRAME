@@ -239,7 +239,10 @@ function setThemeMode(nextMode, persist) {
   themeToggle.setAttribute("aria-label", nextLabel);
   themeToggle.title = nextLabel;
   themeToggle.setAttribute("aria-pressed", String(mode === "day"));
-  if (persist) writeStoredTheme(mode);
+  if (persist) {
+    writeStoredTheme(mode);
+    window.FrameTheme?.saveMode?.(mode);
+  }
 }
 
 function readStoredTheme() {

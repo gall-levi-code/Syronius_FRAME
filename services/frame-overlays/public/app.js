@@ -186,6 +186,7 @@ function setThemeMode(nextMode, persist) {
   themeToggle.setAttribute("aria-pressed", String(mode === "day"));
   if (persist) {
     try { localStorage.setItem(THEME_MODE_KEY, mode); } catch {}
+    window.FrameTheme?.saveMode?.(mode);
   }
 }
 

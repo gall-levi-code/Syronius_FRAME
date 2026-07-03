@@ -118,6 +118,7 @@
     { "prefix": "/theme", "capability": null },
     { "prefix": "/assets", "capability": null },
     { "prefix": "/api/portal", "capability": null },
+    { "prefix": "/api/theme", "capability": null },
     { "prefix": "/stats", "capability": "frame-video-relay" },
     { "prefix": "/overlays/view", "capability": "frame-overlays" },
     { "prefix": "/overlays/assets", "capability": "frame-overlays" },

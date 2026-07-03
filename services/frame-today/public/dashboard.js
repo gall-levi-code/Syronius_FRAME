@@ -60,7 +60,10 @@ function setThemeMode(nextMode, persist) {
   elements.themeToggle.setAttribute("aria-label", nextLabel);
   elements.themeToggle.title = nextLabel;
   elements.themeToggle.setAttribute("aria-pressed", String(mode === "day"));
-  if (persist) writeStoredTheme(mode);
+  if (persist) {
+    writeStoredTheme(mode);
+    window.FrameTheme?.saveMode?.(mode);
+  }
 }
 
 function readStoredTheme() {

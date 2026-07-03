@@ -134,6 +134,7 @@ services:
       CLOUDFLARE_PUBLIC_HOSTNAME: ${CLOUDFLARE_PUBLIC_HOSTNAME:-}
       DATA_ROOT: /data
       STACK_CONFIG_PATH: /data/state/stack-config.json
+      THEME_CONFIG_PATH: /data/portal-theme/theme.json
       DOCKER_HOST: http://frame-docker-proxy:2375
       DOCKER_COMPOSE_PROJECT: syronius-frame
       ENABLE_CONTAINER_RESTARTS: ${ENABLE_CONTAINER_RESTARTS:-false}
@@ -154,6 +155,7 @@ services:
       - "${PORTAL_PORT:-3730}:3730"
     volumes:
       - ${FRAME_DATA_ROOT:-./data}:/data:ro
+      - ${FRAME_DATA_ROOT:-./data}/portal-theme:/data/portal-theme
     depends_on:
       frame-docker-proxy:
         condition: service_healthy
@@ -166,7 +168,7 @@ services:
       traefik.http.routers.frame-portal.service: frame-portal
       traefik.http.routers.frame-portal-public.entrypoints: web
       traefik.http.routers.frame-portal-public.priority: "200"
-      traefik.http.routers.frame-portal-public.rule: Path(`/healthz`) || PathPrefix(`/assets`)
+      traefik.http.routers.frame-portal-public.rule: Path(`/healthz`) || (Method(`GET`) && (Path(`/api/theme`) || Path(`/api/portal/theme`))) || PathPrefix(`/assets`)
       traefik.http.routers.frame-portal-public.service: frame-portal
       traefik.http.services.frame-portal.loadbalancer.server.port: "3730"
     networks:

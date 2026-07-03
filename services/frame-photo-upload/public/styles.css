@@ -1,9 +1,9 @@
 :root {
-  color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #071923; color: #e9f8ff;
+  color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: var(--page); color: #e9f8ff;
   --accent: #2cb4fb; --panel: #0d2633; --surface: #103345; --border: #245066; --muted: #a9c9d8; --page: #071923; --text: #e9f8ff; --control-text: #e9f8ff; --queue: #081d28;
 }
 :root[data-theme="day"] {
-  color-scheme: light; background: #f2f9ff; color: #0b2232;
+  color-scheme: light; background: var(--page); color: #0b2232;
   --accent: #087fc0; --panel: #ffffff; --surface: #eaf6fd; --border: #b8d9ea; --muted: #3d6579; --page: #f2f9ff; --text: #0b2232; --control-text: #0b2232; --queue: #f7fcff;
 }
 * { box-sizing: border-box; }

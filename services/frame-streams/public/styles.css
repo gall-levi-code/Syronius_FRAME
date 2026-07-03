@@ -1,5 +1,6 @@
 :root {
   color-scheme: dark;
+  background: var(--bg);
   --accent: #2cb4fb;
   --accent-soft: rgba(44, 180, 251, 0.15);
   --bg: #07121a;
@@ -24,7 +25,7 @@
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 Inter, system-ui, sans-serif; }
+body { min-height: 100vh; margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 Inter, system-ui, sans-serif; }
 button, input { font: inherit; }
 button { min-height: 42px; border: 1px solid var(--accent); border-radius: 7px; background: var(--accent); color: #032133; font-weight: 750; padding: 0 15px; cursor: pointer; }
 button:hover { filter: brightness(1.08); }

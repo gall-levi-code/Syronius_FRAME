@@ -220,6 +220,11 @@ function bindEvents() {
       renderThemeControls();
     }
   });
+  window.addEventListener("frame-theme-change", () => {
+    themeSettings = readThemeSettings();
+    applyThemeSettings(false);
+    renderThemeControls();
+  });
   elements.closeLogs.addEventListener("click", closeLogs);
   elements.logsDialog.addEventListener("close", closeLogs);
   elements.servicesGrid.addEventListener("click", async (event) => {
@@ -576,6 +581,14 @@ function updateThemeLabel() {
 }
 
 function readThemeSettings() {
+  const shared = window.FrameTheme?.getState?.();
+  if (shared?.profile) {
+    return {
+      mode: shared.mode === "day" ? "day" : "night",
+      profileId: shared.profileId || DEFAULT_THEME_PROFILE_ID,
+      customProfiles: Array.isArray(shared.customProfiles) ? shared.customProfiles.map(normalizeThemeProfile).filter(Boolean) : [],
+    };
+  }
   const customProfiles = readCustomThemeProfiles();
   const mode = readStoredTheme();
   let profileId = DEFAULT_THEME_PROFILE_ID;
@@ -618,6 +631,12 @@ function persistThemeSettings(profile = selectedThemeProfile()) {
       localStorage.setItem(THEME_PROFILE_KEY, JSON.stringify(profile));
     }
   } catch {}
+  window.FrameTheme?.save?.({
+    mode: themeSettings.mode,
+    profileId: themeSettings.profileId,
+    customProfiles: themeSettings.customProfiles,
+    profile,
+  });
 }
 
 function renderThemeControls() {
@@ -1081,10 +1100,12 @@ async function fetchJson(url, options) {
     headers: { Accept: "application/json" },
     ...options,
   });
-  const payload = await response.json().catch(() => ({}));
+  const isJson = response.headers.get("content-type")?.includes("application/json");
+  const payload = isJson ? await response.json() : {};
   if (!response.ok) {
     throw new Error(payload.error || `Request failed (${response.status})`);
   }
+  if (!isJson) throw new Error("Sign in required.");
   return payload;
 }
 
