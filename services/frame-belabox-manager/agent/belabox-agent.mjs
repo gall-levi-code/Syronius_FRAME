@@ -10,7 +10,6 @@ import {
   sign as signBytes,
   verify as verifyBytes,
 } from "node:crypto";
-import mqtt from "mqtt";
 
 const VERSION = "0.5.3";
 const ALLOWED_COMMANDS = new Set([
@@ -41,6 +40,7 @@ const photoConfigPath = process.env.BELABOX_PHOTO_CONFIG_PATH || `${os.homedir()
 const url = process.env.BELABOX_MQTT_URL || mqttUrlFromHost();
 const topics = topicSet(deviceId);
 let diagnosticState = null;
+let client;
 
 if (selfTestMode) {
   selfTest();
@@ -56,7 +56,8 @@ if (!publicKeyPem) {
   process.exit(1);
 }
 
-const client = mqtt.connect(url, {
+const mqtt = await import("mqtt").then((module) => module.default || module);
+client = mqtt.connect(url, {
   username,
   password,
   clientId: `${process.env.BELABOX_MQTT_CLIENT_ID_PREFIX || "frame-belabox-agent"}-${deviceId}`,
@@ -516,7 +517,7 @@ function cameraFtp(value) {
 }
 
 function publishJson(topic, payload, retain = false) {
-  if (!client.connected) return;
+  if (!client?.connected) return;
   client.publish(topic, JSON.stringify(payload), { qos: 1, retain });
 }
 
