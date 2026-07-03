@@ -173,7 +173,7 @@ function finiteNumber(value: unknown, fallback: number | null): number | null {
 }
 
 function clampPollMs(value: number): number {
-  return Number.isFinite(value) ? Math.min(2_000, Math.max(20, value)) : 1000;
+  return Number.isFinite(value) ? Math.min(2_000, Math.max(200, value)) : 1000;
 }
 
 function isStale(receivedAt: string | null, pollMs: number, now: Date): boolean {

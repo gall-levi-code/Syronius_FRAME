@@ -70,7 +70,8 @@ function Assert-Docker {
 
 function Invoke-Runtime {
   param([string[]]$Arguments)
-  & docker run --rm -i --mount "type=bind,source=$Root,target=/workspace" -w /workspace $RuntimeImage node installer/frame-installer.mjs @Arguments
+  $dockerArguments = Get-RuntimeDockerArguments $Arguments
+  & docker @dockerArguments
   if ($LASTEXITCODE -ne 0) {
     throw "FRAME installer command failed."
   }
@@ -78,7 +79,8 @@ function Invoke-Runtime {
 
 function Invoke-RuntimeInput {
   param([string[]]$Arguments, [string]$InputText)
-  $InputText | & docker run --rm -i --mount "type=bind,source=$Root,target=/workspace" -w /workspace $RuntimeImage node installer/frame-installer.mjs @Arguments
+  $dockerArguments = Get-RuntimeDockerArguments $Arguments
+  $InputText | & docker @dockerArguments
   if ($LASTEXITCODE -ne 0) {
     throw "FRAME installer credential command failed."
   }
@@ -129,12 +131,46 @@ function Get-EnvMap {
   return $values
 }
 
+function Get-ArgumentValue {
+  param([string[]]$Arguments, [string]$Name)
+  for ($index = 0; $index -lt $Arguments.Count - 1; $index++) {
+    if ($Arguments[$index] -eq $Name) {
+      return $Arguments[$index + 1]
+    }
+  }
+  return $null
+}
+
+function Resolve-FrameDataPath {
+  param([string]$DataRoot)
+  if ([System.IO.Path]::IsPathRooted($DataRoot)) {
+    return [System.IO.Path]::GetFullPath($DataRoot)
+  }
+  $relativeDataRoot = ($DataRoot -replace "^\./", "") -replace "/", "\"
+  return Join-Path $Root $relativeDataRoot
+}
+
+function Get-RuntimeDockerArguments {
+  param([string[]]$Arguments)
+  $dockerArguments = @("run", "--rm", "-i", "--mount", "type=bind,source=$Root,target=/workspace")
+  $dataRoot = Get-ArgumentValue $Arguments "--data-root"
+  if (-not $dataRoot) {
+    $env = Get-EnvMap
+    if ($env.FRAME_DATA_ROOT) { $dataRoot = $env.FRAME_DATA_ROOT }
+  }
+  if ($dataRoot -and [System.IO.Path]::IsPathRooted($dataRoot)) {
+    $dataPath = Resolve-FrameDataPath $dataRoot
+    New-Item -ItemType Directory -Force -Path $dataPath | Out-Null
+    $dockerArguments += @("--mount", "type=bind,source=$dataPath,target=/frame-data", "--env", "FRAME_INSTALLER_DATA_ROOT=/frame-data")
+  }
+  return $dockerArguments + @("-w", "/workspace", $RuntimeImage, "node", "installer/frame-installer.mjs") + $Arguments
+}
+
 function Get-StackConfig {
   $env = Get-EnvMap
   $dataRoot = "./data"
   if ($env.FRAME_DATA_ROOT) { $dataRoot = $env.FRAME_DATA_ROOT }
-  $relativeDataRoot = ($dataRoot -replace "^\./", "") -replace "/", "\"
-  $path = Join-Path $Root $relativeDataRoot
+  $path = Resolve-FrameDataPath $dataRoot
   $configPath = Join-Path $path "state\stack-config.json"
   if (-not (Test-Path $configPath)) { return $null }
   return Get-Content $configPath -Raw | ConvertFrom-Json
@@ -335,8 +371,7 @@ function Get-SetupIssues {
   if ($config.mode -eq "HYBRID") {
     $dataRoot = "./data"
     if ($env.FRAME_DATA_ROOT) { $dataRoot = $env.FRAME_DATA_ROOT }
-    $relativeDataRoot = ($dataRoot -replace "^\./", "") -replace "/", "\"
-    $tokenPath = Join-Path (Join-Path $Root $relativeDataRoot) "state\cloudflare-tunnel-token"
+    $tokenPath = Join-Path (Resolve-FrameDataPath $dataRoot) "state\cloudflare-tunnel-token"
     $token = ""
     if (Test-Path $tokenPath) { $token = (Get-Content $tokenPath -Raw).Trim() }
     if ($token.Length -lt 100 -or $token -eq "paste_cloudflare_tunnel_token_here") {
@@ -439,12 +474,13 @@ function Configure-NetworkStorage {
   }
   $edgePort = "80"
   if ($env.EDGE_HTTP_PORT) { $edgePort = $env.EDGE_HTTP_PORT }
-  $hostDataRoot = Join-Path $Root "data"
-  if ($env.FRAME_HOST_DATA_ROOT) { $hostDataRoot = $env.FRAME_HOST_DATA_ROOT }
+  $dataRoot = Join-Path $Root "data"
+  if ($env.FRAME_DATA_ROOT) { $dataRoot = $env.FRAME_DATA_ROOT }
   $timezone = "America/Chicago"
   if ($env.TIMEZONE) { $timezone = $env.TIMEZONE }
   $arguments += @("--edge-http-port", (Read-Default "FRAME Edge HTTP port" $edgePort))
-  $arguments += @("--host-data-root", (Read-Default "Host-visible FRAME data path" $hostDataRoot))
+  $dataRoot = Read-Default "FRAME data folder" $dataRoot
+  $arguments += @("--data-root", $dataRoot)
   $arguments += @("--set", "TIMEZONE=$(Read-Timezone $timezone)")
   Invoke-Install $arguments
 }
@@ -483,7 +519,9 @@ function Resolve-SetupIssues {
     Invoke-Install @("--set", "PHOTO_FTP_PASSIVE_HOST=$(Read-PhotoFtpPassiveHost $env)")
   }
   if (((Test-CapabilityEnabled $config "frame-photo-ftp") -or (Test-CapabilityEnabled $config "frame-photo-webupload")) -and $env.FRAME_HOST_DATA_ROOT -eq "/data") {
-    Invoke-Install @("--host-data-root", (Read-Default "Host-visible FRAME data path" (Join-Path $Root "data")))
+    $dataRoot = Join-Path $Root "data"
+    if ($env.FRAME_DATA_ROOT) { $dataRoot = $env.FRAME_DATA_ROOT }
+    Invoke-Install @("--host-data-root", $dataRoot)
   }
   if ((Test-CapabilityEnabled $config "frame-discord-audio-bridge") -and ($env.DISCORD_TOKEN -like "your_*" -or $env.DISCORD_CLIENT_ID -like "your_*")) {
     $clientId = Read-Default "Discord application client ID" $env.DISCORD_CLIENT_ID

@@ -47,10 +47,8 @@ Current limitations:
 
 - Host port conflicts are reported by Docker during `stack start`; an earlier preflight check is
   still planned.
-- Data roots are repository-relative until cross-platform external-volume reset boundaries are
-  defined.
-- Photo `.ready` manifests use `FRAME_HOST_DATA_ROOT`; set it to the host-visible data directory
-  before connecting host-side StreamerBot actions.
+- Photo `.ready` manifests use the configured FRAME data folder by default; override
+  `FRAME_HOST_DATA_ROOT` only when host tools need a different path.
 
 ## Interactive command center
 
@@ -79,7 +77,7 @@ stable and do not enter the menu.
 .\stack.cmd install --enable frame-photo-webupload --enable frame-photo-ftp
 .\stack.cmd install --enable frame-photo-webupload --enable frame-photo-gallery
 .\stack.cmd install --enable frame-photo-webupload --enable frame-photo-gallery --enable frame-photo-todaytools
-.\stack.cmd install --host-data-root "D:\FRAME\data"
+.\stack.cmd install --data-root "D:\FRAME\data"
 .\stack.cmd hybrid-stage
 .\stack.cmd tunnel-token
 .\stack.cmd portal-auth
@@ -104,10 +102,15 @@ Advanced automation can repeat `--set KEY=VALUE` for installer-whitelisted non-s
 .\stack.cmd install --set PHOTO_UPLOAD_MAX_FILES=100 --set PHOTO_UPLOAD_MAX_SESSIONS=2
 ```
 
-For host-side StreamerBot, set `--host-data-root` to the absolute host directory that backs
-`FRAME_DATA_ROOT`, then watch `<host-data-root>\galleries` with subfolders included and process only
-files whose names end exactly in `.ready`. Only newly published manifests receive a changed host
-path; existing `.ready` files are never rewritten or replayed.
+`FRAME_DATA_ROOT` is the host directory Docker mounts into FRAME containers as `/data`. It can be a
+repository-relative path such as `./data` or an absolute path such as `D:\FRAME\data`. The
+interactive setup asks for this once as the FRAME data folder, creates all generated folders there,
+and uses the same path for host-side `.ready` manifests.
+
+Host-side StreamerBot should watch `<FRAME_DATA_ROOT>\galleries` with subfolders included and
+process only files whose names end exactly in `.ready`. Only newly published manifests receive a
+changed host path; existing `.ready` files are never rewritten or replayed. Use `--host-data-root`
+only when a host tool sees the same folder through a different path than Docker does.
 
 `verify` runs deterministic capability/route contract tests and JavaScript syntax checks, then
 validates the generated Docker Compose configuration when it exists.
@@ -147,8 +150,8 @@ that connects but times out, temporarily set `PHOTO_FTP_VERBOSE_LOG=true`, resta
 then return it to `false` after collecting logs.
 
 The FTP credentials only authorize camera uploads. Published photos and Today/Gallery state live
-under `FRAME_DATA_ROOT` (normally `./data`) and are not stored in the container image. Relaunch the
-photo services through the generated Compose stack so these persistent mounts remain attached:
+under `FRAME_DATA_ROOT` and are not stored in the container image. Relaunch the photo services
+through the generated Compose stack so these persistent mounts remain attached:
 
 ```powershell
 .\stack.cmd start
@@ -202,13 +205,14 @@ standalone volume until the unified Audio Bridge has been tested and its permane
 
 - `/.env` - stack settings and secrets
 - `/docker-compose.yml` - complete deployment for implemented services
-- `/data/state/stack-config.json` - canonical capability and route configuration
-- `/data/state/effective-public-prefixes.json` - effective public exposure; empty in LAN mode
-- `/data/state/cloudflared-ingress.yml` - reference Cloudflare ingress for the staged hostname
-- `/data/state/public-routes.yml` - effective public-route allowlist consumed by FRAME Public Gateway
-- `/data/state/cloudflare-tunnel-token` - user-supplied remotely managed tunnel token
+- `<FRAME_DATA_ROOT>/state/stack-config.json` - canonical capability and route configuration
+- `<FRAME_DATA_ROOT>/state/effective-public-prefixes.json` - effective public exposure; empty in LAN mode
+- `<FRAME_DATA_ROOT>/state/cloudflared-ingress.yml` - reference Cloudflare ingress for the staged hostname
+- `<FRAME_DATA_ROOT>/state/public-routes.yml` - effective public-route allowlist consumed by FRAME Public Gateway
+- `<FRAME_DATA_ROOT>/state/cloudflare-tunnel-token` - user-supplied remotely managed tunnel token
 
-Generated files and `/data` are ignored by Git. Configuration files are written atomically.
+Generated files and the repository-local `/data` default are ignored by Git. Configuration files are
+written atomically.
 
 ## Safety behavior
 
@@ -220,8 +224,8 @@ Generated files and `/data` are ignored by Git. Configuration files are written 
 - Optional services are disabled on fresh installs until explicitly enabled.
 - Traefik discovers only services explicitly labeled for FRAME Edge.
 - Disabling a capability never removes its data.
-- `stack reset` requires explicit confirmation and can only remove the repository-relative FRAME
-  data root.
+- `stack reset` requires explicit confirmation. It removes repository-local FRAME data, but leaves
+  external absolute data roots intact.
 - Status output never prints secrets.
 - The receiver management API key is generated once and shared with management services without
   being exposed in either browser UI.

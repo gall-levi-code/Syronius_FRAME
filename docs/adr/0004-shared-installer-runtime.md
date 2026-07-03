@@ -26,4 +26,5 @@ until the shared HTTP edge and tunnel service exist.
 - Docker and Docker Compose v2 are the only host runtime prerequisites.
 - Installer behavior is testable without installing language tooling on the host.
 - The first installer invocation may pull the pinned Node runtime image.
-- External data roots are deferred until a cross-platform mounting and reset-safety contract exists.
+- Absolute external data roots are bind-mounted into the installer runtime for setup writes, and
+  reset leaves those external roots intact.

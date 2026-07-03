@@ -138,6 +138,7 @@
     "/overlays/setup",
     "/overlays/api",
     "/belabox",
+    "/pipeline",
     "/slsui"
   ]
 }

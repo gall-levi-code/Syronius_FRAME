@@ -50,7 +50,6 @@ removed.
 - [x] Build the shared Traefik LAN HTTP edge and route implemented web services through it.
 - [x] Add capability-aware Cloudflare Tunnel routing and staged HYBRID deployment.
 - Add LAN HTTPS and optional Cloudflare Access policy automation.
-- Define cross-platform external data-root mounting and reset boundaries.
 
 ## Photo Workflow
 

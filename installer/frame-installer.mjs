@@ -459,8 +459,11 @@ async function reset(options) {
   }
   const env = await loadEnv();
   const dataRoot = resolveDataRoot(env.FRAME_DATA_ROOT ?? "./data");
-  assertInsideWorkspace(dataRoot);
-  await rm(dataRoot, { recursive: true, force: true });
+  if (isInsideWorkspace(dataRoot)) {
+    await rm(dataRoot, { recursive: true, force: true });
+  } else {
+    console.warn(`External data root left intact: ${env.FRAME_DATA_ROOT}`);
+  }
   await rm(ENV_PATH, { force: true });
   await rm(COMPOSE_PATH, { force: true });
   console.log("FRAME generated config and data were removed.");
@@ -469,7 +472,10 @@ async function reset(options) {
 
 function buildEnvironment(existing, options, mode, capabilities) {
   const dataRoot = normalizeDataRoot(String(options["data-root"] ?? setting(existing, "FRAME_DATA_ROOT", "./data")));
-  const hostDataRoot = normalizeHostDataRoot(String(options["host-data-root"] ?? setting(existing, "FRAME_HOST_DATA_ROOT", "/data")));
+  const defaultHostDataRoot = options["data-root"] === undefined
+    ? setting(existing, "FRAME_HOST_DATA_ROOT", "/data")
+    : dataRoot;
+  const hostDataRoot = normalizeHostDataRoot(String(options["host-data-root"] ?? defaultHostDataRoot));
   const edgePort = normalizePort(options["edge-http-port"] ?? setting(existing, "EDGE_HTTP_PORT", "80"), "FRAME Edge port");
   const edgeLanBaseUrl = formatLocalHttpUrl(edgePort);
   const cloudflarePublicHostname = normalizeHostname(
@@ -955,17 +961,30 @@ function getConfigPathFromEnv(env) {
 
 function resolveDataRoot(value) {
   const normalized = normalizeDataRoot(value);
-  const resolved = path.resolve(WORKSPACE, normalized);
-  assertInsideWorkspace(resolved);
-  return resolved;
+  if (isAbsoluteDataRoot(normalized)) {
+    const installerMount = String(process.env.FRAME_INSTALLER_DATA_ROOT ?? "").trim();
+    if (installerMount) {
+      return path.resolve(installerMount);
+    }
+    if (/^[A-Za-z]:\//.test(normalized) && process.platform !== "win32") {
+      throw new Error("FRAME_DATA_ROOT uses a Windows host path. Run through stack.cmd so the installer can mount it.");
+    }
+    return path.resolve(normalized);
+  }
+  return path.resolve(WORKSPACE, normalized);
 }
 
 function normalizeDataRoot(value) {
   const normalized = String(value ?? "").trim().replaceAll("\\", "/").replace(/\/+$/, "");
-  if (!normalized || path.posix.isAbsolute(normalized) || normalized.split("/").includes("..")) {
-    throw new Error("FRAME_DATA_ROOT must be a repository-relative path without '..'.");
+  if (!normalized || normalized.split("/").includes("..")) {
+    throw new Error("FRAME_DATA_ROOT must be a path without '..'.");
   }
+  if (isAbsoluteDataRoot(normalized)) return normalized;
   return normalized.startsWith("./") ? normalized : `./${normalized}`;
+}
+
+function isAbsoluteDataRoot(value) {
+  return path.isAbsolute(value) || path.posix.isAbsolute(value) || /^[A-Za-z]:\//.test(value);
 }
 
 function normalizeHostDataRoot(value) {
@@ -976,11 +995,9 @@ function normalizeHostDataRoot(value) {
   return normalized;
 }
 
-function assertInsideWorkspace(target) {
+function isInsideWorkspace(target) {
   const relative = path.relative(WORKSPACE, target);
-  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) {
-    throw new Error("Refusing to modify a data path outside the FRAME workspace.");
-  }
+  return Boolean(relative) && !relative.startsWith("..") && !path.isAbsolute(relative);
 }
 
 function validatePath(value, label) {
@@ -1464,8 +1481,8 @@ Usage:
 Install options:
   --mode LAN|HYBRID        Stage a LAN or Cloudflare Tunnel deployment
   --public-hostname <host> Required for HYBRID, for example frame.syroni.us
-  --data-root ./data       Repository-relative FRAME data directory
-  --host-data-root <path>  Host-visible data path written into photo .ready manifests
+  --data-root <path>       FRAME data directory, repo-relative or absolute
+  --host-data-root <path>  Advanced .ready manifest path override
   --edge-http-port 80      Shared FRAME web entry point
   --portal-port 3730       Portal host port
   --audio-bridge-port 3729 Audio Bridge host port

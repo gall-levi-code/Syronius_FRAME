@@ -1,4 +1,5 @@
-import { deriveUploadView, formatBytes, formatDuration, uploadSummary } from "./upload-renderer-core.js?v=20260702-upload-polish-v3";
+import { deriveUploadView, formatBytes, formatDuration, uploadSummary } from "./upload-renderer-core.js?v=live-stack-v1";
+import { ServiceReloadWatchdog, previewElementSize } from "./renderer-core.js";
 
 let payload = window.FRAME_OVERLAY;
 let preset = payload.preset;
@@ -11,6 +12,7 @@ let restInflight = false;
 let lastSnapshot;
 let displayedPercent = null;
 let displayedTransferId = null;
+const reloadWatchdog = new ServiceReloadWatchdog();
 const previewMode = new URLSearchParams(location.search).has("preview");
 const widget = document.querySelector("#widget");
 const status = document.querySelector("#upload-status");
@@ -56,8 +58,8 @@ function connectEvents() {
   eventSource?.close();
   if (!payload.events_url || !("EventSource" in window)) return startRestFallback();
   eventSource = new EventSource(payload.events_url);
-  eventSource.addEventListener("open", stopRestFallback);
-  eventSource.addEventListener("telemetry", (event) => { stopRestFallback(); acceptSnapshot(JSON.parse(event.data)); });
+  eventSource.addEventListener("open", () => { reloadWatchdog.markOnline(); stopRestFallback(); });
+  eventSource.addEventListener("telemetry", (event) => { reloadWatchdog.markOnline(); stopRestFallback(); acceptSnapshot(JSON.parse(event.data)); });
   eventSource.addEventListener("config", (event) => applyPayload(JSON.parse(event.data)));
   eventSource.onerror = startRestFallback;
   clearInterval(settingsTimer);
@@ -73,12 +75,13 @@ function stopRestFallback() { clearInterval(restTimer); restTimer = undefined; }
 async function refreshTelemetry() {
   if (restInflight || !payload.stats_url) return;
   restInflight = true;
-  try { const response = await fetch(payload.stats_url,{cache:"no-store"}); if(response.ok) acceptSnapshot(await response.json()); }
+  try { const response = await fetch(payload.stats_url,{cache:"no-store"}); if(response.ok){reloadWatchdog.markOnline();acceptSnapshot(await response.json());} }
+  catch { reloadWatchdog.markOffline(); }
   finally { restInflight = false; }
 }
 async function refreshSettings() {
-  try { const response=await fetch(payload.settings_url,{cache:"no-store"}); if(response.ok){const next=await response.json();if(next.revision!==payload.revision)applyPayload(next);} }
-  catch { /* Keep last-known configuration while SSE reconnects. */ }
+  try { const response=await fetch(payload.settings_url,{cache:"no-store"}); if(response.ok){reloadWatchdog.markOnline();const next=await response.json();if(next.revision!==payload.revision)applyPayload(next);} }
+  catch { reloadWatchdog.markOffline(); }
 }
 function acceptSnapshot(snapshot) {
   if(lastSnapshot && snapshot.sequence < lastSnapshot.sequence)return;
@@ -156,12 +159,14 @@ function render() {
       : theme.bg_opacity_warn ?? .52;
   document.documentElement.style.setProperty("--quality",stateColor);
   document.documentElement.style.setProperty("--widget-opacity",String(stateOpacity));
+  document.documentElement.style.setProperty("--panel-bg",colorWithAlpha(theme.panel_bg_color||"#000000",panelAlpha(1)));
+  document.documentElement.style.setProperty("--block-bg",colorWithAlpha(theme.block_bg_color||"#132f3d",blockAlpha(1)));
   publishPreviewSize();
 }
 
 function applyTheme() {
   const root=document.documentElement;
-  const vars={"--text":theme.text_color||"#eef8ff","--muted":theme.muted_color||"#9fc6dc","--good":theme.good_color||"#2cb4fb","--warn":theme.warn_color||"#ffd166","--bad":theme.bad_color||"#ff5f6d","--plot-primary":theme.plot_primary||"#2cb4fb","--radius":`${theme.border_radius_px??10}px`,"--blur":`${theme.backdrop_blur_px??4}px`,"--font-size":`${theme.font_size_base_px??16}px`,"--scale":String(preset.layout.scale??1),"--transition":"250ms"};
+  const vars={"--text":theme.text_color||"#eef8ff","--muted":theme.muted_color||"#9fc6dc","--good":theme.good_color||"#2cb4fb","--warn":theme.warn_color||"#ffd166","--bad":theme.bad_color||"#ff5f6d","--plot-primary":theme.plot_primary||"#2cb4fb","--plot-secondary":theme.plot_secondary||"#8de7ff","--panel-bg":colorWithAlpha(theme.panel_bg_color||"#000000",panelAlpha(1)),"--panel-border":theme.panel_border_color||"color-mix(in srgb,var(--plot-primary,#2cb4fb) 40%,transparent)","--panel-glow":theme.panel_glow_color||"#000000","--block-bg":colorWithAlpha(theme.block_bg_color||"#132f3d",blockAlpha(1)),"--block-border":theme.block_border_color||"transparent","--radius":`${theme.border_radius_px??10}px`,"--blur":`${theme.backdrop_blur_px??4}px`,"--panel-padding":`${theme.panel_padding_px??14}px`,"--block-padding":`${theme.block_padding_px??8}px`,"--block-gap":`${theme.block_gap_px??7}px`,"--panel-border-width":`${theme.panel_border_width_px??1}px`,"--block-border-width":`${theme.block_border_width_px??0}px`,"--glow-blur":`${theme.glow_blur_px??50}px`,"--shadow-spread":`${theme.glow_spread_px??0}px`,"--shadow-x":`${theme.glow_offset_x_px??0}px`,"--shadow-y":`${theme.glow_offset_y_px??16}px`,"--font-size":`${theme.font_size_base_px??16}px`,"--font-family":theme.font_family||"Inter, system-ui, sans-serif","--font-weight":String(theme.font_weight??400),"--subheader-font-family":theme.subheader_font_family||theme.font_family||"Inter, system-ui, sans-serif","--subheader-font-size":`${theme.subheader_font_size_px??12}px`,"--subheader-font-weight":String(theme.subheader_font_weight??500),"--scale":String(preset.layout.scale??1),"--transition":"250ms","--widget-opacity":String(theme.bg_opacity_warn??.52)};
   for(const [name,value] of Object.entries(vars))root.style.setProperty(name,value);
 }
 function applyLayout() {
@@ -174,8 +179,11 @@ function applyLayout() {
 }
 function publishPreviewSize(){
   if(!elementPreviewMode||window.parent===window)return;
-  requestAnimationFrame(()=>{const rect=widget.getBoundingClientRect();if(!rect.width||!rect.height)return;window.parent.postMessage({type:"frame-preview-size",width:Math.ceil(rect.width+28),height:Math.ceil(rect.height+28),content_width:Math.ceil(rect.width),content_height:Math.ceil(rect.height)},"*");});
+  requestAnimationFrame(()=>{const size=previewElementSize(widget);if(!size.content_width||!size.content_height)return;window.parent.postMessage({type:"frame-preview-size",...size},"*");});
 }
+function panelAlpha(fallback){return Number.isFinite(Number(theme.panel_bg_alpha))?Number(theme.panel_bg_alpha):fallback;}
+function blockAlpha(fallback){return Number.isFinite(Number(theme.block_bg_alpha))?Number(theme.block_bg_alpha):fallback;}
+function colorWithAlpha(color,alpha){const safeAlpha=Math.min(1,Math.max(0,Number(alpha)||0));const hex=String(color||"").trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i)?.[1];if(!hex)return color;const full=hex.length===3?[...hex].map((digit)=>digit+digit).join(""):hex;return `rgba(${Number.parseInt(full.slice(0,2),16)}, ${Number.parseInt(full.slice(2,4),16)}, ${Number.parseInt(full.slice(4,6),16)}, ${safeAlpha})`;}
 function phaseStatus(phase) {
   if (phase === "receiving") return "UPLOADING";
   if (phase === "queued") return "WAITING";
