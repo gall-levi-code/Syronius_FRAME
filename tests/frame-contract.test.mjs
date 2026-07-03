@@ -95,6 +95,29 @@ test("portal routes and implemented Compose profiles stay aligned with the regis
   }
 });
 
+test("global theme is Portal-backed and available to public surfaces", async () => {
+  const [composeTemplate, portalBackend, portalFrontend, themeClient, todayViewer, registry] = await Promise.all([
+    readFile("installer/templates/docker-compose.yml", "utf8"),
+    readFile("services/frame-portal/src/index.ts", "utf8"),
+    readFile("services/frame-portal/public/portal.js", "utf8"),
+    readFile("services/frame-portal/public/frame-theme.js", "utf8"),
+    readFile("services/frame-today/public/viewer.html", "utf8"),
+    readFile("config/frame-services.json", "utf8"),
+  ]);
+  assert.ok(registry.includes('"prefix": "/api/theme"'), "Hybrid public routes must expose read-only theme state");
+  assert.ok(composeTemplate.includes("THEME_CONFIG_PATH: /data/portal-theme/theme.json"));
+  assert.ok(composeTemplate.includes("${FRAME_DATA_ROOT:-./data}/portal-theme:/data/portal-theme"));
+  assert.ok(composeTemplate.includes("Method(`GET`) && (Path(`/api/theme`) || Path(`/api/portal/theme`))"), "Only Portal theme reads may bypass SSO");
+  assert.ok(portalBackend.includes('"/api/theme"'), "Portal must serve global theme reads");
+  assert.ok(portalBackend.includes('"/api/portal/theme"'), "Portal must serve the installer-stable theme route");
+  assert.ok(portalBackend.includes("app.put(themeApiPaths"), "Portal must persist protected theme writes");
+  assert.ok(themeClient.includes('"/api/theme"'), "Shared theme client must read Portal state");
+  assert.ok(themeClient.includes('"/api/portal/theme"'), "Shared theme client must support existing public tunnel allowlists");
+  assert.ok(!portalFrontend.includes("sanitizeCustomProfiles"), "Portal startup must not call orphaned theme helpers");
+  assert.ok(themeClient.includes("setInterval(load"), "Open pages must pick up global theme changes");
+  assert.ok(todayViewer.includes("/assets/frame-theme.js"), "Photo Stage viewer must inherit global theme");
+});
+
 test("implemented Node services expose build and typecheck scripts", async () => {
   for (const service of [
     "frame-auth",

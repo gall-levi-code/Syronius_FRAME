@@ -45,6 +45,7 @@ function setThemeMode(nextMode, persist) {
     try {
       localStorage.setItem("frame-theme", mode);
     } catch {}
+    window.FrameTheme?.saveMode?.(mode);
   }
 }
 

@@ -1406,7 +1406,7 @@ input[type="color"] {
 :root[data-theme="day"] .control-page,
 .control-page.theme-day {
   color-scheme: light;
-  background: #f6f8fc;
+  background: var(--frame-page);
   color: #161a22;
   --frame-accent: #087fc0;
   --frame-accent-strong: #087fc0;

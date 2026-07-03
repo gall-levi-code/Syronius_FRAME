@@ -57,6 +57,7 @@ const PROFILE_ORDER: &[&str] = &[
 ];
 const DATA_DIRECTORIES: &[&str] = &[
     "state",
+    "portal-theme",
     "audio-bridge",
     "audio-monitor",
     "belabox-broker",

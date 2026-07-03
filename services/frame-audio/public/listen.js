@@ -79,7 +79,7 @@ updatePlaybackButton();
 
 themeToggle.addEventListener("click", () => {
   const next = document.documentElement.dataset.theme === "day" ? "night" : "day";
-  setThemeMode(next);
+  setThemeMode(next, true);
   localStorage.setItem("frame-theme", next);
 });
 window.addEventListener("storage", (event) => {
@@ -520,7 +520,7 @@ function updatePlaybackButton() {
   }
 }
 
-function setThemeMode(nextMode) {
+function setThemeMode(nextMode, persist = false) {
   const mode = nextMode === "day" ? "day" : "night";
   document.documentElement.dataset.theme = mode;
   window.FrameTheme?.apply(mode);
@@ -528,6 +528,7 @@ function setThemeMode(nextMode) {
   themeToggle.setAttribute("aria-label", nextLabel);
   themeToggle.title = nextLabel;
   themeToggle.setAttribute("aria-pressed", String(mode === "day"));
+  if (persist) window.FrameTheme?.saveMode?.(mode);
 }
 
 function createListenerId() {

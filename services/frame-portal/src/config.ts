@@ -8,6 +8,7 @@ export interface AppConfig {
   publicHostname?: string;
   dataRoot: string;
   stackConfigPath: string;
+  themeConfigPath: string;
   dockerHost?: string;
   dockerSocketPath: string;
   dockerComposeProject?: string;
@@ -78,6 +79,9 @@ export function loadConfig(): AppConfig {
     dataRoot,
     stackConfigPath: path.resolve(
       process.env.STACK_CONFIG_PATH?.trim() || path.join(dataRoot, "state", "stack-config.json"),
+    ),
+    themeConfigPath: path.resolve(
+      process.env.THEME_CONFIG_PATH?.trim() || path.join(dataRoot, "portal-theme", "theme.json"),
     ),
     dockerHost: process.env.DOCKER_HOST?.trim() || undefined,
     dockerSocketPath: process.env.DOCKER_SOCKET_PATH?.trim() || "/var/run/docker.sock",

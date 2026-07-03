@@ -5,6 +5,7 @@ import { loadConfig } from "./config";
 import { DockerClient } from "./dockerClient";
 import { buildPortalTools, isPhotoPipelineEnabled, loadStackConfig } from "./stackConfig";
 import { StatusCollector } from "./statusCollector";
+import { readTheme, writeTheme } from "./themeStore";
 
 const appConfig = loadConfig();
 const dockerClient = new DockerClient(
@@ -17,6 +18,7 @@ const dockerClient = new DockerClient(
 const statusCollector = new StatusCollector(appConfig, dockerClient);
 const app = express();
 const publicDir = path.resolve(process.cwd(), "public");
+const themeApiPaths = ["/api/theme", "/api/portal/theme"];
 
 app.disable("x-powered-by");
 app.use(express.json({ limit: "64kb" }));
@@ -31,6 +33,15 @@ app.use(
 
 app.get("/healthz", (_request, response) => {
   response.json({ ok: true, service: "frame-portal" });
+});
+
+app.get(themeApiPaths, async (_request, response, next) => {
+  try {
+    response.setHeader("Cache-Control", "no-store");
+    response.json({ theme: await readTheme(appConfig.themeConfigPath) });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.use((request, response, next) => {
@@ -110,6 +121,15 @@ app.put("/pipeline/api/settings", async (request, response, next) => {
   try {
     response.setHeader("Cache-Control", "no-store");
     response.json(await photoPipelineRequest("/api/internal/photo-pipeline/settings", request.body));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put(themeApiPaths, async (request, response, next) => {
+  try {
+    response.setHeader("Cache-Control", "no-store");
+    response.json({ theme: await writeTheme(appConfig.themeConfigPath, request.body) });
   } catch (error) {
     next(error);
   }

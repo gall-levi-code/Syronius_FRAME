@@ -200,6 +200,7 @@ function writeStoredTheme(mode) {
   try {
     localStorage.setItem("frame-theme", mode);
   } catch {}
+  window.FrameTheme?.saveMode?.(mode);
 }
 
 async function refresh(forceRender) {
