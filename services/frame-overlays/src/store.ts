@@ -69,27 +69,15 @@ export class OverlayStore {
       await copyFile(this.statePath, migrationBackup);
       await this.atomicWrite(migrated, false);
     } else if (isOverlayDocumentV2(raw)) {
-      let synchronized = raw;
-      let changed = false;
-      if (
-        raw.default_template_id !== this.stockDocument.default_template_id
-        || JSON.stringify(raw.default_template_ids ?? {}) !== JSON.stringify(this.stockDocument.default_template_ids)
-        || JSON.stringify(raw.templates) !== JSON.stringify(this.stockDocument.templates)
-      ) {
-        synchronized = {
-          ...raw,
-          default_template_id: this.stockDocument.default_template_id,
-          default_template_ids: clone(this.stockDocument.default_template_ids),
-          templates: clone(this.stockDocument.templates),
-        };
-        changed = true;
-      }
-      changed = clampConnectivityPolls(synchronized, this.now()) || changed;
+      const synchronized = synchronizeV2Document(raw, this.stockDocument);
+      const changed = clampConnectivityPolls(synchronized, this.now()) || JSON.stringify(synchronized) !== JSON.stringify(raw);
       if (changed) {
-        synchronized.revision += 1;
+        synchronized.revision = raw.revision + 1;
+        // ponytail: current templates define the supported design surface; obsolete saved keys are pruned at startup.
         this.assertValid(synchronized);
         await this.atomicWrite(synchronized, true);
       }
+      this.assertValid(synchronized);
     }
     return this.read();
   }
@@ -249,12 +237,37 @@ export function designFromTemplate(template: BuiltinTemplate): OverlayDesign {
   return design;
 }
 
+function synchronizeV2Document(document: OverlayDocumentV2, stock: OverlayDocumentV2): OverlayDocumentV2 {
+  const templatesByType = new Map(stock.templates.map((template) => [template.type, template]));
+  const presets = document.presets.map((preset) => {
+    const template = templatesByType.get(preset.type);
+    if (!template) return preset;
+    return {
+      ...preset,
+      layout: pickKnown(objectValue(preset.layout), objectValue(template.layout)),
+      theme: pickKnown(objectValue(preset.theme), objectValue(template.theme)),
+      config: pickKnown(objectValue(preset.config), objectValue(template.config)),
+    } as unknown as UserPreset;
+  });
+  return {
+    ...document,
+    default_template_id: stock.default_template_id,
+    default_template_ids: clone(stock.default_template_ids),
+    templates: clone(stock.templates),
+    presets,
+  };
+}
+
 function validOverlayType(value: unknown): value is OverlayType {
   return value === "connectivity" || value === "upload_progress" || value === "latest_photo";
 }
 
 function objectValue(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? clone(value as Record<string, unknown>) : {};
+}
+
+function pickKnown(value: Record<string, unknown>, example: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.keys(example).flatMap((key) => key in value ? [[key, value[key]]] : []));
 }
 
 function clampConnectivityPolls(document: OverlayDocumentV2, now: Date): boolean {

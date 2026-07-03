@@ -35,6 +35,8 @@ export interface CreateFrameOverlaysOptions {
   publicDir: string;
   streamsFetch: (route: string, init?: RequestInit) => Promise<Response>;
   photoUploadFetch?: (route: string, init?: RequestInit) => Promise<Response>;
+  photoFtpFetch?: (route: string, init?: RequestInit) => Promise<Response>;
+  belaboxManagerFetch?: (route: string, init?: RequestInit) => Promise<Response>;
   telemetryHub?: TelemetryHub;
   uploadProgressHub?: UploadProgressHub;
 }
@@ -64,6 +66,18 @@ export async function createFrameOverlaysApp(options: CreateFrameOverlaysOptions
     return response.json();
   });
   const uploadProgressHub = options.uploadProgressHub ?? new UploadProgressHub(async (adapter) => {
+    if (adapter === "belabox_agent") {
+      if (!options.belaboxManagerFetch) throw new Error("Belabox upload telemetry is unavailable.");
+      const response = await options.belaboxManagerFetch("/belabox/api/ftp-progress");
+      if (!response.ok) throw new RequestError(response.status, `Belabox Manager returned ${response.status}`);
+      return response.json();
+    }
+    if (adapter === "ftp") {
+      if (!options.photoFtpFetch) throw new Error("FTP ingest telemetry is unavailable.");
+      const response = await options.photoFtpFetch("/api/internal/photo-ftp/progress");
+      if (!response.ok) throw new RequestError(response.status, `Photo FTP returned ${response.status}`);
+      return response.json();
+    }
     if (adapter !== "web_upload") throw new Error(`${adapter} ingest telemetry is not configured yet.`);
     if (!options.photoUploadFetch) throw new Error("Web-upload telemetry is unavailable.");
     const response = await options.photoUploadFetch("/api/internal/photo-upload/progress");

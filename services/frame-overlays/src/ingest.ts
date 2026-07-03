@@ -19,6 +19,7 @@ export interface IngestTransfer {
   elapsed_ms: number | null;
   started_at: string;
   updated_at: string;
+  status_text?: string;
   error?: string;
   capabilities: IngestCapabilities;
 }
@@ -213,6 +214,7 @@ function normalizeTransfers(raw: unknown, adapter: IngestAdapterId): IngestTrans
       elapsed_ms: elapsed,
       started_at: startedAt,
       updated_at: updatedAt,
+      ...(transfer.status_text ? { status_text: textValue(transfer.status_text, 120) } : {}),
       ...(transfer.error ? { error: textValue(transfer.error, 160) } : {}),
       capabilities: { filename: Boolean(filename), total_bytes: bytesTotal !== null, speed: speed !== null, elapsed: elapsed !== null },
     }];

@@ -140,9 +140,33 @@ test("upload renderer focuses the most complete active file and does not invent 
   assert.equal(view.current_percent,90);
   assert.equal(view.percent,null);
   assert.equal(view.speed_bps,225);
-  assert.equal(view.overall_complete,1);
+  assert.equal(view.overall_complete,0);
   assert.equal(view.overall_total,4);
-  assert.equal(Math.round(view.overall_percent),25);
+  assert.equal(Math.round(view.overall_percent),0);
   assert.deepEqual(view.adapters, ["web_upload", "ftp"]);
-  assert.equal(uploadSummary(view),"3 uploading - 1 accepted");
+  assert.equal(uploadSummary(view),"3 uploading - 1 waiting");
+});
+
+test("upload renderer treats waiting and preparing as active states, not completed uploads", () => {
+  const transfers=[
+    {transfer_id:"queued",adapter:"belabox_agent",phase:"queued",bytes_received:0,bytes_total:1000,speed_bps:null,started_at:"2026-06-21T12:00:00Z",updated_at:"2026-06-21T12:00:01Z"},
+    {transfer_id:"preparing",adapter:"belabox_agent",phase:"processing",bytes_received:0,bytes_total:2000,speed_bps:0,started_at:"2026-06-21T12:00:01Z",updated_at:"2026-06-21T12:00:01Z"},
+  ];
+  const view=deriveUploadView(transfers,1000,Date.parse("2026-06-21T12:00:01.500Z"));
+  assert.equal(view.focus.transfer_id,"preparing");
+  assert.equal(view.current_percent,null);
+  assert.equal(view.overall_complete,0);
+  assert.equal(view.overall_total,2);
+  assert.equal(view.overall_percent,0);
+});
+
+test("upload renderer only flashes published files briefly", () => {
+  const transfer={transfer_id:"done",adapter:"belabox_agent",phase:"published",bytes_received:1000,bytes_total:1000,speed_bps:null,started_at:"2026-06-21T12:00:00Z",updated_at:"2026-06-21T12:00:01Z"};
+  assert.equal(deriveUploadView([transfer],1000,Date.parse("2026-06-21T12:00:01.500Z")).focus.transfer_id,"done");
+  assert.equal(deriveUploadView([transfer],1000,Date.parse("2026-06-21T12:00:02.500Z")).focus,null);
+});
+
+test("upload renderer keeps queued files visible while waiting to start", () => {
+  const transfer={transfer_id:"queued",adapter:"belabox_agent",phase:"queued",bytes_received:0,bytes_total:1000,speed_bps:null,started_at:"2026-06-21T12:00:00Z",updated_at:"2026-06-21T12:00:01Z"};
+  assert.equal(deriveUploadView([transfer],1000,Date.parse("2026-06-21T12:00:32Z")).focus.transfer_id,"queued");
 });

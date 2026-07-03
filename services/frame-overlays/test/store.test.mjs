@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -11,7 +11,6 @@ test("V1 migration, backup, serialized writes, and optimistic conflicts are enfo
   t.after(() => rm(root, { recursive: true, force: true }));
   const stateDir = path.join(root, "state");
   const statePath = path.join(stateDir, "overlay-presets.json");
-  const { mkdir } = await import("node:fs/promises");
   await mkdir(stateDir, { recursive: true });
   await writeFile(statePath, JSON.stringify({
     schema_version: "1.0", default_preset_id: "camera-main",
@@ -62,6 +61,40 @@ test("a shipped template revision replaces the persisted stock catalog without c
   assert.equal(upgraded.revision, original.revision + 1);
   assert.deepEqual(upgraded.presets, original.presets);
   assert.ok(await readFile(`${statePath}.bak`, "utf8"));
+});
+
+test("obsolete V2 design keys are pruned during startup sync", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-overlay-v2-prune-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const statePath = path.join(root, "overlay-presets.json");
+  await mkdir(path.dirname(statePath), { recursive: true });
+  const options = await storeFixtureOptions(statePath);
+  const template = structuredClone(options.stockDocument.templates[0]);
+  const preset = {
+    ...template,
+    id:"custom-camera",
+    template_id:template.id,
+    revision:1,
+    created_at:"2026-06-21T12:00:00Z",
+    updated_at:"2026-06-21T12:00:00Z",
+  };
+  delete preset.builtin;
+  delete preset.readonly;
+  preset.layout.legacy_growth = "left";
+  preset.theme.legacy_font_family = "Inter";
+  preset.config.chart_line_width_px = 2;
+  await writeFile(statePath, JSON.stringify({
+    ...options.stockDocument,
+    revision:7,
+    presets:[preset],
+    sources:[{id:"source-custom-camera",slug:"custom-camera",source_key:"ABCDEFGHIJKLMNOPQRSTUVWX",display_name:"Custom Camera",preset_id:"custom-camera",enabled:true,data_source:{kind:"stream",stream_profile_id:null},revision:1,created_at:preset.created_at,updated_at:preset.updated_at}],
+  }));
+  const store = new OverlayStore(options);
+  const synced = await store.init();
+  assert.equal(synced.revision, 8);
+  assert.equal("legacy_growth" in synced.presets[0].layout, false);
+  assert.equal("legacy_font_family" in synced.presets[0].theme, false);
+  assert.equal("chart_line_width_px" in synced.presets[0].config, false);
 });
 
 test("startup clamps persisted connectivity polling to the safe floor", async (t) => {

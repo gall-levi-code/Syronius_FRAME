@@ -24,7 +24,7 @@ const textRangeFields = [["theme.font_size_base_px", "Size", 10, 32, 1], ["theme
 const subheaderRangeFields = [["theme.subheader_font_size_px", "Size", 8, 24, 1], ["theme.subheader_font_weight", "Weight", 100, 900, 100]];
 const plotRangeFields = [["config.bitrate_meter_height_px", "Meter thickness", 4, 40, 1], ["config.bitrate_meter_radius_px", "Meter radius", 0, 30, 1], ["config.chart_bitrate_line_width_px", "Bitrate thickness", .5, 12, .5], ["config.chart_rtt_line_width_px", "RTT thickness", .5, 12, .5], ["config.chart_warn_line_width_px", "Warn thickness", .5, 12, .5]];
 const themeStateFields = [["good", "Good", "good_color", "theme.bg_opacity_good"], ["warn", "Warn", "warn_color", "theme.bg_opacity_warn"], ["bad", "Bad", "bad_color", "theme.bg_opacity_bad"]];
-const uploadRangeFields = [["config.active_poll_ms", "Upload refresh rate (ms)", 200, 2000, 100], ["config.idle_poll_ms", "Idle check rate", 200, 10000, 100], ["config.complete_hide_ms", "Show completed for", 0, 30000, 250]];
+const uploadRangeFields = [["config.active_poll_ms", "Upload refresh rate (ms)", 200, 2000, 100], ["config.idle_poll_ms", "Idle check rate", 200, 10000, 100], ["config.complete_hide_ms", "Complete flash (ms)", 0, 500, 50]];
 const fontFamilyOptions = [
   ["Inter, system-ui, sans-serif", "Inter / System"],
   ["system-ui, sans-serif", "System UI"],
@@ -40,14 +40,28 @@ const fontFamilyOptions = [
 const lineStyleOptions = [["solid", "Solid"], ["dashed", "Dashed"], ["dotted", "Dotted"]];
 const uploadAdapterOptions = [
   ["web_upload", "Web upload", false],
-  ["ftp", "FTP (coming soon)", true],
-  ["belabox_agent", "BELABOX agent (coming soon)", true],
+  ["ftp", "FTP ingest", false],
+  ["belabox_agent", "Belabox FTP connector", false],
 ];
 const dockLabels = { tl:"Top left",t:"Top",tr:"Top right",l:"Left",c:"Center",r:"Right",bl:"Bottom left",b:"Bottom",br:"Bottom right" };
 const growthDirectionLabels = [["up", "Up", "&uarr;"], ["left", "Left", "&larr;"], ["auto", "Auto", "&bull;"], ["right", "Right", "&rarr;"], ["down", "Down", "&darr;"]];
 const customTelemetryBlocks = new Set(["header", "bitrate", "rtt", "buffer", "server", "dropped", "uptime", "meter", "chart"]);
 const blockDensityOptions = [["compact", "Compact", 56], ["normal", "Normal", 72], ["spacious", "Spacious", 104]];
 const fakePreviewStorageKey = "frame-overlays-fake-preview";
+const THEME_MODE_KEY = "frame-theme";
+const LEGACY_PORTAL_THEME_KEY = "frame-portal-theme";
+const THEME_PROFILE_ID_KEY = "frame-theme-profile-id";
+const THEME_PROFILE_KEY = "frame-theme-profile";
+const THEME_CUSTOM_PROFILES_KEY = "frame-theme-custom-profiles";
+const COMPAT_THEME_KEYS = ["frame-gallery-theme-mode", "frame-audio-bridge-color-mode"];
+const THEME_STORAGE_KEYS = new Set([
+  THEME_MODE_KEY,
+  LEGACY_PORTAL_THEME_KEY,
+  THEME_PROFILE_ID_KEY,
+  THEME_PROFILE_KEY,
+  THEME_CUSTOM_PROFILES_KEY,
+  ...COMPAT_THEME_KEYS,
+]);
 const telemetryBlockFields = [
   ["header", "Header", ["show_name", "show_status"]],
   ["bitrate", "Bitrate", ["show_bitrate"]],
@@ -98,6 +112,7 @@ const fakePreviewToggle = document.querySelector("#fake-preview-toggle");
 const notice = document.querySelector("#notice");
 const saveStatus = document.querySelector("#save-status");
 const receiverStatus = document.querySelector("#receiver-status");
+const dashboardLink = document.querySelector("#dashboard-link");
 const themeToggle = document.querySelector("#theme-toggle");
 const confirmDialog = document.querySelector("#confirm-dialog");
 const confirmTitle = document.querySelector("#confirm-title");
@@ -117,11 +132,10 @@ fakePreviewToggle.checked = state.fakePreview;
 preview.addEventListener("load", sendPreview);
 window.addEventListener("resize", applyPreviewScale);
 window.addEventListener("storage", (event) => {
-  if (event.key === "frame-theme-profile") {
+  if (THEME_STORAGE_KEYS.has(event.key)) {
     setThemeMode(readStoredTheme(), false);
     return;
   }
-  if (event.key === "frame-theme" && (event.newValue === "day" || event.newValue === "night")) setThemeMode(event.newValue, false);
   if (event.key === fakePreviewStorageKey) {
     state.fakePreview = readStoredFakePreview();
     fakePreviewToggle.checked = state.fakePreview;
@@ -163,19 +177,23 @@ function toggleTheme() {
 function setThemeMode(nextMode, persist) {
   const mode = nextMode === "day" ? "day" : "night";
   document.documentElement.dataset.theme = mode;
+  document.documentElement.dataset.themeMode = mode;
+  document.body.classList.toggle("theme-day", mode === "day");
   window.FrameTheme?.apply(mode);
   const nextLabel = mode === "day" ? "Switch to night mode" : "Switch to day mode";
   themeToggle.setAttribute("aria-label", nextLabel);
   themeToggle.title = nextLabel;
   themeToggle.setAttribute("aria-pressed", String(mode === "day"));
   if (persist) {
-    try { localStorage.setItem("frame-theme", mode); } catch {}
+    try { localStorage.setItem(THEME_MODE_KEY, mode); } catch {}
   }
 }
 
 function readStoredTheme() {
   try {
-    const stored = localStorage.getItem("frame-theme");
+    const stored = localStorage.getItem(THEME_MODE_KEY)
+      || localStorage.getItem(LEGACY_PORTAL_THEME_KEY)
+      || COMPAT_THEME_KEYS.map((key) => localStorage.getItem(key)).find(Boolean);
     if (stored === "day" || stored === "night") return stored;
   } catch {}
   return "night";
@@ -206,6 +224,7 @@ async function load(preserveSelection = false) {
     state.catalog = catalog;
     state.streams = (streams.streams || []).slice().sort(compareStream);
     state.config = config;
+    if (dashboardLink) dashboardLink.href = dashboardUrl();
     receiverStatus.textContent = streamsAvailable ? "Telemetry ready" : "Telemetry unavailable";
     receiverStatus.classList.toggle("live", streamsAvailable);
     const sources = sortedSources();
@@ -294,8 +313,8 @@ function renderCreateDataSource() {
           <p>Show browser or ingest transfer progress inside OBS.</p>
           <div class="choice-list">
             ${sourceChoice({ key:"upload:web_upload", title:"Web upload", detail:"Browser and mobile upload telemetry", active:selectedKey === "upload:web_upload" })}
-            ${sourceChoice({ key:"upload:ftp", title:"FTP (coming soon)", detail:"Adapter listed now; telemetry fetcher is not wired yet.", disabled:true })}
-            ${sourceChoice({ key:"upload:belabox_agent", title:"BELABOX agent (coming soon)", detail:"Adapter listed now; telemetry fetcher is not wired yet.", disabled:true })}
+            ${sourceChoice({ key:"upload:ftp", title:"FTP ingest", detail:"Live file-growth and staged-camera-upload telemetry", active:selectedKey === "upload:ftp" })}
+            ${sourceChoice({ key:"upload:belabox_agent", title:"Belabox FTP connector", detail:"Live progress from Belabox MQTT telemetry", active:selectedKey === "upload:belabox_agent" })}
           </div>
         </section>
       </div>
@@ -320,6 +339,10 @@ function selectCreateDataSource(choice) {
     state.create.dataSource = { type:"connectivity", label:stream?.description || streamId, data_source:{ kind:"stream", stream_profile_id:streamId } };
   } else if (choice === "upload:web_upload") {
     state.create.dataSource = { type:"upload_progress", label:"Web upload", data_source:{ kind:"upload_progress", adapters:["web_upload"] } };
+  } else if (choice === "upload:ftp") {
+    state.create.dataSource = { type:"upload_progress", label:"FTP ingest", data_source:{ kind:"upload_progress", adapters:["ftp"] } };
+  } else if (choice === "upload:belabox_agent") {
+    state.create.dataSource = { type:"upload_progress", label:"Belabox FTP connector", data_source:{ kind:"upload_progress", adapters:["belabox_agent"] } };
   }
   renderCreateDataSource();
 }
@@ -487,7 +510,7 @@ function streamBindingMarkup(selected) {
 
 function uploadAdapterMarkup(selectedAdapters) {
   const selected = new Set(Array.isArray(selectedAdapters) && selectedAdapters.length ? selectedAdapters : ["web_upload"]);
-  return `<div class="wide"><strong>Upload adapters</strong><div class="toggle-grid">${uploadAdapterOptions.map(([id,label,disabled]) => `<label class="${disabled ? "disabled" : ""}"><input type="checkbox" data-upload-adapter value="${escapeAttr(id)}" ${selected.has(id) ? "checked" : ""} ${disabled ? "disabled" : ""}>${escapeHtml(label)}</label>`).join("")}</div><small>Multiple adapters are part of the long-term source model. Only Web upload is active today.</small></div>`;
+  return `<div class="wide"><strong>Upload adapters</strong><div class="toggle-grid">${uploadAdapterOptions.map(([id,label,disabled]) => `<label class="${disabled ? "disabled" : ""}"><input type="checkbox" data-upload-adapter value="${escapeAttr(id)}" ${selected.has(id) ? "checked" : ""} ${disabled ? "disabled" : ""}>${escapeHtml(label)}</label>`).join("")}</div><small>FTP ingest reports live bytes and speed from file growth; percent appears only when a sender reports total size.</small></div>`;
 }
 
 function bindSourceDetails(type) {
@@ -923,7 +946,7 @@ function resolveConfirm(value) {
 }
 
 function openAddStream() {
-  window.location.href = "http://localhost/slsui#add-stream";
+  window.location.href = "/slsui#add-stream";
 }
 
 function sortedSources() {
@@ -962,6 +985,14 @@ function compareStream(a, b) {
 
 function sourceUrl(source) {
   return `${state.config.public_base_url}/overlays/view/${encodeURIComponent(source.slug)}/${encodeURIComponent(source.source_key)}`;
+}
+
+function dashboardUrl() {
+  try {
+    return new URL("/dashboard", state.config.public_base_url || location.origin).href;
+  } catch {
+    return "/dashboard";
+  }
 }
 
 function previewPresetUrl(presetId) {

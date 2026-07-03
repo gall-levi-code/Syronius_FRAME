@@ -7,7 +7,11 @@ services:
       PORT: 3733
       DATA_ROOT: /data
       STREAMS_API_URL: ${STREAMS_API_URL:-http://host.docker.internal:3732}
+      PHOTO_UPLOAD_API_URL: ${PHOTO_UPLOAD_API_URL:-http://host.docker.internal:3736}
+      PHOTO_FTP_API_URL: ${PHOTO_FTP_API_URL:-http://host.docker.internal:3737}
+      BELABOX_MANAGER_API_URL: ${BELABOX_MANAGER_API_URL:-http://host.docker.internal:3741}
       SLS_API_KEY: ${SLS_API_KEY}
+      PORTAL_SERVICE_TOKEN: ${PORTAL_SERVICE_TOKEN}
       PUBLIC_BASE_URL: ${OVERLAYS_PUBLIC_BASE_URL:-http://localhost:3733}
       OVERLAYS_USERNAME: ${OVERLAYS_USERNAME:-}
       OVERLAYS_PASSWORD: ${OVERLAYS_PASSWORD:-}

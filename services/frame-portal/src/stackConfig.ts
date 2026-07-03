@@ -27,6 +27,9 @@ const FALLBACK_ROUTES: Record<string, string> = {
   audio_listen: "/audio/listen",
   audio_hls: "/audio/hls",
   discord_audio_bridge_root: "/bridge",
+  belabox_manager: "/belabox",
+  belabox_mqtt: "/mqtt",
+  belabox_chunks: "/belabox-chunks",
 };
 
 const TOOL_DEFINITIONS: Array<
@@ -92,6 +95,14 @@ const TOOL_DEFINITIONS: Array<
     serviceName: "frame-audio-bridge",
   },
   {
+    id: "belabox",
+    name: "Belabox Manager",
+    description: "Monitor Belabox MQTT check-ins and agent scaffolding.",
+    routeKey: "belabox_manager",
+    capability: "frame-belabox-manager",
+    serviceName: "frame-belabox-manager",
+  },
+  {
     id: "status",
     name: "System Status",
     description: "Review FRAME service health, alerts, and logs.",
@@ -103,7 +114,7 @@ const TOOL_DEFINITIONS: Array<
 export async function loadStackConfig(appConfig: AppConfig): Promise<LoadedStackConfig> {
   try {
     const text = await readFile(appConfig.stackConfigPath, "utf8");
-    const parsed = JSON.parse(text) as Partial<StackConfig>;
+    const parsed = JSON.parse(stripBom(text)) as Partial<StackConfig>;
     return {
       source: "file",
       config: {
@@ -130,6 +141,10 @@ export async function loadStackConfig(appConfig: AppConfig): Promise<LoadedStack
       },
     };
   }
+}
+
+function stripBom(text: string): string {
+  return text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
 }
 
 export function buildPortalTools(

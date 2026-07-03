@@ -3,6 +3,7 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import express, { type Express } from "express";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
+import { Readable } from "node:stream";
 import { type BasicAuthConfig, requireBasicAuth } from "./auth.js";
 import { streamCompletedUpload } from "./handoff.js";
 import { UploadProgressTracker } from "./progress.js";
@@ -45,6 +46,30 @@ export async function createApp(config: UploadConfig): Promise<Express> {
   app.get("/api/internal/photo-upload/progress", requireServiceToken(config.serviceToken), (_request, response) => {
     response.setHeader("Cache-Control", "no-store");
     response.json(progress.snapshot());
+  });
+  app.post("/api/internal/photo-upload/stage", requireServiceToken(config.serviceToken), express.raw({ type: "*/*", limit: config.maxInputBytes }), async (request, response, next) => {
+    const filename = safeHeader(request.header("x-frame-filename")) || "belabox-photo.jpg";
+    const transferId = validTransferId(request.header("x-frame-transfer-id")) || randomUUID();
+    const bytesTotal = validFileSize(request.header("x-frame-file-size"), config.maxInputBytes);
+    try {
+      if (!Buffer.isBuffer(request.body) || request.body.length === 0) {
+        response.status(400).json({ error: "Completed file body is required." });
+        return;
+      }
+      progress.begin(transferId, filename, bytesTotal);
+      const stagedName = await streamCompletedUpload(
+        Readable.from(request.body),
+        filename,
+        inbox,
+        staging,
+        (bytes) => progress.addBytes(transferId, bytes),
+      );
+      progress.queued(transferId);
+      response.status(202).json({ accepted: true, staged_name: stagedName, transfer_id: transferId });
+    } catch (error) {
+      progress.failed(transferId, errorMessage(error));
+      next(error);
+    }
   });
   app.use("/photos", requireBasicAuth(config.auth));
   app.use("/photos/assets", express.static(config.publicDir, { index: false, maxAge: "1h" }));
@@ -212,6 +237,10 @@ function validFileSize(value: string | undefined, maximum: number): number | nul
   if (!value || !/^\d+$/.test(value)) return null;
   const size = Number(value);
   return Number.isSafeInteger(size) && size >= 0 && size <= maximum ? size : null;
+}
+
+function safeHeader(value: string | undefined): string {
+  return value?.replace(/[^\x20-\x7E]/g, "").slice(0, 180).trim() || "";
 }
 
 function errorMessage(error: unknown): string {

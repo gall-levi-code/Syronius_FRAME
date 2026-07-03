@@ -65,6 +65,19 @@ removed.
 
 ### Remote Photo Agent / Belabox Module
 
+- [x] Phase 4B: reuse the existing overlay SSE path for all photo-upload progress instead of adding a
+  separate WebSocket transport.
+- [x] Phase 4B: expose a shared upload-progress shape for `web_upload`, `belabox_agent`, and `ftp`
+  adapters: transfer ID, adapter, phase, filename, received/sent bytes, optional total bytes,
+  speed, elapsed time, status text, and timestamps.
+- [x] Phase 4B: keep Belabox chunk/FTP connector progress authoritative from the Belabox agent because
+  the sender knows the local file size and exact bytes sent.
+- [x] Phase 4B: add lightweight `frame-photo-ftp` ingest progress by tracking growing inbox files and
+  staged/completed events; true percent remains unavailable unless the sender reports total size.
+- [x] Phase 4B: add `/api/internal/photo-ftp/progress` and enable the Overlay Wizard `ftp` adapter once
+  `frame-photo-ftp` exposes progress directly.
+- [ ] Add an optional upload-result bubble lane for short-lived completed/failed file notices while the
+  main upload card immediately advances to the next active file.
 - Define a `frame-remote-photo-agent` capability for deploying a managed photo relay helper onto a Belabox or similar Linux encoder on the local network.
 - Build a FRAME-side setup wizard that can detect or accept the Belabox LAN IP, explain how to enable Belabox SSH, and connect with the fixed `user` SSH account plus the rotating password from the Belabox Advanced/developer panel.
 - Generate FRAME-managed usernames, paths, script names, and systemd unit names instead of reusing personal prototype paths from the reference scripts.

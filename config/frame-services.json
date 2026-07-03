@@ -3,6 +3,7 @@
   "profileOrder": [
     "audio-bridge",
     "audio-monitor",
+    "belabox",
     "video-relay",
     "overlays",
     "photo-pipeline",
@@ -29,6 +30,12 @@
     "frame-discord-audio-bridge": {
       "implemented": true,
       "profiles": ["audio-bridge"],
+      "requires": [],
+      "requiresAny": []
+    },
+    "frame-belabox-manager": {
+      "implemented": true,
+      "profiles": ["belabox"],
       "requires": [],
       "requiresAny": []
     },
@@ -99,7 +106,10 @@
     "audio_capture": "/audio/capture",
     "audio_listen": "/audio/listen",
     "audio_hls": "/audio/hls",
-    "discord_audio_bridge_root": "/bridge"
+    "discord_audio_bridge_root": "/bridge",
+    "belabox_manager": "/belabox",
+    "belabox_mqtt": "/mqtt",
+    "belabox_chunks": "/belabox-chunks"
   },
   "publicRoutes": [
     { "prefix": "/auth", "capability": null },
@@ -118,13 +128,16 @@
     { "prefix": "/audio/hls", "capability": "frame-audio-relay" },
     { "prefix": "/audio/assets", "capability": "frame-audio-relay" },
     { "prefix": "/audio/public", "capability": "frame-audio-relay" },
-    { "prefix": "/bridge", "capability": "frame-discord-audio-bridge" }
+    { "prefix": "/bridge", "capability": "frame-discord-audio-bridge" },
+    { "prefix": "/mqtt", "capability": "frame-belabox-manager" },
+    { "prefix": "/belabox-chunks", "capability": "frame-belabox-manager" }
   ],
   "forbiddenPublicPrefixes": [
     "/audio/admin",
     "/audio/capture",
     "/overlays/setup",
     "/overlays/api",
+    "/belabox",
     "/pipeline",
     "/slsui"
   ]

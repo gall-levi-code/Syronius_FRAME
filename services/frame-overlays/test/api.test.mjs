@@ -34,13 +34,16 @@ test("source creation returns a keyed URL, rejects stale writes, and stock templ
   assert.equal((await fetch(`${fixture.base}/internal/streams/overlay-bindings`)).status, 401);
   const uploadSource = await json(`${fixture.base}/overlays/api/sources`, {
     method:"POST",
-    body:JSON.stringify({ expected_revision:1, template_id:"default-upload-progress", preset_name:"Uploads Preset", display_name:"Photo Uploads", slug:"photo-uploads", data_source:{kind:"upload_progress",adapters:["web_upload","ftp"]} }),
+    body:JSON.stringify({ expected_revision:1, template_id:"default-upload-progress", preset_name:"Uploads Preset", display_name:"Photo Uploads", slug:"photo-uploads", data_source:{kind:"upload_progress",adapters:["web_upload","ftp","belabox_agent"]} }),
   });
   assert.equal(uploadSource.preset.type, "upload_progress");
-  assert.deepEqual(uploadSource.source.data_source, { kind:"upload_progress", adapters:["web_upload","ftp"] });
+  assert.deepEqual(uploadSource.source.data_source, { kind:"upload_progress", adapters:["web_upload","ftp","belabox_agent"] });
   const uploadView = await fetch(`${fixture.base}${new URL(uploadSource.source.public_url).pathname}`);
   assert.equal(uploadView.status, 200);
   assert.match(await uploadView.text(), /upload-status/);
+  const uploadStats = await json(`${fixture.base}${new URL(uploadSource.source.public_url).pathname}/stats`);
+  assert.equal(uploadStats.transfers.some((transfer) => transfer.adapter === "ftp" && transfer.status_text === "Receiving via FTP"), true);
+  assert.equal(uploadStats.transfers.some((transfer) => transfer.adapter === "belabox_agent" && transfer.status_text === "Uploading 42%"), true);
   const duplicateName = await fetch(`${fixture.base}/overlays/api/sources`, {
     method:"POST",
     headers:{"Content-Type":"application/json"},
@@ -72,7 +75,7 @@ async function startFixture(t, initialState) {
   const statePath = path.join(root,"state","overlay-presets.json");
   if(initialState){await mkdir(path.dirname(statePath),{recursive:true});await writeFile(statePath,JSON.stringify(initialState));}
   const store = new OverlayStore(await storeFixtureOptions(statePath));
-  const runtime = await createFrameOverlaysApp({ config:{publicBaseUrl:"http://placeholder",requestTimeoutMs:1000,slsApiKey:"test-key"}, store, publicDir:path.resolve("public"), streamsFetch:async()=>new Response(JSON.stringify({streams:[]}),{status:200,headers:{"Content-Type":"application/json"}}), photoUploadFetch:async()=>new Response(JSON.stringify({transfers:[]}),{status:200,headers:{"Content-Type":"application/json"}}) });
+  const runtime = await createFrameOverlaysApp({ config:{publicBaseUrl:"http://placeholder",requestTimeoutMs:1000,slsApiKey:"test-key"}, store, publicDir:path.resolve("public"), streamsFetch:async()=>new Response(JSON.stringify({streams:[]}),{status:200,headers:{"Content-Type":"application/json"}}), photoUploadFetch:async()=>new Response(JSON.stringify({transfers:[]}),{status:200,headers:{"Content-Type":"application/json"}}), photoFtpFetch:async()=>new Response(JSON.stringify({transfers:[{transfer_id:"ftp-1",adapter:"ftp",phase:"receiving",filename:"FTP_1234.JPG",bytes_received:2048,bytes_total:null,speed_bps:512,elapsed_ms:4000,started_at:"2026-06-21T12:00:00Z",updated_at:"2026-06-21T12:00:04Z",status_text:"Receiving via FTP"}]}),{status:200,headers:{"Content-Type":"application/json"}}), belaboxManagerFetch:async()=>new Response(JSON.stringify({transfers:[{transfer_id:"belabox-1:file",adapter:"belabox_agent",phase:"receiving",filename:"IMG_1234.JPG",bytes_received:420,bytes_total:1000,speed_bps:100,elapsed_ms:1000,started_at:"2026-06-21T12:00:00Z",updated_at:"2026-06-21T12:00:01Z",status_text:"Uploading 42%"}]}),{status:200,headers:{"Content-Type":"application/json"}}) });
   const server = runtime.app.listen(0);
   await new Promise((resolve)=>server.once("listening",resolve));
   const address=server.address(); const base=`http://127.0.0.1:${address.port}`;

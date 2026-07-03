@@ -3,9 +3,9 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>FRAME Overlay Wizard</title>
+    <title>FRAME Belabox Manager</title>
     <meta name="theme-color" content="#06131d">
-    <link rel="icon" href="/overlays/assets/frame-logo-square.svg" type="image/svg+xml">
+    <link rel="icon" href="/belabox/assets/frame-logo-square.svg" type="image/svg+xml">
     <script>
       (() => {
         try {
@@ -38,17 +38,16 @@
         } catch {}
       })();
     </script>
-    <link rel="stylesheet" href="/overlays/assets/styles.css?v=portal-theme-v2">
+    <link rel="stylesheet" href="/belabox/assets/styles.css?v=portal-theme-v1">
   </head>
   <body>
     <header class="topbar">
-      <a id="dashboard-link" class="brand brand-link" href="/dashboard" aria-label="Open FRAME dashboard">
-        <img src="/overlays/assets/frame-logo-square.svg" alt="" aria-hidden="true">
-        <div><strong>Overlay Wizard</strong><span>OBS browser sources</span></div>
+      <a class="brand brand-link" href="/dashboard" aria-label="Open FRAME dashboard">
+        <img src="/belabox/assets/frame-logo-square.svg" alt="" aria-hidden="true">
+        <div><strong>Belabox Manager</strong><span>MQTT device controls and setup</span></div>
       </a>
       <div class="top-actions">
-        <span id="receiver-status" class="status-pill">Checking telemetry</span>
-        <span id="save-status" class="status-pill hidden">Saved</span>
+        <span id="header-status" class="status-pill">Loading</span>
         <button id="theme-toggle" class="icon-button theme-toggle" type="button" aria-label="Switch to day mode" title="Switch to day mode">
           <svg class="moon-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"/></svg>
           <svg class="sun-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/></svg>
@@ -56,37 +55,32 @@
       </div>
     </header>
 
-    <main class="wizard-shell">
+    <main class="shell">
       <div id="notice" class="notice hidden" role="status"></div>
-      <section id="source-tabs-shell" class="source-tabs-shell hidden" aria-label="OBS overlay sources">
-        <nav id="source-tabs" class="source-tabs" role="tablist"></nav>
+      <section class="summary">
+        <div>
+          <span>MQTT</span>
+          <strong id="mqtt-state">Loading</strong>
+        </div>
+        <div>
+          <span>Devices</span>
+          <strong id="device-count">0</strong>
+        </div>
+        <div>
+          <span>Heartbeat</span>
+          <strong id="heartbeat-state">Waiting</strong>
+        </div>
+        <div>
+          <span>Commands</span>
+          <strong id="command-state">Disabled</strong>
+        </div>
       </section>
-      <section id="main-content" class="wizard-content"></section>
-      <section id="preview-dock" class="preview-dock hidden" aria-label="Renderer preview">
-        <div class="preview-head">
-          <div><strong>Renderer preview</strong><span id="preview-caption">Sample output</span></div>
-          <label class="fake-toggle"><input id="fake-preview-toggle" type="checkbox" checked>Use fake telemetry data</label>
-        </div>
-        <div class="preview-frame-shell">
-          <div id="preview-scale-shell" class="preview-scale-shell">
-            <iframe id="preview-frame" title="Overlay renderer preview" allowtransparency="true"></iframe>
-          </div>
-        </div>
+
+      <section class="manager-layout">
+        <div id="device-tabs" class="device-tabs" role="tablist" aria-label="Belabox devices"></div>
+        <article id="device-panel" class="device-panel"></article>
       </section>
     </main>
-
-    <dialog id="confirm-dialog">
-      <div class="dialog-head">
-        <div><strong id="confirm-title">Confirm action</strong><span id="confirm-subtitle"></span></div>
-        <button type="button" class="icon-button" id="confirm-cancel-x">Close</button>
-      </div>
-      <div id="confirm-body" class="dialog-copy"></div>
-      <div class="dialog-actions">
-        <button type="button" class="secondary" id="confirm-cancel">Cancel</button>
-        <button type="button" id="confirm-accept">Confirm</button>
-      </div>
-    </dialog>
-
-    <script type="module" src="/overlays/assets/app.js?v=portal-theme-v2"></script>
+    <script src="/belabox/assets/app.js?v=portal-theme-v1"></script>
   </body>
 </html>

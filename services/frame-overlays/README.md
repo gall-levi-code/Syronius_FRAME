@@ -25,7 +25,7 @@ Supported overlay feeds:
 | --- | --- |
 | SRT stream health | Bitrate, latency, RTT, dropped packets, uptime, and connection state. |
 | BELABOX cloud telemetry | BELABOX-compatible stream health from a connected telemetry source. |
-| Live photo upload progress | Browser upload progress for incoming photo files. Coming soon. |
+| Live photo upload progress | Browser upload, FTP ingest, and Belabox connector progress for incoming photo files. |
 
 The main thing users create is a **Source**.
 
@@ -43,7 +43,7 @@ Recommended setup:
 3. Choose **Guided setup**.
 4. Enable Overlays.
 5. Enable Stream Management if you want SRT stream health overlays.
-6. Enable Browser Photo Upload when upload progress overlays are available.
+6. Enable Browser Photo Upload, Camera FTP Upload, or Belabox Manager for upload progress overlays.
 7. Start the stack.
 8. Open the Overlay Wizard:
 
@@ -117,7 +117,7 @@ Optional connections:
 | SRT stream health | FRAME Stream Management |
 | Local SRT/SRTLA relay health | FRAME Video Ingest |
 | BELABOX cloud telemetry | A connected BELABOX-compatible telemetry source |
-| Live photo upload progress | FRAME Photo Upload |
+| Live photo upload progress | FRAME Photo Upload, FRAME Photo FTP, or FRAME Belabox Manager |
 
 ## Notes For Operators
 

@@ -1,4 +1,5 @@
 import express from "express";
+import { timingSafeEqual } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { StabilityGate } from "./stabilityGate.js";
@@ -19,6 +20,10 @@ app.disable("x-powered-by");
 app.get("/healthz", (_request, response) => {
   response.json({ ok: true, service: "frame-photo-ftp", ...gate.status });
 });
+app.get("/api/internal/photo-ftp/progress", requireServiceToken(process.env.PORTAL_SERVICE_TOKEN?.trim() || ""), (_request, response) => {
+  response.setHeader("Cache-Control", "no-store");
+  response.json(gate.progressSnapshot());
+});
 const healthServer = app.listen(healthPort, () => console.log(`[photo-ftp] health listening on ${healthPort}`));
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
@@ -35,4 +40,17 @@ function integer(name: string, fallback: number, minimum: number, maximum: numbe
     throw new Error(`${name} must be an integer from ${minimum} to ${maximum}.`);
   }
   return value;
+}
+
+function requireServiceToken(expected: string): express.RequestHandler {
+  return (request, response, next) => {
+    const supplied = request.header("authorization")?.replace(/^Bearer\s+/i, "") || "";
+    const expectedBytes = Buffer.from(expected);
+    const suppliedBytes = Buffer.from(supplied);
+    if (!expected || expectedBytes.length !== suppliedBytes.length || !timingSafeEqual(expectedBytes, suppliedBytes)) {
+      response.status(401).json({ error: "Internal service token required." });
+      return;
+    }
+    next();
+  };
 }

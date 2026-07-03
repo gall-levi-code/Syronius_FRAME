@@ -22,6 +22,7 @@ const CAPABILITY_KEYS: &[&str] = &[
     "frame-video-relay",
     "frame-audio-relay",
     "frame-discord-audio-bridge",
+    "frame-belabox-manager",
     "frame-photo-gallery",
     "frame-photo-ftp",
     "frame-photo-webupload",
@@ -33,6 +34,7 @@ const IMPLEMENTED_CAPABILITIES: &[&str] = &[
     "frame-video-relay",
     "frame-audio-relay",
     "frame-discord-audio-bridge",
+    "frame-belabox-manager",
     "frame-photo-gallery",
     "frame-photo-ftp",
     "frame-photo-webupload",
@@ -42,6 +44,7 @@ const IMPLEMENTED_CAPABILITIES: &[&str] = &[
 const PROFILE_ORDER: &[&str] = &[
     "audio-bridge",
     "audio-monitor",
+    "belabox",
     "video-relay",
     "overlays",
     "photo-pipeline",
@@ -56,6 +59,8 @@ const DATA_DIRECTORIES: &[&str] = &[
     "state",
     "audio-bridge",
     "audio-monitor",
+    "belabox-broker",
+    "belabox-manager",
     "video-relay",
     "overlays",
     "logs",
@@ -74,6 +79,7 @@ const PUBLIC_PREFIXES: &[(&str, Option<&str>)] = &[
     ("/auth", None),
     ("/dashboard", None),
     ("/status", None),
+    ("/theme", None),
     ("/assets", None),
     ("/api/portal", None),
     ("/overlays/view", Some("frame-overlays")),
@@ -86,12 +92,14 @@ const PUBLIC_PREFIXES: &[(&str, Option<&str>)] = &[
     ("/audio/assets", Some("frame-audio-relay")),
     ("/audio/public", Some("frame-audio-relay")),
     ("/bridge", Some("frame-discord-audio-bridge")),
+    ("/mqtt", Some("frame-belabox-manager")),
 ];
 const FORBIDDEN_PUBLIC_PREFIXES: &[&str] = &[
     "/audio/admin",
     "/audio/capture",
     "/overlays/setup",
     "/overlays/api",
+    "/belabox",
     "/slsui",
 ];
 
@@ -297,6 +305,13 @@ fn apply_install_plan(app: AppHandle, plan: InstallPlan) -> Result<ApplyResult, 
         .unwrap_or(false)
     {
         push_install_log(&app, &mut logs, "Discord Audio Bridge was enabled. Add Discord credentials in localhost/setup before using the bot.");
+    }
+    if capabilities
+        .get("frame-belabox-manager")
+        .copied()
+        .unwrap_or(false)
+    {
+        push_install_log(&app, &mut logs, "Belabox Manager was enabled. MQTT credentials were generated; SSH settings are optional for maintenance checks.");
     }
     if capabilities
         .get("frame-photo-ftp")
@@ -1066,6 +1081,12 @@ fn compute_profiles(capabilities: &BTreeMap<String, bool>, mode: &str) -> Vec<St
     add_capability_profiles(
         capabilities,
         &mut enabled,
+        "frame-belabox-manager",
+        &["belabox"],
+    );
+    add_capability_profiles(
+        capabilities,
+        &mut enabled,
         "frame-video-relay",
         &["video-relay"],
     );
@@ -1124,7 +1145,9 @@ fn stack_config(mode: &str, capabilities: &BTreeMap<String, bool>) -> serde_json
         "routes": {
             "dashboard": "/dashboard",
             "status": "/status",
+            "theme": "/theme",
             "video_relay_ui": "/slsui",
+            "video_relay_stats": "/stats",
             "overlays_root": "/overlays",
             "overlays_wizard": "/overlays/setup",
             "photo_upload": "/photos/upload",
@@ -1137,7 +1160,9 @@ fn stack_config(mode: &str, capabilities: &BTreeMap<String, bool>) -> serde_json
             "audio_capture": "/audio/capture",
             "audio_listen": "/audio/listen",
             "audio_hls": "/audio/hls",
-            "discord_audio_bridge_root": "/bridge"
+            "discord_audio_bridge_root": "/bridge",
+            "belabox_manager": "/belabox",
+            "belabox_mqtt": "/mqtt"
         },
         "public_route_prefixes": PUBLIC_PREFIXES.iter().map(|(prefix, _)| *prefix).collect::<Vec<_>>()
     })
@@ -1503,6 +1528,102 @@ fn build_apply_environment(
         existing_or(existing, "TODAY_REFRESH_MS", "1000"),
     );
     env.insert(
+        "BELABOX_HOST".to_string(),
+        existing_or(existing, "BELABOX_HOST", ""),
+    );
+    env.insert(
+        "BELABOX_USER".to_string(),
+        existing_or(existing, "BELABOX_USER", "user"),
+    );
+    env.insert(
+        "BELABOX_PORT".to_string(),
+        existing_or(existing, "BELABOX_PORT", "22"),
+    );
+    env.insert(
+        "BELABOX_SSH_KEY_PATH".to_string(),
+        existing_or(existing, "BELABOX_SSH_KEY_PATH", ""),
+    );
+    env.insert(
+        "BELABOX_PASSWORD".to_string(),
+        existing_or(existing, "BELABOX_PASSWORD", ""),
+    );
+    env.insert(
+        "BELABOX_AGENT_REMOTE_PATH".to_string(),
+        existing_or(
+            existing,
+            "BELABOX_AGENT_REMOTE_PATH",
+            "/tmp/frame-belabox-agent.sh",
+        ),
+    );
+    env.insert(
+        "BELABOX_SSH_ENABLED".to_string(),
+        existing_or(existing, "BELABOX_SSH_ENABLED", "false"),
+    );
+    env.insert(
+        "BELABOX_AGENT_COMMANDS_ENABLED".to_string(),
+        existing_or(existing, "BELABOX_AGENT_COMMANDS_ENABLED", "false"),
+    );
+    env.insert(
+        "BELABOX_AGENT_INSTALL_ENABLED".to_string(),
+        existing_or(existing, "BELABOX_AGENT_INSTALL_ENABLED", "false"),
+    );
+    env.insert(
+        "BELABOX_MQTT_HOST".to_string(),
+        existing_or(existing, "BELABOX_MQTT_HOST", &edge_public_base_url),
+    );
+    env.insert(
+        "BELABOX_MQTT_INTERNAL_URL".to_string(),
+        existing_or(
+            existing,
+            "BELABOX_MQTT_INTERNAL_URL",
+            "mqtt://frame-belabox-broker:1883",
+        ),
+    );
+    env.insert(
+        "BELABOX_MQTT_WS_PATH".to_string(),
+        existing_or(existing, "BELABOX_MQTT_WS_PATH", "/mqtt"),
+    );
+    env.insert(
+        "BELABOX_MQTT_USERNAME".to_string(),
+        existing_or(existing, "BELABOX_MQTT_USERNAME", "frame-belabox"),
+    );
+    env.insert(
+        "BELABOX_MQTT_PASSWORD".to_string(),
+        preserve_secret(existing, "BELABOX_MQTT_PASSWORD", 32),
+    );
+    env.insert(
+        "BELABOX_MQTT_CLIENT_ID_PREFIX".to_string(),
+        existing_or(existing, "BELABOX_MQTT_CLIENT_ID_PREFIX", "frame-belabox"),
+    );
+    env.insert(
+        "BELABOX_MQTT_RECONNECT_MS".to_string(),
+        existing_or(existing, "BELABOX_MQTT_RECONNECT_MS", "5000"),
+    );
+    env.insert(
+        "BELABOX_DEVICE_ID".to_string(),
+        existing_or(existing, "BELABOX_DEVICE_ID", "belabox-1"),
+    );
+    env.insert(
+        "BELABOX_MQTT_KEEPALIVE".to_string(),
+        existing_or(existing, "BELABOX_MQTT_KEEPALIVE", "30"),
+    );
+    env.insert(
+        "BELABOX_HEARTBEAT_INTERVAL_MS".to_string(),
+        existing_or(existing, "BELABOX_HEARTBEAT_INTERVAL_MS", "10000"),
+    );
+    env.insert(
+        "BELABOX_TELEMETRY_INTERVAL_MS".to_string(),
+        existing_or(existing, "BELABOX_TELEMETRY_INTERVAL_MS", "30000"),
+    );
+    env.insert(
+        "BELABOX_CHUNK_UPLOAD_URL".to_string(),
+        existing_or(existing, "BELABOX_CHUNK_UPLOAD_URL", ""),
+    );
+    env.insert(
+        "BELABOX_CHUNK_SIZE_BYTES".to_string(),
+        existing_or(existing, "BELABOX_CHUNK_SIZE_BYTES", "4194304"),
+    );
+    env.insert(
         "FRAME_AUTH_SESSION_SECRET".to_string(),
         preserve_secret(existing, "FRAME_AUTH_SESSION_SECRET", 32),
     );
@@ -1835,6 +1956,33 @@ fn serialize_env(env: &BTreeMap<String, String>) -> String {
         (
             "Audio Monitor",
             &["AUDIO_PUBLIC_BASE_URL", "AUDIO_CAPTURE_BASE_URL"],
+        ),
+        (
+            "Belabox Manager",
+            &[
+                "BELABOX_HOST",
+                "BELABOX_USER",
+                "BELABOX_PORT",
+                "BELABOX_SSH_KEY_PATH",
+                "BELABOX_PASSWORD",
+                "BELABOX_AGENT_REMOTE_PATH",
+                "BELABOX_SSH_ENABLED",
+                "BELABOX_AGENT_COMMANDS_ENABLED",
+                "BELABOX_AGENT_INSTALL_ENABLED",
+                "BELABOX_MQTT_HOST",
+                "BELABOX_MQTT_INTERNAL_URL",
+                "BELABOX_MQTT_WS_PATH",
+                "BELABOX_MQTT_USERNAME",
+                "BELABOX_MQTT_PASSWORD",
+                "BELABOX_MQTT_CLIENT_ID_PREFIX",
+                "BELABOX_MQTT_RECONNECT_MS",
+                "BELABOX_DEVICE_ID",
+                "BELABOX_MQTT_KEEPALIVE",
+                "BELABOX_HEARTBEAT_INTERVAL_MS",
+                "BELABOX_TELEMETRY_INTERVAL_MS",
+                "BELABOX_CHUNK_UPLOAD_URL",
+                "BELABOX_CHUNK_SIZE_BYTES",
+            ],
         ),
         (
             "Photo workflow",

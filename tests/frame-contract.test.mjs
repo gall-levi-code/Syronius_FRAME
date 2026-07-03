@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { promisify } from "node:util";
 import {
   CAPABILITIES,
   IMPLEMENTED_CAPABILITIES,
@@ -12,6 +14,8 @@ import {
   enforceDependencies,
   normalizePrefixes,
 } from "../installer/frame-contract.mjs";
+
+const execFileAsync = promisify(execFile);
 
 test("canonical registry matches the published stack-config schema", async () => {
   const schema = JSON.parse(await readFile("docs/schemas/stack-config.schema.json", "utf8"));
@@ -33,9 +37,14 @@ test("runtime overlay schema and stock defaults match their canonical copies", a
 });
 
 test("installer Compose template stays synchronized with the service contracts", async () => {
-  const compose = await readFile("installer/templates/docker-compose.yml", "utf8");
+  const [compose, brokerConfig] = await Promise.all([
+    readFile("installer/templates/docker-compose.yml", "utf8"),
+    readFile("services/frame-belabox-broker/mosquitto.conf", "utf8"),
+  ]);
   const photoUpload = composeServiceBlock(compose, "frame-photo-upload");
   const photoFtp = composeServiceBlock(compose, "frame-photo-ftp");
+  const belaboxBroker = composeServiceBlock(compose, "frame-belabox-broker");
+  const belabox = composeServiceBlock(compose, "frame-belabox-manager");
   const streams = composeServiceBlock(compose, "frame-streams");
   const overlays = composeServiceBlock(compose, "frame-overlays");
   assert.ok(photoUpload.includes("PORTAL_SERVICE_TOKEN: ${PORTAL_SERVICE_TOKEN}"));
@@ -44,9 +53,27 @@ test("installer Compose template stays synchronized with the service contracts",
   assert.ok(photoFtp.includes("PHOTO_FTP_MAX_SESSIONS: ${PHOTO_FTP_MAX_SESSIONS:-20}"));
   assert.ok(photoFtp.includes("PHOTO_FTP_MAX_SESSIONS_PER_IP: ${PHOTO_FTP_MAX_SESSIONS_PER_IP:-10}"));
   assert.ok(photoFtp.includes("PHOTO_FTP_PASSIVE_MAX: ${PHOTO_FTP_PASSIVE_MAX:-30019}"));
+  assert.ok(photoFtp.includes("PORTAL_SERVICE_TOKEN: ${PORTAL_SERVICE_TOKEN}"));
   assert.ok(photoFtp.includes("${PHOTO_FTP_PASSIVE_MIN:-30000}-${PHOTO_FTP_PASSIVE_MAX:-30019}:${PHOTO_FTP_PASSIVE_MIN:-30000}-${PHOTO_FTP_PASSIVE_MAX:-30019}"));
+  assert.ok(belaboxBroker.includes("image: eclipse-mosquitto@sha256:"));
+  assert.ok(belaboxBroker.includes("BELABOX_MQTT_PASSWORD: ${BELABOX_MQTT_PASSWORD:-}"));
+  assert.ok(belaboxBroker.includes("Path(`/mqtt`) || PathPrefix(`/mqtt/`)"));
+  assert.ok(brokerConfig.includes("acl_file /mosquitto/data/acl"));
+  assert.ok(!belaboxBroker.includes("ports:"));
+  assert.ok(belabox.includes("BELABOX_HOST: ${BELABOX_HOST:-}"));
+  assert.ok(belabox.includes("BELABOX_SSH_CREDENTIAL_KEY: ${BELABOX_SSH_CREDENTIAL_KEY:-}"));
+  assert.ok(belabox.includes("BELABOX_AGENT_COMMANDS_ENABLED: ${BELABOX_AGENT_COMMANDS_ENABLED:-false}"));
+  assert.ok(belabox.includes("BELABOX_MQTT_INTERNAL_URL: ${BELABOX_MQTT_INTERNAL_URL:-mqtt://frame-belabox-broker:1883}"));
+  assert.ok(belabox.includes("BELABOX_MQTT_PASSWORD: ${BELABOX_MQTT_PASSWORD:-}"));
+  assert.ok(belabox.includes("BELABOX_CHUNK_UPLOAD_URL: ${BELABOX_CHUNK_UPLOAD_URL:-}"));
+  assert.ok(belabox.includes("Path(`/belabox-chunks`) || PathPrefix(`/belabox-chunks/`)"));
+  assert.ok(belabox.includes("BELABOX_DIAGNOSTIC_UPLOAD_BYTES: ${BELABOX_DIAGNOSTIC_UPLOAD_BYTES:-8388608}"));
+  assert.ok(belabox.includes("BELABOX_BROKER_DATA_DIR: /broker-data"));
+  assert.ok(belabox.includes("frame-belabox-broker:"));
+  assert.ok(!belabox.includes("ports:"));
   assert.ok(overlays.includes("PORTAL_SERVICE_TOKEN: ${PORTAL_SERVICE_TOKEN}"));
   assert.ok(overlays.includes("PHOTO_UPLOAD_API_URL: http://frame-photo-upload:3736"));
+  assert.ok(overlays.includes("PHOTO_FTP_API_URL: http://frame-photo-ftp:3737"));
   assert.ok(streams.includes("STREAMS_PUBLIC_BASE_URL: ${STREAMS_PUBLIC_BASE_URL:-http://localhost}"));
   assert.ok(streams.includes("Path(`/stats`) || PathPrefix(`/stats/`)"));
   assert.ok(!streams.includes("traefik.http.routers.frame-streams-stats.middlewares"));
@@ -60,6 +87,7 @@ test("portal routes and implemented Compose profiles stay aligned with the regis
   for (const [name, route] of Object.entries(ROUTES)) {
     assert.ok(portalStackConfig.includes(`${name}: "${route}"`), `Portal route ${name} drifted`);
   }
+  assert.ok(portalStackConfig.includes("stripBom(text)"), "Portal must tolerate BOM-prefixed stack config");
   for (const name of IMPLEMENTED_CAPABILITIES) {
     for (const profile of SERVICE_REGISTRY.capabilities[name].profiles) {
       assert.ok(composeTemplate.includes(`"${profile}"`), `Compose profile ${profile} is missing`);
@@ -72,6 +100,7 @@ test("implemented Node services expose build and typecheck scripts", async () =>
     "frame-auth",
     "frame-audio",
     "frame-audio-bridge",
+    "frame-belabox-manager",
     "frame-overlays",
     "frame-portal",
     "frame-streams",
@@ -121,6 +150,23 @@ test("Overlay Wizard presents OBS sources as the only editable objects", async (
     readFile("services/frame-overlays/public/renderer.css", "utf8"),
   ]);
   assert.ok(html.includes("FRAME Overlay Wizard"));
+  assert.ok(html.includes("FrameTheme"), "Overlay Wizard should inherit the shared FRAME theme");
+  assert.ok(html.includes("THEME_PROFILE_KEY"), "Overlay Wizard bootstrap should read Portal theme profiles");
+  assert.ok(html.includes('id="dashboard-link"'), "Overlay Wizard logo should link to the dashboard");
+  assert.ok(html.includes("portal-theme-v2"), "Overlay Wizard assets should cache-bust theme chrome updates");
+  assert.ok(html.includes("M21 12.8A9 9 0 1 1 11.2 3"), "Overlay Wizard theme toggle should use the Portal moon icon path");
+  assert.ok(html.includes("M4.93 4.93l1.42 1.42"), "Overlay Wizard theme toggle should use the Portal sun icon path");
+  assert.ok(frontend.includes("THEME_STORAGE_KEYS"), "Overlay Wizard should listen for Portal theme storage changes");
+  assert.ok(frontend.includes("THEME_PROFILE_ID_KEY"), "Overlay Wizard should react when the Portal theme preset changes");
+  assert.ok(frontend.includes("dashboardLink.href = dashboardUrl()"), "Overlay Wizard logo should route through the configured public base");
+  assert.ok(frontend.includes('new URL("/dashboard", state.config.public_base_url || location.origin).href'));
+  assert.ok(frontend.includes('window.location.href = "/slsui#add-stream"'), "Overlay Wizard should not hardcode localhost for SLSUI");
+  assert.ok(styles.includes(".theme-day .moon-icon"), "Overlay Wizard should support Portal body theme class selectors");
+  assert.ok(styles.includes("--surface-muted"), "Overlay Wizard chrome should derive surfaces from the global theme");
+  assert.ok(styles.includes(".brand-link"), "Overlay Wizard linked logo should not inherit button chrome");
+  assert.ok(!styles.includes("background:#0b2635"), "Overlay Wizard should avoid hardcoded raised-panel blues");
+  assert.ok(!styles.includes("background:#081b27"), "Overlay Wizard should avoid hardcoded section blues");
+  assert.ok(!styles.includes("color:#03121b"), "Overlay Wizard primary button text should use themed contrast");
   assert.ok(html.includes('id="source-tabs"'), "Overlay Wizard must use source tabs");
   assert.ok(html.includes('role="tablist"'), "Overlay source navigation must be exposed as tabs");
   assert.ok(frontend.includes('role="tab"'), "Overlay source entries must be tab controls");
@@ -185,6 +231,7 @@ test("implemented capability profiles are stable and ordered", () => {
   assert.deepEqual(computeComposeProfiles(capabilities, "LAN"), [
     "audio-bridge",
     "audio-monitor",
+    "belabox",
     "video-relay",
     "overlays",
     "photo-pipeline",
@@ -196,6 +243,7 @@ test("implemented capability profiles are stable and ordered", () => {
   assert.deepEqual(computeComposeProfiles(capabilities, "HYBRID"), [
     "audio-bridge",
     "audio-monitor",
+    "belabox",
     "video-relay",
     "overlays",
     "photo-pipeline",
@@ -282,10 +330,83 @@ test("Hybrid exposes unauthenticated read-only stream stats without exposing Str
   assert.ok(!prefixes.includes("/slsui"));
 });
 
+test("Belabox pairing UI hides MQTT implementation details", async () => {
+  const [html, frontend, backend, dockerfile, agent, styles] = await Promise.all([
+    readFile("services/frame-belabox-manager/public/index.html", "utf8"),
+    readFile("services/frame-belabox-manager/public/app.js", "utf8"),
+    readFile("services/frame-belabox-manager/src/index.ts", "utf8"),
+    readFile("services/frame-belabox-manager/Dockerfile", "utf8"),
+    readFile("services/frame-belabox-manager/agent/belabox-agent.mjs", "utf8"),
+    readFile("services/frame-belabox-manager/public/styles.css", "utf8"),
+  ]);
+  assert.ok(html.includes('role="tablist"'), "Belabox devices should render like Overlay Wizard source tabs");
+  assert.ok(html.includes("FrameTheme"), "Belabox Manager should inherit the shared FRAME theme");
+  assert.ok(frontend.includes("THEME_PROFILE_ID_KEY"), "Belabox Manager should read Portal theme profile settings");
+  assert.ok(frontend.includes("THEME_CUSTOM_PROFILES_KEY"), "Belabox Manager should listen for Portal custom theme changes");
+  assert.ok(html.includes("header-status"), "Belabox Manager should keep action feedback in the header");
+  assert.ok(html.includes("frame-logo-square.svg"), "Belabox Manager should use the FRAME header identity");
+  assert.ok(html.includes('class="brand brand-link" href="/dashboard"'), "FRAME logo should link back to the dashboard");
+  assert.ok(!html.includes('href="/dashboard">Dashboard</a>'), "Belabox Manager should not duplicate the dashboard button");
+  assert.ok(html.includes("M21 12.8A9 9 0 1 1 11.2 3"), "Theme toggle should use the Portal moon icon path");
+  assert.ok(html.includes("M4.93 4.93l1.42 1.42"), "Theme toggle should use the Portal sun icon path");
+  assert.ok(frontend.includes("THEME_STORAGE_KEYS"));
+  assert.ok(frontend.includes("handleThemeStorageChange"));
+  assert.ok(styles.includes(".brand-link"));
+  assert.ok(styles.includes(".theme-day .moon-icon"));
+  assert.ok(frontend.includes("Add Device"), "Zero-device state should enter the add-device wizard");
+  assert.ok(frontend.includes("SSH Maintenance"));
+  assert.ok(frontend.includes("MQTT Controls"));
+  assert.ok(frontend.includes("/belabox/api/pair"));
+  assert.ok(frontend.includes("/belabox/api/pair/jobs"));
+  assert.ok(frontend.includes("/belabox/api/ftp-connector/jobs"));
+  assert.ok(frontend.includes("Enable Chunk Relay"));
+  assert.ok(frontend.includes("Run Upload Speed Test"));
+  assert.ok(frontend.includes("SSH required"));
+  assert.ok(frontend.includes("remember_ssh"));
+  assert.ok(frontend.includes("Forget Saved SSH"));
+  assert.ok(frontend.includes("detailsOpen"));
+  assert.ok(frontend.includes("setButtonBusy"));
+  assert.ok(frontend.includes("rememberFormInput"));
+  assert.ok(frontend.includes("panelHasEditableFocus"));
+  assert.ok(frontend.includes("data-remove-device"));
+  assert.ok(frontend.includes('method: "DELETE"'));
+  assert.ok(backend.includes("ftp_connectors:"));
+  assert.ok(backend.includes("ssh_credentials:"));
+  assert.ok(backend.includes("aes-256-gcm"));
+  assert.ok(backend.includes("safeFtpPassword"));
+  assert.ok(backend.includes("if (!device.last_heartbeat_at) return false"));
+  assert.ok(backend.includes("/belabox/api/diagnostics/speed-test"));
+  assert.ok(backend.includes("network_speed_test"));
+  assert.ok(backend.includes("isProvisionedDevice(parsedTopic.deviceId)"));
+  assert.ok(dockerfile.includes("sshpass"));
+  assert.ok(dockerfile.includes("iperf3"));
+  assert.ok(agent.includes("network_speed_test"));
+  assert.ok(agent.includes("BELABOX_CHUNK_UPLOAD_TOKEN"));
+  assert.ok(!html.includes("MQTT password"));
+  assert.ok(!frontend.includes("BELABOX_MQTT_PASSWORD"));
+});
+
+test("Belabox agent rejects invalid signed commands", async () => {
+  await execFileAsync("node", ["services/frame-belabox-manager/agent/belabox-agent.mjs", "--self-test"]);
+});
+
+test("Hybrid exposes only authenticated Belabox MQTT and not the Belabox manager UI", () => {
+  const capabilities = Object.fromEntries(CAPABILITIES.map((name) => [name, false]));
+  capabilities["frame-belabox-manager"] = true;
+  const prefixes = computeEffectivePublicPrefixes({
+    mode: "HYBRID",
+    capabilities,
+    public_route_prefixes: [...PUBLIC_PREFIXES, "/belabox"],
+  });
+  assert.ok(prefixes.includes("/mqtt"));
+  assert.ok(prefixes.includes("/belabox-chunks"));
+  assert.ok(!prefixes.includes("/belabox"));
+});
+
 test("FRAME Edge denies management surfaces when a tunnel bypasses the public gateway", async () => {
   const composeTemplate = await readFile("installer/templates/docker-compose.yml", "utf8");
   assert.ok(composeTemplate.includes("traefik.http.routers.frame-public-deny.rule"));
-  for (const route of ["/slsui", "/pipeline", "/audio/admin", "/audio/capture", "/audio/api", "/overlays/setup", "/overlays/api"]) {
+  for (const route of ["/slsui", "/audio/admin", "/audio/capture", "/audio/api", "/belabox", "/pipeline", "/overlays/setup", "/overlays/api"]) {
     assert.ok(composeTemplate.includes(`Path(\`${route}\`)`), `${route} is missing from the Edge deny router`);
   }
 });

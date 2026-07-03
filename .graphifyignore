@@ -8,10 +8,16 @@ docker-compose.yml
 graphify-out/
 .codex/
 .codex-remote-attachments/
+docker_container_samples/
 node_modules/
 **/node_modules/
 dist/
 **/dist/
 coverage/
 **/coverage/
+apps/*/src-tauri/gen/
+**/src-tauri/gen/
+apps/*/src-tauri/target/
+**/target/
+**/public/frame-logo-square.*
 *.log
