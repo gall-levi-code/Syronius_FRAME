@@ -62,6 +62,7 @@ interface PairInput {
   privateKey: string;
   deviceId: string;
   installDiagnostics: boolean;
+  enableSshOnBoot: boolean;
   rememberSsh: boolean;
 }
 
@@ -110,6 +111,8 @@ interface FtpConnectorRecord {
   device_id: string;
   camera_username: string;
   camera_password: string;
+  target_host?: string;
+  target_port?: number;
   created_at: string;
   updated_at: string;
 }
@@ -199,7 +202,7 @@ const config = {
     clientIdPrefix: safeClientIdPrefix(process.env.BELABOX_MQTT_CLIENT_ID_PREFIX?.trim() || "frame-belabox"),
     reconnectMs: readInt("BELABOX_MQTT_RECONNECT_MS", 5000, 1000, 60000),
     keepalive: readInt("BELABOX_MQTT_KEEPALIVE", 30, 5, 300),
-    heartbeatMs: readInt("BELABOX_HEARTBEAT_INTERVAL_MS", 10000, 5000, 300000),
+    heartbeatMs: readInt("BELABOX_HEARTBEAT_INTERVAL_MS", 2000, 2000, 300000),
     telemetryMs: readInt("BELABOX_TELEMETRY_INTERVAL_MS", 30000, 1000, 600000),
     activePhotoTelemetryMs: readInt("BELABOX_ACTIVE_PHOTO_TELEMETRY_INTERVAL_MS", 500, 200, 5000),
     brokerDataDir: path.resolve(process.env.BELABOX_BROKER_DATA_DIR?.trim() || "./belabox-broker"),
@@ -216,6 +219,8 @@ const config = {
   chunkUpload: {
     publicUrl: normalizeUrl(process.env.BELABOX_CHUNK_UPLOAD_URL?.trim() || `${process.env.BELABOX_MQTT_HOST?.trim() || "http://localhost"}/belabox-chunks/api/transfers`),
     chunkSizeBytes: readInt("BELABOX_CHUNK_SIZE_BYTES", 4 * 1024 * 1024, 256 * 1024, 64 * 1024 * 1024),
+    parallelUploads: readInt("BELABOX_CHUNK_PARALLEL_UPLOADS", 1, 1, 4),
+    uploadKbps: readInt("BELABOX_CHUNK_UPLOAD_KBPS", 0, 0, 1000000),
     maxFileBytes: readInt("PHOTO_MAX_INPUT_MB", 50, 1, 2048) * 1024 * 1024,
   },
   diagnostics: {
@@ -570,6 +575,26 @@ app.get("/belabox/api/ftp-progress", (_request, response) => {
   });
 });
 
+app.get("/belabox/api/devices/:deviceId/ftp-connector", (request, response, next) => {
+  try {
+    const deviceId = sanitizeDeviceId(request.params.deviceId);
+    const record = ftpConnectors.find((connector) => connector.device_id === deviceId);
+    if (!record) throw new RequestError(404, "FTP connector is not installed for this device.");
+    response.json({
+      device_id: deviceId,
+      camera_ftp_username: record.camera_username,
+      camera_ftp_password: record.camera_password,
+      camera_ftp_port: config.ftpConnector.cameraPort,
+      target_host: record.target_host || config.ftpConnector.host,
+      target_port: record.target_port || config.ftpConnector.port,
+      upload_dir: "~/.frame-belabox-agent/photo-spool/incoming",
+      ready_dir: "~/.frame-belabox-agent/photo-spool/ready",
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/belabox/api/logs", (_request, response) => {
   response.json({
     available: devices.size > 0,
@@ -805,6 +830,8 @@ function statusPayload() {
     ftp_connectors: ftpConnectors.map((record) => ({
       device_id: record.device_id,
       camera_username: record.camera_username,
+      target_host: record.target_host || config.ftpConnector.host,
+      target_port: record.target_port || config.ftpConnector.port,
       created_at: record.created_at,
       updated_at: record.updated_at,
     })),
@@ -814,6 +841,8 @@ function statusPayload() {
       public_url_configured: Boolean(config.chunkUpload.publicUrl),
       photo_upload_configured: Boolean(config.photoUpload.apiUrl && config.photoUpload.serviceToken),
       chunk_size_bytes: config.chunkUpload.chunkSizeBytes,
+      chunk_parallel_uploads: config.chunkUpload.parallelUploads,
+      chunk_upload_kbps: config.chunkUpload.uploadKbps,
     },
     diagnostics: {
       upload_bytes: config.diagnostics.uploadBytes,
@@ -910,6 +939,7 @@ function savedSshCredential(deviceId: string): PairInput | null {
     privateKey: secret.privateKey,
     deviceId,
     installDiagnostics: false,
+    enableSshOnBoot: false,
     rememberSsh: false,
   };
 }
@@ -953,12 +983,14 @@ function redactSshCredential(record: SavedSshCredential): JsonRecord {
   };
 }
 
-function upsertFtpConnector(deviceId: string, input?: Pick<FtpConnectorInput, "cameraUsername" | "cameraPassword">): FtpConnectorRecord {
+function upsertFtpConnector(deviceId: string, input?: Pick<FtpConnectorInput, "cameraUsername" | "cameraPassword" | "targetHost" | "targetPort">): FtpConnectorRecord {
   const existing = ftpConnectors.find((record) => record.device_id === deviceId);
   if (existing) {
-    if (input?.cameraUsername || input?.cameraPassword) {
+    if (input?.cameraUsername || input?.cameraPassword || input?.targetHost || input?.targetPort) {
       existing.camera_username = input.cameraUsername || existing.camera_username;
       existing.camera_password = input.cameraPassword || existing.camera_password;
+      existing.target_host = input.targetHost || existing.target_host;
+      existing.target_port = input.targetPort || existing.target_port;
       existing.updated_at = new Date().toISOString();
       saveFtpConnectors();
     }
@@ -969,6 +1001,8 @@ function upsertFtpConnector(deviceId: string, input?: Pick<FtpConnectorInput, "c
     device_id: deviceId,
     camera_username: input?.cameraUsername || config.ftpConnector.cameraUsername,
     camera_password: input?.cameraPassword || randomSecret(18),
+    target_host: input?.targetHost || config.ftpConnector.host,
+    target_port: input?.targetPort || config.ftpConnector.port,
     created_at: now,
     updated_at: now,
   };
@@ -1163,7 +1197,7 @@ function parseChunkManifest(body: unknown): ChunkManifest {
   const deviceId = sanitizeDeviceId(stringValue(data.device_id) || "");
   const transferId = safeTransferId(stringValue(data.transfer_id) || randomUUID());
   const sizeBytes = safePositiveInt(data.size_bytes, "size_bytes", 1, config.chunkUpload.maxFileBytes);
-  const chunkSizeBytes = safePositiveInt(data.chunk_size_bytes, "chunk_size_bytes", 256 * 1024, config.chunkUpload.chunkSizeBytes);
+  const chunkSizeBytes = safePositiveInt(data.chunk_size_bytes, "chunk_size_bytes", 256 * 1024, 64 * 1024 * 1024);
   const chunkCount = safePositiveInt(data.chunk_count, "chunk_count", 1, 10000);
   const chunks = Array.isArray(data.chunks) ? data.chunks.map((chunk, index) => {
     const item = chunk && typeof chunk === "object" ? chunk as JsonRecord : {};
@@ -1270,6 +1304,16 @@ function safePositiveInt(value: unknown, label: string, minimum: number, maximum
   return parsed;
 }
 
+function safeNumber(value: unknown, label: string, minimum: number, maximum: number): number {
+  const text = String(value ?? "");
+  if (!/^\d+(\.\d+)?$/.test(text)) throw new RequestError(400, `${label} must be a number.`);
+  const parsed = Number.parseFloat(text);
+  if (!Number.isFinite(parsed) || parsed < minimum || parsed > maximum) {
+    throw new RequestError(400, `${label} must be from ${minimum} to ${maximum}.`);
+  }
+  return parsed;
+}
+
 function safeTransferId(value: string): string {
   if (!/^[A-Za-z0-9_-]{8,96}$/.test(value)) throw new RequestError(400, "transfer_id must be 8-96 letters, numbers, dashes, or underscores.");
   return value;
@@ -1315,7 +1359,17 @@ function parsePairInput(body: unknown): PairInput {
   const privateKey = stringValue(data.private_key) || "";
   if (!password && !privateKey) throw new RequestError(400, "SSH password or private key is required.");
   const deviceId = sanitizeDeviceId(stringValue(data.device_id) || `belabox-${host.replace(/[^A-Za-z0-9]+/g, "-")}`);
-  return { host, user, port, password, privateKey, deviceId, installDiagnostics: data.install_diagnostics === true, rememberSsh: data.remember_ssh === true };
+  return {
+    host,
+    user,
+    port,
+    password,
+    privateKey,
+    deviceId,
+    installDiagnostics: data.install_diagnostics === true,
+    enableSshOnBoot: data.enable_ssh_on_boot === true,
+    rememberSsh: data.remember_ssh === true,
+  };
 }
 
 function parseSpeedTestInput(body: unknown): { deviceId: string; bytes: number; parallel: number } {
@@ -1417,6 +1471,14 @@ fi
 if [ -z "$node_bin" ] || [ -z "$npm_bin" ]; then echo "node_and_npm_required" >&2; exit 42; fi
 if [ "${input.installDiagnostics ? "1" : "0"}" = "1" ] && command -v apt-get >/dev/null 2>&1; then
   sudo_run apt-get update >/dev/null && sudo_run apt-get install -y iperf3 >/dev/null || true
+fi
+enable_ssh_on_boot() {
+  if ! command -v systemctl >/dev/null 2>&1; then return 1; fi
+  sudo_run systemctl enable --now ssh.service >/dev/null 2>&1 || sudo_run systemctl enable --now ssh >/dev/null 2>&1
+}
+if [ "${input.enableSshOnBoot ? "1" : "0"}" = "1" ] && ! enable_ssh_on_boot; then
+  echo "ssh_enable_on_boot_failed" >&2
+  exit 45
 fi
 "$npm_bin" --prefix "$agent_dir" install --omit=dev --no-audit --no-fund >/dev/null
 start_agent_background() {
@@ -1560,6 +1622,8 @@ FRAME_FTP_CONNECTOR_EOF
   printf 'FRAME_CHUNK_UPLOAD_URL=%s\\n' "$(decode '${b64(config.chunkUpload.publicUrl)}')"
   printf 'FRAME_CHUNK_UPLOAD_TOKEN=%s\\n' "$(decode '${b64(device.mqtt_password)}')"
   printf 'FRAME_CHUNK_SIZE_BYTES=%s\\n' '${config.chunkUpload.chunkSizeBytes}'
+  printf 'FRAME_CHUNK_PARALLEL_UPLOADS=%s\\n' '${config.chunkUpload.parallelUploads}'
+  printf 'FRAME_CHUNK_UPLOAD_KBPS=%s\\n' '${config.chunkUpload.uploadKbps}'
   printf 'FRAME_CAMERA_FTP_USERNAME=%s\\n' "$(decode '${b64(record.camera_username)}')"
   printf 'FRAME_CAMERA_FTP_PASSWORD=%s\\n' "$(decode '${b64(record.camera_password)}')"
   printf 'FRAME_CAMERA_FTP_HOST=0.0.0.0\\n'
@@ -1590,6 +1654,11 @@ PY
   if command -v apt-get >/dev/null 2>&1 && sudo_run apt-get update >/dev/null && sudo_run apt-get install -y python3-pyftpdlib >/dev/null; then return 0; fi
   if ! "$python_bin" -m pip --version >/dev/null 2>&1 && command -v apt-get >/dev/null 2>&1; then sudo_run apt-get install -y python3-pip >/dev/null || true; fi
   "$python_bin" -m pip install --user pyftpdlib >/dev/null
+}
+ensure_imagemagick() {
+  if command -v magick >/dev/null 2>&1 || command -v convert >/dev/null 2>&1; then return 0; fi
+  if command -v apt-get >/dev/null 2>&1; then sudo_run apt-get update >/dev/null && sudo_run apt-get install -y imagemagick >/dev/null || true; fi
+  return 0
 }
 test_frame_ftp() {
   set -a; . "$connector_dir/ftp-connector.env"; set +a
@@ -1673,6 +1742,7 @@ sudo_run systemctl stop frame-belabox-ftp-connector.service >/dev/null 2>&1 || t
 if command -v systemctl >/dev/null 2>&1; then systemctl --user stop frame-belabox-ftp-connector.service >/dev/null 2>&1 || true; fi
 pkill -f "$connector_dir/ftp-connector.py" 2>/dev/null || true
 ensure_pyftpdlib || { echo "pyftpdlib_install_failed" >&2; exit 43; }
+ensure_imagemagick
 test_frame_ftp || { echo "frame_ftp_test_failed" >&2; exit 44; }
 if install_system_service; then
   :
@@ -1897,10 +1967,21 @@ function validateCommandArgs(command: CommandName, args: JsonRecord): void {
     throw new RequestError(400, "photo_transfer_mode_set mode must be direct_ftp or chunked_https.");
   }
   if (command === "photo_transport_config_set" && args.chunk_size_bytes !== undefined) {
-    safePositiveInt(args.chunk_size_bytes, "chunk_size_bytes", 256 * 1024, config.chunkUpload.chunkSizeBytes);
+    safePositiveInt(args.chunk_size_bytes, "chunk_size_bytes", 256 * 1024, 64 * 1024 * 1024);
   }
-  if (command === "photo_processing_config_set" && args.enabled !== undefined && typeof args.enabled !== "boolean") {
-    throw new RequestError(400, "photo_processing_config_set enabled must be true or false.");
+  if (command === "photo_transport_config_set" && args.chunk_parallel_uploads !== undefined) {
+    safePositiveInt(args.chunk_parallel_uploads, "chunk_parallel_uploads", 1, 4);
+  }
+  if (command === "photo_transport_config_set" && args.chunk_upload_kbps !== undefined) {
+    safePositiveInt(args.chunk_upload_kbps, "chunk_upload_kbps", 0, 1000000);
+  }
+  if (command === "photo_processing_config_set") {
+    if (args.enabled !== undefined && typeof args.enabled !== "boolean") {
+      throw new RequestError(400, "photo_processing_config_set enabled must be true or false.");
+    }
+    if (args.long_edge_px !== undefined) safePositiveInt(args.long_edge_px, "long_edge_px", 0, 12000);
+    if (args.jpeg_quality !== undefined) safePositiveInt(args.jpeg_quality, "jpeg_quality", 40, 100);
+    if (args.max_output_mb !== undefined) safeNumber(args.max_output_mb, "max_output_mb", 0, 500);
   }
   if (command === "network_speed_test") {
     if (args.mode !== "http_upload") throw new RequestError(400, "network_speed_test mode must be http_upload.");
@@ -2064,9 +2145,6 @@ function configurationIssues(): string[] {
   if (!config.user) issues.push("BELABOX_USER is not set.");
   if (config.passwordConfigured && !config.keyPath) {
     issues.push("BELABOX_PASSWORD is stored as a placeholder only; key-based SSH is required for checks right now.");
-  }
-  if (!config.sshEnabled || !config.commandsEnabled) {
-    issues.push("SSH command execution is disabled by environment flags.");
   }
   if (!config.photoUpload.serviceToken) {
     issues.push("PORTAL_SERVICE_TOKEN is required before chunked photo uploads can be assembled.");

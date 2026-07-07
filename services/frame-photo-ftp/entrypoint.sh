@@ -36,6 +36,7 @@ set -- \
   -E \
   -j \
   -R \
+  -A \
   -c "$max_sessions" \
   -C "$max_sessions_per_ip"
 

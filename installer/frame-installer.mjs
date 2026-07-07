@@ -67,6 +67,8 @@ const IMPORTABLE_ENV_KEYS = new Set([
   "BELABOX_TELEMETRY_INTERVAL_MS",
   "BELABOX_CHUNK_UPLOAD_URL",
   "BELABOX_CHUNK_SIZE_BYTES",
+  "BELABOX_CHUNK_PARALLEL_UPLOADS",
+  "BELABOX_CHUNK_UPLOAD_KBPS",
   "BELABOX_DIAGNOSTIC_UPLOAD_BYTES",
   "BELABOX_DIAGNOSTIC_MAX_UPLOAD_BYTES",
   "BELABOX_DIAGNOSTIC_PARALLEL_STREAMS",
@@ -121,6 +123,8 @@ const CUSTOMIZABLE_ENV_KEYS = new Set([
   "BELABOX_TELEMETRY_INTERVAL_MS",
   "BELABOX_CHUNK_UPLOAD_URL",
   "BELABOX_CHUNK_SIZE_BYTES",
+  "BELABOX_CHUNK_PARALLEL_UPLOADS",
+  "BELABOX_CHUNK_UPLOAD_KBPS",
   "BELABOX_DIAGNOSTIC_UPLOAD_BYTES",
   "BELABOX_DIAGNOSTIC_MAX_UPLOAD_BYTES",
   "BELABOX_DIAGNOSTIC_PARALLEL_STREAMS",
@@ -515,7 +519,7 @@ function buildEnvironment(existing, options, mode, capabilities) {
   const belaboxDeviceId = normalizeMqttName(setting(existing, "BELABOX_DEVICE_ID", "belabox-1"), "BELABOX_DEVICE_ID");
   const belaboxMqttReconnectMs = normalizeInteger(setting(existing, "BELABOX_MQTT_RECONNECT_MS", "5000"), "Belabox MQTT reconnect interval", 1000, 60000);
   const belaboxMqttKeepalive = normalizeInteger(setting(existing, "BELABOX_MQTT_KEEPALIVE", "30"), "Belabox MQTT keepalive", 5, 300);
-  const belaboxHeartbeatMs = normalizeInteger(setting(existing, "BELABOX_HEARTBEAT_INTERVAL_MS", "10000"), "Belabox heartbeat interval", 5000, 300000);
+  const belaboxHeartbeatMs = normalizeInteger(setting(existing, "BELABOX_HEARTBEAT_INTERVAL_MS", "2000"), "Belabox heartbeat interval", 2000, 300000);
   const belaboxTelemetryMs = normalizeInteger(setting(existing, "BELABOX_TELEMETRY_INTERVAL_MS", "30000"), "Belabox telemetry interval", 10000, 600000);
   assertPortSet([
     ["FRAME Edge", edgePort, true],
@@ -604,6 +608,8 @@ function buildEnvironment(existing, options, mode, capabilities) {
     BELABOX_TELEMETRY_INTERVAL_MS: belaboxTelemetryMs,
     BELABOX_CHUNK_UPLOAD_URL: setting(existing, "BELABOX_CHUNK_UPLOAD_URL", ""),
     BELABOX_CHUNK_SIZE_BYTES: setting(existing, "BELABOX_CHUNK_SIZE_BYTES", "4194304"),
+    BELABOX_CHUNK_PARALLEL_UPLOADS: setting(existing, "BELABOX_CHUNK_PARALLEL_UPLOADS", "1"),
+    BELABOX_CHUNK_UPLOAD_KBPS: setting(existing, "BELABOX_CHUNK_UPLOAD_KBPS", "0"),
     BELABOX_DIAGNOSTIC_UPLOAD_BYTES: setting(existing, "BELABOX_DIAGNOSTIC_UPLOAD_BYTES", "8388608"),
     BELABOX_DIAGNOSTIC_MAX_UPLOAD_BYTES: setting(existing, "BELABOX_DIAGNOSTIC_MAX_UPLOAD_BYTES", "67108864"),
     BELABOX_DIAGNOSTIC_PARALLEL_STREAMS: setting(existing, "BELABOX_DIAGNOSTIC_PARALLEL_STREAMS", "1"),
@@ -679,9 +685,11 @@ function validateEnvironment(env, config, forStart) {
   normalizeMqttName(defaultIfBlank(env.BELABOX_DEVICE_ID, "belabox-1"), "BELABOX_DEVICE_ID");
   normalizeInteger(setting(env, "BELABOX_MQTT_RECONNECT_MS", "5000"), "Belabox MQTT reconnect interval", 1000, 60000);
   normalizeInteger(setting(env, "BELABOX_MQTT_KEEPALIVE", "30"), "Belabox MQTT keepalive", 5, 300);
-  normalizeInteger(setting(env, "BELABOX_HEARTBEAT_INTERVAL_MS", "10000"), "Belabox heartbeat interval", 5000, 300000);
+  normalizeInteger(setting(env, "BELABOX_HEARTBEAT_INTERVAL_MS", "2000"), "Belabox heartbeat interval", 2000, 300000);
   normalizeInteger(setting(env, "BELABOX_TELEMETRY_INTERVAL_MS", "30000"), "Belabox telemetry interval", 10000, 600000);
   normalizeInteger(setting(env, "BELABOX_CHUNK_SIZE_BYTES", "4194304"), "Belabox chunk size", 262144, 67108864);
+  normalizeInteger(setting(env, "BELABOX_CHUNK_PARALLEL_UPLOADS", "1"), "Belabox chunk parallel uploads", 1, 4);
+  normalizeInteger(setting(env, "BELABOX_CHUNK_UPLOAD_KBPS", "0"), "Belabox chunk upload cap", 0, 1000000);
   normalizeInteger(setting(env, "BELABOX_DIAGNOSTIC_UPLOAD_BYTES", "8388608"), "Belabox diagnostic upload size", 65536, 67108864);
   normalizeInteger(setting(env, "BELABOX_DIAGNOSTIC_MAX_UPLOAD_BYTES", "67108864"), "Belabox diagnostic max upload size", 65536, 268435456);
   normalizeInteger(setting(env, "BELABOX_DIAGNOSTIC_PARALLEL_STREAMS", "1"), "Belabox diagnostic parallel streams", 1, 8);
@@ -1328,6 +1336,8 @@ function serializeEnv(env) {
         "BELABOX_TELEMETRY_INTERVAL_MS",
         "BELABOX_CHUNK_UPLOAD_URL",
         "BELABOX_CHUNK_SIZE_BYTES",
+        "BELABOX_CHUNK_PARALLEL_UPLOADS",
+        "BELABOX_CHUNK_UPLOAD_KBPS",
         "BELABOX_DIAGNOSTIC_UPLOAD_BYTES",
         "BELABOX_DIAGNOSTIC_MAX_UPLOAD_BYTES",
         "BELABOX_DIAGNOSTIC_PARALLEL_STREAMS",

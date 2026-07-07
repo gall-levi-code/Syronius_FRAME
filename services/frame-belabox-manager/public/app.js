@@ -5,6 +5,8 @@ const THEME_PROFILE_ID_KEY = "frame-theme-profile-id";
 const THEME_PROFILE_KEY = "frame-theme-profile";
 const THEME_CUSTOM_PROFILES_KEY = "frame-theme-custom-profiles";
 const COMPAT_THEME_KEYS = ["frame-gallery-theme-mode", "frame-audio-bridge-color-mode"];
+const REFRESH_INTERVAL_MS = 2000;
+const COMMAND_POLL_INTERVAL_MS = 500;
 const THEME_STORAGE_KEYS = new Set([
   THEME_MODE_KEY,
   LEGACY_PORTAL_THEME_KEY,
@@ -33,6 +35,7 @@ const state = {
   logs: null,
   formDraft: {},
   detailsOpen: {},
+  ftpOutputs: {},
   panelLocked: false,
   noticeMessage: "Loading",
   noticeTone: "busy",
@@ -57,7 +60,7 @@ function initialize() {
   elements.devicePanel.addEventListener("submit", handlePanelSubmit);
   elements.devicePanel.addEventListener("toggle", rememberDetailsState, true);
   void refresh();
-  setInterval(refresh, 5000);
+  setInterval(refresh, REFRESH_INTERVAL_MS);
 }
 
 async function refresh() {
@@ -164,13 +167,16 @@ function renderAddDeviceWizard(isEmpty) {
         <label class="check-row"><input id="setup-chunk-enabled" name="setup_chunk" type="checkbox">Enable Chunk Relay mode after pairing</label>
         <div class="form-grid">
           <label>Chunk size bytes<input id="photo-chunk-size" name="chunk_size_bytes" type="number" min="262144" max="67108864" step="262144" value="${escapeAttr(state.status.chunk_upload?.chunk_size_bytes || 4194304)}"></label>
+          <label>Parallel uploads<input id="photo-chunk-parallel" name="chunk_parallel_uploads" type="number" min="1" max="4" step="1" value="${escapeAttr(state.status.chunk_upload?.chunk_parallel_uploads || 1)}"></label>
+          <label>Upload cap kbps<input id="photo-chunk-kbps" name="chunk_upload_kbps" type="number" min="0" max="1000000" step="64" value="${escapeAttr(state.status.chunk_upload?.chunk_upload_kbps || 0)}"></label>
         </div>
-        <p class="hint">Chunk Relay is separate from FTP and uses signed MQTT commands after the agent connects.</p>
+        <p class="hint">Chunk Relay is separate from FTP and uses signed MQTT commands after the agent connects. Set upload cap to 0 for uncapped.</p>
       </section>
 
       <section class="wizard-step">
         <h3>Diagnostics</h3>
         <label class="check-row"><input id="install-diagnostics" name="install_diagnostics" type="checkbox">Install optional network diagnostics tools</label>
+        <label class="check-row"><input id="enable-ssh-on-boot" name="enable_ssh_on_boot" type="checkbox">Enable SSH on boot</label>
       </section>
 
       <section class="wizard-step">
@@ -195,6 +201,10 @@ function renderDevicePanel(deviceId) {
   const cameraFtp = ftp.camera_ftp || {};
   const connector = ftpConnector(deviceId);
   const savedSsh = savedSshCredential(deviceId);
+  const processing = processingSettings(ftp);
+  const chunkSize = Number(ftp.chunk_size_bytes ?? state.status.chunk_upload?.chunk_size_bytes ?? 4194304);
+  const chunkParallel = Number(ftp.chunk_parallel_uploads ?? state.status.chunk_upload?.chunk_parallel_uploads ?? 1);
+  const chunkUploadKbps = Number(ftp.chunk_upload_kbps ?? state.status.chunk_upload?.chunk_upload_kbps ?? 0);
   return `<div class="panel-head">
       <div>
         <p class="eyebrow">Belabox</p>
@@ -218,6 +228,7 @@ function renderDevicePanel(deviceId) {
         <dl>${rows([
           ["FTP connector", ftp.state || connectorStatus(connector, ftp)],
           ["Chunk Relay", chunkStatus(ftp)],
+          ["Pre-processing", processing.enabled ? "Enabled" : "Disabled"],
           ["Upload file", ftp.file || "None"],
           ["Progress", ftp.file ? `${Math.round(Number(ftp.percent || 0))}%` : "Idle"],
         ])}</dl>
@@ -240,6 +251,7 @@ function renderDevicePanel(deviceId) {
         <label class="wide">Private key<textarea id="pair-key" name="private_key" rows="4" spellcheck="false"></textarea></label>
         <label class="check-row wide"><input id="remember-ssh" name="remember_ssh" type="checkbox" ${sshCredentialSaveEnabled() ? "" : "disabled"}>Save encrypted SSH credential for future maintenance</label>
         <label class="check-row wide"><input id="install-diagnostics" name="install_diagnostics" type="checkbox">Install optional network diagnostics tools</label>
+        <label class="check-row wide"><input id="enable-ssh-on-boot" name="enable_ssh_on_boot" type="checkbox">Enable SSH on boot</label>
         <div class="actions wide">
           <button id="pair-device" type="submit">Repair / Update Agent</button>
           ${savedSsh ? `<button id="forget-ssh" type="button">Forget Saved SSH</button>` : ""}
@@ -251,19 +263,22 @@ function renderDevicePanel(deviceId) {
     <details class="settings-section" data-section="ftp-connector" open>
       <summary>FTP Connector</summary>
       <dl>${rows([
-        ["FRAME target", `${state.status.ftp_connector?.target_host || "Not set"}:${state.status.ftp_connector?.target_port || 2121}`],
+        ["FRAME target", `${connector?.target_host || state.status.ftp_connector?.target_host || "Not set"}:${connector?.target_port || state.status.ftp_connector?.target_port || 2121}`],
         ["FRAME credentials", state.status.ftp_connector?.target_password_configured ? "Configured internally" : "Missing in .env"],
         ["Camera FTP", cameraFtp.port ? `${cameraFtp.username}@Belabox:${cameraFtp.port}` : connector ? `${connector.camera_username}@Belabox:${state.status.ftp_connector?.camera_port || 2121}` : "Not installed"],
         ["Managed folder", state.status.ftp_connector?.managed_upload_dir || "Agent workspace"],
       ])}</dl>
       <form id="ftp-form" class="form-grid">
-        <label>FRAME FTP external host/IP<input id="ftp-target-host" name="target_host" value="${escapeAttr(ftpDefaultHost())}"></label>
-        <label>FRAME FTP port<input id="ftp-target-port" name="target_port" type="number" min="1" max="65535" value="${escapeAttr(state.status.ftp_connector?.target_port || 2121)}"></label>
+        <label>FRAME FTP external host/IP<input id="ftp-target-host" name="target_host" value="${escapeAttr(ftpTargetHost(connector))}"></label>
+        <label>FRAME FTP port<input id="ftp-target-port" name="target_port" type="number" min="1" max="65535" value="${escapeAttr(connector?.target_port || state.status.ftp_connector?.target_port || 2121)}"></label>
         <label>Camera FTP username<input id="camera-ftp-user" name="camera_username" value="${escapeAttr(connector?.camera_username || state.status.ftp_connector?.camera_username || "framecam")}"></label>
         <label>Camera FTP password<input id="camera-ftp-password" name="camera_password" type="password" autocomplete="new-password" placeholder="${connector ? "Keep current if blank" : "Generate if blank"}"></label>
-        <div class="actions wide"><button id="setup-ftp-connector" type="submit">Install / Repair FTP Connector</button></div>
+        <div class="actions wide">
+          <button id="setup-ftp-connector" type="submit">Install / Repair FTP Connector</button>
+          ${connector ? `<button id="show-ftp-password" type="button">Show Camera FTP Password</button>` : ""}
+        </div>
       </form>
-      <pre id="ftp-output">${connector ? "FTP connector credentials are stored internally. Reinstall uses saved SSH or prompts through SSH Maintenance." : "Install uses saved SSH if available. Otherwise open SSH Maintenance first."}</pre>
+      <pre id="ftp-output">${escapeHtml(state.ftpOutputs[deviceId] || (connector ? "FTP connector credentials are stored internally. Reinstall uses saved SSH or prompts through SSH Maintenance." : "Install uses saved SSH if available. Otherwise open SSH Maintenance first."))}</pre>
     </details>
 
     <details class="settings-section" data-section="mqtt-controls" open>
@@ -271,16 +286,33 @@ function renderDevicePanel(deviceId) {
       <dl>${rows([
         ["Current mode", ftp.transfer_mode || ftp.transport || "Unknown"],
         ["State", ftp.status_text || ftp.state || "Waiting for telemetry"],
+        ["Pre-processing", processing.enabled ? "Enabled" : "Disabled"],
+        ["Long edge", processing.long_edge_px ? `${processing.long_edge_px} px` : "Original"],
+        ["JPEG quality", processing.jpeg_quality],
+        ["Max output", processing.max_output_mb ? `${processing.max_output_mb} MiB` : "No limit"],
+        ["Processor", processing.processor || "Not reported"],
         ["Endpoint", state.status.chunk_upload?.public_url_configured ? "Configured" : "Missing"],
         ["Photo stage", state.status.chunk_upload?.photo_upload_configured ? "Configured" : "Missing token"],
+        ["Chunk size", `${chunkSize} bytes`],
+        ["Parallel chunks", chunkParallel],
+        ["Upload cap", formatUploadCap(chunkUploadKbps)],
       ])}</dl>
       <form id="chunk-form" class="form-grid">
-        <label>Chunk size bytes<input id="photo-chunk-size" name="chunk_size_bytes" type="number" min="262144" max="67108864" step="262144" value="${escapeAttr(state.status.chunk_upload?.chunk_size_bytes || 4194304)}"></label>
+        <label>Chunk size bytes<input id="photo-chunk-size" name="chunk_size_bytes" type="number" min="262144" max="67108864" step="262144" value="${escapeAttr(chunkSize)}"></label>
+        <label>Parallel uploads<input id="photo-chunk-parallel" name="chunk_parallel_uploads" type="number" min="1" max="4" step="1" value="${escapeAttr(chunkParallel)}"></label>
+        <label>Upload cap kbps<input id="photo-chunk-kbps" name="chunk_upload_kbps" type="number" min="0" max="1000000" step="64" value="${escapeAttr(chunkUploadKbps)}"></label>
         <div class="actions wide">
           <button id="enable-chunk-relay" type="button" ${live?.online ? "" : "disabled"}>Enable Chunk Relay</button>
           <button id="use-direct-ftp" type="button" ${live?.online ? "" : "disabled"}>Use Direct FTP</button>
           <button id="refresh-photo-module" type="button" ${live?.online ? "" : "disabled"}>Refresh Status</button>
         </div>
+      </form>
+      <form id="processing-form" class="form-grid">
+        <label class="check-row wide"><input id="photo-processing-enabled" name="enabled" type="checkbox" ${processing.enabled ? "checked" : ""}>Resize/compress before transfer</label>
+        <label>Long edge px<input id="photo-long-edge" name="long_edge_px" type="number" min="0" max="12000" step="1" value="${escapeAttr(processing.long_edge_px)}"></label>
+        <label>JPEG quality<input id="photo-jpeg-quality" name="jpeg_quality" type="number" min="40" max="100" step="1" value="${escapeAttr(processing.jpeg_quality)}"></label>
+        <label>Max output MiB<input id="photo-max-output" name="max_output_mb" type="number" min="0" max="500" step="0.1" value="${escapeAttr(processing.max_output_mb)}"></label>
+        <div class="actions wide"><button id="apply-photo-processing" type="submit" ${live?.online ? "" : "disabled"}>Apply Processing</button></div>
       </form>
       <p class="hint">${live?.online ? "Uses signed MQTT commands. No SSH login required." : "Agent must be online before MQTT configuration can be sent."}</p>
     </details>
@@ -331,6 +363,8 @@ async function handlePanelClick(event) {
   if (remove) return removeProvisionedDevice(remove);
   const forgetSsh = event.target.closest("#forget-ssh");
   if (forgetSsh) return forgetSavedSsh(forgetSsh);
+  const showFtpPassword = event.target.closest("#show-ftp-password");
+  if (showFtpPassword) return showFtpCredentials(showFtpPassword);
   const chunk = event.target.closest("#enable-chunk-relay");
   if (chunk) return applyPhotoTransport("chunked_https", undefined, undefined, false, chunk);
   const direct = event.target.closest("#use-direct-ftp");
@@ -343,6 +377,7 @@ function handlePanelSubmit(event) {
   if (event.target.matches("#device-wizard")) return runWizardSubmit(event);
   if (event.target.matches("#repair-form")) return runRepairSubmit(event);
   if (event.target.matches("#ftp-form")) return runFtpSubmit(event);
+  if (event.target.matches("#processing-form")) return runProcessingSubmit(event);
   if (event.target.matches("#speed-test-form")) return runSpeedTestSubmit(event);
 }
 
@@ -374,6 +409,13 @@ async function runSpeedTestSubmit(event) {
   await runSpeedTest(form);
 }
 
+async function runProcessingSubmit(event) {
+  const form = event.target.closest("#processing-form");
+  if (!form) return;
+  event.preventDefault();
+  await applyPhotoProcessing(form);
+}
+
 async function pairDevice(form, includeModules) {
   const button = form.querySelector("#pair-device");
   const output = form.querySelector("#pair-output");
@@ -391,7 +433,7 @@ async function pairDevice(form, includeModules) {
       await setupFtpConnector(form, result.device_id, output);
     }
     if (includeModules && form.querySelector("#setup-chunk-enabled")?.checked) {
-      await applyPhotoTransport("chunked_https", result.device_id, form.querySelector("#photo-chunk-size")?.value, true);
+      await applyPhotoTransport("chunked_https", result.device_id, form, true);
     }
     clearSecrets(form);
     showNotice(result.mqtt_status === "heartbeat_seen" ? "Belabox paired and online." : "Belabox paired. Waiting for heartbeat.", "success");
@@ -404,13 +446,13 @@ async function pairDevice(form, includeModules) {
   }
 }
 
-async function setupFtpConnector(form, deviceId = state.selectedDeviceId, output = form.querySelector("#ftp-output")) {
+async function setupFtpConnector(form, deviceId = state.selectedDeviceId, output = form.querySelector("#ftp-output") || elements.devicePanel.querySelector("#ftp-output")) {
   const button = form.querySelector("#setup-ftp-connector");
   const sshScope = form.querySelector("#pair-host") ? form : elements.devicePanel;
   const sshPayload = pairPayload(sshScope, deviceId);
   const resetButton = setButtonBusy(button, "Installing...");
   state.panelLocked = true;
-  output.textContent = "Queued...";
+  if (output) output.textContent = "Queued...";
   showNotice("Installing FTP connector...", "busy");
   try {
     const payload = {
@@ -422,12 +464,9 @@ async function setupFtpConnector(form, deviceId = state.selectedDeviceId, output
     };
     const job = await fetchJson("/belabox/api/ftp-connector/jobs", postJson(payload));
     const result = await pollFtpConnectorJob(job.job_id, output);
-    output.textContent = [
-      `FRAME target: ${result.target_host}:${result.target_port}`,
-      `Camera FTP: ${result.camera_ftp_username}@Belabox:${result.camera_ftp_port}`,
-      `Camera FTP password: ${result.camera_ftp_password}`,
-      `Managed upload folder: ${result.upload_dir}`,
-    ].join("\n");
+    const lines = ftpCredentialLines(result);
+    state.ftpOutputs[deviceId] = lines;
+    if (output) output.textContent = lines;
     clearSecrets(form);
     showNotice("FTP connector installed and tested. Waiting for telemetry.", "success");
     await refresh();
@@ -441,11 +480,47 @@ async function setupFtpConnector(form, deviceId = state.selectedDeviceId, output
   }
 }
 
-async function applyPhotoTransport(mode, deviceId = state.selectedDeviceId, chunkSizeValue, quiet = false, button = null) {
-  const resetButton = setButtonBusy(button, mode === "chunked_https" ? "Enabling..." : "Switching...");
-  const chunkSize = Number(chunkSizeValue || elements.devicePanel.querySelector("#photo-chunk-size")?.value || 0);
+async function showFtpCredentials(button) {
+  const deviceId = state.selectedDeviceId;
+  const output = elements.devicePanel.querySelector("#ftp-output");
+  const resetButton = setButtonBusy(button, "Showing...");
   try {
-    if (chunkSize > 0) await sendPhotoCommand("photo_transport_config_set", { chunk_size_bytes: chunkSize }, deviceId);
+    const result = await fetchJson(`/belabox/api/devices/${encodeURIComponent(deviceId)}/ftp-connector`);
+    const lines = ftpCredentialLines(result);
+    state.ftpOutputs[deviceId] = lines;
+    if (output) output.textContent = lines;
+    showNotice("Camera FTP credentials shown.", "success");
+  } catch (error) {
+    if (output) output.textContent = `Could not show FTP credentials: ${error.message}`;
+    showNotice(`Could not show FTP credentials: ${error.message}`, "error");
+  } finally {
+    resetButton();
+  }
+}
+
+function ftpCredentialLines(result) {
+  return [
+    result.target_host ? `FRAME target: ${result.target_host}:${result.target_port}` : "",
+    `Camera FTP: ${result.camera_ftp_username}@Belabox:${result.camera_ftp_port}`,
+    `Camera FTP password: ${result.camera_ftp_password}`,
+    `Managed upload folder: ${result.upload_dir}`,
+  ].filter(Boolean).join("\n");
+}
+
+async function applyPhotoTransport(mode, deviceId = state.selectedDeviceId, source = elements.devicePanel, quiet = false, button = null) {
+  const resetButton = setButtonBusy(button, mode === "chunked_https" ? "Enabling..." : "Switching...");
+  const root = source?.querySelector ? source : elements.devicePanel;
+  const chunkSize = Number(root.querySelector("#photo-chunk-size")?.value || 0);
+  const parallel = Number(root.querySelector("#photo-chunk-parallel")?.value || 1);
+  const uploadKbps = Number(root.querySelector("#photo-chunk-kbps")?.value || 0);
+  try {
+    if (chunkSize > 0) {
+      await sendPhotoCommand("photo_transport_config_set", {
+        chunk_size_bytes: chunkSize,
+        chunk_parallel_uploads: parallel,
+        chunk_upload_kbps: uploadKbps,
+      }, deviceId);
+    }
     await sendPhotoCommand("photo_transfer_mode_set", { mode }, deviceId);
     if (!quiet) showNotice(`Photo transfer mode requested: ${mode}.`, "success");
   } catch (error) {
@@ -455,13 +530,39 @@ async function applyPhotoTransport(mode, deviceId = state.selectedDeviceId, chun
   }
 }
 
+async function applyPhotoProcessing(form, deviceId = state.selectedDeviceId) {
+  const payload = {
+    enabled: form.querySelector("#photo-processing-enabled")?.checked === true,
+    long_edge_px: Number(form.querySelector("#photo-long-edge")?.value || 0),
+    jpeg_quality: Number(form.querySelector("#photo-jpeg-quality")?.value || 92),
+    max_output_mb: Number(form.querySelector("#photo-max-output")?.value || 0),
+  };
+  try {
+    await sendPhotoCommand("photo_processing_config_set", payload, deviceId, form.querySelector("#apply-photo-processing"));
+    showNotice("Pre-transfer processing update requested.", "success");
+  } catch (error) {
+    showNotice(`Processing update failed: ${error.message}`, "error");
+  }
+}
+
 async function sendPhotoCommand(command, args, deviceId = state.selectedDeviceId, button = null) {
   if (!deviceId || deviceId === ADD_DEVICE_ID) throw new Error("Select a paired Belabox device first.");
-  const resetButton = setButtonBusy(button, "Sending...");
+  const resetButton = setButtonBusy(button, "Applying...");
   showNotice(`Sending ${command}...`, "busy");
   try {
-    await fetchJson("/belabox/api/cmd/request", postJson({ device_id: deviceId, command, args }));
-    showNotice(`${command} sent to ${deviceId}.`, "success");
+    const queued = await fetchJson("/belabox/api/cmd/request", postJson({ device_id: deviceId, command, args }));
+    const commandId = queued.command?.command_id;
+    if (!commandId) {
+      showNotice(`${command} sent to ${deviceId}.`, "success");
+      return queued.command;
+    }
+    const result = await pollCommandResult(commandId, null, COMMAND_POLL_INTERVAL_MS);
+    if (result.status === "rejected" || result.error_message) {
+      throw new Error(result.error_message || result.result_summary || `${command} failed.`);
+    }
+    showNotice(result.result_summary || `${command} applied.`, "success");
+    await refresh();
+    return result;
   } finally {
     resetButton();
   }
@@ -515,15 +616,15 @@ async function pollFtpConnectorJob(jobId, output) {
   }
 }
 
-async function pollCommandResult(commandId, output) {
+async function pollCommandResult(commandId, output, intervalMs = 1000) {
   for (let attempt = 0; attempt < 90; attempt += 1) {
     await refresh();
     const diagnostic = liveDevice(state.selectedDeviceId)?.telemetry?.network_diagnostics;
-    if (diagnostic) output.textContent = diagnosticSummary(diagnostic);
+    if (diagnostic && output) output.textContent = diagnosticSummary(diagnostic);
     const audit = await fetchJson("/belabox/api/commands");
     const result = (audit.commands || []).find((entry) => entry.type === "result" && entry.command_id === commandId);
     if (result) return result;
-    await delay(1000);
+    await delay(intervalMs);
   }
   throw new Error("Timed out waiting for agent result.");
 }
@@ -531,7 +632,7 @@ async function pollCommandResult(commandId, output) {
 function renderJob(job, output) {
   const lines = (job.steps || []).map((step) => `${formatDate(step.at)}  ${step.message}`);
   if (job.status === "error" && job.error) lines.push(`Error: ${job.error}`);
-  output.textContent = lines.join("\n");
+  if (output) output.textContent = lines.join("\n");
   showNotice(job.step || "");
 }
 
@@ -575,6 +676,7 @@ function pairPayload(form, deviceId) {
     private_key: form.querySelector("#pair-key")?.value || "",
     device_id: deviceId || form.querySelector("#pair-device-id")?.value.trim() || "",
     install_diagnostics: form.querySelector("#install-diagnostics")?.checked === true,
+    enable_ssh_on_boot: form.querySelector("#enable-ssh-on-boot")?.checked === true,
     remember_ssh: form.querySelector("#remember-ssh")?.checked === true,
   };
 }
@@ -694,6 +796,11 @@ function ftpDefaultHost() {
   return value === "Not set" ? "" : value;
 }
 
+function ftpTargetHost(connector) {
+  const value = connector?.target_host || ftpDefaultHost();
+  return value === "Not set" ? "" : value;
+}
+
 function connectorStatus(connector, ftp) {
   if (ftp?.state || ftp?.status_text) return ftp.status_text || ftp.state;
   return connector ? "Installed" : "Not installed";
@@ -702,6 +809,27 @@ function connectorStatus(connector, ftp) {
 function chunkStatus(ftp) {
   if (ftp?.transfer_mode === "chunked_https" || ftp?.transport === "chunked_https") return "Enabled";
   return "Direct FTP";
+}
+
+function formatUploadCap(value) {
+  const kbps = Number(value || 0);
+  return kbps > 0 ? `${kbps} kbps` : "Uncapped";
+}
+
+function processingSettings(ftp) {
+  const processing = ftp?.image_processing || {};
+  return {
+    enabled: processing.enabled === true,
+    long_edge_px: nonNegativeNumber(processing.long_edge_px, 0),
+    jpeg_quality: nonNegativeNumber(processing.jpeg_quality, 92) || 92,
+    max_output_mb: nonNegativeNumber(processing.max_output_mb, 0),
+    processor: processing.processor || "",
+  };
+}
+
+function nonNegativeNumber(value, fallback) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
 function diagnosticSummary(diagnostics) {

@@ -31,7 +31,7 @@ const username = process.env.BELABOX_MQTT_USERNAME || "";
 const password = process.env.BELABOX_MQTT_PASSWORD || "";
 const publicKeyPem = readPublicKeyPem();
 const usedNonces = new Set();
-const heartbeatMs = readInt("BELABOX_HEARTBEAT_INTERVAL_MS", 10000, 5000, 300000);
+const heartbeatMs = readInt("BELABOX_HEARTBEAT_INTERVAL_MS", 2000, 2000, 300000);
 const telemetryMs = readInt("BELABOX_TELEMETRY_INTERVAL_MS", 30000, 1000, 600000);
 const activePhotoTelemetryMs = readInt("BELABOX_ACTIVE_PHOTO_TELEMETRY_INTERVAL_MS", 500, 200, 5000);
 const reconnectMs = readInt("BELABOX_MQTT_RECONNECT_MS", 5000, 1000, 60000);
@@ -47,50 +47,51 @@ if (selfTestMode) {
   process.exit(0);
 }
 
-if (!username || !password) {
-  console.error("[belabox-agent] MQTT credentials are required.");
+main().catch((error) => {
+  console.error(`[belabox-agent] ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);
+});
+
+async function main() {
+  if (!username || !password) throw new Error("MQTT credentials are required.");
+  if (!publicKeyPem) throw new Error("command signing public key is required.");
+
+  const mqtt = await import("mqtt").then((module) => module.default || module);
+  client = mqtt.connect(url, {
+    username,
+    password,
+    clientId: `${process.env.BELABOX_MQTT_CLIENT_ID_PREFIX || "frame-belabox-agent"}-${deviceId}`,
+    reconnectPeriod: reconnectMs,
+    keepalive,
+    clean: true,
+    will: {
+      topic: topics.status,
+      payload: JSON.stringify({ device_id: deviceId, state: "offline", reason: "lwt", at: new Date().toISOString() }),
+      qos: 1,
+      retain: true,
+    },
+  });
+
+  client.on("connect", () => {
+    publishJson(topics.status, { device_id: deviceId, state: "online", at: new Date().toISOString() }, true);
+    publishJson(topics.version, { device_id: deviceId, version: VERSION, at: new Date().toISOString() }, true);
+    client.subscribe(topics.cmdRequest, { qos: 1 });
+    publishHeartbeat();
+    publishTelemetry();
+  });
+
+  client.on("message", (_topic, payload) => {
+    void handleCommand(payload);
+  });
+
+  client.on("error", (error) => {
+    console.error(`[belabox-agent] MQTT error: ${error.message}`);
+  });
+
+  setInterval(publishHeartbeat, heartbeatMs);
+  setInterval(publishTelemetry, telemetryMs);
+  setInterval(publishActivePhotoTelemetry, activePhotoTelemetryMs);
 }
-if (!publicKeyPem) {
-  console.error("[belabox-agent] command signing public key is required.");
-  process.exit(1);
-}
-
-const mqtt = await import("mqtt").then((module) => module.default || module);
-client = mqtt.connect(url, {
-  username,
-  password,
-  clientId: `${process.env.BELABOX_MQTT_CLIENT_ID_PREFIX || "frame-belabox-agent"}-${deviceId}`,
-  reconnectPeriod: reconnectMs,
-  keepalive,
-  clean: true,
-  will: {
-    topic: topics.status,
-    payload: JSON.stringify({ device_id: deviceId, state: "offline", reason: "lwt", at: new Date().toISOString() }),
-    qos: 1,
-    retain: true,
-  },
-});
-
-client.on("connect", () => {
-  publishJson(topics.status, { device_id: deviceId, state: "online", at: new Date().toISOString() }, true);
-  publishJson(topics.version, { device_id: deviceId, version: VERSION, at: new Date().toISOString() }, true);
-  client.subscribe(topics.cmdRequest, { qos: 1 });
-  publishHeartbeat();
-  publishTelemetry();
-});
-
-client.on("message", (_topic, payload) => {
-  void handleCommand(payload);
-});
-
-client.on("error", (error) => {
-  console.error(`[belabox-agent] MQTT error: ${error.message}`);
-});
-
-setInterval(publishHeartbeat, heartbeatMs);
-setInterval(publishTelemetry, telemetryMs);
-setInterval(publishActivePhotoTelemetry, activePhotoTelemetryMs);
 
 function publishHeartbeat() {
   publishJson(topics.heartbeat, {
@@ -143,13 +144,17 @@ async function runCommand(command) {
       publishTelemetry();
       return `photo transfer mode set to ${command.args.mode}`;
     case "photo_transport_config_set":
-      writePhotoConfig({ chunk_size_bytes: command.args.chunk_size_bytes });
+      writePhotoConfig({
+        chunk_size_bytes: command.args.chunk_size_bytes,
+        chunk_parallel_uploads: command.args.chunk_parallel_uploads,
+        chunk_upload_kbps: command.args.chunk_upload_kbps,
+      });
       publishTelemetry();
       return "photo transport config updated";
     case "photo_processing_config_set":
       writePhotoConfig({ image_processing: command.args });
       publishTelemetry();
-      return "photo processing config saved; processing is not active in Phase 4A";
+      return "photo processing config saved";
     case "photo_module_status":
       publishTelemetry();
       return `photo module config ${JSON.stringify(readPhotoConfig())}`;
@@ -221,8 +226,18 @@ function validateArgs(command, args) {
       throw new Error("chunk_size_bytes must be 262144-67108864");
     }
   }
-  if (command === "photo_processing_config_set" && args.enabled !== undefined && typeof args.enabled !== "boolean") {
-    throw new Error("photo processing enabled must be true or false");
+  if (command === "photo_transport_config_set" && args.chunk_parallel_uploads !== undefined) {
+    if (!Number.isInteger(args.chunk_parallel_uploads) || args.chunk_parallel_uploads < 1 || args.chunk_parallel_uploads > 4) {
+      throw new Error("chunk_parallel_uploads must be 1-4");
+    }
+  }
+  if (command === "photo_transport_config_set" && args.chunk_upload_kbps !== undefined) {
+    if (!Number.isInteger(args.chunk_upload_kbps) || args.chunk_upload_kbps < 0 || args.chunk_upload_kbps > 1000000) {
+      throw new Error("chunk_upload_kbps must be 0-1000000");
+    }
+  }
+  if (command === "photo_processing_config_set") {
+    validatePhotoProcessingArgs(args);
   }
   if (command === "network_speed_test") {
     if (args.mode !== "http_upload") throw new Error("network_speed_test mode must be http_upload");
@@ -232,6 +247,29 @@ function validateArgs(command, args) {
     if (args.parallel !== undefined && (!Number.isInteger(args.parallel) || args.parallel < 1 || args.parallel > 8)) {
       throw new Error("network_speed_test parallel must be 1-8");
     }
+  }
+}
+
+function validatePhotoProcessingArgs(args) {
+  if (args.enabled !== undefined && typeof args.enabled !== "boolean") {
+    throw new Error("photo processing enabled must be true or false");
+  }
+  integerArg(args, "long_edge_px", 0, 12000);
+  integerArg(args, "jpeg_quality", 40, 100);
+  numberArg(args, "max_output_mb", 0, 500);
+}
+
+function integerArg(args, key, minimum, maximum) {
+  if (args[key] === undefined) return;
+  if (!Number.isInteger(args[key]) || args[key] < minimum || args[key] > maximum) {
+    throw new Error(`${key} must be ${minimum}-${maximum}`);
+  }
+}
+
+function numberArg(args, key, minimum, maximum) {
+  if (args[key] === undefined) return;
+  if (typeof args[key] !== "number" || !Number.isFinite(args[key]) || args[key] < minimum || args[key] > maximum) {
+    throw new Error(`${key} must be ${minimum}-${maximum}`);
   }
 }
 
@@ -391,7 +429,7 @@ function collectTelemetry(ftpUpload = readFtpUploadStatus()) {
 function photoTransferIsActive(status) {
   return Boolean(status.file)
     || status.queue_count > 0
-    || ["queued", "connecting", "preparing", "uploading", "assembling", "complete", "failed"].includes(status.state);
+    || ["queued", "processing", "connecting", "preparing", "uploading", "assembling", "complete", "failed"].includes(status.state);
 }
 
 function diskUsage(target) {
@@ -443,6 +481,7 @@ function readFtpUploadStatus() {
   try {
     const status = JSON.parse(fs.readFileSync(statusPath, "utf8"));
     if (!status || typeof status !== "object" || Array.isArray(status)) return null;
+    const photoConfig = readPhotoConfig();
     return {
       enabled: status.enabled === true,
       state: text(status.state, 32) || "unknown",
@@ -456,10 +495,13 @@ function readFtpUploadStatus() {
       done: status.done === true,
       queue_count: number(status.queue_count),
       transfer_id: text(status.transfer_id, 120) || null,
-      transfer_mode: text(status.transfer_mode, 40) || null,
-      transport: text(status.transport, 40) || null,
-      chunk_size_bytes: number(status.chunk_size_bytes),
+      transfer_mode: text(status.transfer_mode, 40) || text(photoConfig.transfer_mode, 40) || null,
+      transport: text(status.transport, 40) || text(photoConfig.transfer_mode, 40) || null,
+      chunk_size_bytes: number(valueOr(status.chunk_size_bytes, photoConfig.chunk_size_bytes)),
       chunk_count: number(status.chunk_count),
+      chunk_parallel_uploads: number(valueOr(status.chunk_parallel_uploads, photoConfig.chunk_parallel_uploads)),
+      chunk_upload_kbps: number(valueOr(status.chunk_upload_kbps, photoConfig.chunk_upload_kbps)),
+      image_processing: imageProcessing(status.image_processing),
       camera_ftp: cameraFtp(status.camera_ftp),
       spool: spool(status.spool),
       started_at: iso(status.started_at),
@@ -516,8 +558,19 @@ function cameraFtp(value) {
   };
 }
 
+function imageProcessing(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return {
+    enabled: value.enabled === true,
+    long_edge_px: number(value.long_edge_px),
+    jpeg_quality: number(value.jpeg_quality),
+    max_output_mb: number(value.max_output_mb),
+    processor: text(value.processor, 40) || null,
+  };
+}
+
 function publishJson(topic, payload, retain = false) {
-  if (!client?.connected) return;
+  if (!client || !client.connected) return;
   client.publish(topic, JSON.stringify(payload), { qos: 1, retain });
 }
 
@@ -535,6 +588,10 @@ function text(value, maximum) {
 function number(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+function valueOr(value, fallback) {
+  return value === undefined || value === null ? fallback : value;
 }
 
 function iso(value) {
@@ -588,10 +645,16 @@ function selfTest() {
   assertReject(() => verifyCommand(makeCommand({ command: "shell" }), publicPem, new Set()), "unknown");
   assertReject(() => verifyCommand({ ...makeCommand(), signature: "bad" }, publicPem, new Set()), "signature");
   assertEqual(photoTransferIsActive({ file: "a.jpg", queue_count: 0, state: "uploading" }), true, "active upload");
+  assertEqual(photoTransferIsActive({ file: "a.jpg", queue_count: 0, state: "processing" }), true, "processing upload");
   assertEqual(photoTransferIsActive({ file: null, queue_count: 1, state: "idle" }), true, "queued upload");
   assertEqual(photoTransferIsActive({ file: null, queue_count: 0, state: "idle" }), false, "idle upload");
   validateArgs("network_speed_test", { mode: "http_upload", bytes: 65536, parallel: 2 });
   assertReject(() => validateArgs("network_speed_test", { mode: "iperf3_tcp" }), "speed mode");
+  validateArgs("photo_transport_config_set", { chunk_size_bytes: 4194304, chunk_parallel_uploads: 4, chunk_upload_kbps: 2500 });
+  assertReject(() => validateArgs("photo_transport_config_set", { chunk_parallel_uploads: 5 }), "chunk parallel");
+  assertReject(() => validateArgs("photo_transport_config_set", { chunk_upload_kbps: -1 }), "chunk cap");
+  validateArgs("photo_processing_config_set", { enabled: true, long_edge_px: 1600, jpeg_quality: 85, max_output_mb: 2.5 });
+  assertReject(() => validateArgs("photo_processing_config_set", { jpeg_quality: 20 }), "jpeg quality");
 }
 
 function assertReject(fn, label) {
