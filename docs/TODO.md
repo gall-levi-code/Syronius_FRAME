@@ -51,6 +51,32 @@ removed.
 - [x] Add capability-aware Cloudflare Tunnel routing and staged HYBRID deployment.
 - Add LAN HTTPS and optional Cloudflare Access policy automation.
 
+### Update System
+
+- Define a GitHub Releases update manifest for FRAME releases, including version, channel,
+  release archive URL, SHA256 checksum, minimum installer version, migration notes, and affected
+  tool groups.
+- Track installed versions in a FRAME-owned state file with separate entries for the whole FRAME
+  release, user-facing tools, service/image build IDs, schema versions, and install timestamps.
+- Add `stack update` and `stack update --tool <tool-id>` commands that preflight Docker, disk,
+  active stream/upload risk, config validity, and migration compatibility before changing files.
+- Implement stack-safe update transactions: snapshot `.env`, `docker-compose.yml`,
+  `stack-config.json`, `/data/state`, and installed version state; download and verify the release;
+  rerun the installer; pull/build affected services; restart only required containers; wait for
+  health checks; restore the snapshot on failure.
+- Extend Portal tool cards with installed version, latest version, update availability, and
+  per-tool changelog dialogs.
+- Let Portal show per-tool update buttons, but have the manifest decide whether the actual update is
+  tool-only, tool-group, or full-stack.
+- Add a top-level FRAME update panel for shared installer, auth, routing, schema, and dependency
+  changes that cannot be safely presented as a single-tool update.
+- Add `Update now` and `Schedule when idle` actions, with explicit blocking/warning states for live
+  stream, active upload, unhealthy service, low disk, or incompatible migration.
+- Keep Belabox agent updates separate from FRAME stack updates: FRAME hosts a signed/versioned agent
+  bundle, the manager sends a signed `agent_update` command, the agent verifies and swaps itself,
+  then reports the new heartbeat/version.
+- Defer silent automatic updates until rollback, idle detection, and stream/upload safety are proven.
+
 ## Photo Workflow
 
 - [x] Freeze V1 processing, recovery, sidecar, and quarantine contracts.
