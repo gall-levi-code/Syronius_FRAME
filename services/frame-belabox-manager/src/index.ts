@@ -649,7 +649,10 @@ app.post("/belabox/api/cmd/request", async (request, response, next) => {
     if (CONFIRM_COMMANDS.has(command) && request.body?.confirm !== true) {
       throw new RequestError(400, "This command requires confirm=true.");
     }
-    const args = parseCommandArgs(request.body?.args);
+    let args = parseCommandArgs(request.body?.args);
+    if (command === "photo_transport_config_set") {
+      args = { ...args, chunk_upload_url: config.chunkUpload.publicUrl };
+    }
     validateCommandArgs(command, args);
     const signed = await publishSignedCommand(deviceId, command, args);
     response.json({ queued: true, command: signed });
@@ -1974,6 +1977,9 @@ function validateCommandArgs(command: CommandName, args: JsonRecord): void {
   }
   if (command === "photo_transport_config_set" && args.chunk_upload_kbps !== undefined) {
     safePositiveInt(args.chunk_upload_kbps, "chunk_upload_kbps", 0, 1000000);
+  }
+  if (command === "photo_transport_config_set" && args.chunk_upload_url !== undefined) {
+    normalizeUrl(stringValue(args.chunk_upload_url) || "");
   }
   if (command === "photo_processing_config_set") {
     if (args.enabled !== undefined && typeof args.enabled !== "boolean") {

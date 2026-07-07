@@ -72,9 +72,18 @@ removed.
   changes that cannot be safely presented as a single-tool update.
 - Add `Update now` and `Schedule when idle` actions, with explicit blocking/warning states for live
   stream, active upload, unhealthy service, low disk, or incompatible migration.
-- Keep Belabox agent updates separate from FRAME stack updates: FRAME hosts a signed/versioned agent
-  bundle, the manager sends a signed `agent_update` command, the agent verifies and swaps itself,
-  then reports the new heartbeat/version.
+- Keep Belabox agent updates separate from FRAME stack updates.
+- Add a bootstrap-only Belabox agent updater: the current installed agent cannot learn update
+  behavior over MQTT until an updater-capable agent has been installed once.
+- Host signed/versioned Belabox agent update manifests and bundles from FRAME over HTTPS, with
+  short-lived package URLs suitable for MQTT/WSS delivery.
+- Implement signed `agent_update` commands carrying artifact name, version, manifest/package URL,
+  SHA256 checksum, size, expiry, and optional rollback target.
+- Have the Belabox agent download updates over HTTPS, verify command signature and checksums, stage
+  files, run agent/connector self-tests, atomically swap the scripts, restart, and report the new
+  heartbeat/version.
+- Report update progress over MQTT with phases such as downloading, verified, installing,
+  restarting, failed, and rolled back.
 - Defer silent automatic updates until rollback, idle detection, and stream/upload safety are proven.
 
 ## Photo Workflow

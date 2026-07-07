@@ -91,6 +91,12 @@ def chunk_upload_kbps(config=None):
     return bounded_int(root.get("chunk_upload_kbps"), CHUNK_UPLOAD_KBPS, 0, 1000000)
 
 
+def chunk_upload_url(config=None):
+    root = config if isinstance(config, dict) else photo_config()
+    value = str(root.get("chunk_upload_url") or CHUNK_UPLOAD_URL).strip()
+    return value if value.startswith(("http://", "https://")) else ""
+
+
 def processing_settings(config=None):
     root = config if isinstance(config, dict) else photo_config()
     raw = root.get("image_processing", {})
@@ -433,7 +439,8 @@ def upload_direct_ftp(path):
 
 def upload_chunked(path):
     global last_completed_at, last_error
-    if not CHUNK_UPLOAD_URL or not CHUNK_UPLOAD_TOKEN:
+    upload_url = chunk_upload_url()
+    if not upload_url or not CHUNK_UPLOAD_TOKEN:
         last_error = "Chunk upload URL/token is not configured"
         write_status(state="failed", status_text="Chunk upload not configured", file=path.name, last_error=last_error)
         time.sleep(RETRY_SECONDS)
@@ -497,7 +504,7 @@ def upload_chunked(path):
         active_parallel = min(parallel_limit, chunk_count)
         mark("preparing", "Preparing chunks")
         manifest = build_manifest(upload_path, transfer_id, chunk_size, upload_name)
-        request_json(CHUNK_UPLOAD_URL, "POST", manifest)
+        request_json(upload_url, "POST", manifest)
         sent_by_chunk = {}
         progress_lock = threading.Lock()
         limiter = RateLimiter(upload_kbps)
@@ -509,9 +516,9 @@ def upload_chunked(path):
                 sent = sum(sent_by_chunk.values())
             mark("uploading", uploading_text())
 
-        upload_manifest_chunks(upload_path, transfer_id, manifest, active_parallel, limiter, progress)
+        upload_manifest_chunks(upload_url, upload_path, transfer_id, manifest, active_parallel, limiter, progress)
         mark("assembling", "Assembling on FRAME")
-        request_json(f"{CHUNK_UPLOAD_URL.rstrip('/')}/{transfer_id}/complete", "POST", {"device_id": manifest["device_id"]})
+        request_json(f"{upload_url.rstrip('/')}/{transfer_id}/complete", "POST", {"device_id": manifest["device_id"]})
         sent = total
         last_completed_at = iso_now()
         mark("complete", "Complete", done=True, last_completed_at=last_completed_at)
@@ -557,13 +564,13 @@ def chunk_offset(chunk, chunk_size):
     return int(chunk["index"]) * chunk_size
 
 
-def upload_one_chunk(upload_path, transfer_id, manifest, chunk, rate_limiter, progress):
+def upload_one_chunk(upload_url, upload_path, transfer_id, manifest, chunk, rate_limiter, progress):
     with upload_path.open("rb") as handle:
         handle.seek(chunk_offset(chunk, manifest["chunk_size_bytes"]))
         body = handle.read(chunk["size_bytes"])
     if len(body) != chunk["size_bytes"]:
         raise RuntimeError(f"chunk {chunk['index']} expected {chunk['size_bytes']} bytes, read {len(body)}")
-    put_url = f"{CHUNK_UPLOAD_URL.rstrip('/')}/{transfer_id}/chunks/{chunk['index']}"
+    put_url = f"{upload_url.rstrip('/')}/{transfer_id}/chunks/{chunk['index']}"
     request_bytes(
         put_url,
         "PUT",
@@ -574,15 +581,15 @@ def upload_one_chunk(upload_path, transfer_id, manifest, chunk, rate_limiter, pr
     progress(chunk["index"], len(body))
 
 
-def upload_manifest_chunks(upload_path, transfer_id, manifest, parallel, rate_limiter, progress):
+def upload_manifest_chunks(upload_url, upload_path, transfer_id, manifest, parallel, rate_limiter, progress):
     chunks = manifest["chunks"]
     if parallel <= 1 or len(chunks) <= 1:
         for chunk in chunks:
-            upload_one_chunk(upload_path, transfer_id, manifest, chunk, rate_limiter, progress)
+            upload_one_chunk(upload_url, upload_path, transfer_id, manifest, chunk, rate_limiter, progress)
         return
     with ThreadPoolExecutor(max_workers=parallel) as executor:
         futures = [
-            executor.submit(upload_one_chunk, upload_path, transfer_id, manifest, chunk, rate_limiter, progress)
+            executor.submit(upload_one_chunk, upload_url, upload_path, transfer_id, manifest, chunk, rate_limiter, progress)
             for chunk in chunks
         ]
         for future in as_completed(futures):
@@ -720,6 +727,8 @@ def self_test():
     assert chunk_parallel_uploads({"chunk_parallel_uploads": "9"}) == CHUNK_PARALLEL_UPLOADS
     assert chunk_upload_kbps({"chunk_upload_kbps": "512"}) == 512
     assert chunk_upload_kbps({"chunk_upload_kbps": "-1"}) == CHUNK_UPLOAD_KBPS
+    assert chunk_upload_url({"chunk_upload_url": "https://example.test/chunks"}) == "https://example.test/chunks"
+    assert chunk_upload_url({"chunk_upload_url": "ftp://example.test/chunks"}) == ""
     assert chunk_offset({"index": 2}, 4096) == 8192
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)

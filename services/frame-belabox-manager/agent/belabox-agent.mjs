@@ -148,6 +148,7 @@ async function runCommand(command) {
         chunk_size_bytes: command.args.chunk_size_bytes,
         chunk_parallel_uploads: command.args.chunk_parallel_uploads,
         chunk_upload_kbps: command.args.chunk_upload_kbps,
+        chunk_upload_url: command.args.chunk_upload_url,
       });
       publishTelemetry();
       return "photo transport config updated";
@@ -234,6 +235,11 @@ function validateArgs(command, args) {
   if (command === "photo_transport_config_set" && args.chunk_upload_kbps !== undefined) {
     if (!Number.isInteger(args.chunk_upload_kbps) || args.chunk_upload_kbps < 0 || args.chunk_upload_kbps > 1000000) {
       throw new Error("chunk_upload_kbps must be 0-1000000");
+    }
+  }
+  if (command === "photo_transport_config_set" && args.chunk_upload_url !== undefined) {
+    if (typeof args.chunk_upload_url !== "string" || !/^https?:\/\/.{1,500}$/.test(args.chunk_upload_url)) {
+      throw new Error("chunk_upload_url must be http(s)");
     }
   }
   if (command === "photo_processing_config_set") {
@@ -650,9 +656,10 @@ function selfTest() {
   assertEqual(photoTransferIsActive({ file: null, queue_count: 0, state: "idle" }), false, "idle upload");
   validateArgs("network_speed_test", { mode: "http_upload", bytes: 65536, parallel: 2 });
   assertReject(() => validateArgs("network_speed_test", { mode: "iperf3_tcp" }), "speed mode");
-  validateArgs("photo_transport_config_set", { chunk_size_bytes: 4194304, chunk_parallel_uploads: 4, chunk_upload_kbps: 2500 });
+  validateArgs("photo_transport_config_set", { chunk_size_bytes: 4194304, chunk_parallel_uploads: 4, chunk_upload_kbps: 2500, chunk_upload_url: "https://example.test/chunks" });
   assertReject(() => validateArgs("photo_transport_config_set", { chunk_parallel_uploads: 5 }), "chunk parallel");
   assertReject(() => validateArgs("photo_transport_config_set", { chunk_upload_kbps: -1 }), "chunk cap");
+  assertReject(() => validateArgs("photo_transport_config_set", { chunk_upload_url: "ftp://example.test/chunks" }), "chunk url");
   validateArgs("photo_processing_config_set", { enabled: true, long_edge_px: 1600, jpeg_quality: 85, max_output_mb: 2.5 });
   assertReject(() => validateArgs("photo_processing_config_set", { jpeg_quality: 20 }), "jpeg quality");
 }
