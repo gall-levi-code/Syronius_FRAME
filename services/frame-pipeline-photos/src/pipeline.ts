@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   access,
+  copyFile,
   mkdir,
   readdir,
   readFile,
@@ -293,7 +294,7 @@ export class PhotoPipeline {
         try {
           const temporaryJpg = path.join(claim.directory, "normalized.jpg.tmp");
           await rm(temporaryJpg, { force: true });
-          const result = await writeNormalizedJpg(claim.source, temporaryJpg, this.settings);
+          const result = await writeNormalizedJpg(claim.source, temporaryJpg, this.settings, sourceMetadata, sourceStat.size);
           outputQuality = result.quality;
           outputSizeBytes = result.sizeBytes;
           await rename(temporaryJpg, files.jpg);
@@ -660,10 +661,18 @@ function boundedNumber(value: unknown, fallback: number, minimum: number, maximu
   return Math.round(parsed * 1000) / 1000;
 }
 
-async function writeNormalizedJpg(source: string, target: string, settings: PipelineProcessingSettings): Promise<{
-  quality: number;
-  sizeBytes: number;
-}> {
+async function writeNormalizedJpg(
+  source: string,
+  target: string,
+  settings: PipelineProcessingSettings,
+  sourceMetadata?: Metadata,
+  sourceSizeBytes?: number,
+): Promise<{ quality: number; sizeBytes: number }> {
+  if (sourceMetadata && sourceSizeBytes !== undefined && canReuseJpg(sourceMetadata, sourceSizeBytes, settings)) {
+    await rm(target, { force: true });
+    await copyFile(source, target);
+    return { quality: settings.jpeg_quality, sizeBytes: sourceSizeBytes };
+  }
   const maxBytes = settings.max_output_mb > 0 ? Math.floor(settings.max_output_mb * 1024 * 1024) : 0;
   for (let quality = settings.jpeg_quality; quality >= 40; quality = Math.max(quality - 5, quality === 40 ? -1 : 40)) {
     await rm(target, { force: true });
@@ -691,6 +700,18 @@ async function writeNormalizedJpg(source: string, target: string, settings: Pipe
     }
   }
   throw new Error("Unable to write compressed JPG.");
+}
+
+function canReuseJpg(metadata: Metadata, sizeBytes: number, settings: PipelineProcessingSettings): boolean {
+  if (metadata.format !== "jpeg" || metadata.space !== "srgb") return false;
+  if (metadata.pages && metadata.pages > 1) return false;
+  if (metadata.orientation && metadata.orientation !== 1) return false;
+  const width = metadata.width ?? 0;
+  const height = metadata.height ?? 0;
+  if (!width || !height) return false;
+  if (settings.long_edge_px > 0 && Math.max(width, height) > settings.long_edge_px) return false;
+  const maxBytes = settings.max_output_mb > 0 ? Math.floor(settings.max_output_mb * 1024 * 1024) : 0;
+  return !maxBytes || sizeBytes <= maxBytes;
 }
 
 function outputFiles(directory: string, base: string): Record<"jpg" | "json" | "txt" | "orientation" | "ready", string> {

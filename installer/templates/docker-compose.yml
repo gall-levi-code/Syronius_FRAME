@@ -59,7 +59,7 @@ services:
       traefik.http.routers.frame-auth.service: frame-auth
       traefik.http.routers.frame-public-deny.entrypoints: web
       traefik.http.routers.frame-public-deny.priority: "1000"
-      traefik.http.routers.frame-public-deny.rule: (Host(`${CLOUDFLARE_PUBLIC_HOSTNAME:-frame.invalid}`) || HeaderRegexp(`Cf-Ray`, `.+`)) && (Path(`/audio`) || Path(`/audio/admin`) || PathPrefix(`/audio/admin/`) || Path(`/audio/capture`) || PathPrefix(`/audio/capture/`) || Path(`/audio/api`) || PathPrefix(`/audio/api/`) || Path(`/belabox`) || PathPrefix(`/belabox/`) || Path(`/pipeline`) || PathPrefix(`/pipeline/`) || Path(`/slsui`) || PathPrefix(`/slsui/`) || Path(`/overlays`) || Path(`/overlays/setup`) || PathPrefix(`/overlays/setup/`) || Path(`/overlays/api`) || PathPrefix(`/overlays/api/`))
+      traefik.http.routers.frame-public-deny.rule: (Host(`${CLOUDFLARE_PUBLIC_HOSTNAME:-frame.invalid}`) || HeaderRegexp(`Cf-Ray`, `.+`)) && (Path(`/audio`) || Path(`/audio/admin`) || PathPrefix(`/audio/admin/`) || Path(`/audio/capture`) || PathPrefix(`/audio/capture/`) || Path(`/audio/api`) || PathPrefix(`/audio/api/`) || Path(`/belabox`) || Path(`/belabox/`) || Path(`/belabox/api`) || PathPrefix(`/belabox/api/`) || Path(`/belabox/assets`) || PathPrefix(`/belabox/assets/`) || Path(`/pipeline`) || PathPrefix(`/pipeline/`) || Path(`/slsui`) || PathPrefix(`/slsui/`) || Path(`/overlays`) || Path(`/overlays/setup`) || PathPrefix(`/overlays/setup/`) || Path(`/overlays/api`) || PathPrefix(`/overlays/api/`))
       traefik.http.routers.frame-public-deny.middlewares: frame-public-deny-path
       traefik.http.routers.frame-public-deny.service: frame-auth
       traefik.http.services.frame-auth.loadbalancer.server.port: "3740"
@@ -251,7 +251,7 @@ services:
           fi
         fi
         if [ ! -s /mosquitto/data/acl ]; then
-          printf 'user %s\ntopic read frame/belabox/+/status\ntopic read frame/belabox/+/heartbeat\ntopic read frame/belabox/+/telemetry\ntopic read frame/belabox/+/logs\ntopic read frame/belabox/+/agent/version\ntopic write frame/belabox/+/cmd/request\ntopic read frame/belabox/+/cmd/response\n' "$${BELABOX_MQTT_USERNAME:-frame-belabox}" > /mosquitto/data/acl
+          printf 'user %s\ntopic read frame/belabox/+/status\ntopic read frame/belabox/+/heartbeat\ntopic read frame/belabox/+/telemetry\ntopic read frame/belabox/+/logs\ntopic read frame/belabox/+/agent/version\ntopic write frame/belabox/+/cmd/request\ntopic read frame/belabox/+/cmd/response\ntopic write frame/belabox/+/proxy/http/request/+\ntopic read frame/belabox/+/proxy/http/response/+\ntopic write frame/belabox/+/proxy/stream/+/client\ntopic read frame/belabox/+/proxy/stream/+/server\n' "$${BELABOX_MQTT_USERNAME:-frame-belabox}" > /mosquitto/data/acl
         fi
         chown mosquitto:mosquitto /mosquitto/data/passwords /mosquitto/data /mosquitto/log
         chown mosquitto:mosquitto /mosquitto/data/acl
@@ -421,7 +421,7 @@ services:
       HOST_DATA_ROOT: ${FRAME_HOST_DATA_ROOT:-/data}
       TIMEZONE: ${TIMEZONE:-America/Chicago}
       PIPELINE_POLL_MS: ${PIPELINE_POLL_MS:-1000}
-      PIPELINE_CONCURRENCY: ${PIPELINE_CONCURRENCY:-2}
+      PIPELINE_CONCURRENCY: ${PIPELINE_CONCURRENCY:-10}
       PHOTO_MAX_INPUT_MB: ${PHOTO_MAX_INPUT_MB:-50}
       PHOTO_MAX_MEGAPIXELS: ${PHOTO_MAX_MEGAPIXELS:-80}
       PHOTO_CONVERSION_ATTEMPTS: ${PHOTO_CONVERSION_ATTEMPTS:-3}

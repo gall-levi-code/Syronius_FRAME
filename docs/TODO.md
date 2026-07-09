@@ -121,6 +121,31 @@ removed.
 - Default to deleting successfully transferred files on the Belabox, with an archive-completed-files option for users who want local recovery.
 - Define a remote photo upload progress event schema for future overlays: discovered, stable, queued, transferring, transferred, failed, retried, and archived/deleted.
 - Add a remote-agent status dashboard showing connection health, queue depth, last transfer, failures, and installed helper version.
+- Belabox Manager UX simplification pass:
+  - Rename `MQTT Controls` to `Photo Transfer`.
+  - Hide protocol terms like MQTT, WSS, chunk relay, and egress binding behind Advanced.
+  - Add an `Encoder Status` strip for online state, remote UI, Photo Agent, and stream health.
+  - Make `Open Encoder Remote` the primary online action.
+  - Replace raw state strings with user-facing states such as `Ready`, `Uploading`, `Processing`, `Waiting for encoder`, and `Needs setup`.
+  - Add a visual photo pipeline: camera received, processing, upload-ready, sending, published.
+  - Add a stream-safe upload preset that caps photo upload while live.
+  - Add transfer presets: `Protect Stream`, `Balanced`, and `Fast`.
+  - Show upload caps in Mbps with helper context instead of kbps-only.
+  - Show egress lanes as `Ethernet`, `Wi-Fi 1`, and `Wi-Fi 2` health chips.
+  - Show the active upload lane during transfer.
+  - Add a `What is slowing things down?` summary for CPU prep, network upload, FRAME ingest, or waiting.
+  - Collapse SSH maintenance unless the agent is missing or repair is needed.
+  - Rename `Install / Repair Photo Agent` to `Repair Agent`.
+  - Add an installed-agent card with version and last heartbeat.
+  - Move dangerous actions into confirmation modals.
+  - Combine Photo Agent and Photo Transfer into one guided panel.
+  - Add live upload stats: current file, rate, queue depth, and ETA.
+  - Warn when uploads are uncapped while streaming.
+  - Add a diagnostics drawer for raw MQTT, route, and chunk details.
+  - Add editable device display names instead of exposing only device IDs.
+  - Add a remote access URL row with copy/open buttons.
+  - Add a quiet `Agent update available` banner.
+  - Add a guarded `Reset photo queue` action that clears stuck pending files while preserving config.
 - Revisit chunked HTTPS or multi-connection transfer later if SFTP reliability is not enough for bonded or multi-WAN scenarios.
 - Keep remote photo overlay widgets in their own schema/preset namespace so they do not overwrite FRAME's stock connectivity presets.
 - Refactor the overlay wizard so stock defaults are immutable, OBS URL slugs can be chosen before first save, and saving a renamed preset creates a new preset instead of rewriting `default-connectivity`.

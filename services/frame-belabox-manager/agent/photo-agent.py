@@ -2,10 +2,12 @@
 import ftplib
 import hashlib
 import http.client
+import ipaddress
 import threading
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -19,15 +21,20 @@ from pathlib import Path
 
 UPLOAD_DIR = Path(os.environ.get("FRAME_FTP_UPLOAD_DIR", "/home/nikonftp/uploads"))
 READY_DIR = Path(os.environ.get("FRAME_FTP_READY_DIR", "/home/nikonftp/ready"))
+PROCESSED_DIR = Path(os.environ.get("FRAME_FTP_PROCESSED_DIR", str(Path.home() / ".frame-belabox-agent/photo-spool/processed")))
 INFLIGHT_DIR = Path(os.environ.get("FRAME_FTP_INFLIGHT_DIR", str(Path.home() / ".frame-belabox-agent/photo-spool/inflight")))
-STATUS_PATH = Path(os.environ.get("FRAME_FTP_STATUS_PATH", str(Path.home() / ".frame-belabox-agent/ftp-connector/status.json")))
+STATUS_PATH = Path(os.environ.get("FRAME_PHOTO_AGENT_STATUS_PATH") or os.environ.get("FRAME_FTP_STATUS_PATH", str(Path.home() / ".frame-belabox-agent/photo-agent/status.json")))
 CONFIG_PATH = Path(os.environ.get("FRAME_PHOTO_CONFIG_PATH", str(Path.home() / ".frame-belabox-agent/photo-config.json")))
+EGRESS_STATUS_PATH = Path(os.environ.get("FRAME_EGRESS_STATUS_PATH", str(Path.home() / ".frame-belabox-agent/egress.json")))
 TRANSFER_MODE = os.environ.get("FRAME_PHOTO_TRANSFER_MODE", "direct_ftp")
 CHUNK_UPLOAD_URL = os.environ.get("FRAME_CHUNK_UPLOAD_URL", "")
 CHUNK_UPLOAD_TOKEN = os.environ.get("FRAME_CHUNK_UPLOAD_TOKEN", "")
 CHUNK_SIZE_BYTES = max(262144, int(os.environ.get("FRAME_CHUNK_SIZE_BYTES", str(4 * 1024 * 1024))))
 CHUNK_PARALLEL_UPLOADS = min(4, max(1, int(os.environ.get("FRAME_CHUNK_PARALLEL_UPLOADS", "1"))))
 CHUNK_UPLOAD_KBPS = min(1000000, max(0, int(os.environ.get("FRAME_CHUNK_UPLOAD_KBPS", "0"))))
+CHUNK_EGRESS_BINDING = os.environ.get("FRAME_CHUNK_EGRESS_BINDING", "true").lower() not in {"0", "false", "no"}
+CHUNK_CONNECT_TIMEOUT_SECONDS = max(0.5, float(os.environ.get("FRAME_CHUNK_CONNECT_TIMEOUT_SECONDS", "2.0")))
+CHUNK_PROGRESS_TIMEOUT_SECONDS = max(0.5, float(os.environ.get("FRAME_CHUNK_PROGRESS_TIMEOUT_SECONDS", "0.75")))
 HOST = os.environ.get("FRAME_FTP_HOST", "")
 PORT = int(os.environ.get("FRAME_FTP_PORT", "2121"))
 USERNAME = os.environ.get("FRAME_FTP_USERNAME", "")
@@ -50,12 +57,45 @@ PROCESSING_DEFAULTS = {
 }
 MAX_OUTPUT_DEFAULT_LONG_EDGE = 2400
 
+
+def env_int(name, fallback, minimum, maximum):
+    try:
+        parsed = int(os.environ.get(name, str(fallback)))
+        return parsed if minimum <= parsed <= maximum else fallback
+    except Exception:
+        return fallback
+
+
+PREPROCESS_AHEAD = env_int("FRAME_PHOTO_PREPROCESS_AHEAD", 2, 1, 3)
+
 last_completed_at = None
 last_error = None
+preprocess_state = {}
+preprocess_lock = threading.Lock()
 
 
 def iso_now():
     return datetime.now(timezone.utc).isoformat()
+
+
+def set_preprocess_state(state="idle", file=None, status_text="Idle", **extra):
+    with preprocess_lock:
+        preprocess_state.clear()
+        preprocess_state.update({
+            "state": state,
+            "file": file,
+            "status_text": status_text,
+            "updated_at": iso_now(),
+            **extra,
+        })
+
+
+def preprocess_snapshot():
+    with preprocess_lock:
+        return dict(preprocess_state)
+
+
+set_preprocess_state()
 
 
 def photo_config():
@@ -177,11 +217,15 @@ def write_status(**status):
         "rate_bps": 0,
         "done": False,
         "queue_count": queue_count(),
+        "processed_count": len(list_images(PROCESSED_DIR)),
         "transfer_mode": photo_config().get("transfer_mode", TRANSFER_MODE),
         "transport": photo_config().get("transfer_mode", TRANSFER_MODE),
         "chunk_size_bytes": chunk_size_bytes(),
         "chunk_parallel_uploads": chunk_parallel_uploads(),
         "chunk_upload_kbps": chunk_upload_kbps(),
+        "egress_binding": "disabled",
+        "egress_lane_count": 0,
+        "egress_lanes": [],
         "camera_ftp": {
             "host": CAMERA_HOST,
             "port": CAMERA_PORT,
@@ -192,7 +236,12 @@ def write_status(**status):
         "spool": {
             "incoming": str(UPLOAD_DIR),
             "ready": str(READY_DIR),
+            "processed": str(PROCESSED_DIR),
             "inflight": str(INFLIGHT_DIR),
+        },
+        "preprocess": {
+            "ahead": PREPROCESS_AHEAD,
+            **preprocess_snapshot(),
         },
         "image_processing": image_processing_status(),
         "started_at": None,
@@ -209,7 +258,7 @@ def write_status(**status):
 
 
 def queue_count():
-    return len(list_images(UPLOAD_DIR)) + len(list_images(READY_DIR))
+    return len(list_images(UPLOAD_DIR)) + len(list_images(READY_DIR)) + len(list_images(PROCESSED_DIR))
 
 
 def list_images(directory):
@@ -235,7 +284,7 @@ def stage_uploads():
     for path in list_images(UPLOAD_DIR):
         if not is_stable(path):
             continue
-        target = unique_ready_path(path.name)
+        target = unique_spool_path(READY_DIR, path.name)
         shutil.move(str(path), str(target))
         info = target.stat()
         staged.append((target, info))
@@ -253,21 +302,20 @@ def stage_uploads():
 
 def is_stable(path):
     try:
-        first = path.stat().st_size
-        time.sleep(STABLE_SECONDS)
-        return path.exists() and path.stat().st_size == first
+        info = path.stat()
+        return info.st_size > 0 and (time.time() - info.st_mtime) >= STABLE_SECONDS
     except FileNotFoundError:
         return False
 
 
-def unique_ready_path(name):
-    target = READY_DIR / name
+def unique_spool_path(directory, name):
+    target = directory / name
     if not target.exists():
         return target
     stem, suffix = target.stem, target.suffix
     counter = 2
     while True:
-        candidate = READY_DIR / f"{stem}-{counter}{suffix}"
+        candidate = directory / f"{stem}-{counter}{suffix}"
         if not candidate.exists():
             return candidate
         counter += 1
@@ -293,6 +341,58 @@ def prepare_upload(path, settings):
         return processed, upload_name_for(path, settings), processed, None
     except Exception as error:
         return path, path.name, None, f"Image processing skipped: {str(error)[:120]}"
+
+
+def prepare_preprocessed_upload(path, settings):
+    upload_name = upload_name_for(path, settings)
+    target = unique_spool_path(PROCESSED_DIR, upload_name)
+    if not settings["enabled"]:
+        shutil.move(str(path), str(target))
+        return target, None
+    try:
+        processed = process_image(path, settings)
+        os.replace(processed, target)
+        path.unlink(missing_ok=True)
+        return target, None
+    except Exception as error:
+        warning = f"Image processing skipped: {str(error)[:120]}"
+        target = unique_spool_path(PROCESSED_DIR, path.name)
+        shutil.move(str(path), str(target))
+        return target, warning
+
+
+def fill_processed_queue():
+    global last_error
+    processed = list_images(PROCESSED_DIR)
+    slots = PREPROCESS_AHEAD - len(processed)
+    if slots <= 0:
+        set_preprocess_state(status_text=f"{len(processed)} upload-ready")
+        return
+    ready = list_images(READY_DIR)
+    if not ready:
+        set_preprocess_state()
+        return
+    settings = processing_settings()
+    for path in ready[:slots]:
+        try:
+            info = path.stat()
+        except FileNotFoundError:
+            continue
+        text = "Pre-processing image" if settings["enabled"] else "Preparing upload"
+        set_preprocess_state("processing", path.name, text, size_bytes=info.st_size)
+        target, warning = prepare_preprocessed_upload(path, settings)
+        if warning:
+            last_error = warning
+        set_preprocess_state("queued", target.name, "Upload-ready", warning=warning)
+
+
+def preprocess_loop():
+    while True:
+        try:
+            fill_processed_queue()
+        except Exception as error:
+            set_preprocess_state("failed", None, "Pre-processing failed", error=str(error)[:160])
+        time.sleep(IDLE_SECONDS)
 
 
 def process_image(path, settings):
@@ -371,7 +471,7 @@ def imagemagick_command(processor, source, target, settings, quality):
     return command
 
 
-def upload_direct_ftp(path):
+def upload_direct_ftp(path, prepared=False):
     global last_completed_at, last_error
     upload_path = path
     upload_name = path.name
@@ -407,13 +507,14 @@ def upload_direct_ftp(path):
 
     try:
         last_error = None
-        settings = processing_settings()
-        if settings["enabled"]:
-            mark("processing", "Processing image")
-        upload_path, upload_name, cleanup_path, processing_warning = prepare_upload(path, settings)
-        if processing_warning:
-            last_error = processing_warning
-            mark("processing", "Processing skipped; uploading original", last_error=last_error)
+        if not prepared:
+            settings = processing_settings()
+            if settings["enabled"]:
+                mark("processing", "Processing image")
+            upload_path, upload_name, cleanup_path, processing_warning = prepare_upload(path, settings)
+            if processing_warning:
+                last_error = processing_warning
+                mark("processing", "Processing skipped; uploading original", last_error=last_error)
         total = upload_path.stat().st_size
         mark("connecting", "Connecting")
         with ftplib.FTP() as ftp:
@@ -437,7 +538,7 @@ def upload_direct_ftp(path):
             cleanup_path.unlink(missing_ok=True)
 
 
-def upload_chunked(path):
+def upload_chunked(path, prepared=False):
     global last_completed_at, last_error
     upload_url = chunk_upload_url()
     if not upload_url or not CHUNK_UPLOAD_TOKEN:
@@ -492,13 +593,14 @@ def upload_chunked(path):
 
     try:
         last_error = None
-        settings = processing_settings()
-        if settings["enabled"]:
-            mark("processing", "Processing image")
-        upload_path, upload_name, cleanup_path, processing_warning = prepare_upload(path, settings)
-        if processing_warning:
-            last_error = processing_warning
-            mark("processing", "Processing skipped; uploading original", last_error=last_error)
+        if not prepared:
+            settings = processing_settings()
+            if settings["enabled"]:
+                mark("processing", "Processing image")
+            upload_path, upload_name, cleanup_path, processing_warning = prepare_upload(path, settings)
+            if processing_warning:
+                last_error = processing_warning
+                mark("processing", "Processing skipped; uploading original", last_error=last_error)
         total = upload_path.stat().st_size
         chunk_count = max(1, (total + chunk_size - 1) // chunk_size)
         active_parallel = min(parallel_limit, chunk_count)
@@ -508,16 +610,33 @@ def upload_chunked(path):
         sent_by_chunk = {}
         progress_lock = threading.Lock()
         limiter = RateLimiter(upload_kbps)
+        def live_lanes():
+            return healthy_egress_lanes() if CHUNK_EGRESS_BINDING else []
 
-        def progress(chunk_index, sent_in_chunk):
+        def progress(chunk_index, sent_in_chunk, lane=None):
             nonlocal sent
             with progress_lock:
                 sent_by_chunk[chunk_index] = sent_in_chunk
                 sent = sum(sent_by_chunk.values())
-            mark("uploading", uploading_text())
+            lanes = live_lanes()
+            mark(
+                "uploading",
+                uploading_text(),
+                egress_binding="source_ip" if lanes else "default_route",
+                egress_lane_count=len(lanes),
+                egress_lanes=lane_status(lanes),
+                active_egress=lane_label(lane) if lane else None,
+            )
 
-        upload_manifest_chunks(upload_url, upload_path, transfer_id, manifest, active_parallel, limiter, progress)
-        mark("assembling", "Assembling on FRAME")
+        upload_manifest_chunks(upload_url, upload_path, transfer_id, manifest, active_parallel, limiter, progress, live_lanes)
+        lanes = live_lanes()
+        mark(
+            "assembling",
+            "Assembling on FRAME",
+            egress_binding="source_ip" if lanes else "default_route",
+            egress_lane_count=len(lanes),
+            egress_lanes=lane_status(lanes),
+        )
         request_json(f"{upload_url.rstrip('/')}/{transfer_id}/complete", "POST", {"device_id": manifest["device_id"]})
         sent = total
         last_completed_at = iso_now()
@@ -564,36 +683,66 @@ def chunk_offset(chunk, chunk_size):
     return int(chunk["index"]) * chunk_size
 
 
-def upload_one_chunk(upload_url, upload_path, transfer_id, manifest, chunk, rate_limiter, progress):
+def upload_one_chunk(upload_url, upload_path, transfer_id, manifest, chunk, rate_limiter, progress, lane=None):
     with upload_path.open("rb") as handle:
         handle.seek(chunk_offset(chunk, manifest["chunk_size_bytes"]))
         body = handle.read(chunk["size_bytes"])
     if len(body) != chunk["size_bytes"]:
         raise RuntimeError(f"chunk {chunk['index']} expected {chunk['size_bytes']} bytes, read {len(body)}")
     put_url = f"{upload_url.rstrip('/')}/{transfer_id}/chunks/{chunk['index']}"
+    progress(chunk["index"], 0, lane)
     request_bytes(
         put_url,
         "PUT",
         body,
-        progress=lambda sent: progress(chunk["index"], sent),
+        progress=lambda sent: progress(chunk["index"], sent, lane),
         rate_limiter=rate_limiter,
+        lane=lane,
     )
-    progress(chunk["index"], len(body))
+    progress(chunk["index"], len(body), lane)
 
 
-def upload_manifest_chunks(upload_url, upload_path, transfer_id, manifest, parallel, rate_limiter, progress):
+def upload_manifest_chunks(upload_url, upload_path, transfer_id, manifest, parallel, rate_limiter, progress, lanes_provider):
     chunks = manifest["chunks"]
     if parallel <= 1 or len(chunks) <= 1:
         for chunk in chunks:
-            upload_one_chunk(upload_url, upload_path, transfer_id, manifest, chunk, rate_limiter, progress)
+            upload_one_chunk_with_retry(upload_url, upload_path, transfer_id, manifest, chunk, rate_limiter, progress, lanes_provider)
         return
     with ThreadPoolExecutor(max_workers=parallel) as executor:
         futures = [
-            executor.submit(upload_one_chunk, upload_url, upload_path, transfer_id, manifest, chunk, rate_limiter, progress)
+            executor.submit(upload_one_chunk_with_retry, upload_url, upload_path, transfer_id, manifest, chunk, rate_limiter, progress, lanes_provider)
             for chunk in chunks
         ]
         for future in as_completed(futures):
             future.result()
+
+
+def upload_one_chunk_with_retry(upload_url, upload_path, transfer_id, manifest, chunk, rate_limiter, progress, lanes_provider):
+    candidates = lane_candidates(lanes_provider(), chunk["index"])
+    last_error = None
+    for lane in candidates:
+        try:
+            return upload_one_chunk(upload_url, upload_path, transfer_id, manifest, chunk, rate_limiter, progress, lane)
+        except Exception as error:
+            last_error = error
+    refreshed = lane_candidates(lanes_provider(), chunk["index"])
+    attempted = {(lane or {}).get("address") for lane in candidates}
+    for lane in refreshed:
+        if (lane or {}).get("address") in attempted:
+            continue
+        try:
+            return upload_one_chunk(upload_url, upload_path, transfer_id, manifest, chunk, rate_limiter, progress, lane)
+        except Exception as error:
+            last_error = error
+    raise last_error or RuntimeError(f"chunk {chunk['index']} failed")
+
+
+def lane_candidates(lanes, chunk_index):
+    if not lanes:
+        return [None]
+    start = chunk_index % len(lanes)
+    ordered = lanes[start:] + lanes[:start]
+    return ordered + [None]
 
 
 def request_json(url, method, payload):
@@ -601,9 +750,9 @@ def request_json(url, method, payload):
     return request_bytes(url, method, body, "application/json")
 
 
-def request_bytes(url, method, body, content_type="application/octet-stream", progress=None, rate_limiter=None):
+def request_bytes(url, method, body, content_type="application/octet-stream", progress=None, rate_limiter=None, lane=None):
     if (progress or rate_limiter) and method.upper() in {"PUT", "POST"}:
-        return request_stream(url, method, body, content_type, progress or (lambda _sent: None), rate_limiter)
+        return request_stream(url, method, body, content_type, progress or (lambda _sent: None), rate_limiter, lane)
     request = urllib.request.Request(
         url,
         data=body,
@@ -618,16 +767,20 @@ def request_bytes(url, method, body, content_type="application/octet-stream", pr
         raise RuntimeError(f"chunk upload HTTP {error.code}: {detail}") from error
 
 
-def request_stream(url, method, body, content_type, progress, rate_limiter=None):
+def request_stream(url, method, body, content_type, progress, rate_limiter=None, lane=None):
     parsed = urllib.parse.urlsplit(url)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         raise RuntimeError("chunk upload URL must start with http:// or https://")
     path = urllib.parse.urlunsplit(("", "", parsed.path or "/", parsed.query, ""))
     connection_type = http.client.HTTPSConnection if parsed.scheme == "https" else http.client.HTTPConnection
-    connection = connection_type(parsed.hostname, parsed.port, timeout=60)
+    source_address = (lane["address"], 0) if lane and lane.get("address") else None
+    connection = connection_type(parsed.hostname, parsed.port, timeout=CHUNK_CONNECT_TIMEOUT_SECONDS, source_address=source_address)
     try:
+        connection.connect()
+        if connection.sock:
+            connection.sock.settimeout(CHUNK_PROGRESS_TIMEOUT_SECONDS)
         connection.putrequest(method, path)
-        for name, value in request_headers(content_type, len(body)).items():
+        for name, value in request_headers(content_type, len(body), lane).items():
             connection.putheader(name, value)
         connection.endheaders()
         view = memoryview(body)
@@ -646,18 +799,61 @@ def request_stream(url, method, body, content_type, progress, rate_limiter=None)
         if response.status >= 400:
             raise RuntimeError(f"chunk upload HTTP {response.status}: {detail.decode('utf-8', 'replace')[:120]}")
         return detail
+    except (TimeoutError, socket.timeout) as error:
+        raise RuntimeError(f"chunk upload stalled on {lane_label(lane)}") from error
     finally:
         connection.close()
 
 
-def request_headers(content_type, length):
-    return {
+def request_headers(content_type, length, lane=None):
+    headers = {
         "Authorization": f"Bearer {CHUNK_UPLOAD_TOKEN}",
         "Content-Type": content_type,
         "Content-Length": str(length),
         "Accept": "application/json",
         "User-Agent": "FRAME-Belabox-Agent/0.5 chunk-uploader",
     }
+    if lane:
+        headers["X-FRAME-Egress-Name"] = lane.get("name", "")
+        headers["X-FRAME-Egress-Address"] = lane.get("address", "")
+    return headers
+
+
+def healthy_egress_lanes():
+    try:
+        with EGRESS_STATUS_PATH.open("r", encoding="utf-8") as handle:
+            status = json.load(handle)
+    except Exception:
+        return []
+    lanes = status.get("lanes", []) if isinstance(status, dict) else []
+    healthy = []
+    for lane in lanes:
+        if not isinstance(lane, dict):
+            continue
+        if lane.get("state") != "healthy":
+            continue
+        address = str(lane.get("address") or "")
+        try:
+            ipaddress.ip_address(address)
+        except Exception:
+            continue
+        healthy.append({
+            "name": str(lane.get("name") or ""),
+            "address": address,
+            "route_dev": str(lane.get("route_dev") or ""),
+            "route_src": str(lane.get("route_src") or ""),
+        })
+    return healthy
+
+
+def lane_label(lane):
+    if not lane:
+        return "default route"
+    return f"{lane.get('name') or 'egress'} {lane.get('address') or ''}".strip()
+
+
+def lane_status(lanes):
+    return [{"name": lane.get("name", ""), "address": lane.get("address", ""), "state": "healthy"} for lane in lanes]
 
 
 def start_ftp_receiver():
@@ -689,23 +885,30 @@ def main():
         raise SystemExit(2)
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     READY_DIR.mkdir(parents=True, exist_ok=True)
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
     INFLIGHT_DIR.mkdir(parents=True, exist_ok=True)
     start_ftp_receiver()
+    threading.Thread(target=preprocess_loop, daemon=True).start()
     write_status(status_text=f"Camera FTP ready on port {CAMERA_PORT}")
     while True:
         stage_uploads()
-        ready = list_images(READY_DIR)
-        if ready:
+        processed = list_images(PROCESSED_DIR)
+        if processed:
             if transfer_mode() == "chunked_https":
-                upload_chunked(ready[0])
+                upload_chunked(processed[0], prepared=True)
             else:
-                upload_direct_ftp(ready[0])
+                upload_direct_ftp(processed[0], prepared=True)
         else:
-            write_status()
+            waiting = list_images(READY_DIR)
+            write_status(
+                state="queued" if waiting else "idle",
+                status_text="Waiting for pre-processing" if waiting else "Idle",
+            )
             time.sleep(IDLE_SECONDS)
 
 
 def self_test():
+    global UPLOAD_DIR, READY_DIR, PROCESSED_DIR, INFLIGHT_DIR
     settings = processing_settings({"image_processing": {
         "enabled": True,
         "long_edge_px": "1600",
@@ -730,6 +933,28 @@ def self_test():
     assert chunk_upload_url({"chunk_upload_url": "https://example.test/chunks"}) == "https://example.test/chunks"
     assert chunk_upload_url({"chunk_upload_url": "ftp://example.test/chunks"}) == ""
     assert chunk_offset({"index": 2}, 4096) == 8192
+
+    original_dirs = (UPLOAD_DIR, READY_DIR, PROCESSED_DIR, INFLIGHT_DIR)
+    with tempfile.TemporaryDirectory() as root:
+        UPLOAD_DIR = Path(root) / "incoming"
+        READY_DIR = Path(root) / "ready"
+        PROCESSED_DIR = Path(root) / "processed"
+        INFLIGHT_DIR = Path(root) / "inflight"
+        for directory in [UPLOAD_DIR, READY_DIR, PROCESSED_DIR, INFLIGHT_DIR]:
+            directory.mkdir(parents=True, exist_ok=True)
+        sample = READY_DIR / "photo.jpg"
+        sample.write_bytes(b"jpeg")
+        assert not is_stable(sample)
+        old_time = time.time() - STABLE_SECONDS - 1
+        os.utime(sample, (old_time, old_time))
+        assert is_stable(sample)
+        target, warning = prepare_preprocessed_upload(sample, {"enabled": False})
+        assert warning is None
+        assert target.parent == PROCESSED_DIR
+        assert target.name == "photo.jpg"
+        assert target.exists()
+        assert queue_count() == 1
+    UPLOAD_DIR, READY_DIR, PROCESSED_DIR, INFLIGHT_DIR = original_dirs
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         older = root / "older.jpg"

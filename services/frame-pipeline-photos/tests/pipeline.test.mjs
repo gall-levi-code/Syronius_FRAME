@@ -155,6 +155,44 @@ test("pipeline settings resize output and enforce maximum published size", async
   assert.ok(sidecar.jpeg_quality <= 85);
 });
 
+test("pipeline reuses JPEGs that already fit published constraints", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-pipeline-"));
+  const pipeline = new PhotoPipeline(config(root));
+  await pipeline.init();
+  await pipeline.updateSettings({ long_edge_px: 300, jpeg_quality: 85, max_output_mb: 1 });
+  const source = path.join(root, "staging", "Ready Photo.jpg");
+  await sharp({ create: { width: 240, height: 160, channels: 3, background: "#2cb4fb" } })
+    .jpeg({ quality: 95 })
+    .toFile(source);
+  const original = await readFile(source);
+
+  await pipeline.processOnce();
+
+  const latest = JSON.parse(await readFile(path.join(root, "state", "latest.json"), "utf8"));
+  const output = await readFile(path.join(root, "galleries", latest.date_folder, `${latest.latest_base}.jpg`));
+  assert.deepEqual(output, original);
+});
+
+test("pipeline still resizes oversized JPEGs", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-pipeline-"));
+  const pipeline = new PhotoPipeline(config(root));
+  await pipeline.init();
+  await pipeline.updateSettings({ long_edge_px: 300, jpeg_quality: 85, max_output_mb: 1 });
+  const source = path.join(root, "staging", "Large Photo.jpg");
+  await sharp({ create: { width: 900, height: 600, channels: 3, background: "#2cb4fb" } })
+    .jpeg({ quality: 95 })
+    .toFile(source);
+  const original = await readFile(source);
+
+  await pipeline.processOnce();
+
+  const latest = JSON.parse(await readFile(path.join(root, "state", "latest.json"), "utf8"));
+  const outputPath = path.join(root, "galleries", latest.date_folder, `${latest.latest_base}.jpg`);
+  const metadata = await sharp(outputPath).metadata();
+  assert.equal(Math.max(metadata.width, metadata.height), 300);
+  assert.notDeepEqual(await readFile(outputPath), original);
+});
+
 test("trash and restore preserve ready while every management change advances latest state", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-pipeline-"));
   const pipeline = new PhotoPipeline(config(root));

@@ -58,6 +58,8 @@ test("installer Compose template stays synchronized with the service contracts",
   assert.ok(belaboxBroker.includes("image: eclipse-mosquitto@sha256:"));
   assert.ok(belaboxBroker.includes("BELABOX_MQTT_PASSWORD: ${BELABOX_MQTT_PASSWORD:-}"));
   assert.ok(belaboxBroker.includes("Path(`/mqtt`) || PathPrefix(`/mqtt/`)"));
+  assert.ok(belaboxBroker.includes("topic write frame/belabox/+/proxy/http/request/+"));
+  assert.ok(belaboxBroker.includes("topic read frame/belabox/+/proxy/stream/+/server"));
   assert.ok(brokerConfig.includes("acl_file /mosquitto/data/acl"));
   assert.ok(!belaboxBroker.includes("ports:"));
   assert.ok(belabox.includes("BELABOX_HOST: ${BELABOX_HOST:-}"));
@@ -354,12 +356,13 @@ test("Hybrid exposes unauthenticated read-only stream stats without exposing Str
 });
 
 test("Belabox pairing UI hides MQTT implementation details", async () => {
-  const [html, frontend, backend, dockerfile, agent, styles] = await Promise.all([
+  const [html, frontend, backend, dockerfile, agent, photoAgent, styles] = await Promise.all([
     readFile("services/frame-belabox-manager/public/index.html", "utf8"),
     readFile("services/frame-belabox-manager/public/app.js", "utf8"),
     readFile("services/frame-belabox-manager/src/index.ts", "utf8"),
     readFile("services/frame-belabox-manager/Dockerfile", "utf8"),
     readFile("services/frame-belabox-manager/agent/belabox-agent.mjs", "utf8"),
+    readFile("services/frame-belabox-manager/agent/photo-agent.py", "utf8"),
     readFile("services/frame-belabox-manager/public/styles.css", "utf8"),
   ]);
   assert.ok(html.includes('role="tablist"'), "Belabox devices should render like Overlay Wizard source tabs");
@@ -379,6 +382,7 @@ test("Belabox pairing UI hides MQTT implementation details", async () => {
   assert.ok(frontend.includes("Add Device"), "Zero-device state should enter the add-device wizard");
   assert.ok(frontend.includes("SSH Maintenance"));
   assert.ok(frontend.includes("MQTT Controls"));
+  assert.ok(frontend.includes("Photo Agent"));
   assert.ok(frontend.includes("/belabox/api/pair"));
   assert.ok(frontend.includes("/belabox/api/pair/jobs"));
   assert.ok(frontend.includes("/belabox/api/ftp-connector/jobs"));
@@ -401,10 +405,32 @@ test("Belabox pairing UI hides MQTT implementation details", async () => {
   assert.ok(backend.includes("/belabox/api/diagnostics/speed-test"));
   assert.ok(backend.includes("network_speed_test"));
   assert.ok(backend.includes("isProvisionedDevice(parsedTopic.deviceId)"));
+  assert.ok(backend.includes("proxy/http/request"));
+  assert.ok(backend.includes("agent-wss-only"));
+  assert.ok(backend.includes("This encoder is offline."));
+  assert.ok(backend.includes('response.setHeader("Refresh", "2")'));
+  assert.ok(backend.includes('`${REMOTE_BELAUI_ROUTE_PREFIX}/status`'));
+  assert.ok(backend.includes("remoteBelauiShellPage"));
+  assert.ok(backend.includes("REMOTE_BELAUI_STATUS_TIMEOUT_MS"));
+  assert.ok(backend.includes("REMOTE_BELAUI_STATUS_POLL_MS"));
+  assert.ok(backend.includes("REMOTE_BELAUI_OFFLINE_FAILURES"));
+  assert.ok(backend.includes("noteOffline"));
+  assert.ok(backend.includes("requireReachable: false"));
+  assert.ok(backend.includes("Reconnecting to encoder..."));
+  assert.ok(backend.includes("frame-belabox-remote-offline"));
+  assert.ok(frontend.includes('/belabox/remote?key=${encodeURIComponent(deviceId)}'));
   assert.ok(dockerfile.includes("sshpass"));
   assert.ok(dockerfile.includes("iperf3"));
   assert.ok(agent.includes("network_speed_test"));
   assert.ok(agent.includes("BELABOX_CHUNK_UPLOAD_TOKEN"));
+  assert.ok(agent.includes("BELABOX_EGRESS_STATUS_PATH"));
+  assert.ok(agent.includes("routeForSource"));
+  assert.ok(agent.includes("agent-wss-proxy"));
+  assert.ok(photoAgent.includes("source_address="));
+  assert.ok(photoAgent.includes("healthy_egress_lanes"));
+  assert.ok(photoAgent.includes("FRAME_EGRESS_STATUS_PATH"));
+  assert.ok(backend.includes("frame-belabox-photo-agent.service"));
+  assert.ok(backend.includes("photo-agent.py"));
   assert.ok(!html.includes("MQTT password"));
   assert.ok(!frontend.includes("BELABOX_MQTT_PASSWORD"));
 });
@@ -413,25 +439,32 @@ test("Belabox agent rejects invalid signed commands", async () => {
   await execFileAsync("node", ["services/frame-belabox-manager/agent/belabox-agent.mjs", "--self-test"]);
 });
 
-test("Hybrid exposes only authenticated Belabox MQTT and not the Belabox manager UI", () => {
+test("Hybrid exposes Belabox agent routes and remote UI without exposing the manager UI/API", () => {
   const capabilities = Object.fromEntries(CAPABILITIES.map((name) => [name, false]));
   capabilities["frame-belabox-manager"] = true;
   const prefixes = computeEffectivePublicPrefixes({
     mode: "HYBRID",
     capabilities,
-    public_route_prefixes: [...PUBLIC_PREFIXES, "/belabox"],
+    public_route_prefixes: [...PUBLIC_PREFIXES, "/belabox", "/belabox/api"],
   });
+  assert.ok(prefixes.includes("/belabox/remote"));
   assert.ok(prefixes.includes("/mqtt"));
   assert.ok(prefixes.includes("/belabox-chunks"));
   assert.ok(!prefixes.includes("/belabox"));
+  assert.ok(!prefixes.includes("/belabox/api"));
 });
 
 test("FRAME Edge denies management surfaces when a tunnel bypasses the public gateway", async () => {
   const composeTemplate = await readFile("installer/templates/docker-compose.yml", "utf8");
   assert.ok(composeTemplate.includes("traefik.http.routers.frame-public-deny.rule"));
-  for (const route of ["/slsui", "/audio/admin", "/audio/capture", "/audio/api", "/belabox", "/pipeline", "/overlays/setup", "/overlays/api"]) {
-    assert.ok(composeTemplate.includes(`Path(\`${route}\`)`), `${route} is missing from the Edge deny router`);
+  const denyRule =
+    composeTemplate
+      .split("\n")
+      .find((line) => line.includes("traefik.http.routers.frame-public-deny.rule")) ?? "";
+  for (const route of ["/slsui", "/audio/admin", "/audio/capture", "/audio/api", "/belabox", "/belabox/api", "/belabox/assets", "/pipeline", "/overlays/setup", "/overlays/api"]) {
+    assert.ok(denyRule.includes(`Path(\`${route}\`)`), `${route} is missing from the Edge deny router`);
   }
+  assert.ok(!denyRule.includes("PathPrefix(`/belabox/`)"), "Remote belaUI must be able to reach the SSO-protected Belabox router");
 });
 
 test("Hybrid public gateway forwards the exact root when the dashboard is public", async () => {

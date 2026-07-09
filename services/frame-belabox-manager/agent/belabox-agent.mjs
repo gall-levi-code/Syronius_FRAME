@@ -1,7 +1,11 @@
 import fs from "node:fs";
 import http from "node:http";
 import https from "node:https";
+import net from "node:net";
+import tls from "node:tls";
 import os from "node:os";
+import dns from "node:dns";
+import { execFileSync } from "node:child_process";
 import {
   createPrivateKey,
   createPublicKey,
@@ -11,7 +15,10 @@ import {
   verify as verifyBytes,
 } from "node:crypto";
 
-const VERSION = "0.5.3";
+const VERSION = "0.5.6";
+const REMOTE_BELAUI_HTTP_TIMEOUT_MS = 8000;
+const REMOTE_BELAUI_MAX_HTTP_BODY_BYTES = 2 * 1024 * 1024;
+const REMOTE_BELAUI_STREAM_CHUNK_BYTES = 48 * 1024;
 const ALLOWED_COMMANDS = new Set([
   "agent_update",
   "agent_restart",
@@ -37,9 +44,20 @@ const activePhotoTelemetryMs = readInt("BELABOX_ACTIVE_PHOTO_TELEMETRY_INTERVAL_
 const reconnectMs = readInt("BELABOX_MQTT_RECONNECT_MS", 5000, 1000, 60000);
 const keepalive = readInt("BELABOX_MQTT_KEEPALIVE", 30, 5, 300);
 const photoConfigPath = process.env.BELABOX_PHOTO_CONFIG_PATH || `${os.homedir()}/.frame-belabox-agent/photo-config.json`;
+const egressStatusPath = process.env.BELABOX_EGRESS_STATUS_PATH || `${os.homedir()}/.frame-belabox-agent/egress.json`;
+const egressProbeMs = readInt("BELABOX_EGRESS_PROBE_INTERVAL_MS", 1000, 500, 60000);
+const remoteBelaui = {
+  enabled: readBool("BELABOX_REMOTE_BELAUI_ENABLED", true),
+  localUrl: loopbackHttpUrl(process.env.BELABOX_REMOTE_BELAUI_LOCAL_URL || "http://127.0.0.1"),
+  rewriteWebSocket: readBool("BELABOX_REMOTE_BELAUI_REWRITE_WS", true),
+};
 const url = process.env.BELABOX_MQTT_URL || mqttUrlFromHost();
 const topics = topicSet(deviceId);
 let diagnosticState = null;
+let remoteBelauiState = remoteBelauiSnapshot(remoteBelaui.enabled ? "unchecked" : "disabled");
+let egressState = egressSnapshot([]);
+let egressRefreshRunning = false;
+const proxyStreams = new Map();
 let client;
 
 if (selfTestMode) {
@@ -75,13 +93,25 @@ async function main() {
   client.on("connect", () => {
     publishJson(topics.status, { device_id: deviceId, state: "online", at: new Date().toISOString() }, true);
     publishJson(topics.version, { device_id: deviceId, version: VERSION, at: new Date().toISOString() }, true);
-    client.subscribe(topics.cmdRequest, { qos: 1 });
+    client.subscribe([topics.cmdRequest, topics.proxyHttpRequest, topics.proxyStreamClient], { qos: 1 });
     publishHeartbeat();
     publishTelemetry();
   });
 
-  client.on("message", (_topic, payload) => {
-    void handleCommand(payload);
+  client.on("message", (topic, payload) => {
+    if (topic === topics.cmdRequest) {
+      void handleCommand(payload);
+      return;
+    }
+    const httpRequestId = proxyHttpRequestId(topic);
+    if (httpRequestId) {
+      void handleProxyHttpRequest(httpRequestId, payload);
+      return;
+    }
+    const stream = proxyStreamClientId(topic);
+    if (stream) {
+      handleProxyStreamMessage(stream, payload);
+    }
   });
 
   client.on("error", (error) => {
@@ -91,6 +121,10 @@ async function main() {
   setInterval(publishHeartbeat, heartbeatMs);
   setInterval(publishTelemetry, telemetryMs);
   setInterval(publishActivePhotoTelemetry, activePhotoTelemetryMs);
+  setInterval(refreshRemoteBelauiState, telemetryMs);
+  setInterval(() => { void refreshEgressState(); }, egressProbeMs);
+  refreshRemoteBelauiState();
+  void refreshEgressState();
 }
 
 function publishHeartbeat() {
@@ -406,6 +440,158 @@ function formatBytes(bytes) {
   return `${Math.round((bytes / 1024) * 10) / 10} KiB`;
 }
 
+async function handleProxyHttpRequest(requestId, payload) {
+  let message = {};
+  try {
+    message = parseJsonPayload(payload, 512 * 1024);
+    const response = await localBelauiHttpRequest(message);
+    publishJson(topics.proxyHttpResponse(requestId), { request_id: requestId, ...response });
+  } catch (error) {
+    publishJson(topics.proxyHttpResponse(requestId), {
+      request_id: requestId,
+      status_code: 502,
+      headers: { "content-type": "text/plain; charset=utf-8" },
+      body_b64: "",
+      error: error instanceof Error ? error.message.slice(0, 200) : String(error).slice(0, 200),
+    });
+  }
+}
+
+function localBelauiHttpRequest(message) {
+  if (!remoteBelaui.enabled) throw new Error("remote belaUI is disabled");
+  const target = localBelauiUrl(text(message.path, 2000) || "/");
+  const method = text(message.method, 16) || "GET";
+  const body = Buffer.from(text(message.body_b64, REMOTE_BELAUI_MAX_HTTP_BODY_BYTES * 2) || "", "base64");
+  if (body.length > REMOTE_BELAUI_MAX_HTTP_BODY_BYTES) throw new Error("proxy body too large");
+  const headers = proxyHeaders(message.headers, target);
+  if (body.length) headers["content-length"] = String(body.length);
+  const transport = target.protocol === "https:" ? https : http;
+  return new Promise((resolve, reject) => {
+    const request = transport.request(target, { method, headers, timeout: REMOTE_BELAUI_HTTP_TIMEOUT_MS }, (response) => {
+      const chunks = [];
+      let size = 0;
+      response.on("data", (chunk) => {
+        size += chunk.length;
+        if (size > REMOTE_BELAUI_MAX_HTTP_BODY_BYTES) {
+          request.destroy(new Error("proxy response too large"));
+          return;
+        }
+        chunks.push(Buffer.from(chunk));
+      });
+      response.on("end", () => resolve({
+        status_code: response.statusCode || 502,
+        headers: responseHeaders(response.headers),
+        body_b64: Buffer.concat(chunks).toString("base64"),
+      }));
+    });
+    request.on("timeout", () => request.destroy(new Error("remote belaUI timed out")));
+    request.on("error", reject);
+    request.end(body);
+  });
+}
+
+function handleProxyStreamMessage({ sessionId }, payload) {
+  let message;
+  try {
+    message = parseJsonPayload(payload, REMOTE_BELAUI_STREAM_CHUNK_BYTES * 2);
+  } catch {
+    return;
+  }
+  const type = text(message.type, 16);
+  if (type === "open") {
+    openProxyStream(sessionId, message);
+    return;
+  }
+  const stream = proxyStreams.get(sessionId);
+  if (!stream) return;
+  if (type === "data") {
+    const data = Buffer.from(text(message.data_b64, REMOTE_BELAUI_STREAM_CHUNK_BYTES * 2) || "", "base64");
+    if (data.length) stream.socket.write(data);
+    return;
+  }
+  if (type === "close") closeProxyStream(sessionId);
+}
+
+function openProxyStream(sessionId, message) {
+  if (proxyStreams.has(sessionId)) return;
+  const target = localBelauiUrl(text(message.path, 2000) || "/");
+  const port = Number(target.port || (target.protocol === "https:" ? 443 : 80));
+  const socket = target.protocol === "https:"
+    ? tls.connect({ host: target.hostname, port, servername: target.hostname })
+    : net.connect(port, target.hostname);
+  proxyStreams.set(sessionId, { socket });
+  const close = (type = "close", error = "") => {
+    if (!proxyStreams.has(sessionId)) return;
+    proxyStreams.delete(sessionId);
+    publishJson(topics.proxyStreamServer(sessionId), { type, session_id: sessionId, error });
+    socket.destroy();
+  };
+  socket.once(target.protocol === "https:" ? "secureConnect" : "connect", () => {
+    socket.write(`${text(message.method, 16) || "GET"} ${target.pathname}${target.search} HTTP/${text(message.http_version, 16) || "1.1"}\r\n`);
+    const headers = proxyHeaders(message.headers, target);
+    headers.connection = "Upgrade";
+    for (const [name, value] of Object.entries(headers)) {
+      const values = Array.isArray(value) ? value : [value];
+      for (const item of values) socket.write(`${name}: ${item}\r\n`);
+    }
+    socket.write("\r\n");
+    const head = Buffer.from(text(message.head_b64, REMOTE_BELAUI_STREAM_CHUNK_BYTES * 2) || "", "base64");
+    if (head.length) socket.write(head);
+  });
+  socket.on("data", (chunk) => publishProxyStreamData(sessionId, Buffer.from(chunk)));
+  socket.on("close", () => close("close"));
+  socket.on("error", (error) => close("error", error.message.slice(0, 160)));
+}
+
+function closeProxyStream(sessionId) {
+  const stream = proxyStreams.get(sessionId);
+  if (!stream) return;
+  proxyStreams.delete(sessionId);
+  stream.socket.destroy();
+}
+
+function publishProxyStreamData(sessionId, data) {
+  for (let offset = 0; offset < data.length; offset += REMOTE_BELAUI_STREAM_CHUNK_BYTES) {
+    publishJson(topics.proxyStreamServer(sessionId), {
+      type: "data",
+      session_id: sessionId,
+      data_b64: data.subarray(offset, offset + REMOTE_BELAUI_STREAM_CHUNK_BYTES).toString("base64"),
+    });
+  }
+}
+
+function localBelauiUrl(path) {
+  const target = new URL(remoteBelaui.localUrl);
+  const incoming = new URL(path || "/", "http://frame.local");
+  const base = target.pathname.replace(/\/+$/, "");
+  target.pathname = `${base}${incoming.pathname}`.replace(/\/{2,}/g, "/");
+  target.search = incoming.search;
+  target.hash = "";
+  return target;
+}
+
+function proxyHeaders(value, target) {
+  const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  const headers = {};
+  for (const [name, item] of Object.entries(source)) {
+    const lower = name.toLowerCase();
+    if (["host", "connection", "content-length", "accept-encoding", "proxy-connection", "cookie", "authorization", "x-frame-authenticated-user"].includes(lower)) continue;
+    if (typeof item === "string") headers[lower] = item.slice(0, 4096);
+    else if (Array.isArray(item) && item.every((entry) => typeof entry === "string")) headers[lower] = item.map((entry) => entry.slice(0, 4096)).slice(0, 16);
+  }
+  headers.host = target.host;
+  headers["accept-encoding"] = "identity";
+  return headers;
+}
+
+function responseHeaders(headers) {
+  return Object.fromEntries(Object.entries(headers).flatMap(([name, value]) => {
+    if (value === undefined) return [];
+    if (Array.isArray(value)) return [[name, value.map(String)]];
+    return [[name, String(value)]];
+  }));
+}
+
 function collectTelemetry(ftpUpload = readFtpUploadStatus()) {
   const memoryTotal = os.totalmem();
   const memoryFree = os.freemem();
@@ -425,11 +611,49 @@ function collectTelemetry(ftpUpload = readFtpUploadStatus()) {
     temperature_c: readTemperature(),
     active_streaming_services: [],
     network_interfaces: networkSummary(),
+    egress: egressState,
     agent_version: VERSION,
+    remote_belaui: remoteBelauiState,
   };
   if (ftpUpload) telemetry.ftp_upload = ftpUpload;
   if (diagnosticState) telemetry.network_diagnostics = diagnosticState;
   return telemetry;
+}
+
+function refreshRemoteBelauiState() {
+  if (!remoteBelaui.enabled) {
+    remoteBelauiState = remoteBelauiSnapshot("disabled");
+    return;
+  }
+  const parsed = new URL(remoteBelaui.localUrl);
+  const transport = parsed.protocol === "https:" ? https : http;
+  const request = transport.request(parsed, {
+    method: "GET",
+    timeout: 1500,
+    headers: { "user-agent": `FRAME-Belabox-Agent/${VERSION}` },
+  }, (response) => {
+    response.resume();
+    remoteBelauiState = {
+      ...remoteBelauiSnapshot(response.statusCode && response.statusCode < 500 ? "reachable" : "error"),
+      http_status: response.statusCode || 0,
+    };
+  });
+  request.on("timeout", () => request.destroy(new Error("timeout")));
+  request.on("error", (error) => {
+    remoteBelauiState = { ...remoteBelauiSnapshot("unreachable"), error: text(error.message, 120) };
+  });
+  request.end();
+}
+
+function remoteBelauiSnapshot(state) {
+  return {
+    enabled: remoteBelaui.enabled,
+    state,
+    local_url: remoteBelaui.localUrl,
+    rewrite_websocket: remoteBelaui.rewriteWebSocket,
+    transport: "agent-wss-proxy",
+    checked_at: new Date().toISOString(),
+  };
 }
 
 function photoTransferIsActive(status) {
@@ -482,8 +706,109 @@ function networkSummary() {
   );
 }
 
+async function refreshEgressState() {
+  if (egressRefreshRunning) return;
+  egressRefreshRunning = true;
+  try {
+    const target = await egressTargetAddress();
+    const lanes = networkSummary()
+      .filter((entry) => entry.family === "IPv4" && usableSourceAddress(entry.address))
+      .map((entry) => egressLane(entry, target.address));
+    egressState = egressSnapshot(lanes, target);
+    writeJsonFile(egressStatusPath, egressState);
+  } catch (error) {
+    egressState = { ...egressSnapshot([]), state: "error", error: text(error.message, 160) };
+    writeJsonFile(egressStatusPath, egressState);
+  } finally {
+    egressRefreshRunning = false;
+  }
+}
+
+async function egressTargetAddress() {
+  const host = egressTargetHost();
+  const resolved = await lookupIpv4(host);
+  return { host, address: resolved.address };
+}
+
+function lookupIpv4(host) {
+  return new Promise((resolve, reject) => {
+    dns.lookup(host, { family: 4 }, (error, address) => {
+      if (error) reject(error);
+      else resolve({ address });
+    });
+  });
+}
+
+function egressTargetHost() {
+  for (const value of [process.env.BELABOX_CHUNK_UPLOAD_URL, process.env.BELABOX_MQTT_URL, url]) {
+    try {
+      const parsed = new URL(value || "");
+      if (parsed.hostname) return parsed.hostname;
+    } catch {
+      // keep looking
+    }
+  }
+  return "127.0.0.1";
+}
+
+function usableSourceAddress(address) {
+  return Boolean(address) && !address.startsWith("127.") && !address.startsWith("169.254.");
+}
+
+function egressLane(entry, targetAddress) {
+  const route = routeForSource(targetAddress, entry.address);
+  const healthy = route.ok && (!route.dev || route.dev === entry.name) && (!route.src || route.src === entry.address);
+  return {
+    name: entry.name,
+    family: entry.family,
+    address: entry.address,
+    mac: entry.mac,
+    state: healthy ? "healthy" : route.ok ? "routed_elsewhere" : "unreachable",
+    route_dev: route.dev || null,
+    route_src: route.src || null,
+    route_via: route.via || null,
+    route_error: route.error || null,
+  };
+}
+
+function routeForSource(targetAddress, sourceAddress) {
+  try {
+    const output = execFileSync("ip", ["route", "get", targetAddress, "from", sourceAddress], {
+      encoding: "utf8",
+      timeout: 500,
+      stdio: ["ignore", "pipe", "pipe"],
+    }).trim();
+    return {
+      ok: true,
+      dev: firstMatch(output, /\bdev\s+(\S+)/),
+      src: firstMatch(output, /\bsrc\s+(\S+)/),
+      via: firstMatch(output, /\bvia\s+(\S+)/),
+      raw: output.slice(0, 240),
+    };
+  } catch (error) {
+    const stderr = error && error.stderr && typeof error.stderr.toString === "function" ? error.stderr.toString() : "";
+    return { ok: false, error: text(stderr || error.message, 160) };
+  }
+}
+
+function egressSnapshot(lanes, target = null) {
+  const healthy = lanes.filter((lane) => lane.state === "healthy");
+  return {
+    enabled: true,
+    state: healthy.length > 0 ? "ready" : "no_healthy_lanes",
+    target_host: target && target.host ? target.host : egressTargetHost(),
+    target_address: target && target.address ? target.address : null,
+    updated_at: new Date().toISOString(),
+    lane_count: lanes.length,
+    healthy_lane_count: healthy.length,
+    lanes,
+  };
+}
+
 function readFtpUploadStatus() {
-  const statusPath = process.env.BELABOX_FTP_CONNECTOR_STATUS_PATH || `${os.homedir()}/.frame-belabox-agent/ftp-connector/status.json`;
+  const statusPath = process.env.BELABOX_PHOTO_AGENT_STATUS_PATH
+    || process.env.BELABOX_FTP_CONNECTOR_STATUS_PATH
+    || `${os.homedir()}/.frame-belabox-agent/photo-agent/status.json`;
   try {
     const status = JSON.parse(fs.readFileSync(statusPath, "utf8"));
     if (!status || typeof status !== "object" || Array.isArray(status)) return null;
@@ -500,6 +825,7 @@ function readFtpUploadStatus() {
       rate_bps: number(status.rate_bps),
       done: status.done === true,
       queue_count: number(status.queue_count),
+      processed_count: number(status.processed_count),
       transfer_id: text(status.transfer_id, 120) || null,
       transfer_mode: text(status.transfer_mode, 40) || text(photoConfig.transfer_mode, 40) || null,
       transport: text(status.transport, 40) || text(photoConfig.transfer_mode, 40) || null,
@@ -507,6 +833,11 @@ function readFtpUploadStatus() {
       chunk_count: number(status.chunk_count),
       chunk_parallel_uploads: number(valueOr(status.chunk_parallel_uploads, photoConfig.chunk_parallel_uploads)),
       chunk_upload_kbps: number(valueOr(status.chunk_upload_kbps, photoConfig.chunk_upload_kbps)),
+      egress_binding: text(status.egress_binding, 40) || null,
+      egress_lane_count: number(status.egress_lane_count),
+      egress_lanes: arrayOfObjects(status.egress_lanes, 8),
+      active_egress: text(status.active_egress, 120) || null,
+      preprocess: preprocessStatus(status.preprocess),
       image_processing: imageProcessing(status.image_processing),
       camera_ftp: cameraFtp(status.camera_ftp),
       spool: spool(status.spool),
@@ -544,11 +875,24 @@ function pathDir(file) {
   return file.slice(0, Math.max(file.lastIndexOf("/"), 0)) || ".";
 }
 
+function writeJsonFile(file, payload) {
+  fs.mkdirSync(pathDir(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, `${JSON.stringify(payload)}\n`, { mode: 0o600 });
+  fs.renameSync(tmp, file);
+}
+
+function firstMatch(value, pattern) {
+  const match = pattern.exec(value);
+  return match ? match[1] : "";
+}
+
 function spool(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return {
     incoming: text(value.incoming, 220) || "",
     ready: text(value.ready, 220) || "",
+    processed: text(value.processed, 220) || "",
     inflight: text(value.inflight, 220) || "",
   };
 }
@@ -575,9 +919,30 @@ function imageProcessing(value) {
   };
 }
 
+function preprocessStatus(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return {
+    state: text(value.state, 32) || "unknown",
+    file: text(value.file, 180) || null,
+    status_text: text(value.status_text, 120) || "",
+    ahead: number(value.ahead),
+    size_bytes: number(value.size_bytes),
+    warning: text(value.warning, 160) || null,
+    error: text(value.error, 160) || null,
+    updated_at: iso(value.updated_at),
+  };
+}
+
 function publishJson(topic, payload, retain = false) {
   if (!client || !client.connected) return;
   client.publish(topic, JSON.stringify(payload), { qos: 1, retain });
+}
+
+function parseJsonPayload(payload, maxBytes) {
+  const textValue = payload.toString("utf8").slice(0, maxBytes);
+  const parsed = JSON.parse(textValue);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("proxy payload must be an object");
+  return parsed;
 }
 
 function readPublicKeyPem() {
@@ -598,6 +963,13 @@ function number(value) {
 
 function valueOr(value, fallback) {
   return value === undefined || value === null ? fallback : value;
+}
+
+function arrayOfObjects(value, maximum) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item) => item && typeof item === "object" && !Array.isArray(item))
+    .slice(0, maximum);
 }
 
 function iso(value) {
@@ -662,6 +1034,8 @@ function selfTest() {
   assertReject(() => validateArgs("photo_transport_config_set", { chunk_upload_url: "ftp://example.test/chunks" }), "chunk url");
   validateArgs("photo_processing_config_set", { enabled: true, long_edge_px: 1600, jpeg_quality: 85, max_output_mb: 2.5 });
   assertReject(() => validateArgs("photo_processing_config_set", { jpeg_quality: 20 }), "jpeg quality");
+  assertEqual(loopbackHttpUrl("http://127.0.0.1:3741/"), "http://127.0.0.1:3741", "loopback URL");
+  assertEqual(readBool("FRAME_SELFTEST_MISSING_BOOL", true), true, "bool fallback");
 }
 
 function assertReject(fn, label) {
@@ -680,6 +1054,7 @@ function assertEqual(actual, expected, label) {
 function topicSet(id) {
   const root = `frame/belabox/${id}`;
   return {
+    root,
     status: `${root}/status`,
     heartbeat: `${root}/heartbeat`,
     telemetry: `${root}/telemetry`,
@@ -687,7 +1062,24 @@ function topicSet(id) {
     version: `${root}/agent/version`,
     cmdRequest: `${root}/cmd/request`,
     cmdResponse: `${root}/cmd/response`,
+    proxyHttpRequest: `${root}/proxy/http/request/+`,
+    proxyStreamClient: `${root}/proxy/stream/+/client`,
+    proxyHttpResponse: (requestId) => `${root}/proxy/http/response/${requestId}`,
+    proxyStreamServer: (sessionId) => `${root}/proxy/stream/${sessionId}/server`,
   };
+}
+
+function proxyHttpRequestId(topic) {
+  const prefix = `${topics.root}/proxy/http/request/`;
+  const requestId = topic.startsWith(prefix) ? topic.slice(prefix.length) : "";
+  return /^[A-Za-z0-9_-]{8,80}$/.test(requestId) ? requestId : "";
+}
+
+function proxyStreamClientId(topic) {
+  const prefix = `${topics.root}/proxy/stream/`;
+  if (!topic.startsWith(prefix) || !topic.endsWith("/client")) return null;
+  const sessionId = topic.slice(prefix.length, -"/client".length);
+  return /^[A-Za-z0-9_-]{8,80}$/.test(sessionId) ? { sessionId } : null;
 }
 
 function mqttUrlFromHost() {
@@ -711,4 +1103,24 @@ function readInt(name, fallback, minimum, maximum) {
   const value = raw ? Number.parseInt(raw, 10) : fallback;
   if (!Number.isInteger(value) || value < minimum || value > maximum) return fallback;
   return value;
+}
+
+function readBool(name, fallback) {
+  const raw = String(process.env[name] || "").trim().toLowerCase();
+  if (!raw) return fallback;
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  return fallback;
+}
+
+function loopbackHttpUrl(value) {
+  try {
+    const parsed = new URL(value);
+    if (!["http:", "https:"].includes(parsed.protocol)) return "http://127.0.0.1";
+    if (!["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname)) return "http://127.0.0.1";
+    parsed.hash = "";
+    return parsed.toString().replace(/\/+$/, "");
+  } catch {
+    return "http://127.0.0.1";
+  }
 }

@@ -88,6 +88,7 @@
         "audio_hls",
         "discord_audio_bridge_root",
         "belabox_manager",
+        "belabox_remote",
         "belabox_mqtt",
         "belabox_chunks"
       ],
@@ -165,6 +166,10 @@
           "pattern": "^/"
         },
         "belabox_manager": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "belabox_remote": {
           "type": "string",
           "pattern": "^/"
         },

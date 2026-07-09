@@ -25,6 +25,8 @@ import {
 } from "node:crypto";
 import path from "node:path";
 import os from "node:os";
+import http, { type IncomingMessage } from "node:http";
+import net from "node:net";
 import { promisify } from "node:util";
 import express from "express";
 import mqtt, { type MqttClient } from "mqtt";
@@ -140,6 +142,14 @@ interface CommandAuditEntry {
   error_message?: string | null;
 }
 
+interface AgentHttpResponse {
+  request_id: string;
+  status_code: number;
+  headers: Record<string, string | string[]>;
+  body_b64: string;
+  error?: string;
+}
+
 type CommandName =
   | "agent_update"
   | "agent_restart"
@@ -154,6 +164,13 @@ type CommandName =
   | "network_speed_test";
 
 const TOPIC_ROOT = "frame/belabox";
+const REMOTE_BELAUI_ROUTE_PREFIX = "/belabox/remote";
+const REMOTE_BELAUI_HTTP_TIMEOUT_MS = 8000;
+const REMOTE_BELAUI_STATUS_TIMEOUT_MS = 1500;
+const REMOTE_BELAUI_STATUS_POLL_MS = 500;
+const REMOTE_BELAUI_OFFLINE_FAILURES = 4;
+const REMOTE_BELAUI_MAX_HTTP_BODY_BYTES = 2 * 1024 * 1024;
+const REMOTE_BELAUI_STREAM_CHUNK_BYTES = 48 * 1024;
 const TOPICS = {
   status: "status",
   heartbeat: "heartbeat",
@@ -228,6 +245,11 @@ const config = {
     maxUploadBytes: readInt("BELABOX_DIAGNOSTIC_MAX_UPLOAD_BYTES", 64 * 1024 * 1024, 64 * 1024, 256 * 1024 * 1024),
     parallel: readInt("BELABOX_DIAGNOSTIC_PARALLEL_STREAMS", 1, 1, 8),
   },
+  remoteBelaui: {
+    enabled: readBool("BELABOX_REMOTE_BELAUI_ENABLED", true),
+    localUrl: normalizeLoopbackHttpUrl(process.env.BELABOX_REMOTE_BELAUI_LOCAL_URL?.trim() || "http://127.0.0.1"),
+    rewriteWebSocket: readBool("BELABOX_REMOTE_BELAUI_REWRITE_WS", true),
+  },
   photoUpload: {
     apiUrl: normalizeUrl(process.env.PHOTO_UPLOAD_API_URL?.trim() || "http://frame-photo-upload:3736"),
     serviceToken: process.env.PORTAL_SERVICE_TOKEN?.trim() || "",
@@ -256,6 +278,12 @@ const commandAudit = loadAuditLog();
 const devices = new Map<string, DeviceState>();
 const pairJobs = new Map<string, PairJob>();
 const ftpConnectorJobs = new Map<string, PairJob>();
+const remoteBelauiHttpWaiters = new Map<string, {
+  resolve: (response: AgentHttpResponse) => void;
+  reject: (error: Error) => void;
+  timeout: NodeJS.Timeout;
+}>();
+const remoteBelauiStreams = new Map<string, { socket: net.Socket; closed: boolean }>();
 let mqttClient: MqttClient | null = null;
 const mqttHealth = {
   enabled: Boolean(config.mqtt.username && config.mqtt.password),
@@ -542,8 +570,21 @@ app.post("/belabox/api/agent/update", (_request, response) => {
   response.status(501).json({ error: "Agent update is scaffolded but not implemented yet." });
 });
 
-app.post("/belabox/api/agent/remove", (_request, response) => {
-  response.status(501).json({ error: "Agent remove is scaffolded but not implemented yet." });
+app.post("/belabox/api/agent/remove", async (request, response, next) => {
+  try {
+    const input = parseAgentRemoveInput(request.body);
+    const result = await uninstallAgent(input);
+    appendAudit({
+      at: new Date().toISOString(),
+      type: "issued",
+      device_id: input.deviceId,
+      status: "agent_removed",
+      result_summary: stringValue(result.summary) || "agent removed",
+    });
+    response.json(result);
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.get("/belabox/api/telemetry", (_request, response) => {
@@ -589,6 +630,7 @@ app.get("/belabox/api/devices/:deviceId/ftp-connector", (request, response, next
       target_port: record.target_port || config.ftpConnector.port,
       upload_dir: "~/.frame-belabox-agent/photo-spool/incoming",
       ready_dir: "~/.frame-belabox-agent/photo-spool/ready",
+      processed_dir: "~/.frame-belabox-agent/photo-spool/processed",
     });
   } catch (error) {
     next(error);
@@ -618,7 +660,7 @@ app.get("/belabox/api/actions", (_request, response) => {
       { id: "agent-check", enabled: commandsAreEnabled(), method: "POST", path: "/belabox/api/agent/check" },
       { id: "agent-install", enabled: false, method: "POST", path: "/belabox/api/agent/install" },
       { id: "agent-update", enabled: false, method: "POST", path: "/belabox/api/agent/update" },
-      { id: "agent-remove", enabled: false, method: "POST", path: "/belabox/api/agent/remove" },
+      { id: "agent-remove", enabled: true, method: "POST", path: "/belabox/api/agent/remove" },
       { id: "mqtt-command-request", enabled: mqttHealth.enabled, method: "POST", path: "/belabox/api/cmd/request" },
     ],
   });
@@ -661,6 +703,38 @@ app.post("/belabox/api/cmd/request", async (request, response, next) => {
   }
 });
 
+app.get(`${REMOTE_BELAUI_ROUTE_PREFIX}/status`, async (request, response, next) => {
+  try {
+    response.setHeader("Cache-Control", "no-store");
+    response.json(await remoteBelauiStatusPayload(remoteBelauiKey(request.query.key)));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get([REMOTE_BELAUI_ROUTE_PREFIX, `${REMOTE_BELAUI_ROUTE_PREFIX}/`], (request, response, next) => {
+  try {
+    const key = request.query.key;
+    if (key !== undefined) {
+      response.setHeader("Cache-Control", "no-store");
+      response.type("html").send(remoteBelauiShellPage(remoteBelauiKey(key)));
+      return;
+    }
+  } catch (error) {
+    next(error);
+    return;
+  }
+  response.setHeader("Cache-Control", "no-store");
+  const links = provisionedDevices.map((device) =>
+    `<li><a href="${REMOTE_BELAUI_ROUTE_PREFIX}?key=${encodeURIComponent(device.device_id)}">${device.device_id}</a></li>`,
+  ).join("");
+  response.type("html").send(`<!doctype html><html><head><meta charset="utf-8"><title>FRAME Remote</title></head><body><h1>FRAME Remote</h1><ul>${links || "<li>No Belabox devices paired.</li>"}</ul></body></html>`);
+});
+
+app.all([`${REMOTE_BELAUI_ROUTE_PREFIX}/:deviceId`, `${REMOTE_BELAUI_ROUTE_PREFIX}/:deviceId/*`], (request, response, next) => {
+  proxyRemoteBelaui(request, response, next);
+});
+
 app.use("/belabox/assets", express.static(publicDir, { maxAge: 0 }));
 app.get(["/", "/belabox"], (_request, response) => {
   response.setHeader("Cache-Control", "no-store");
@@ -673,11 +747,496 @@ app.use((error: unknown, _request: express.Request, response: express.Response, 
   response.status(status).json({ error: errorMessage(error) });
 });
 
-app.listen(config.port, () => {
+const server = app.listen(config.port, () => {
   console.log(`[belabox-manager] FRAME Belabox Manager listening on port ${config.port}`);
   if (!isConfigured()) console.log("[belabox-manager] Belabox SSH target is not configured; MQTT runtime remains available.");
   if (!mqttHealth.enabled) console.log("[belabox-manager] MQTT credentials are not configured; device cache will stay idle.");
 });
+server.on("upgrade", handleRemoteBelauiUpgrade);
+
+function proxyRemoteBelaui(request: express.Request, response: express.Response, next: express.NextFunction): void {
+  try {
+    const deviceId = sanitizeDeviceId(String(request.params.deviceId || ""));
+    if (!isProvisionedDevice(deviceId)) throw new RequestError(404, "Belabox device is not provisioned.");
+    void proxyRemoteBelauiViaAgent(request, response, next, deviceId, remoteBelauiRequestSuffix(request), remoteBelauiRequestBody(request));
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function proxyRemoteBelauiViaAgent(
+  request: express.Request,
+  response: express.Response,
+  next: express.NextFunction,
+  deviceId: string,
+  suffix: string,
+  body: Buffer | null,
+): Promise<void> {
+  try {
+    const agentResponse = await requestAgentRemoteBelauiHttp(deviceId, {
+      method: request.method,
+      path: suffix,
+      headers: remoteBelauiRequestHeaders(request.headers, new URL(config.remoteBelaui.localUrl)),
+      body_b64: body ? body.toString("base64") : undefined,
+    });
+    if (agentResponse.error) throw new Error(agentResponse.error);
+    const bodyBuffer = Buffer.from(agentResponse.body_b64 || "", "base64");
+    const contentType = String(agentResponse.headers["content-type"] || "");
+    const modified = remoteBelauiTextResponse(contentType);
+    response.status(agentResponse.status_code || 502);
+    writeAgentRemoteBelauiHeaders(response, agentResponse.headers, deviceId, modified);
+    response.send(modified ? rewriteRemoteBelauiText(deviceId, bodyBuffer.toString("utf8")) : bodyBuffer);
+  } catch (error) {
+    if (!(error instanceof RequestError && error.status === 404) && remoteBelauiOfflinePageAllowed(request)) {
+      sendRemoteBelauiOfflinePage(response, deviceId, error);
+      return;
+    }
+    next(new RequestError(503, `Remote belaUI proxy failed: ${errorMessage(error)}`));
+  }
+}
+
+function handleRemoteBelauiUpgrade(request: IncomingMessage, socket: net.Socket, head: Buffer): void {
+  const parsed = parseRemoteBelauiUpgradeUrl(request.url || "");
+  if (!parsed) return;
+  void handleRemoteBelauiUpgradeViaAgent(parsed, request, socket, head);
+}
+
+async function handleRemoteBelauiUpgradeViaAgent(
+  parsed: { deviceId: string; path: string; search: string },
+  request: IncomingMessage,
+  socket: net.Socket,
+  head: Buffer,
+): Promise<void> {
+  try {
+    assertAgentRemoteBelauiAvailable(parsed.deviceId);
+  } catch {
+    socket.destroy();
+    return;
+  }
+  const sessionId = randomUUID();
+  const key = remoteBelauiStreamKey(parsed.deviceId, sessionId);
+  remoteBelauiStreams.set(key, { socket, closed: false });
+  const close = () => {
+    const session = remoteBelauiStreams.get(key);
+    if (!session || session.closed) return;
+    session.closed = true;
+    remoteBelauiStreams.delete(key);
+    void publishMqtt(remoteBelauiStreamClientTopic(parsed.deviceId, sessionId), { type: "close", session_id: sessionId }).catch(() => undefined);
+  };
+  socket.on("data", (chunk) => {
+    void publishRemoteBelauiStreamData(parsed.deviceId, sessionId, Buffer.from(chunk)).catch(() => socket.destroy());
+  });
+  socket.on("close", close);
+  socket.on("error", close);
+  try {
+    await publishMqtt(remoteBelauiStreamClientTopic(parsed.deviceId, sessionId), {
+      type: "open",
+      session_id: sessionId,
+      method: request.method || "GET",
+      http_version: request.httpVersion || "1.1",
+      path: `${parsed.path}${parsed.search}`,
+      headers: remoteBelauiRequestHeaders(request.headers, new URL(config.remoteBelaui.localUrl)),
+      head_b64: head.length ? head.toString("base64") : "",
+    });
+  } catch {
+    remoteBelauiStreams.delete(key);
+    socket.destroy();
+  }
+}
+
+function remoteBelauiRequestSuffix(request: express.Request): string {
+  const suffix = typeof request.params[0] === "string" && request.params[0] ? `/${request.params[0]}` : "/";
+  const url = new URL(request.originalUrl, "http://frame.local");
+  url.searchParams.delete("frame_embed");
+  url.searchParams.delete("key");
+  return `${suffix}${url.search}`;
+}
+
+function remoteBelauiRequestHeaders(headers: IncomingMessage["headers"], target: URL): http.OutgoingHttpHeaders {
+  const next: http.OutgoingHttpHeaders = { ...headers };
+  for (const name of ["host", "connection", "content-length", "accept-encoding", "proxy-connection", "cookie", "authorization", "x-frame-authenticated-user"]) delete next[name];
+  next.host = target.host;
+  next["accept-encoding"] = "identity";
+  if (next.origin) next.origin = target.origin;
+  return next;
+}
+
+function writeAgentRemoteBelauiHeaders(response: express.Response, headers: AgentHttpResponse["headers"], deviceId: string, modified: boolean): void {
+  for (const [name, value] of Object.entries(headers)) {
+    const lower = name.toLowerCase();
+    if (["connection", "transfer-encoding", "content-encoding"].includes(lower)) continue;
+    if (modified && lower === "content-length") continue;
+    if (lower === "location") response.setHeader(name, rewriteRemoteBelauiLocation(deviceId, value));
+    else response.setHeader(name, value);
+  }
+  response.setHeader("Cache-Control", "no-store");
+  response.setHeader("X-FRAME-Belabox-Proxy", "agent-wss");
+}
+
+function remoteBelauiOfflinePageAllowed(request: express.Request): boolean {
+  if (!["GET", "HEAD"].includes(request.method.toUpperCase())) return false;
+  const accept = String(request.headers.accept || "");
+  return !accept || accept.includes("text/html") || accept.includes("*/*");
+}
+
+function sendRemoteBelauiOfflinePage(response: express.Response, deviceId: string, error: unknown): void {
+  response.status(200);
+  response.setHeader("Cache-Control", "no-store");
+  response.setHeader("Refresh", "2");
+  response.setHeader("X-FRAME-Belabox-Proxy", "agent-offline");
+  response.type("html").send(remoteBelauiOfflinePage(deviceId, errorMessage(error)));
+}
+
+function remoteBelauiKey(value: unknown): string {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const key = stringValue(raw);
+  if (!key) throw new RequestError(400, "Remote key is required.");
+  const deviceId = sanitizeDeviceId(key);
+  if (!isProvisionedDevice(deviceId)) throw new RequestError(404, "Belabox device is not provisioned.");
+  return deviceId;
+}
+
+async function remoteBelauiStatusPayload(deviceId: string): Promise<JsonRecord> {
+  const live = devices.get(deviceId);
+  const remote = objectValue(live?.telemetry?.remote_belaui) || {};
+  const agentOnline = Boolean(live && deviceIsOnline(live));
+  const remoteState = stringValue(remote.state) || "unknown";
+  if (!agentOnline) return remoteBelauiStatusJson(deviceId, live, false, "offline", remoteState, "Encoder offline.");
+  try {
+    const target = new URL(config.remoteBelaui.localUrl);
+    const probe = await requestAgentRemoteBelauiHttp(deviceId, {
+      method: "GET",
+      path: "/",
+      headers: { host: target.host, "accept-encoding": "identity", accept: "text/html,*/*" },
+    }, { requireReachable: false, timeoutMs: REMOTE_BELAUI_STATUS_TIMEOUT_MS });
+    if (probe.error) throw new Error(probe.error);
+    const status = probe.status_code || 0;
+    const ready = status > 0 && status < 500;
+    return {
+      ...remoteBelauiStatusJson(
+        deviceId,
+        live,
+        ready,
+        ready ? "online" : "waiting",
+        ready ? "reachable" : remoteState,
+        ready ? "Encoder online." : "Reconnecting to encoder...",
+      ),
+      http_status: status || null,
+    };
+  } catch (error) {
+    return remoteBelauiStatusJson(deviceId, live, false, "waiting", remoteState, "Reconnecting to encoder...");
+  }
+}
+
+function remoteBelauiStatusJson(
+  deviceId: string,
+  live: DeviceState | undefined,
+  ready: boolean,
+  state: string,
+  remoteState: string,
+  message: string,
+): JsonRecord {
+  return {
+    device_id: deviceId,
+    ready,
+    state,
+    agent_online: Boolean(live && deviceIsOnline(live)),
+    remote_belaui_state: remoteState,
+    agent_version: live?.agent_version || null,
+    last_heartbeat_at: live?.last_heartbeat_at || null,
+    checked_at: new Date().toISOString(),
+    message,
+  };
+}
+
+function remoteBelauiShellPage(deviceId: string): string {
+  const encodedDevice = encodeURIComponent(deviceId);
+  const escapedDevice = escapeHtml(deviceId);
+  const statusUrl = `${REMOTE_BELAUI_ROUTE_PREFIX}/status?key=${encodedDevice}`;
+  const frameUrl = `${REMOTE_BELAUI_ROUTE_PREFIX}/${encodedDevice}/?frame_embed=1`;
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapedDevice} - FRAME Remote</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:#071018; color:#edf7ff; }
+    body { margin:0; min-height:100vh; background:#071018; }
+    iframe { position:fixed; inset:0; width:100%; height:100%; border:0; background:#071018; }
+    main { min-height:100vh; display:flex; justify-content:flex-start; align-items:center; box-sizing:border-box; padding:64px 24px 24px; }
+    section { width:min(520px, 100%); margin:0 auto; border:1px solid rgba(121, 204, 255, .24); border-radius:8px; background:rgba(8, 18, 28, .86); padding:28px; box-shadow:0 24px 80px rgba(0,0,0,.38); text-align:center; }
+    .eyebrow { margin:0 0 10px; color:#79ccff; font-size:12px; font-weight:700; letter-spacing:0; text-transform:uppercase; }
+    h1 { margin:0; font-size:36px; line-height:1.05; letter-spacing:0; }
+    p { margin:14px 0 0; color:#b8c7d6; font-size:16px; line-height:1.5; }
+    .status { margin-top:14px; color:#d9f2ff; font-size:14px; overflow-wrap:anywhere; }
+    .status-bar { position:relative; height:12px; margin:22px auto 0; overflow:hidden; border-radius:999px; background:rgba(255,255,255,.1); }
+    .status-bar span { display:block; width:38%; height:100%; border-radius:inherit; background:#2cb4fb; animation:frame-remote-scan 1.25s ease-in-out infinite; }
+    @keyframes frame-remote-scan { from { transform:translateX(-110%); } to { transform:translateX(300%); } }
+    [hidden] { display:none !important; }
+  </style>
+</head>
+<body>
+  <iframe id="remote-frame" title="FRAME Remote" hidden></iframe>
+  <main id="offline">
+    <section>
+      <p class="eyebrow">FRAME Remote</p>
+      <h1>This encoder is offline.</h1>
+      <p>Don't refresh. This page will update automatically if ${escapedDevice} comes online.</p>
+      <div class="status-bar" aria-hidden="true"><span></span></div>
+      <div class="status" id="status-text">Reconnecting to encoder...</div>
+    </section>
+  </main>
+  <script>
+    const statusUrl = ${JSON.stringify(statusUrl)};
+    const frameUrl = ${JSON.stringify(frameUrl)};
+    const deviceId = ${JSON.stringify(deviceId)};
+    const frame = document.getElementById("remote-frame");
+    const offline = document.getElementById("offline");
+    const statusText = document.getElementById("status-text");
+    const offlineFailureThreshold = ${REMOTE_BELAUI_OFFLINE_FAILURES};
+    let offlineFailures = 0;
+    let frameShown = false;
+
+    function showOffline(message) {
+      frame.hidden = true;
+      if (frame.getAttribute("src") !== "about:blank") frame.setAttribute("src", "about:blank");
+      offline.hidden = false;
+      statusText.textContent = message || "Reconnecting to encoder...";
+    }
+
+    function noteOffline(message) {
+      offlineFailures += 1;
+      statusText.textContent = message || "Reconnecting to encoder...";
+      if (!frameShown || offlineFailures >= offlineFailureThreshold) showOffline(message);
+    }
+
+    function showFrame() {
+      offlineFailures = 0;
+      frameShown = true;
+      if (frame.getAttribute("src") !== frameUrl) frame.setAttribute("src", frameUrl);
+      frame.hidden = false;
+      offline.hidden = true;
+    }
+
+    async function poll() {
+      try {
+        const response = await fetch(statusUrl, { cache: "no-store" });
+        const status = await response.json();
+        if (status.ready) showFrame();
+        else noteOffline(status.message);
+      } catch (error) {
+        noteOffline("Reconnecting to encoder...");
+      } finally {
+        setTimeout(poll, ${REMOTE_BELAUI_STATUS_POLL_MS});
+      }
+    }
+
+    window.addEventListener("message", (event) => {
+      const data = event.data || {};
+      if (data.type === "frame-belabox-remote-offline" && data.device_id === deviceId) {
+        noteOffline(data.message);
+      }
+    });
+
+    poll();
+  </script>
+</body>
+</html>`;
+}
+
+function remoteBelauiOfflinePage(deviceId: string, _reason: string): string {
+  const escapedDevice = escapeHtml(deviceId);
+  const offlineMessage = "Reconnecting to encoder...";
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="refresh" content="2">
+  <title>${escapedDevice} offline - FRAME Remote</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:#071018; color:#edf7ff; }
+    body { margin:0; min-height:100vh; display:flex; justify-content:flex-start; align-items:center; box-sizing:border-box; padding:64px 24px 24px; background:#071018; }
+    main { width:min(520px, 100%); margin:0 auto; box-sizing:border-box; border:1px solid rgba(121, 204, 255, .24); border-radius:8px; background:rgba(8, 18, 28, .86); padding:28px; box-shadow:0 24px 80px rgba(0,0,0,.38); text-align:center; }
+    .eyebrow { margin:0 0 10px; color:#79ccff; font-size:12px; font-weight:700; letter-spacing:0; text-transform:uppercase; }
+    h1 { margin:0; font-size:36px; line-height:1.05; letter-spacing:0; }
+    p { margin:14px 0 0; color:#b8c7d6; font-size:16px; line-height:1.5; }
+    .status { margin-top:14px; color:#d9f2ff; font-size:14px; overflow-wrap:anywhere; }
+    .status-bar { position:relative; height:12px; margin:22px auto 0; overflow:hidden; border-radius:999px; background:rgba(255,255,255,.1); }
+    .status-bar span { display:block; width:38%; height:100%; border-radius:inherit; background:#2cb4fb; animation:frame-remote-scan 1.25s ease-in-out infinite; }
+    @keyframes frame-remote-scan { from { transform:translateX(-110%); } to { transform:translateX(300%); } }
+  </style>
+</head>
+<body>
+  <main>
+    <p class="eyebrow">FRAME Remote</p>
+    <h1>This encoder is offline.</h1>
+    <p>This page will refresh when ${escapedDevice} is back online.</p>
+    <div class="status-bar" aria-hidden="true"><span></span></div>
+    <div class="status">${offlineMessage}</div>
+  </main>
+  <script>
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: "frame-belabox-remote-offline", device_id: ${JSON.stringify(deviceId)}, message: ${JSON.stringify(offlineMessage)} }, window.location.origin);
+    }
+  </script>
+</body>
+</html>`;
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;",
+  })[char] || char);
+}
+
+function rewriteRemoteBelauiLocation(deviceId: string, value: string | string[]): string | string[] {
+  const route = `${REMOTE_BELAUI_ROUTE_PREFIX}/${encodeURIComponent(deviceId)}`;
+  const rewrite = (location: string) => location.startsWith("/") ? `${route}${location}` : location;
+  return Array.isArray(value) ? value.map(rewrite) : rewrite(value);
+}
+
+function remoteBelauiTextResponse(contentType: string): boolean {
+  return /text\/html|javascript|ecmascript|text\/css|application\/json/i.test(contentType);
+}
+
+function rewriteRemoteBelauiText(deviceId: string, text: string): string {
+  const route = `${REMOTE_BELAUI_ROUTE_PREFIX}/${encodeURIComponent(deviceId)}`;
+  const wsExpression = `(window.location.protocol === "https:" ? "wss://" : "ws://") + window.location.host + "${route}/"`;
+  const rewritten = text
+    .replace(/\b(href|src|action)=("|')\/(?!\/)/gi, `$1=$2${route}/`)
+    .replace(/url\((['"]?)\/(?!\/)/gi, `url($1${route}/`)
+    .replace(/new WebSocket\(\s*["']ws:\/\/["']\s*\+\s*window\.location\.host\s*\)/g, `new WebSocket(${wsExpression})`)
+    .replace(/new WebSocket\(\s*wsProtocol\s*\+\s*window\.location\.host\s*\)/g, `new WebSocket(${wsExpression})`);
+  if (/<base\b/i.test(rewritten)) return rewritten.replace(/<base\b[^>]*>/i, `<base href="${route}/">`);
+  return rewritten.replace(/(<head[^>]*>)/i, `$1<base href="${route}/">`);
+}
+
+function remoteBelauiRequestBody(request: express.Request): Buffer | null {
+  if (Buffer.isBuffer(request.body)) return request.body;
+  if (typeof request.body === "string") return Buffer.from(request.body);
+  if (request.body && typeof request.body === "object" && Object.keys(request.body).length > 0) return Buffer.from(JSON.stringify(request.body));
+  return null;
+}
+
+function parseRemoteBelauiUpgradeUrl(value: string): { deviceId: string; path: string; search: string } | null {
+  const parsed = new URL(value || "/", "http://frame.local");
+  const base = `${REMOTE_BELAUI_ROUTE_PREFIX}/`;
+  if (!parsed.pathname.startsWith(base)) return null;
+  const rest = parsed.pathname.slice(base.length);
+  const [rawDeviceId, ...pathParts] = rest.split("/");
+  if (!rawDeviceId) return null;
+  try {
+    return {
+      deviceId: sanitizeDeviceId(decodeURIComponent(rawDeviceId)),
+      path: `/${pathParts.join("/")}`,
+      search: parsed.search,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function requestAgentRemoteBelauiHttp(
+  deviceId: string,
+  payload: JsonRecord,
+  options: { requireReachable?: boolean; timeoutMs?: number } = {},
+): Promise<AgentHttpResponse> {
+  if (options.requireReachable !== false) assertAgentRemoteBelauiAvailable(deviceId);
+  const requestId = randomUUID();
+  const key = remoteBelauiHttpKey(deviceId, requestId);
+  const promise = new Promise<AgentHttpResponse>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      remoteBelauiHttpWaiters.delete(key);
+      reject(new Error("agent remote belaUI timed out"));
+    }, options.timeoutMs || REMOTE_BELAUI_HTTP_TIMEOUT_MS);
+    remoteBelauiHttpWaiters.set(key, { resolve, reject, timeout });
+  });
+  try {
+    await publishMqtt(remoteBelauiHttpRequestTopic(deviceId, requestId), { ...payload, request_id: requestId });
+  } catch (error) {
+    const waiter = remoteBelauiHttpWaiters.get(key);
+    if (waiter) {
+      clearTimeout(waiter.timeout);
+      remoteBelauiHttpWaiters.delete(key);
+    }
+    throw error;
+  }
+  return promise;
+}
+
+function handleAgentRemoteBelauiHttpResponse(deviceId: string, kind: string, payload: Buffer): void {
+  const requestId = kind.split("/").pop() || "";
+  const key = remoteBelauiHttpKey(deviceId, requestId);
+  const waiter = remoteBelauiHttpWaiters.get(key);
+  if (!waiter) return;
+  clearTimeout(waiter.timeout);
+  remoteBelauiHttpWaiters.delete(key);
+  const message = parseJsonPayload(payload, REMOTE_BELAUI_MAX_HTTP_BODY_BYTES * 2);
+  const response = agentHttpResponse(message, requestId);
+  if (response.error) waiter.reject(new Error(response.error));
+  else waiter.resolve(response);
+}
+
+function handleAgentRemoteBelauiStreamMessage(deviceId: string, kind: string, payload: Buffer): void {
+  const match = /^proxy\/stream\/([^/]+)\/server$/.exec(kind);
+  if (!match) return;
+  const sessionId = match[1];
+  const key = remoteBelauiStreamKey(deviceId, sessionId);
+  const session = remoteBelauiStreams.get(key);
+  if (!session || session.closed) return;
+  const message = parseJsonPayload(payload, REMOTE_BELAUI_STREAM_CHUNK_BYTES * 2);
+  const type = stringValue(message.type);
+  if (type === "data") {
+    const data = Buffer.from(stringValue(message.data_b64) || "", "base64");
+    if (data.length) session.socket.write(data);
+    return;
+  }
+  if (type === "close" || type === "error") {
+    session.closed = true;
+    remoteBelauiStreams.delete(key);
+    session.socket.destroy();
+  }
+}
+
+async function publishRemoteBelauiStreamData(deviceId: string, sessionId: string, data: Buffer): Promise<void> {
+  for (let offset = 0; offset < data.length; offset += REMOTE_BELAUI_STREAM_CHUNK_BYTES) {
+    await publishMqtt(remoteBelauiStreamClientTopic(deviceId, sessionId), {
+      type: "data",
+      session_id: sessionId,
+      data_b64: data.subarray(offset, offset + REMOTE_BELAUI_STREAM_CHUNK_BYTES).toString("base64"),
+    });
+  }
+}
+
+function agentHttpResponse(message: JsonRecord, requestId: string): AgentHttpResponse {
+  const statusCode = Number(message.status_code);
+  const headers = objectValue(message.headers) || {};
+  const cleanHeaders: Record<string, string | string[]> = {};
+  for (const [name, value] of Object.entries(headers)) {
+    if (typeof value === "string") cleanHeaders[name] = value;
+    else if (Array.isArray(value) && value.every((item) => typeof item === "string")) cleanHeaders[name] = value;
+  }
+  return {
+    request_id: stringValue(message.request_id) || requestId,
+    status_code: Number.isInteger(statusCode) ? statusCode : 502,
+    headers: cleanHeaders,
+    body_b64: stringValue(message.body_b64) || "",
+    error: stringValue(message.error) || undefined,
+  };
+}
+
+function assertAgentRemoteBelauiAvailable(deviceId: string): void {
+  const live = devices.get(deviceId);
+  const remote = objectValue(live?.telemetry?.remote_belaui) || {};
+  if (!live || !deviceIsOnline(live)) throw new RequestError(503, "Belabox agent is not online.");
+  if (stringValue(remote.state) !== "reachable") throw new RequestError(503, "Agent cannot reach loopback belaUI.");
+}
 
 function startMqtt(): MqttClient | null {
   if (!mqttHealth.enabled) return null;
@@ -703,6 +1262,8 @@ function startMqtt(): MqttClient | null {
       `${TOPIC_ROOT}/+/logs`,
       `${TOPIC_ROOT}/+/agent/version`,
       `${TOPIC_ROOT}/+/cmd/response`,
+      `${TOPIC_ROOT}/+/proxy/http/response/+`,
+      `${TOPIC_ROOT}/+/proxy/stream/+/server`,
     ]);
   });
 
@@ -726,6 +1287,15 @@ function handleMqttMessage(topic: string, payload: Buffer): void {
   const parsedTopic = parseTopic(topic);
   if (!parsedTopic) return;
   if (!isProvisionedDevice(parsedTopic.deviceId)) return;
+
+  if (parsedTopic.kind.startsWith("proxy/http/response/")) {
+    handleAgentRemoteBelauiHttpResponse(parsedTopic.deviceId, parsedTopic.kind, payload);
+    return;
+  }
+  if (parsedTopic.kind.startsWith("proxy/stream/")) {
+    handleAgentRemoteBelauiStreamMessage(parsedTopic.deviceId, parsedTopic.kind, payload);
+    return;
+  }
 
   const message = parsePayload(payload);
   const device = ensureDevice(parsedTopic.deviceId);
@@ -828,6 +1398,7 @@ function statusPayload() {
       camera_port: config.ftpConnector.cameraPort,
       managed_upload_dir: "~/.frame-belabox-agent/photo-spool/incoming",
       managed_ready_dir: "~/.frame-belabox-agent/photo-spool/ready",
+      managed_processed_dir: "~/.frame-belabox-agent/photo-spool/processed",
       progress_endpoint: "/belabox/api/ftp-progress",
     },
     ftp_connectors: ftpConnectors.map((record) => ({
@@ -852,6 +1423,13 @@ function statusPayload() {
       max_upload_bytes: config.diagnostics.maxUploadBytes,
       parallel_streams: config.diagnostics.parallel,
       upload_url_configured: Boolean(diagnosticUploadUrl()),
+    },
+    remote_belaui: {
+      enabled: config.remoteBelaui.enabled,
+      route_prefix: REMOTE_BELAUI_ROUTE_PREFIX,
+      local_url: config.remoteBelaui.localUrl,
+      rewrite_websocket: config.remoteBelaui.rewriteWebSocket,
+      proxy_mode: "agent-wss-only",
     },
     issues: configurationIssues(),
   };
@@ -1388,10 +1966,8 @@ function parseSpeedTestInput(body: unknown): { deviceId: string; bytes: number; 
   };
 }
 
-function parseFtpConnectorInput(body: unknown): FtpConnectorInput {
+function sshInputForMaintenance(body: unknown): PairInput {
   const data = body && typeof body === "object" ? body as JsonRecord : {};
-  const targetHost = safeFtpHost(stringValue(data.target_host) || config.ftpConnector.host);
-  if (!targetHost) throw new RequestError(400, "FRAME Photo FTP external host/IP is required.");
   const requestedDeviceId = sanitizeDeviceId(stringValue(data.device_id) || "");
   const hasInlineSsh = Boolean(stringValue(data.host) && stringValue(data.user) && (stringValue(data.password) || stringValue(data.private_key)));
   let sshInput: PairInput | null = null;
@@ -1405,12 +1981,28 @@ function parseFtpConnectorInput(body: unknown): FtpConnectorInput {
     }
   }
   if (!sshInput) throw new RequestError(400, "SSH credentials are required. Open SSH Maintenance, enter local IP and SSH login, then retry.");
+  return sshInput;
+}
+
+function parseFtpConnectorInput(body: unknown): FtpConnectorInput {
+  const data = body && typeof body === "object" ? body as JsonRecord : {};
+  const targetHost = safeFtpHost(stringValue(data.target_host) || config.ftpConnector.host);
+  if (!targetHost) throw new RequestError(400, "FRAME Photo FTP external host/IP is required.");
+  const sshInput = sshInputForMaintenance(body);
   return {
     ...sshInput,
     targetHost,
     targetPort: requestPort(data.target_port ?? config.ftpConnector.port, "FRAME Photo FTP port"),
     cameraUsername: data.camera_username === undefined ? "" : safeFtpUsername(requiredString(data.camera_username, "Camera FTP username")),
     cameraPassword: safeFtpPassword(stringValue(data.camera_password) || ""),
+  };
+}
+
+function parseAgentRemoveInput(body: unknown): PairInput & { purge: boolean } {
+  const data = body && typeof body === "object" ? body as JsonRecord : {};
+  return {
+    ...sshInputForMaintenance(body),
+    purge: data.purge === true,
   };
 }
 
@@ -1432,7 +2024,12 @@ async function installAgent(input: PairInput, device: ProvisionedDevice): Promis
     `BELABOX_CHUNK_UPLOAD_URL=${config.chunkUpload.publicUrl}`,
     `BELABOX_CHUNK_UPLOAD_TOKEN=${device.mqtt_password}`,
     `BELABOX_DIAGNOSTIC_UPLOAD_URL=${diagnosticUploadUrl()}`,
-    "BELABOX_FTP_CONNECTOR_STATUS_PATH=$HOME/.frame-belabox-agent/ftp-connector/status.json",
+    `BELABOX_REMOTE_BELAUI_ENABLED=${config.remoteBelaui.enabled ? "true" : "false"}`,
+    `BELABOX_REMOTE_BELAUI_LOCAL_URL=${config.remoteBelaui.localUrl}`,
+    `BELABOX_REMOTE_BELAUI_REWRITE_WS=${config.remoteBelaui.rewriteWebSocket ? "true" : "false"}`,
+    "BELABOX_PHOTO_AGENT_STATUS_PATH=$HOME/.frame-belabox-agent/photo-agent/status.json",
+    "BELABOX_FTP_CONNECTOR_STATUS_PATH=$HOME/.frame-belabox-agent/photo-agent/status.json",
+    "BELABOX_EGRESS_STATUS_PATH=$HOME/.frame-belabox-agent/egress.json",
     "BELABOX_PHOTO_CONFIG_PATH=$HOME/.frame-belabox-agent/photo-config.json",
   ].join("\n");
   const pkg = JSON.stringify({ type: "module", dependencies: { mqtt: "^4.3.8" } }, null, 2);
@@ -1561,6 +2158,69 @@ printf frame-belabox-agent-installed
   if (!result.stdout.includes("frame-belabox-agent-installed")) throw new RequestError(502, "Agent install did not complete.");
 }
 
+async function uninstallAgent(input: PairInput & { purge: boolean }): Promise<JsonRecord> {
+  const sudoPasswordB64 = input.password ? Buffer.from(input.password, "utf8").toString("base64") : "";
+  const script = `set -eu
+sudo_password_b64='${sudoPasswordB64}'
+agent_dir="$HOME/.frame-belabox-agent"
+purge="${input.purge ? "1" : "0"}"
+sudo_run() {
+  if ! command -v sudo >/dev/null 2>&1; then return 1; fi
+  if sudo -n true 2>/dev/null; then sudo "$@"; return $?; fi
+  if [ -n "$sudo_password_b64" ] && command -v base64 >/dev/null 2>&1; then
+    printf %s "$sudo_password_b64" | base64 -d | sudo -S -p '' "$@"
+    return $?
+  fi
+  return 1
+}
+remove_system_unit() {
+  unit="$1"
+  sudo_run systemctl disable --now "$unit" >/dev/null 2>&1 || true
+  if [ -f "/etc/systemd/system/$unit" ]; then
+    sudo_run rm -f "/etc/systemd/system/$unit" || { echo "failed_to_remove_system_unit:$unit" >&2; exit 46; }
+  fi
+}
+remove_user_unit() {
+  unit="$1"
+  if command -v systemctl >/dev/null 2>&1; then systemctl --user disable --now "$unit" >/dev/null 2>&1 || true; fi
+  rm -f "$HOME/.config/systemd/user/$unit"
+}
+remove_system_unit frame-belabox-ftp-connector.service
+remove_system_unit frame-belabox-photo-agent.service
+remove_system_unit frame-belabox-agent.service
+if command -v systemctl >/dev/null 2>&1; then sudo_run systemctl daemon-reload >/dev/null 2>&1 || true; fi
+remove_user_unit frame-belabox-ftp-connector.service
+remove_user_unit frame-belabox-photo-agent.service
+remove_user_unit frame-belabox-agent.service
+if command -v systemctl >/dev/null 2>&1; then systemctl --user daemon-reload >/dev/null 2>&1 || true; fi
+if command -v crontab >/dev/null 2>&1; then
+  crontab -l 2>/dev/null | grep -v 'frame-belabox-agent\\|frame-belabox-ftp-connector\\|frame-belabox-photo-agent' | crontab - || true
+fi
+pkill -f "$agent_dir/ftp-connector/ftp-connector.py" 2>/dev/null || true
+pkill -f "$agent_dir/photo-agent/photo-agent.py" 2>/dev/null || true
+pkill -f "$agent_dir/belabox-agent.mjs" 2>/dev/null || true
+if [ "$purge" = "1" ]; then
+  rm -rf "$agent_dir"
+  printf 'frame-belabox-agent-removed purge'
+elif [ -d "$agent_dir" ]; then
+  archive="$HOME/.frame-belabox-agent.removed-$(date +%Y%m%d%H%M%S)"
+  mv "$agent_dir" "$archive"
+  printf 'frame-belabox-agent-removed archive=%s' "$archive"
+else
+  printf 'frame-belabox-agent-removed missing'
+fi
+`;
+  const result = await runPairSsh(input, ["sh", "-s"], script, 120000);
+  if (!result.stdout.includes("frame-belabox-agent-removed")) throw new RequestError(502, "Agent uninstall did not complete.");
+  const summary = result.stdout.trim().slice(0, 300);
+  return {
+    removed: true,
+    device_id: input.deviceId,
+    purge: input.purge,
+    summary,
+  };
+}
+
 async function runFtpConnectorJob(jobId: string, input: FtpConnectorInput): Promise<void> {
   const job = ftpConnectorJobs.get(jobId);
   if (!job) return;
@@ -1570,15 +2230,15 @@ async function runFtpConnectorJob(jobId: string, input: FtpConnectorInput): Prom
     updatePairJob(job, "Refreshing Belabox agent");
     const record = upsertProvisionedDevice(input.deviceId, false, true);
     await installAgent(input, record);
-    updatePairJob(job, "Installing FTP connector");
+    updatePairJob(job, "Installing Photo Agent");
     const result = await installFtpConnector(input);
     job.status = "success";
     job.result = result;
-    updatePairJob(job, "FTP connector installed");
+    updatePairJob(job, "Photo Agent installed");
   } catch (error) {
     job.status = "error";
     job.error = friendlyFtpConnectorError(errorMessage(error), input);
-    updatePairJob(job, "FTP connector setup failed");
+    updatePairJob(job, "Photo Agent setup failed");
   } finally {
     job.finished_at = new Date().toISOString();
     job.updated_at = job.finished_at;
@@ -1591,7 +2251,7 @@ async function installFtpConnector(input: FtpConnectorInput): Promise<JsonRecord
   }
   const device = provisionedDevices.find((record) => record.device_id === input.deviceId) || upsertProvisionedDevice(input.deviceId, false, true);
   const record = upsertFtpConnector(input.deviceId, input);
-  const connector = readFileSync(path.join(process.cwd(), "agent", "ftp-connector.py"), "utf8");
+  const connector = readFileSync(path.join(process.cwd(), "agent", "photo-agent.py"), "utf8");
   const sudoPasswordB64 = input.password ? Buffer.from(input.password, "utf8").toString("base64") : "";
   const script = `set -eu
 umask 077
@@ -1599,16 +2259,17 @@ sudo_password_b64='${sudoPasswordB64}'
 agent_user="$(id -un)"
 home_dir="$(cd "$HOME" && pwd)"
 agent_dir="$HOME/.frame-belabox-agent"
-connector_dir="$agent_dir/ftp-connector"
+connector_dir="$agent_dir/photo-agent"
 spool_dir="$agent_dir/photo-spool"
 upload_dir="$spool_dir/incoming"
 ready_dir="$spool_dir/ready"
+processed_dir="$spool_dir/processed"
 inflight_dir="$spool_dir/inflight"
-mkdir -p "$connector_dir" "$upload_dir" "$ready_dir" "$inflight_dir" "$spool_dir/done" "$spool_dir/failed"
+mkdir -p "$connector_dir" "$upload_dir" "$ready_dir" "$processed_dir" "$inflight_dir" "$spool_dir/done" "$spool_dir/failed"
 decode() { printf %s "$1" | base64 -d; }
-cat > "$connector_dir/ftp-connector.py" <<'FRAME_FTP_CONNECTOR_EOF'
+cat > "$connector_dir/photo-agent.py" <<'FRAME_PHOTO_AGENT_EOF'
 ${connector}
-FRAME_FTP_CONNECTOR_EOF
+FRAME_PHOTO_AGENT_EOF
 {
   printf 'BELABOX_DEVICE_ID=%s\\n' "$(decode '${b64(input.deviceId)}')"
   printf 'FRAME_FTP_HOST=%s\\n' "$(decode '${b64(input.targetHost)}')"
@@ -1618,9 +2279,12 @@ FRAME_FTP_CONNECTOR_EOF
   printf 'FRAME_FTP_REMOTE_DIR=%s\\n' "$(decode '${b64(config.ftpConnector.remoteDir)}')"
   printf 'FRAME_FTP_UPLOAD_DIR=%s\\n' "$upload_dir"
   printf 'FRAME_FTP_READY_DIR=%s\\n' "$ready_dir"
+  printf 'FRAME_FTP_PROCESSED_DIR=%s\\n' "$processed_dir"
   printf 'FRAME_FTP_INFLIGHT_DIR=%s\\n' "$inflight_dir"
+  printf 'FRAME_PHOTO_AGENT_STATUS_PATH=%s\\n' "$connector_dir/status.json"
   printf 'FRAME_FTP_STATUS_PATH=%s\\n' "$connector_dir/status.json"
   printf 'FRAME_PHOTO_CONFIG_PATH=%s\\n' "$agent_dir/photo-config.json"
+  printf 'FRAME_EGRESS_STATUS_PATH=%s\\n' "$agent_dir/egress.json"
   printf 'FRAME_PHOTO_TRANSFER_MODE=direct_ftp\\n'
   printf 'FRAME_CHUNK_UPLOAD_URL=%s\\n' "$(decode '${b64(config.chunkUpload.publicUrl)}')"
   printf 'FRAME_CHUNK_UPLOAD_TOKEN=%s\\n' "$(decode '${b64(device.mqtt_password)}')"
@@ -1631,9 +2295,9 @@ FRAME_FTP_CONNECTOR_EOF
   printf 'FRAME_CAMERA_FTP_PASSWORD=%s\\n' "$(decode '${b64(record.camera_password)}')"
   printf 'FRAME_CAMERA_FTP_HOST=0.0.0.0\\n'
   printf 'FRAME_CAMERA_FTP_PORT=%s\\n' '${config.ftpConnector.cameraPort}'
-} > "$connector_dir/ftp-connector.env"
-chmod 700 "$connector_dir" "$connector_dir/ftp-connector.py"
-chmod 600 "$connector_dir/ftp-connector.env"
+} > "$connector_dir/photo-agent.env"
+chmod 700 "$connector_dir" "$connector_dir/photo-agent.py"
+chmod 600 "$connector_dir/photo-agent.env"
 sudo_run() {
   if ! command -v sudo >/dev/null 2>&1; then return 1; fi
   if sudo -n true 2>/dev/null; then sudo "$@"; return $?; fi
@@ -1664,7 +2328,7 @@ ensure_imagemagick() {
   return 0
 }
 test_frame_ftp() {
-  set -a; . "$connector_dir/ftp-connector.env"; set +a
+  set -a; . "$connector_dir/photo-agent.env"; set +a
   "$python_bin" - <<'PY'
 import ftplib, io, os, time
 name = f".frame-belabox-connector-test-{int(time.time())}.tmp"
@@ -1683,7 +2347,7 @@ with ftplib.FTP() as ftp:
 PY
 }
 test_local_ftp() {
-  set -a; . "$connector_dir/ftp-connector.env"; set +a
+  set -a; . "$connector_dir/photo-agent.env"; set +a
   for _ in $(seq 1 30); do
     if "$python_bin" - <<'PY' >/dev/null 2>&1
 import ftplib, io, os, time
@@ -1703,18 +2367,18 @@ PY
   return 1
 }
 start_connector_background() {
-  ( cd "$connector_dir"; set -a; . "$connector_dir/ftp-connector.env"; set +a; nohup "$python_bin" "$connector_dir/ftp-connector.py" >> "$connector_dir/ftp-connector.log" 2>&1 & echo $! > "$connector_dir/ftp-connector.pid" )
+  ( cd "$connector_dir"; set -a; . "$connector_dir/photo-agent.env"; set +a; nohup "$python_bin" "$connector_dir/photo-agent.py" >> "$connector_dir/photo-agent.log" 2>&1 & echo $! > "$connector_dir/photo-agent.pid" )
 }
 install_crontab_fallback() {
   if command -v crontab >/dev/null 2>&1; then
-    (crontab -l 2>/dev/null | grep -v 'frame-belabox-ftp-connector'; printf '@reboot cd %s && set -a && . %s/ftp-connector.env && set +a && %s %s/ftp-connector.py >> %s/ftp-connector.log 2>&1\\n' "$connector_dir" "$connector_dir" "$python_bin" "$connector_dir" "$connector_dir") | crontab - || true
+    (crontab -l 2>/dev/null | grep -v 'frame-belabox-ftp-connector\\|frame-belabox-photo-agent'; printf '@reboot cd %s && set -a && . %s/photo-agent.env && set +a && %s %s/photo-agent.py >> %s/photo-agent.log 2>&1\\n' "$connector_dir" "$connector_dir" "$python_bin" "$connector_dir" "$connector_dir") | crontab - || true
   fi
 }
 install_system_service() {
   service_file="$(mktemp)"
-  cat > "$service_file" <<FRAME_FTP_SERVICE_EOF
+  cat > "$service_file" <<FRAME_PHOTO_AGENT_SERVICE_EOF
 [Unit]
-Description=FRAME Belabox FTP Connector
+Description=FRAME Belabox Photo Agent
 After=network-online.target frame-belabox-agent.service
 Wants=network-online.target
 
@@ -1723,27 +2387,33 @@ Type=simple
 User=$agent_user
 WorkingDirectory=$connector_dir
 Environment=HOME=$home_dir
-EnvironmentFile=$connector_dir/ftp-connector.env
-ExecStart=$python_bin $connector_dir/ftp-connector.py
+EnvironmentFile=$connector_dir/photo-agent.env
+ExecStart=$python_bin $connector_dir/photo-agent.py
 Restart=always
 RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
-FRAME_FTP_SERVICE_EOF
-  if sudo_run install -m 0644 "$service_file" /etc/systemd/system/frame-belabox-ftp-connector.service; then
+FRAME_PHOTO_AGENT_SERVICE_EOF
+  if sudo_run install -m 0644 "$service_file" /etc/systemd/system/frame-belabox-photo-agent.service; then
     sudo_run systemctl daemon-reload
-    sudo_run systemctl enable frame-belabox-ftp-connector.service >/dev/null
-    sudo_run systemctl restart frame-belabox-ftp-connector.service
+    sudo_run systemctl enable frame-belabox-photo-agent.service >/dev/null
+    sudo_run systemctl restart frame-belabox-photo-agent.service
     rm -f "$service_file"
     return 0
   fi
   rm -f "$service_file"
   return 1
 }
-sudo_run systemctl stop frame-belabox-ftp-connector.service >/dev/null 2>&1 || true
-if command -v systemctl >/dev/null 2>&1; then systemctl --user stop frame-belabox-ftp-connector.service >/dev/null 2>&1 || true; fi
-pkill -f "$connector_dir/ftp-connector.py" 2>/dev/null || true
+sudo_run systemctl disable --now frame-belabox-ftp-connector.service >/dev/null 2>&1 || true
+sudo_run systemctl stop frame-belabox-photo-agent.service >/dev/null 2>&1 || true
+sudo_run rm -f /etc/systemd/system/frame-belabox-ftp-connector.service >/dev/null 2>&1 || true
+if command -v systemctl >/dev/null 2>&1; then systemctl --user disable --now frame-belabox-ftp-connector.service >/dev/null 2>&1 || true; fi
+if command -v systemctl >/dev/null 2>&1; then systemctl --user stop frame-belabox-photo-agent.service >/dev/null 2>&1 || true; fi
+rm -f "$HOME/.config/systemd/user/frame-belabox-ftp-connector.service"
+pkill -f "$agent_dir/ftp-connector/ftp-connector.py" 2>/dev/null || true
+pkill -f "$connector_dir/photo-agent.py" 2>/dev/null || true
+if [ -d "$agent_dir/ftp-connector" ]; then mv "$agent_dir/ftp-connector" "$agent_dir/ftp-connector.removed-$(date +%Y%m%d%H%M%S)" 2>/dev/null || true; fi
 ensure_pyftpdlib || { echo "pyftpdlib_install_failed" >&2; exit 43; }
 ensure_imagemagick
 test_frame_ftp || { echo "frame_ftp_test_failed" >&2; exit 44; }
@@ -1752,24 +2422,24 @@ if install_system_service; then
 elif command -v systemctl >/dev/null 2>&1 && systemctl --user daemon-reload >/dev/null 2>&1; then
   sudo_run loginctl enable-linger "$agent_user" >/dev/null 2>&1 || true
   mkdir -p "$HOME/.config/systemd/user"
-  cat > "$HOME/.config/systemd/user/frame-belabox-ftp-connector.service" <<FRAME_FTP_USER_SERVICE_EOF
+  cat > "$HOME/.config/systemd/user/frame-belabox-photo-agent.service" <<FRAME_PHOTO_AGENT_USER_SERVICE_EOF
 [Unit]
-Description=FRAME Belabox FTP Connector
+Description=FRAME Belabox Photo Agent
 After=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=%h/.frame-belabox-agent/ftp-connector
-EnvironmentFile=%h/.frame-belabox-agent/ftp-connector/ftp-connector.env
-ExecStart=$python_bin %h/.frame-belabox-agent/ftp-connector/ftp-connector.py
+WorkingDirectory=%h/.frame-belabox-agent/photo-agent
+EnvironmentFile=%h/.frame-belabox-agent/photo-agent/photo-agent.env
+ExecStart=$python_bin %h/.frame-belabox-agent/photo-agent/photo-agent.py
 Restart=always
 RestartSec=5
 
 [Install]
 WantedBy=default.target
-FRAME_FTP_USER_SERVICE_EOF
+FRAME_PHOTO_AGENT_USER_SERVICE_EOF
   systemctl --user daemon-reload
-  systemctl --user enable frame-belabox-ftp-connector.service >/dev/null
+  systemctl --user enable frame-belabox-photo-agent.service >/dev/null
   install_crontab_fallback
   start_connector_background
 else
@@ -1777,10 +2447,10 @@ else
   start_connector_background
 fi
 test_local_ftp || { echo "camera_ftp_test_failed" >&2; exit 45; }
-printf frame-belabox-ftp-connector-installed
+printf frame-belabox-photo-agent-installed
 `;
   const result = await runPairSsh(input, ["sh", "-s"], script, 300000);
-  if (!result.stdout.includes("frame-belabox-ftp-connector-installed")) throw new RequestError(502, "FTP connector install did not complete.");
+  if (!result.stdout.includes("frame-belabox-photo-agent-installed")) throw new RequestError(502, "Photo Agent install did not complete.");
   return {
     installed: true,
     camera_ftp_username: record.camera_username,
@@ -1788,6 +2458,7 @@ printf frame-belabox-ftp-connector-installed
     camera_ftp_port: config.ftpConnector.cameraPort,
     upload_dir: "~/.frame-belabox-agent/photo-spool/incoming",
     ready_dir: "~/.frame-belabox-agent/photo-spool/ready",
+    processed_dir: "~/.frame-belabox-agent/photo-spool/processed",
     target_host: input.targetHost,
     target_port: input.targetPort,
     chunk_upload_url: config.chunkUpload.publicUrl,
@@ -1878,6 +2549,10 @@ function brokerAcl(): string {
     "topic write frame/belabox/+/agent/version",
     "topic write frame/belabox/+/cmd/request",
     "topic read frame/belabox/+/cmd/response",
+    "topic write frame/belabox/+/proxy/http/request/+",
+    "topic read frame/belabox/+/proxy/http/response/+",
+    "topic write frame/belabox/+/proxy/stream/+/client",
+    "topic read frame/belabox/+/proxy/stream/+/server",
   ];
   const deviceRules = provisionedDevices.flatMap((device) => [
     "",
@@ -1889,6 +2564,10 @@ function brokerAcl(): string {
     `topic write ${topicFor(device.device_id, TOPICS.version)}`,
     `topic read ${topicFor(device.device_id, TOPICS.cmdRequest)}`,
     `topic write ${topicFor(device.device_id, TOPICS.cmdResponse)}`,
+    `topic read ${topicFor(device.device_id, "proxy/http/request/+")}`,
+    `topic write ${topicFor(device.device_id, "proxy/http/response/+")}`,
+    `topic read ${topicFor(device.device_id, "proxy/stream/+/client")}`,
+    `topic write ${topicFor(device.device_id, "proxy/stream/+/server")}`,
   ]);
   return [...manager, ...deviceRules].join("\n");
 }
@@ -2117,7 +2796,11 @@ function parseTopic(topic: string): { deviceId: string; kind: string } | null {
 }
 
 function parsePayload(payload: Buffer): JsonRecord {
-  const text = payload.toString("utf8").slice(0, 16 * 1024);
+  return parseJsonPayload(payload, 16 * 1024);
+}
+
+function parseJsonPayload(payload: Buffer, maxBytes: number): JsonRecord {
+  const text = payload.toString("utf8").slice(0, maxBytes);
   try {
     const parsed = JSON.parse(text);
     return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as JsonRecord : { value: parsed };
@@ -2135,11 +2818,39 @@ function topicTemplates() {
     version: topicFor("{device_id}", TOPICS.version),
     cmd_request: topicFor("{device_id}", TOPICS.cmdRequest),
     cmd_response: topicFor("{device_id}", TOPICS.cmdResponse),
+    remote_belaui_http_request: remoteBelauiHttpRequestTopic("{device_id}", "{request_id}"),
+    remote_belaui_http_response: remoteBelauiHttpResponseTopic("{device_id}", "{request_id}"),
+    remote_belaui_stream_client: remoteBelauiStreamClientTopic("{device_id}", "{session_id}"),
+    remote_belaui_stream_server: remoteBelauiStreamServerTopic("{device_id}", "{session_id}"),
   };
 }
 
 function topicFor(deviceId: string, suffix: string): string {
   return `${TOPIC_ROOT}/${deviceId}/${suffix}`;
+}
+
+function remoteBelauiHttpRequestTopic(deviceId: string, requestId: string): string {
+  return topicFor(deviceId, `proxy/http/request/${requestId}`);
+}
+
+function remoteBelauiHttpResponseTopic(deviceId: string, requestId: string): string {
+  return topicFor(deviceId, `proxy/http/response/${requestId}`);
+}
+
+function remoteBelauiStreamClientTopic(deviceId: string, sessionId: string): string {
+  return topicFor(deviceId, `proxy/stream/${sessionId}/client`);
+}
+
+function remoteBelauiStreamServerTopic(deviceId: string, sessionId: string): string {
+  return topicFor(deviceId, `proxy/stream/${sessionId}/server`);
+}
+
+function remoteBelauiHttpKey(deviceId: string, requestId: string): string {
+  return `${deviceId}:${requestId}`;
+}
+
+function remoteBelauiStreamKey(deviceId: string, sessionId: string): string {
+  return `${deviceId}:${sessionId}`;
 }
 
 function configurationIssues(): string[] {
@@ -2254,6 +2965,16 @@ function normalizePath(value: string): string {
 function normalizeUrl(value: string): string {
   const parsed = new URL(value);
   if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("URL settings must start with http:// or https://.");
+  parsed.hash = "";
+  return parsed.toString().replace(/\/+$/, "");
+}
+
+function normalizeLoopbackHttpUrl(value: string): string {
+  const parsed = new URL(value);
+  if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("BELABOX_REMOTE_BELAUI_LOCAL_URL must start with http:// or https://.");
+  if (!["localhost", "127.0.0.1", "[::1]"].includes(parsed.hostname)) {
+    throw new Error("BELABOX_REMOTE_BELAUI_LOCAL_URL must point at loopback belaUI.");
+  }
   parsed.hash = "";
   return parsed.toString().replace(/\/+$/, "");
 }
@@ -2374,7 +3095,7 @@ function friendlyFtpConnectorError(message: string, input?: Pick<FtpConnectorInp
     return "Belabox needs node and npm for the MQTT agent. Install them manually or provide sudo-capable SSH credentials so setup can install nodejs/npm.";
   }
   if (/python3_required/i.test(text)) {
-    return "Belabox needs python3 for the FTP connector. Install it manually or provide sudo-capable SSH credentials so setup can install python3.";
+    return "Belabox needs python3 for the Photo Agent. Install it manually or provide sudo-capable SSH credentials so setup can install python3.";
   }
   if (/pyftpdlib_install_failed|No module named ['\"]?pyftpdlib|pyftpdlib/i.test(text)) {
     return "Belabox needs pyftpdlib for the local camera FTP receiver. Setup tried apt/pip install and failed; check internet access and sudo permissions on the Belabox.";

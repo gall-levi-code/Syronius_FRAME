@@ -1494,7 +1494,7 @@ fn build_apply_environment(
     );
     env.insert(
         "PIPELINE_CONCURRENCY".to_string(),
-        existing_or(existing, "PIPELINE_CONCURRENCY", "2"),
+        existing_or(existing, "PIPELINE_CONCURRENCY", "10"),
     );
     env.insert(
         "PHOTO_MAX_INPUT_MB".to_string(),

@@ -28,6 +28,7 @@ const FALLBACK_ROUTES: Record<string, string> = {
   audio_hls: "/audio/hls",
   discord_audio_bridge_root: "/bridge",
   belabox_manager: "/belabox",
+  belabox_remote: "/belabox/remote",
   belabox_mqtt: "/mqtt",
   belabox_chunks: "/belabox-chunks",
 };

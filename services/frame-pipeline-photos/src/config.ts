@@ -28,7 +28,7 @@ export function loadConfig(): PipelineConfig {
     hostDataRoot: process.env.HOST_DATA_ROOT?.trim() || "/data",
     timezone: process.env.TIMEZONE?.trim() || "America/Chicago",
     pollMs: integer("PIPELINE_POLL_MS", 1000, 100, 60000),
-    concurrency: integer("PIPELINE_CONCURRENCY", 2, 1, 8),
+    concurrency: integer("PIPELINE_CONCURRENCY", 10, 1, 10),
     maxInputBytes: integer("PHOTO_MAX_INPUT_MB", 50, 1, 2048) * 1024 * 1024,
     maxPixels: integer("PHOTO_MAX_MEGAPIXELS", 80, 1, 1000) * 1_000_000,
     conversionAttempts: integer("PHOTO_CONVERSION_ATTEMPTS", 3, 1, 10),
