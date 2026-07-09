@@ -57,7 +57,7 @@ test("HTTP API serves published media and rejects unpublished media", async () =
     username: "frame",
     password: "secret",
     realm: "FRAME Test",
-  });
+  }, "https://frame.example");
   const server = app.listen(0);
   const address = server.address();
   assert.ok(address && typeof address === "object");
@@ -92,6 +92,7 @@ test("HTTP API serves published media and rejects unpublished media", async () =
     assert.equal(dashboard.total_images, 2);
     assert.equal(dashboard.current_gallery.count, 2);
     assert.equal(dashboard.latest_photo.base, "second");
+    assert.equal(dashboard.public_base_url, "https://frame.example");
   } finally {
     controller.close();
     await new Promise((resolve) => server.close(resolve));

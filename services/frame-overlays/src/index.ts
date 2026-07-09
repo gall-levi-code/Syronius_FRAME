@@ -24,7 +24,7 @@ const config = {
   belaboxManagerApiUrl: stripTrailingSlash(process.env.BELABOX_MANAGER_API_URL?.trim() || "http://frame-belabox-manager:3741"),
   slsApiKey: required("SLS_API_KEY"),
   ingestApiToken: required("PORTAL_SERVICE_TOKEN"),
-  publicBaseUrl: stripTrailingSlash(process.env.PUBLIC_BASE_URL?.trim() || "http://localhost:3733"),
+  publicBaseUrl: normalizePublicUrl(process.env.PUBLIC_BASE_URL?.trim() || "http://localhost:3733"),
   requestTimeoutMs: readPositiveInt("REQUEST_TIMEOUT_MS", 3000),
   username: process.env.OVERLAYS_USERNAME?.trim() || undefined,
   password: process.env.OVERLAYS_PASSWORD?.trim() || undefined,
@@ -133,4 +133,12 @@ function required(name: string): string {
 
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
+}
+
+function normalizePublicUrl(value: string): string {
+  const url = new URL(value);
+  if (!["http:", "https:"].includes(url.protocol)) throw new Error("PUBLIC_BASE_URL must start with http:// or https://.");
+  if (!["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname)) url.protocol = "https:";
+  url.hash = "";
+  return stripTrailingSlash(url.toString());
 }

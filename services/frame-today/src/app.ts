@@ -9,6 +9,7 @@ export function createApp(
   store: TodayStore,
   publicDir: string,
   auth: BasicAuthConfig,
+  publicBaseUrl = "http://localhost",
 ): Express {
   const app = express();
   app.disable("x-powered-by");
@@ -45,7 +46,7 @@ export function createApp(
   app.get("/today/api/dashboard", requireBasicAuth(auth), async (_request, response, next) => {
     try {
       response.setHeader("Cache-Control", "no-store");
-      response.json(await store.dashboardSummary());
+      response.json({ ...(await store.dashboardSummary()), public_base_url: publicBaseUrl });
     } catch (error) {
       next(error);
     }

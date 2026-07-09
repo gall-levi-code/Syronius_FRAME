@@ -102,7 +102,7 @@ const config = {
   playerPort: readInt("SRT_PLAYER_PORT", 4000),
   senderPort: readInt("SRT_SENDER_PORT", 4001),
   statsPort: readInt("SLS_STATS_PORT", 8080),
-  publicBaseUrl: stripTrailingSlash(process.env.STREAMS_PUBLIC_BASE_URL?.trim() || "http://localhost"),
+  publicBaseUrl: normalizePublicUrl(process.env.STREAMS_PUBLIC_BASE_URL?.trim() || "http://localhost"),
   overlayWizardUrl: process.env.OVERLAY_WIZARD_URL?.trim() || "http://localhost:3733/overlays/setup",
   overlaysApiUrl: stripTrailingSlash(process.env.OVERLAYS_API_URL?.trim() || ""),
   requestTimeoutMs: readInt("REQUEST_TIMEOUT_MS", 3000),
@@ -760,6 +760,14 @@ function required(name: string): string {
 
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
+}
+
+function normalizePublicUrl(value: string): string {
+  const url = new URL(value);
+  if (!["http:", "https:"].includes(url.protocol)) throw new Error("Public URL settings must start with http:// or https://.");
+  if (!["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname)) url.protocol = "https:";
+  url.hash = "";
+  return stripTrailingSlash(url.toString());
 }
 
 function errorMessage(error: unknown): string {

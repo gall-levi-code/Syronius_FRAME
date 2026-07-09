@@ -45,6 +45,7 @@ test("installer Compose template stays synchronized with the service contracts",
   const photoFtp = composeServiceBlock(compose, "frame-photo-ftp");
   const belaboxBroker = composeServiceBlock(compose, "frame-belabox-broker");
   const belabox = composeServiceBlock(compose, "frame-belabox-manager");
+  const today = composeServiceBlock(compose, "frame-today");
   const streams = composeServiceBlock(compose, "frame-streams");
   const overlays = composeServiceBlock(compose, "frame-overlays");
   assert.ok(photoUpload.includes("PORTAL_SERVICE_TOKEN: ${PORTAL_SERVICE_TOKEN}"));
@@ -76,6 +77,7 @@ test("installer Compose template stays synchronized with the service contracts",
   assert.ok(overlays.includes("PORTAL_SERVICE_TOKEN: ${PORTAL_SERVICE_TOKEN}"));
   assert.ok(overlays.includes("PHOTO_UPLOAD_API_URL: http://frame-photo-upload:3736"));
   assert.ok(overlays.includes("PHOTO_FTP_API_URL: http://frame-photo-ftp:3737"));
+  assert.ok(today.includes("PUBLIC_BASE_URL: ${EDGE_PUBLIC_BASE_URL:-http://localhost}"));
   assert.ok(streams.includes("STREAMS_PUBLIC_BASE_URL: ${STREAMS_PUBLIC_BASE_URL:-http://localhost}"));
   assert.ok(streams.includes("Path(`/stats`) || PathPrefix(`/stats/`)"));
   assert.ok(!streams.includes("traefik.http.routers.frame-streams-stats.middlewares"));
@@ -184,7 +186,8 @@ test("Overlay Wizard presents OBS sources as the only editable objects", async (
   assert.ok(frontend.includes("THEME_STORAGE_KEYS"), "Overlay Wizard should listen for Portal theme storage changes");
   assert.ok(frontend.includes("THEME_PROFILE_ID_KEY"), "Overlay Wizard should react when the Portal theme preset changes");
   assert.ok(frontend.includes("dashboardLink.href = dashboardUrl()"), "Overlay Wizard logo should route through the configured public base");
-  assert.ok(frontend.includes('new URL("/dashboard", state.config.public_base_url || location.origin).href'));
+  assert.ok(frontend.includes("function publicBaseUrl()"), "Overlay Wizard should normalize configured public URLs");
+  assert.ok(frontend.includes('url.protocol = "https:"'), "Overlay Wizard should force HTTPS for non-local public links");
   assert.ok(frontend.includes('window.location.href = "/slsui#add-stream"'), "Overlay Wizard should not hardcode localhost for SLSUI");
   assert.ok(styles.includes(".theme-day .moon-icon"), "Overlay Wizard should support Portal body theme class selectors");
   assert.ok(styles.includes("--surface-muted"), "Overlay Wizard chrome should derive surfaces from the global theme");
@@ -381,7 +384,10 @@ test("Belabox pairing UI hides MQTT implementation details", async () => {
   assert.ok(styles.includes(".theme-day .moon-icon"));
   assert.ok(frontend.includes("Add Device"), "Zero-device state should enter the add-device wizard");
   assert.ok(frontend.includes("SSH Maintenance"));
-  assert.ok(frontend.includes("MQTT Controls"));
+  assert.ok(frontend.includes("Photo Transfer"));
+  assert.ok(frontend.includes("Protect Stream"));
+  assert.ok(frontend.includes("What is slowing things down?"));
+  assert.ok(frontend.includes("Open Encoder Remote"));
   assert.ok(frontend.includes("Photo Agent"));
   assert.ok(frontend.includes("/belabox/api/pair"));
   assert.ok(frontend.includes("/belabox/api/pair/jobs"));
@@ -433,6 +439,30 @@ test("Belabox pairing UI hides MQTT implementation details", async () => {
   assert.ok(backend.includes("photo-agent.py"));
   assert.ok(!html.includes("MQTT password"));
   assert.ok(!frontend.includes("BELABOX_MQTT_PASSWORD"));
+});
+
+test("Photo Stage copies the Hybrid viewer URL", async () => {
+  const [frontend, backend] = await Promise.all([
+    readFile("services/frame-today/public/dashboard.js", "utf8"),
+    readFile("services/frame-today/src/app.ts", "utf8"),
+  ]);
+  assert.ok(backend.includes("public_base_url: publicBaseUrl"), "Today dashboard API should expose the configured public base");
+  assert.ok(frontend.includes('publicUrl("/today/viewer")'), "Today dashboard should copy the public viewer URL");
+  assert.ok(frontend.includes('url.protocol = "https:"'), "Today dashboard should force HTTPS for non-local public links");
+});
+
+test("Hybrid public URL configs force external HTTPS", async () => {
+  const files = await Promise.all([
+    readFile("services/frame-streams/src/index.ts", "utf8"),
+    readFile("services/frame-overlays/src/index.ts", "utf8"),
+    readFile("services/frame-audio/src/config.ts", "utf8"),
+    readFile("services/frame-audio-bridge/src/config.ts", "utf8"),
+    readFile("services/frame-belabox-manager/src/index.ts", "utf8"),
+  ]);
+  for (const source of files) {
+    assert.ok(source.includes("function normalizePublicUrl"), "Public URL config should normalize external links");
+    assert.ok(source.includes('url.protocol = "https:"') || source.includes('parsed.protocol = "https:"'));
+  }
 });
 
 test("Belabox agent rejects invalid signed commands", async () => {

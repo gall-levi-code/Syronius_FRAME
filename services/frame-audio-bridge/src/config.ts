@@ -43,6 +43,14 @@ function trimTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
 }
 
+function normalizePublicUrl(value: string): string {
+  const url = new URL(value);
+  if (!["http:", "https:"].includes(url.protocol)) throw new Error("PUBLIC_BASE_URL must start with http:// or https://.");
+  if (!["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname)) url.protocol = "https:";
+  url.hash = "";
+  return trimTrailingSlash(url.toString());
+}
+
 export function loadConfig(): AppConfig {
   const port = readInt("PORT", 3728, 1);
   const maxAudioDelayMs = readInt("MAX_AUDIO_DELAY_MS", 10_000, 0);
@@ -51,7 +59,7 @@ export function loadConfig(): AppConfig {
     maxAudioDelayMs,
   );
 
-  const publicBaseUrl = trimTrailingSlash(
+  const publicBaseUrl = normalizePublicUrl(
     process.env.PUBLIC_BASE_URL?.trim() || `http://localhost:${port}`,
   );
 

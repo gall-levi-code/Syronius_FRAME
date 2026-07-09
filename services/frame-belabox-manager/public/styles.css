@@ -315,6 +315,43 @@ textarea { resize: vertical; }
   gap: 12px;
 }
 
+.panel-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.primary-action {
+  min-height: 38px;
+}
+
+.remote-row {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-soft);
+}
+
+.remote-row span {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.remote-row code {
+  overflow: hidden;
+  color: var(--text);
+  font: 13px ui-monospace, "Cascadia Code", Consolas, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .status-dot {
   width: 9px;
   height: 9px;
@@ -340,6 +377,51 @@ textarea { resize: vertical; }
 .pill.online { color: var(--good); }
 .pill.warn { color: var(--warn); }
 
+.encoder-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.status-tile,
+.insight-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.status-tile {
+  display: grid;
+  gap: 6px;
+  min-height: 74px;
+  padding: 12px;
+}
+
+.status-tile span {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.status-tile strong {
+  color: var(--text);
+  font-size: 18px;
+}
+
+.status-tile.good strong { color: var(--good); }
+.status-tile.warn strong { color: var(--warn); }
+
+.insight-card {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px;
+}
+
+.insight-card.good { border-color: color-mix(in srgb, var(--good) 55%, var(--line)); }
+.insight-card.warn { border-color: color-mix(in srgb, var(--warn) 60%, var(--line)); }
+.insight-card.busy { border-color: color-mix(in srgb, var(--accent) 60%, var(--line)); }
+
 .detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -352,6 +434,100 @@ textarea { resize: vertical; }
   display: grid;
   gap: 12px;
   padding: 14px;
+}
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pipeline {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pipeline li {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.pipeline li span {
+  display: block;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--control);
+}
+
+.pipeline li.done span,
+.pipeline li.active span {
+  background: var(--good);
+}
+
+.pipeline li.active {
+  color: var(--text);
+}
+
+.preset-row,
+.lane-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.preset-button {
+  display: grid;
+  gap: 4px;
+  min-width: 150px;
+  text-align: left;
+  color: var(--text);
+  background: var(--control);
+}
+
+.preset-button.active {
+  border-color: var(--good);
+  color: var(--good);
+}
+
+.preset-button span {
+  font-size: 12px;
+}
+
+.lane-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 9px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.lane-chip.healthy { color: var(--good); border-color: color-mix(in srgb, var(--good) 45%, var(--line)); }
+.lane-chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
+.lane-chip.offline { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); }
+.lane-chip.active { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+
+.nested-details {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.nested-details[open] {
+  display: grid;
+  gap: 12px;
 }
 
 .wizard {
@@ -482,11 +658,15 @@ pre {
 
 @media (max-width: 800px) {
   .summary,
+  .encoder-strip,
   .detail-grid,
+  .pipeline,
+  .remote-row,
   .form-grid {
     grid-template-columns: 1fr;
   }
 
+  .insight-card,
   .topbar {
     align-items: flex-start;
     flex-direction: column;

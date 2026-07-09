@@ -212,7 +212,7 @@ const config = {
   requestTimeoutMs: readInt("REQUEST_TIMEOUT_MS", 3000, 500, 30000),
   mqtt: {
     internalUrl: process.env.BELABOX_MQTT_INTERNAL_URL?.trim() || "mqtt://frame-belabox-broker:1883",
-    publicHost: process.env.BELABOX_MQTT_HOST?.trim() || "http://localhost",
+    publicHost: normalizePublicUrl(process.env.BELABOX_MQTT_HOST?.trim() || "http://localhost"),
     wsPath: normalizePath(process.env.BELABOX_MQTT_WS_PATH?.trim() || "/mqtt"),
     username: process.env.BELABOX_MQTT_USERNAME?.trim() || "",
     password: process.env.BELABOX_MQTT_PASSWORD || "",
@@ -234,7 +234,7 @@ const config = {
     cameraPort: readAnyPort(["BELABOX_CAMERA_FTP_PORT"], 2121),
   },
   chunkUpload: {
-    publicUrl: normalizeUrl(process.env.BELABOX_CHUNK_UPLOAD_URL?.trim() || `${process.env.BELABOX_MQTT_HOST?.trim() || "http://localhost"}/belabox-chunks/api/transfers`),
+    publicUrl: normalizePublicUrl(process.env.BELABOX_CHUNK_UPLOAD_URL?.trim() || `${process.env.BELABOX_MQTT_HOST?.trim() || "http://localhost"}/belabox-chunks/api/transfers`),
     chunkSizeBytes: readInt("BELABOX_CHUNK_SIZE_BYTES", 4 * 1024 * 1024, 256 * 1024, 64 * 1024 * 1024),
     parallelUploads: readInt("BELABOX_CHUNK_PARALLEL_UPLOADS", 1, 1, 4),
     uploadKbps: readInt("BELABOX_CHUNK_UPLOAD_KBPS", 0, 0, 1000000),
@@ -2965,6 +2965,14 @@ function normalizePath(value: string): string {
 function normalizeUrl(value: string): string {
   const parsed = new URL(value);
   if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("URL settings must start with http:// or https://.");
+  parsed.hash = "";
+  return parsed.toString().replace(/\/+$/, "");
+}
+
+function normalizePublicUrl(value: string): string {
+  const parsed = new URL(value);
+  if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("Public URL settings must start with http:// or https://.");
+  if (!["localhost", "127.0.0.1", "::1", "[::1]"].includes(parsed.hostname)) parsed.protocol = "https:";
   parsed.hash = "";
   return parsed.toString().replace(/\/+$/, "");
 }

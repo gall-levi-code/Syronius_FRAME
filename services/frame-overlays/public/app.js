@@ -985,14 +985,24 @@ function compareStream(a, b) {
 }
 
 function sourceUrl(source) {
-  return `${state.config.public_base_url}/overlays/view/${encodeURIComponent(source.slug)}/${encodeURIComponent(source.source_key)}`;
+  return new URL(`/overlays/view/${encodeURIComponent(source.slug)}/${encodeURIComponent(source.source_key)}`, publicBaseUrl()).href;
 }
 
 function dashboardUrl() {
   try {
-    return new URL("/dashboard", state.config.public_base_url || location.origin).href;
+    return new URL("/dashboard", publicBaseUrl()).href;
   } catch {
     return "/dashboard";
+  }
+}
+
+function publicBaseUrl() {
+  try {
+    const url = new URL(state.config.public_base_url || location.origin);
+    if (!["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname)) url.protocol = "https:";
+    return url.origin;
+  } catch {
+    return location.origin;
   }
 }
 
@@ -1015,7 +1025,7 @@ function previewTargetOrigin() {
 function isTrustedPreviewOrigin(origin) {
   if (origin === location.origin) return true;
   try {
-    return origin === new URL(state.config.public_base_url).origin;
+    return origin === publicBaseUrl();
   } catch {
     return false;
   }

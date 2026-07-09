@@ -18,6 +18,7 @@ const elements = {
   message: document.querySelector("#dashboard-message"),
   themeToggle: document.querySelector("#theme-toggle"),
 };
+const dashboardConfig = { publicBaseUrl: "" };
 
 initializeTheme();
 elements.themeToggle.addEventListener("click", toggleTheme);
@@ -33,7 +34,7 @@ window.addEventListener("storage", (event) => {
 
 elements.copyViewer.addEventListener("click", async () => {
   try {
-    await navigator.clipboard.writeText(new URL("/today/viewer", location.origin).href);
+    await navigator.clipboard.writeText(publicUrl("/today/viewer"));
     elements.copyViewer.textContent = "Viewer URL copied";
     setTimeout(() => { elements.copyViewer.textContent = "Copy OBS viewer URL"; }, 1800);
   } catch {
@@ -84,7 +85,9 @@ async function refresh() {
   try {
     const response = await fetch("/today/api/dashboard", { cache: "no-store" });
     if (!response.ok) throw new Error(`Dashboard request failed (${response.status}).`);
-    render(await response.json());
+    const summary = await response.json();
+    dashboardConfig.publicBaseUrl = summary.public_base_url || "";
+    render(summary);
     elements.status.textContent = "Library connected";
     elements.status.className = "status-pill good";
     elements.message.textContent = "";
@@ -92,6 +95,16 @@ async function refresh() {
     elements.status.textContent = "Library unavailable";
     elements.status.className = "status-pill bad";
     elements.message.textContent = error instanceof Error ? error.message : String(error);
+  }
+}
+
+function publicUrl(path) {
+  try {
+    const url = new URL(dashboardConfig.publicBaseUrl || location.origin);
+    if (!["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname)) url.protocol = "https:";
+    return new URL(path, url.origin).href;
+  } catch {
+    return new URL(path, location.origin).href;
   }
 }
 

@@ -7,6 +7,11 @@ const THEME_CUSTOM_PROFILES_KEY = "frame-theme-custom-profiles";
 const COMPAT_THEME_KEYS = ["frame-gallery-theme-mode", "frame-audio-bridge-color-mode"];
 const REFRESH_INTERVAL_MS = 2000;
 const COMMAND_POLL_INTERVAL_MS = 500;
+const TRANSFER_PRESETS = {
+  protect: { label: "Protect Stream", chunk_size_bytes: 1048576, chunk_parallel_uploads: 1, chunk_upload_kbps: 768 },
+  balanced: { label: "Balanced", chunk_size_bytes: 1048576, chunk_parallel_uploads: 2, chunk_upload_kbps: 2000 },
+  fast: { label: "Fast", chunk_size_bytes: 4194304, chunk_parallel_uploads: 4, chunk_upload_kbps: 0 },
+};
 const THEME_STORAGE_KEYS = new Set([
   THEME_MODE_KEY,
   LEGACY_PORTAL_THEME_KEY,
@@ -163,14 +168,14 @@ function renderAddDeviceWizard(isEmpty) {
       </section>
 
       <section class="wizard-step">
-        <h3>Chunk Relay</h3>
-        <label class="check-row"><input id="setup-chunk-enabled" name="setup_chunk" type="checkbox">Enable Chunk Relay mode after pairing</label>
+        <h3>Photo Transfer</h3>
+        <label class="check-row"><input id="setup-chunk-enabled" name="setup_chunk" type="checkbox">Enable stream-safe photo transfer after pairing</label>
         <div class="form-grid">
           <label>Chunk size bytes<input id="photo-chunk-size" name="chunk_size_bytes" type="number" min="262144" max="67108864" step="262144" value="${escapeAttr(state.status.chunk_upload?.chunk_size_bytes || 4194304)}"></label>
           <label>Parallel uploads<input id="photo-chunk-parallel" name="chunk_parallel_uploads" type="number" min="1" max="4" step="1" value="${escapeAttr(state.status.chunk_upload?.chunk_parallel_uploads || 1)}"></label>
           <label>Upload cap kbps<input id="photo-chunk-kbps" name="chunk_upload_kbps" type="number" min="0" max="1000000" step="64" value="${escapeAttr(state.status.chunk_upload?.chunk_upload_kbps || 0)}"></label>
         </div>
-        <p class="hint">Chunk Relay is separate from FTP and uses signed MQTT commands after the agent connects. Set upload cap to 0 for uncapped.</p>
+        <p class="hint">Use a capped upload preset while live. Set upload cap to 0 only when you want maximum speed.</p>
       </section>
 
       <section class="wizard-step">
@@ -208,43 +213,157 @@ function renderDevicePanel(deviceId) {
   const chunkSize = Number(ftp.chunk_size_bytes ?? state.status.chunk_upload?.chunk_size_bytes ?? 4194304);
   const chunkParallel = Number(ftp.chunk_parallel_uploads ?? state.status.chunk_upload?.chunk_parallel_uploads ?? 1);
   const chunkUploadKbps = Number(ftp.chunk_upload_kbps ?? state.status.chunk_upload?.chunk_upload_kbps ?? 0);
+  const remoteUrl = remoteAccessUrl(deviceId);
+  const slowdown = slowdownSummary(live, connector, ftp, preprocess, egress, chunkUploadKbps);
+  const setupButtonLabel = connector ? "Repair Agent" : "Install Photo Agent";
   return `<div class="panel-head">
       <div>
         <p class="eyebrow">Belabox</p>
         <h2>${escapeHtml(deviceId)}</h2>
       </div>
-      <span class="pill ${live?.online ? "online" : ""}">${live?.online ? "Online" : "Offline"}</span>
+      <div class="panel-actions">
+        <span class="pill ${live?.online ? "online" : ""}">${live?.online ? "Online" : "Offline"}</span>
+        <a class="primary-action" href="${escapeAttr(remoteUrl)}" target="_blank" rel="noreferrer">Open Encoder Remote</a>
+        <button class="secondary" type="button" data-copy-text="${escapeAttr(remoteUrl)}">Copy URL</button>
+      </div>
     </div>
+
+    <div class="remote-row">
+      <span>Remote access</span>
+      <code>${escapeHtml(remoteUrl)}</code>
+    </div>
+
+    <section class="encoder-strip" aria-label="Encoder status">
+      ${statusTile("Encoder", live?.online ? "Online" : "Offline", live?.online ? "good" : "warn")}
+      ${statusTile("Remote", remoteBelauiStatus(remoteBelaui), remoteBelaui.state === "reachable" ? "good" : "warn")}
+      ${statusTile("Photo Agent", friendlyTransferState(ftp, connector), connector ? "good" : "warn")}
+      ${statusTile("Stream Safety", streamSafetyLabel(ftp, chunkUploadKbps), chunkUploadKbps > 0 ? "good" : "warn")}
+    </section>
+
+    <section class="insight-card ${slowdown.tone}">
+      <div>
+        <p class="eyebrow">What is slowing things down?</p>
+        <h3>${escapeHtml(slowdown.title)}</h3>
+      </div>
+      <p>${escapeHtml(slowdown.detail)}</p>
+    </section>
+
+    <section class="status-card pipeline-card">
+      <div class="section-head">
+        <h3>Photo Pipeline</h3>
+        <span>${escapeHtml(friendlyTransferState(ftp, connector))}</span>
+      </div>
+      ${photoPipeline(ftp, preprocess)}
+    </section>
 
     <section class="detail-grid">
       <div class="status-card">
-        <h3>Overview</h3>
+        <h3>Live Upload</h3>
         <dl>${rows([
-          ["Heartbeat", formatDate(live?.last_heartbeat_at)],
-          ["Agent", live?.agent_version || "Unknown"],
-          ["MQTT", state.status.mqtt?.connected ? "Connected" : "Reconnecting"],
-          ["Egress lanes", egressSummary(egress)],
-          ["Created", formatDate(provisioned?.created_at)],
+          ["Current file", ftp.file || "None"],
+          ["Progress", ftp.file ? `${Math.round(Number(ftp.percent || 0))}%` : "Idle"],
+          ["Rate", formatBytes(Number(ftp.rate_bps || 0)) + "/s"],
+          ["Queue", `${Number(ftp.queue_count || 0)} total, ${Number(ftp.processed_count || 0)} upload-ready`],
+          ["ETA", transferEta(ftp)],
         ])}</dl>
       </div>
       <div class="status-card">
-        <h3>Modules</h3>
+        <h3>Connections</h3>
+        ${egressLaneChips(egress, ftp)}
         <dl>${rows([
-          ["Photo Agent", ftp.state || connectorStatus(connector, ftp)],
-          ["Chunk Relay", chunkStatus(ftp)],
-          ["Remote belaUI", remoteBelauiStatus(remoteBelaui)],
-          ["Remote route", remoteBelaui.route_prefix || "/belabox/remote"],
-          ["Pre-processing", processing.enabled ? "Enabled" : "Disabled"],
-          ["Upload file", ftp.file || "None"],
-          ["Progress", ftp.file ? `${Math.round(Number(ftp.percent || 0))}%` : "Idle"],
+          ["Active lane", ftp.active_egress || "Idle"],
+          ["Healthy lanes", `${ftp.egress_lane_count || egress.healthy_lane_count || 0}`],
+          ["Last heartbeat", live?.last_heartbeat_at ? formatAge(live.last_heartbeat_at) : "Waiting"],
         ])}</dl>
-        <p class="hint"><a href="/belabox/remote?key=${encodeURIComponent(deviceId)}" target="_blank" rel="noreferrer">Open Encoder Remote</a></p>
       </div>
     </section>
 
+    <details class="settings-section" data-section="photo-transfer" open>
+      <summary>Photo Transfer</summary>
+      <div class="preset-row" aria-label="Transfer presets">
+        ${transferPresetButtons(chunkSize, chunkParallel, chunkUploadKbps, live?.online)}
+      </div>
+      <p class="hint">Protect Stream is the safest starting point while live. Fast is uncapped and can affect bitrate recovery on weak uplinks.</p>
+
+      <dl>${rows([
+        ["Mode", friendlyTransferMode(ftp)],
+        ["Upload cap", formatUploadCap(chunkUploadKbps)],
+        ["Preprocessor", preprocess.status_text || preprocess.state || "Idle"],
+        ["Upload-ready", `${Number(ftp.processed_count || 0)}/${Number(preprocess.ahead || 0) || "?"}`],
+        ["Resize/compress", processing.enabled ? "Enabled" : "Disabled"],
+      ])}</dl>
+
+      <form id="processing-form" class="form-grid">
+        <label class="check-row wide"><input id="photo-processing-enabled" name="enabled" type="checkbox" ${processing.enabled ? "checked" : ""}>Resize/compress before transfer</label>
+        <label>Long edge px<input id="photo-long-edge" name="long_edge_px" type="number" min="0" max="12000" step="1" value="${escapeAttr(processing.long_edge_px)}"></label>
+        <label>JPEG quality<input id="photo-jpeg-quality" name="jpeg_quality" type="number" min="40" max="100" step="1" value="${escapeAttr(processing.jpeg_quality)}"></label>
+        <label>Max output MiB<input id="photo-max-output" name="max_output_mb" type="number" min="0" max="500" step="0.1" value="${escapeAttr(processing.max_output_mb)}"></label>
+        <div class="actions wide"><button id="apply-photo-processing" type="submit" ${live?.online ? "" : "disabled"}>Apply Processing</button></div>
+      </form>
+
+      <details class="nested-details">
+        <summary>Advanced transfer settings</summary>
+        <dl>${rows([
+          ["Endpoint", state.status.chunk_upload?.public_url_configured ? "Configured" : "Missing"],
+          ["Photo stage", state.status.chunk_upload?.photo_upload_configured ? "Configured" : "Missing token"],
+          ["Chunk size", `${chunkSize} bytes`],
+          ["Parallel chunks", chunkParallel],
+          ["Egress binding", ftp.egress_binding || "Waiting"],
+        ])}</dl>
+        <form id="chunk-form" class="form-grid">
+          <label>Chunk size bytes<input id="photo-chunk-size" name="chunk_size_bytes" type="number" min="262144" max="67108864" step="262144" value="${escapeAttr(chunkSize)}"></label>
+          <label>Parallel uploads<input id="photo-chunk-parallel" name="chunk_parallel_uploads" type="number" min="1" max="4" step="1" value="${escapeAttr(chunkParallel)}"></label>
+          <label>Upload cap kbps<input id="photo-chunk-kbps" name="chunk_upload_kbps" type="number" min="0" max="1000000" step="64" value="${escapeAttr(chunkUploadKbps)}"></label>
+          <div class="actions wide">
+            <button id="enable-chunk-relay" type="button" ${live?.online ? "" : "disabled"}>Enable Chunk Relay</button>
+            <button id="use-direct-ftp" type="button" ${live?.online ? "" : "disabled"}>Use Direct FTP</button>
+            <button id="refresh-photo-module" type="button" ${live?.online ? "" : "disabled"}>Refresh Status</button>
+          </div>
+        </form>
+      </details>
+
+      <details class="nested-details">
+        <summary>Agent setup</summary>
+        <dl>${rows([
+          ["FRAME target", `${connector?.target_host || state.status.ftp_connector?.target_host || "Not set"}:${connector?.target_port || state.status.ftp_connector?.target_port || 2121}`],
+          ["Camera FTP", cameraFtp.port ? `${cameraFtp.username}@Belabox:${cameraFtp.port}` : connector ? `${connector.camera_username}@Belabox:${state.status.ftp_connector?.camera_port || 2121}` : "Not installed"],
+          ["Managed folder", state.status.ftp_connector?.managed_upload_dir || "Agent workspace"],
+        ])}</dl>
+        <form id="ftp-form" class="form-grid">
+          <label>FRAME FTP external host/IP<input id="ftp-target-host" name="target_host" value="${escapeAttr(ftpTargetHost(connector))}"></label>
+          <label>FRAME FTP port<input id="ftp-target-port" name="target_port" type="number" min="1" max="65535" value="${escapeAttr(connector?.target_port || state.status.ftp_connector?.target_port || 2121)}"></label>
+          <label>Camera FTP username<input id="camera-ftp-user" name="camera_username" value="${escapeAttr(connector?.camera_username || state.status.ftp_connector?.camera_username || "framecam")}"></label>
+          <label>Camera FTP password<input id="camera-ftp-password" name="camera_password" type="password" autocomplete="new-password" placeholder="${connector ? "Keep current if blank" : "Generate if blank"}"></label>
+          <div class="actions wide">
+            <button id="setup-ftp-connector" type="submit">${setupButtonLabel}</button>
+            ${connector ? `<button id="show-ftp-password" type="button">Show Camera FTP Password</button>` : ""}
+          </div>
+        </form>
+        <pre id="ftp-output">${escapeHtml(state.ftpOutputs[deviceId] || (connector ? "Agent credentials are stored internally. Repair uses saved SSH or prompts through SSH Maintenance." : "Install uses saved SSH if available. Otherwise open SSH Maintenance first."))}</pre>
+      </details>
+
+      <p class="hint">${live?.online ? "Online controls use signed commands. No SSH login required." : "Agent must be online before photo settings can be sent."}</p>
+    </details>
+
+    <details class="settings-section" data-section="network-diagnostics">
+      <summary>Diagnostics</summary>
+      <dl>${rows([
+        ["State", diagnostics.state || "Idle"],
+        ["Progress", diagnostics.bytes_total ? `${Math.round((Number(diagnostics.bytes_sent || 0) / Number(diagnostics.bytes_total)) * 100)}%` : "None"],
+        ["Speed", diagnostics.mbps ? `${diagnostics.mbps} Mbps` : "Unknown"],
+        ["Streams", diagnostics.parallel || state.status.diagnostics?.parallel_streams || 1],
+      ])}</dl>
+      <form id="speed-test-form" class="form-grid">
+        <label>Upload test size MiB<input id="speed-test-mib" name="mib" type="number" min="1" max="${Math.max(1, Math.floor((state.status.diagnostics?.max_upload_bytes || 67108864) / 1024 / 1024))}" step="1" value="${Math.max(1, Math.round((state.status.diagnostics?.upload_bytes || 8388608) / 1024 / 1024))}"></label>
+        <label>Parallel streams<input id="speed-test-parallel" name="parallel" type="number" min="1" max="8" step="1" value="${escapeAttr(state.status.diagnostics?.parallel_streams || 1)}"></label>
+        <div class="actions wide"><button id="run-speed-test" type="submit" ${live?.online ? "" : "disabled"}>Run Upload Speed Test</button></div>
+      </form>
+      <pre id="speed-test-output">${diagnosticSummary(diagnostics)}</pre>
+    </details>
+
     <details class="settings-section" data-section="ssh-maintenance">
       <summary>SSH Maintenance</summary>
-      <p class="hint">Online controls use signed MQTT. SSH is only needed for agent repair, optional tool install, or reinstalling local services.</p>
+      <p class="hint">SSH is only needed for agent repair, optional tool install, or reinstalling local services.</p>
       <dl>${rows([
         ["Saved login", savedSsh ? `${savedSsh.user}@${savedSsh.host}:${savedSsh.port}` : "Not saved"],
         ["Encrypted save", sshCredentialSaveEnabled() ? "Available" : "Disabled"],
@@ -265,84 +384,6 @@ function renderDevicePanel(deviceId) {
         </div>
       </form>
       <pre id="pair-output">${savedSsh ? "Saved SSH can be reused for installer jobs. Enter a password or key to rotate it." : "Enter SSH credentials when an installer or repair job needs local access."}</pre>
-    </details>
-
-    <details class="settings-section" data-section="ftp-connector" open>
-      <summary>Photo Agent</summary>
-      <dl>${rows([
-        ["FRAME target", `${connector?.target_host || state.status.ftp_connector?.target_host || "Not set"}:${connector?.target_port || state.status.ftp_connector?.target_port || 2121}`],
-        ["FRAME credentials", state.status.ftp_connector?.target_password_configured ? "Configured internally" : "Missing in .env"],
-        ["Camera FTP", cameraFtp.port ? `${cameraFtp.username}@Belabox:${cameraFtp.port}` : connector ? `${connector.camera_username}@Belabox:${state.status.ftp_connector?.camera_port || 2121}` : "Not installed"],
-        ["Managed folder", state.status.ftp_connector?.managed_upload_dir || "Agent workspace"],
-      ])}</dl>
-      <form id="ftp-form" class="form-grid">
-        <label>FRAME FTP external host/IP<input id="ftp-target-host" name="target_host" value="${escapeAttr(ftpTargetHost(connector))}"></label>
-        <label>FRAME FTP port<input id="ftp-target-port" name="target_port" type="number" min="1" max="65535" value="${escapeAttr(connector?.target_port || state.status.ftp_connector?.target_port || 2121)}"></label>
-        <label>Camera FTP username<input id="camera-ftp-user" name="camera_username" value="${escapeAttr(connector?.camera_username || state.status.ftp_connector?.camera_username || "framecam")}"></label>
-        <label>Camera FTP password<input id="camera-ftp-password" name="camera_password" type="password" autocomplete="new-password" placeholder="${connector ? "Keep current if blank" : "Generate if blank"}"></label>
-        <div class="actions wide">
-          <button id="setup-ftp-connector" type="submit">Install / Repair Photo Agent</button>
-          ${connector ? `<button id="show-ftp-password" type="button">Show Camera FTP Password</button>` : ""}
-        </div>
-      </form>
-      <pre id="ftp-output">${escapeHtml(state.ftpOutputs[deviceId] || (connector ? "Photo Agent credentials are stored internally. Reinstall uses saved SSH or prompts through SSH Maintenance." : "Install uses saved SSH if available. Otherwise open SSH Maintenance first."))}</pre>
-    </details>
-
-    <details class="settings-section" data-section="mqtt-controls" open>
-      <summary>MQTT Controls</summary>
-      <dl>${rows([
-        ["Current mode", ftp.transfer_mode || ftp.transport || "Unknown"],
-        ["State", ftp.status_text || ftp.state || "Waiting for telemetry"],
-        ["Preprocessor", preprocess.status_text || preprocess.state || "Idle"],
-        ["Upload-ready", `${Number(ftp.processed_count || 0)}/${Number(preprocess.ahead || 0) || "?"}`],
-        ["Pre-processing", processing.enabled ? "Enabled" : "Disabled"],
-        ["Long edge", processing.long_edge_px ? `${processing.long_edge_px} px` : "Original"],
-        ["JPEG quality", processing.jpeg_quality],
-        ["Max output", processing.max_output_mb ? `${processing.max_output_mb} MiB` : "No limit"],
-        ["Processor", processing.processor || "Not reported"],
-        ["Endpoint", state.status.chunk_upload?.public_url_configured ? "Configured" : "Missing"],
-        ["Photo stage", state.status.chunk_upload?.photo_upload_configured ? "Configured" : "Missing token"],
-        ["Chunk size", `${chunkSize} bytes`],
-        ["Parallel chunks", chunkParallel],
-        ["Upload cap", formatUploadCap(chunkUploadKbps)],
-        ["Egress binding", ftp.egress_binding || "Waiting"],
-        ["Healthy lanes", `${ftp.egress_lane_count || egress.healthy_lane_count || 0}`],
-        ["Active lane", ftp.active_egress || "Idle"],
-      ])}</dl>
-      <form id="chunk-form" class="form-grid">
-        <label>Chunk size bytes<input id="photo-chunk-size" name="chunk_size_bytes" type="number" min="262144" max="67108864" step="262144" value="${escapeAttr(chunkSize)}"></label>
-        <label>Parallel uploads<input id="photo-chunk-parallel" name="chunk_parallel_uploads" type="number" min="1" max="4" step="1" value="${escapeAttr(chunkParallel)}"></label>
-        <label>Upload cap kbps<input id="photo-chunk-kbps" name="chunk_upload_kbps" type="number" min="0" max="1000000" step="64" value="${escapeAttr(chunkUploadKbps)}"></label>
-        <div class="actions wide">
-          <button id="enable-chunk-relay" type="button" ${live?.online ? "" : "disabled"}>Enable Chunk Relay</button>
-          <button id="use-direct-ftp" type="button" ${live?.online ? "" : "disabled"}>Use Direct FTP</button>
-          <button id="refresh-photo-module" type="button" ${live?.online ? "" : "disabled"}>Refresh Status</button>
-        </div>
-      </form>
-      <form id="processing-form" class="form-grid">
-        <label class="check-row wide"><input id="photo-processing-enabled" name="enabled" type="checkbox" ${processing.enabled ? "checked" : ""}>Resize/compress before transfer</label>
-        <label>Long edge px<input id="photo-long-edge" name="long_edge_px" type="number" min="0" max="12000" step="1" value="${escapeAttr(processing.long_edge_px)}"></label>
-        <label>JPEG quality<input id="photo-jpeg-quality" name="jpeg_quality" type="number" min="40" max="100" step="1" value="${escapeAttr(processing.jpeg_quality)}"></label>
-        <label>Max output MiB<input id="photo-max-output" name="max_output_mb" type="number" min="0" max="500" step="0.1" value="${escapeAttr(processing.max_output_mb)}"></label>
-        <div class="actions wide"><button id="apply-photo-processing" type="submit" ${live?.online ? "" : "disabled"}>Apply Processing</button></div>
-      </form>
-      <p class="hint">${live?.online ? "Uses signed MQTT commands. No SSH login required." : "Agent must be online before MQTT configuration can be sent."}</p>
-    </details>
-
-    <details class="settings-section" data-section="network-diagnostics" open>
-      <summary>Network Diagnostics</summary>
-      <dl>${rows([
-        ["State", diagnostics.state || "Idle"],
-        ["Progress", diagnostics.bytes_total ? `${Math.round((Number(diagnostics.bytes_sent || 0) / Number(diagnostics.bytes_total)) * 100)}%` : "None"],
-        ["Speed", diagnostics.mbps ? `${diagnostics.mbps} Mbps` : "Unknown"],
-        ["Streams", diagnostics.parallel || state.status.diagnostics?.parallel_streams || 1],
-      ])}</dl>
-      <form id="speed-test-form" class="form-grid">
-        <label>Upload test size MiB<input id="speed-test-mib" name="mib" type="number" min="1" max="${Math.max(1, Math.floor((state.status.diagnostics?.max_upload_bytes || 67108864) / 1024 / 1024))}" step="1" value="${Math.max(1, Math.round((state.status.diagnostics?.upload_bytes || 8388608) / 1024 / 1024))}"></label>
-        <label>Parallel streams<input id="speed-test-parallel" name="parallel" type="number" min="1" max="8" step="1" value="${escapeAttr(state.status.diagnostics?.parallel_streams || 1)}"></label>
-        <div class="actions wide"><button id="run-speed-test" type="submit" ${live?.online ? "" : "disabled"}>Run Upload Speed Test</button></div>
-      </form>
-      <pre id="speed-test-output">${diagnosticSummary(diagnostics)}</pre>
     </details>
 
     <details class="settings-section" data-section="telemetry">
@@ -372,6 +413,10 @@ function renderDevicePanel(deviceId) {
 }
 
 async function handlePanelClick(event) {
+  const copy = event.target.closest("[data-copy-text]");
+  if (copy) return copyToClipboard(copy);
+  const preset = event.target.closest("[data-transfer-preset]");
+  if (preset) return applyTransferPreset(preset.dataset.transferPreset, preset);
   const uninstall = event.target.closest("[data-uninstall-agent]");
   if (uninstall) return uninstallAgent(uninstall);
   const remove = event.target.closest("[data-remove-device]");
@@ -520,6 +565,27 @@ function ftpCredentialLines(result) {
     `Camera FTP password: ${result.camera_ftp_password}`,
     `Managed upload folder: ${result.upload_dir}`,
   ].filter(Boolean).join("\n");
+}
+
+async function applyTransferPreset(name, button) {
+  const preset = TRANSFER_PRESETS[name];
+  if (!preset) return;
+  const resetButton = setButtonBusy(button, "Applying...");
+  showNotice(`Applying ${preset.label} preset...`, "busy");
+  try {
+    await sendPhotoCommand("photo_transport_config_set", {
+      chunk_size_bytes: preset.chunk_size_bytes,
+      chunk_parallel_uploads: preset.chunk_parallel_uploads,
+      chunk_upload_kbps: preset.chunk_upload_kbps,
+    }, state.selectedDeviceId);
+    await sendPhotoCommand("photo_transfer_mode_set", { mode: "chunked_https" }, state.selectedDeviceId);
+    showNotice(`${preset.label} preset requested.`, "success");
+    await refresh();
+  } catch (error) {
+    showNotice(`${preset.label} preset failed: ${error.message}`, "error");
+  } finally {
+    resetButton();
+  }
 }
 
 async function applyPhotoTransport(mode, deviceId = state.selectedDeviceId, source = elements.devicePanel, quiet = false, button = null) {
@@ -683,6 +749,16 @@ async function uninstallAgent(button) {
   }
 }
 
+async function copyToClipboard(button) {
+  const text = button.dataset.copyText || "";
+  try {
+    await navigator.clipboard.writeText(text);
+    showNotice("Remote URL copied.", "success");
+  } catch {
+    showNotice(text, "success");
+  }
+}
+
 async function forgetSavedSsh(button) {
   const deviceId = state.selectedDeviceId;
   if (!confirm(`Forget saved SSH credential for ${deviceId}?`)) return;
@@ -842,11 +918,125 @@ function chunkStatus(ftp) {
   return "Direct FTP";
 }
 
+function remoteAccessUrl(deviceId) {
+  const path = `/belabox/remote?key=${encodeURIComponent(deviceId)}`;
+  try {
+    return new URL(path, publicFrameOrigin()).href;
+  } catch {
+    return path;
+  }
+}
+
+function publicFrameOrigin() {
+  const configured = state.status?.mqtt?.public_host || "";
+  try {
+    const url = new URL(configured || window.location.origin);
+    if (!["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname)) url.protocol = "https:";
+    return url.origin;
+  } catch {
+    return window.location.origin;
+  }
+}
+
+function statusTile(label, value, tone = "neutral") {
+  return `<div class="status-tile ${escapeAttr(tone)}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`;
+}
+
+function transferPresetButtons(chunkSize, parallel, kbps, online) {
+  const selected = selectedTransferPreset(chunkSize, parallel, kbps);
+  return Object.entries(TRANSFER_PRESETS).map(([key, preset]) => {
+    const active = selected === key ? " active" : "";
+    const cap = preset.chunk_upload_kbps ? formatUploadCap(preset.chunk_upload_kbps) : "Uncapped";
+    return `<button class="preset-button${active}" type="button" data-transfer-preset="${escapeAttr(key)}" ${online ? "" : "disabled"}>
+      <strong>${escapeHtml(preset.label)}</strong>
+      <span>${preset.chunk_parallel_uploads} stream${preset.chunk_parallel_uploads === 1 ? "" : "s"} &middot; ${escapeHtml(cap)}</span>
+    </button>`;
+  }).join("");
+}
+
+function selectedTransferPreset(chunkSize, parallel, kbps) {
+  const match = Object.entries(TRANSFER_PRESETS).find(([, preset]) =>
+    preset.chunk_size_bytes === chunkSize
+      && preset.chunk_parallel_uploads === parallel
+      && preset.chunk_upload_kbps === kbps,
+  );
+  return match ? match[0] : "";
+}
+
 function remoteBelauiStatus(value) {
   if (!value?.enabled) return "Disabled";
   if (value.state === "reachable") return `Reachable (${value.http_status || "HTTP"})`;
   if (value.state === "unreachable") return "Unreachable";
   return value.state || "Configured";
+}
+
+function friendlyTransferState(ftp, connector) {
+  if (!connector && !ftp?.state) return "Needs setup";
+  const stateName = String(ftp?.state || "").toLowerCase();
+  if (ftp?.done || stateName === "complete" || stateName === "published") return "Published";
+  if (stateName === "failed" || stateName === "error") return "Needs attention";
+  if (stateName === "uploading") return "Uploading";
+  if (["connecting", "preparing", "assembling"].includes(stateName)) return "Sending";
+  if (stateName === "processing") return "Processing";
+  if (stateName === "queued") return "Queued";
+  if (stateName === "idle") return "Ready";
+  return ftp?.status_text || stateName || "Waiting";
+}
+
+function friendlyTransferMode(ftp) {
+  return ftp?.transfer_mode === "chunked_https" || ftp?.transport === "chunked_https" ? "Stream-safe HTTPS" : "Direct FTP";
+}
+
+function streamSafetyLabel(ftp, kbps) {
+  if (ftp?.transfer_mode !== "chunked_https" && ftp?.transport !== "chunked_https") return "Direct FTP";
+  return kbps > 0 ? "Capped" : "Uncapped";
+}
+
+function slowdownSummary(live, connector, ftp, preprocess, egress, kbps) {
+  if (!live?.online) return { tone: "warn", title: "Encoder offline", detail: "FRAME is waiting for the Belabox agent to reconnect." };
+  if (!connector) return { tone: "warn", title: "Photo Agent not installed", detail: "Install the Photo Agent before camera uploads can be managed." };
+  if (ftp?.last_error) return { tone: "warn", title: "Last transfer needs attention", detail: ftp.last_error };
+  if (String(preprocess?.state || "").toLowerCase() === "processing") return { tone: "busy", title: "Preparing images on the Belabox", detail: "Image resize/compression is active before upload begins." };
+  if (ftp?.state === "uploading") {
+    const cap = kbps > 0 ? `Upload is capped at ${formatUploadCap(kbps)}.` : "Upload is uncapped and can compete with the live stream.";
+    return { tone: kbps > 0 ? "good" : "warn", title: "Network upload is active", detail: cap };
+  }
+  if (Number(ftp?.queue_count || 0) > 0 && Number(ftp?.processed_count || 0) === 0) return { tone: "busy", title: "Waiting for upload-ready files", detail: "The Belabox is staging or processing photos before sending them." };
+  if (egress?.lane_count && !egress.healthy_lane_count) return { tone: "warn", title: "No healthy egress lanes", detail: "The agent can see network interfaces, but none currently route cleanly to FRAME." };
+  if (kbps === 0 && (ftp?.transfer_mode === "chunked_https" || ftp?.transport === "chunked_https")) return { tone: "warn", title: "Uploads are uncapped", detail: "Use Protect Stream while live to avoid starving SRTLA bitrate recovery." };
+  return { tone: "good", title: "Ready", detail: "No current photo-transfer bottleneck is reported." };
+}
+
+function photoPipeline(ftp, preprocess) {
+  const stages = ["Received", "Processing", "Upload-ready", "Sending", "Published"];
+  const stateName = String(ftp?.state || "").toLowerCase();
+  let active = -1;
+  if (ftp?.done || stateName === "complete" || stateName === "published") active = 4;
+  else if (["connecting", "preparing", "uploading", "assembling"].includes(stateName)) active = 3;
+  else if (Number(ftp?.processed_count || 0) > 0) active = 2;
+  else if (stateName === "processing" || String(preprocess?.state || "").toLowerCase() === "processing") active = 1;
+  else if (Number(ftp?.queue_count || 0) > 0 || stateName === "queued") active = 0;
+  return `<ol class="pipeline">${stages.map((stage, index) => {
+    const className = active < 0 ? "pending" : index < active ? "done" : index === active ? "active" : "pending";
+    return `<li class="${className}"><span></span>${escapeHtml(stage)}</li>`;
+  }).join("")}</ol>`;
+}
+
+function egressLaneChips(egress, ftp) {
+  const lanes = Array.isArray(egress?.lanes) ? egress.lanes : [];
+  if (!lanes.length) return `<p class="hint">Waiting for connection telemetry.</p>`;
+  return `<div class="lane-chips">${lanes.map((lane, index) => {
+    const stateName = lane.state === "healthy" ? "healthy" : lane.state === "unreachable" ? "offline" : "warn";
+    const active = String(ftp?.active_egress || "").includes(lane.address) || String(ftp?.active_egress || "").includes(lane.name);
+    return `<span class="lane-chip ${stateName}${active ? " active" : ""}">${escapeHtml(friendlyLaneName(lane, index))}</span>`;
+  }).join("")}</div>`;
+}
+
+function friendlyLaneName(lane, index) {
+  const name = String(lane?.name || "");
+  if (name.startsWith("eth")) return "Ethernet";
+  if (name.startsWith("wlan")) return `Wi-Fi ${index + 1}`;
+  return name || `Lane ${index + 1}`;
 }
 
 function egressSummary(value) {
@@ -856,7 +1046,8 @@ function egressSummary(value) {
 
 function formatUploadCap(value) {
   const kbps = Number(value || 0);
-  return kbps > 0 ? `${kbps} kbps` : "Uncapped";
+  if (kbps <= 0) return "Uncapped";
+  return kbps >= 1000 ? `${(kbps / 1000).toFixed(kbps % 1000 ? 1 : 0)} Mbps` : `${kbps} kbps`;
 }
 
 function processingSettings(ftp) {
@@ -883,6 +1074,15 @@ function diagnosticSummary(diagnostics) {
   const speed = diagnostics.mbps ? `${diagnostics.mbps} Mbps` : "calculating";
   const error = diagnostics.error ? `\nError: ${diagnostics.error}` : "";
   return `${diagnostics.state}: ${pct} (${formatBytes(sent)} / ${formatBytes(total)})\nSpeed: ${speed}\nStreams: ${diagnostics.parallel || 1}${error}`;
+}
+
+function transferEta(ftp) {
+  const total = Number(ftp?.size_bytes || 0);
+  const sent = Number(ftp?.sent_bytes || 0);
+  const rate = Number(ftp?.rate_bps || 0);
+  if (!total || !sent || !rate || sent >= total) return "Unknown";
+  const secondsLeft = Math.ceil((total - sent) / rate);
+  return secondsLeft < 60 ? `${secondsLeft}s` : `${Math.ceil(secondsLeft / 60)}m`;
 }
 
 function formatBytes(value) {
