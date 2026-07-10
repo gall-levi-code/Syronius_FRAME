@@ -292,6 +292,7 @@ services:
     container_name: frame-belabox-manager
     restart: unless-stopped
     environment:
+      FRAME_MODE: ${FRAME_MODE:-LAN}
       PORT: 3741
       DATA_ROOT: /data
       BELABOX_HOST: ${BELABOX_HOST:-}
@@ -337,6 +338,7 @@ services:
       BELABOX_DIAGNOSTIC_PARALLEL_STREAMS: ${BELABOX_DIAGNOSTIC_PARALLEL_STREAMS:-1}
       PHOTO_MAX_INPUT_MB: ${PHOTO_MAX_INPUT_MB:-50}
       PHOTO_UPLOAD_API_URL: http://frame-photo-upload:3736
+      PHOTO_PIPELINE_URL: http://frame-pipeline-photos:3735
       PORTAL_SERVICE_TOKEN: ${PORTAL_SERVICE_TOKEN:-}
       REQUEST_TIMEOUT_MS: ${REQUEST_TIMEOUT_MS:-3000}
     volumes:

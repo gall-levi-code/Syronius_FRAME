@@ -5,6 +5,7 @@ import net from "node:net";
 import tls from "node:tls";
 import os from "node:os";
 import dns from "node:dns";
+import path from "node:path";
 import { execFileSync } from "node:child_process";
 import {
   createPrivateKey,
@@ -15,7 +16,7 @@ import {
   verify as verifyBytes,
 } from "node:crypto";
 
-const VERSION = "0.5.6";
+const VERSION = "0.6.0";
 const REMOTE_BELAUI_HTTP_TIMEOUT_MS = 8000;
 const REMOTE_BELAUI_MAX_HTTP_BODY_BYTES = 2 * 1024 * 1024;
 const REMOTE_BELAUI_STREAM_CHUNK_BYTES = 48 * 1024;
@@ -30,6 +31,7 @@ const ALLOWED_COMMANDS = new Set([
   "photo_transport_config_set",
   "photo_processing_config_set",
   "photo_module_status",
+  "photo_queue_reset",
   "network_speed_test",
 ]);
 const selfTestMode = process.argv.includes("--self-test");
@@ -193,6 +195,11 @@ async function runCommand(command) {
     case "photo_module_status":
       publishTelemetry();
       return `photo module config ${JSON.stringify(readPhotoConfig())}`;
+    case "photo_queue_reset": {
+      const result = archivePhotoQueue();
+      publishTelemetry();
+      return `photo queue reset archived ${result.moved} file${result.moved === 1 ? "" : "s"}${result.preserved ? `; preserved ${result.preserved} active` : ""}`;
+    }
     case "network_speed_test":
       return await runNetworkSpeedTest(command.args);
     case "agent_update":
@@ -461,6 +468,7 @@ function localBelauiHttpRequest(message) {
   if (!remoteBelaui.enabled) throw new Error("remote belaUI is disabled");
   const target = localBelauiUrl(text(message.path, 2000) || "/");
   const method = text(message.method, 16) || "GET";
+  const probeOnly = message.probe_only === true;
   const body = Buffer.from(text(message.body_b64, REMOTE_BELAUI_MAX_HTTP_BODY_BYTES * 2) || "", "base64");
   if (body.length > REMOTE_BELAUI_MAX_HTTP_BODY_BYTES) throw new Error("proxy body too large");
   const headers = proxyHeaders(message.headers, target);
@@ -468,6 +476,15 @@ function localBelauiHttpRequest(message) {
   const transport = target.protocol === "https:" ? https : http;
   return new Promise((resolve, reject) => {
     const request = transport.request(target, { method, headers, timeout: REMOTE_BELAUI_HTTP_TIMEOUT_MS }, (response) => {
+      if (probeOnly) {
+        response.resume();
+        response.on("end", () => resolve({
+          status_code: response.statusCode || 502,
+          headers: responseHeaders(response.headers),
+          body_b64: "",
+        }));
+        return;
+      }
       const chunks = [];
       let size = 0;
       response.on("data", (chunk) => {
@@ -845,6 +862,7 @@ function readFtpUploadStatus() {
       updated_at: iso(status.updated_at) || new Date().toISOString(),
       last_completed_at: iso(status.last_completed_at),
       last_error: text(status.last_error, 160) || null,
+      last_result: transferResult(status.last_result),
     };
   } catch {
     return null;
@@ -873,6 +891,29 @@ function cleanObject(value) {
 
 function pathDir(file) {
   return file.slice(0, Math.max(file.lastIndexOf("/"), 0)) || ".";
+}
+
+function archivePhotoQueue(base = path.resolve(os.homedir(), ".frame-belabox-agent/photo-spool"), ftp = readFtpUploadStatus() || {}) {
+  const active = new Set([ftp.file, ftp.preprocess && ftp.preprocess.file].filter(Boolean));
+  const archive = path.join(base, "reset-archive", new Date().toISOString().replace(/[^0-9]/g, ""));
+  let moved = 0;
+  let preserved = 0;
+  for (const name of ["incoming", "ready", "processed"]) {
+    const directory = path.resolve((ftp.spool && ftp.spool[name]) || path.join(base, name));
+    if (!directory.startsWith(`${base}${path.sep}`)) throw new Error("photo queue path is outside the managed spool");
+    if (!fs.existsSync(directory)) continue;
+    for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      if (active.has(entry.name)) {
+        preserved += 1;
+        continue;
+      }
+      fs.mkdirSync(archive, { recursive: true });
+      fs.renameSync(path.join(directory, entry.name), path.join(archive, `${name}-${entry.name}`));
+      moved += 1;
+    }
+  }
+  return { moved, preserved, archive: moved ? archive : null };
 }
 
 function writeJsonFile(file, payload) {
@@ -930,6 +971,18 @@ function preprocessStatus(value) {
     warning: text(value.warning, 160) || null,
     error: text(value.error, 160) || null,
     updated_at: iso(value.updated_at),
+  };
+}
+
+function transferResult(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const status = text(value.status, 16);
+  if (status !== "completed" && status !== "failed") return null;
+  return {
+    status,
+    file: text(value.file, 180) || null,
+    at: iso(value.at),
+    error: text(value.error, 160) || null,
   };
 }
 
@@ -1026,6 +1079,8 @@ function selfTest() {
   assertEqual(photoTransferIsActive({ file: "a.jpg", queue_count: 0, state: "processing" }), true, "processing upload");
   assertEqual(photoTransferIsActive({ file: null, queue_count: 1, state: "idle" }), true, "queued upload");
   assertEqual(photoTransferIsActive({ file: null, queue_count: 0, state: "idle" }), false, "idle upload");
+  assertEqual(transferResult({ status: "completed", file: "photo.jpg", at: new Date().toISOString() }).file, "photo.jpg", "transfer result");
+  assertEqual(transferResult({ status: "pending" }), null, "invalid transfer result");
   validateArgs("network_speed_test", { mode: "http_upload", bytes: 65536, parallel: 2 });
   assertReject(() => validateArgs("network_speed_test", { mode: "iperf3_tcp" }), "speed mode");
   validateArgs("photo_transport_config_set", { chunk_size_bytes: 4194304, chunk_parallel_uploads: 4, chunk_upload_kbps: 2500, chunk_upload_url: "https://example.test/chunks" });
@@ -1034,6 +1089,18 @@ function selfTest() {
   assertReject(() => validateArgs("photo_transport_config_set", { chunk_upload_url: "ftp://example.test/chunks" }), "chunk url");
   validateArgs("photo_processing_config_set", { enabled: true, long_edge_px: 1600, jpeg_quality: 85, max_output_mb: 2.5 });
   assertReject(() => validateArgs("photo_processing_config_set", { jpeg_quality: 20 }), "jpeg quality");
+  validateArgs("photo_queue_reset", {});
+  const queueRoot = fs.mkdtempSync(path.join(os.tmpdir(), "frame-photo-queue-"));
+  try {
+    for (const directory of ["incoming", "ready", "processed"]) fs.mkdirSync(path.join(queueRoot, directory));
+    fs.writeFileSync(path.join(queueRoot, "ready", "pending.jpg"), "pending");
+    fs.writeFileSync(path.join(queueRoot, "processed", "active.jpg"), "active");
+    const reset = archivePhotoQueue(queueRoot, { file: "active.jpg", state: "uploading" });
+    assertEqual(reset.moved, 1, "queue reset moved");
+    assertEqual(reset.preserved, 1, "queue reset preserved active");
+  } finally {
+    fs.rmSync(queueRoot, { recursive: true, force: true });
+  }
   assertEqual(loopbackHttpUrl("http://127.0.0.1:3741/"), "http://127.0.0.1:3741", "loopback URL");
   assertEqual(readBool("FRAME_SELFTEST_MISSING_BOOL", true), true, "bool fallback");
 }

@@ -30,6 +30,9 @@ export interface PipelineStatus {
   published: number;
   quarantined: number;
   last_publish_at: string | null;
+  last_publish_file: string | null;
+  last_quarantine_at: string | null;
+  last_quarantine_file: string | null;
   last_error: string | null;
   heic_supported: boolean;
 }
@@ -104,6 +107,9 @@ export class PhotoPipeline {
       published: 0,
       quarantined: 0,
       last_publish_at: null,
+      last_publish_file: null,
+      last_quarantine_at: null,
+      last_quarantine_file: null,
       last_error: null,
       heic_supported: Boolean(sharp.format.heif?.input?.buffer),
     };
@@ -347,6 +353,7 @@ export class PhotoPipeline {
       await this.finishClaim(claim, dateFolder);
       this.status.published += 1;
       this.status.last_publish_at = processedAt;
+      this.status.last_publish_file = claim.originalName;
       this.status.last_error = null;
       console.log(`[photo-pipeline] published ${claim.originalName} as ${dateFolder}/${base}`);
     } catch (error) {
@@ -360,6 +367,8 @@ export class PhotoPipeline {
       }
       await this.quarantine(claim, reason);
       this.status.quarantined += 1;
+      this.status.last_quarantine_at = new Date().toISOString();
+      this.status.last_quarantine_file = claim.originalName;
       this.status.last_error = reason.detail;
       console.error(`[photo-pipeline] quarantined ${claim.originalName}: ${reason.code} ${reason.detail}`);
     }
@@ -407,6 +416,7 @@ export class PhotoPipeline {
     });
     this.status.published += 1;
     this.status.last_publish_at = new Date().toISOString();
+    this.status.last_publish_file = claim.originalName;
     this.status.last_error = null;
     console.log(`[photo-pipeline] recovered completed publish ${publication.dateFolder}/${publication.base}`);
     return true;

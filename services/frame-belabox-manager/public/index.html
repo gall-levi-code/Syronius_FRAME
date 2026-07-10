@@ -39,7 +39,7 @@
       })();
     </script>
     <script src="/assets/frame-theme.js?v=global-theme-v1"></script>
-    <link rel="stylesheet" href="/belabox/assets/styles.css?v=portal-theme-v1">
+    <link rel="stylesheet" href="/belabox/assets/styles.css?v=manager-workspace-v3">
   </head>
   <body>
     <header class="topbar">
@@ -58,30 +58,11 @@
 
     <main class="shell">
       <div id="notice" class="notice hidden" role="status"></div>
-      <section class="summary">
-        <div>
-          <span>Agent Link</span>
-          <strong id="mqtt-state">Loading</strong>
-        </div>
-        <div>
-          <span>Devices</span>
-          <strong id="device-count">0</strong>
-        </div>
-        <div>
-          <span>Heartbeat</span>
-          <strong id="heartbeat-state">Waiting</strong>
-        </div>
-        <div>
-          <span>Controls</span>
-          <strong id="command-state">Disabled</strong>
-        </div>
-      </section>
-
       <section class="manager-layout">
         <div id="device-tabs" class="device-tabs" role="tablist" aria-label="Belabox devices"></div>
-        <article id="device-panel" class="device-panel"></article>
+        <article id="device-panel" class="device-panel" role="tabpanel" tabindex="-1"></article>
       </section>
     </main>
-    <script src="/belabox/assets/app.js?v=fast-feedback-v1"></script>
+    <script src="/belabox/assets/app.js?v=manager-workspace-v3"></script>
   </body>
 </html>

@@ -64,6 +64,7 @@ test("installer Compose template stays synchronized with the service contracts",
   assert.ok(brokerConfig.includes("acl_file /mosquitto/data/acl"));
   assert.ok(!belaboxBroker.includes("ports:"));
   assert.ok(belabox.includes("BELABOX_HOST: ${BELABOX_HOST:-}"));
+  assert.ok(belabox.includes("FRAME_MODE: ${FRAME_MODE:-LAN}"));
   assert.ok(belabox.includes("BELABOX_SSH_CREDENTIAL_KEY: ${BELABOX_SSH_CREDENTIAL_KEY:-}"));
   assert.ok(belabox.includes("BELABOX_AGENT_COMMANDS_ENABLED: ${BELABOX_AGENT_COMMANDS_ENABLED:-false}"));
   assert.ok(belabox.includes("BELABOX_MQTT_INTERNAL_URL: ${BELABOX_MQTT_INTERNAL_URL:-mqtt://frame-belabox-broker:1883}"));
@@ -292,6 +293,13 @@ test("photo pipeline is internal and activated by every photo capability", () =>
   }
 });
 
+test("photo pipeline reports per-file outcomes for transfer UX", async () => {
+  const source = await readFile("services/frame-pipeline-photos/src/pipeline.ts", "utf8");
+  assert.ok(source.includes("last_publish_file"));
+  assert.ok(source.includes("last_quarantine_file"));
+  assert.ok(source.includes("last_quarantine_at"));
+});
+
 test("Portal hides pipeline settings unless photo pipeline capabilities are enabled", async () => {
   const [stackConfig, portalServer, frontend, html] = await Promise.all([
     readFile("services/frame-portal/src/stackConfig.ts", "utf8"),
@@ -383,7 +391,25 @@ test("Belabox pairing UI hides MQTT implementation details", async () => {
   assert.ok(styles.includes(".brand-link"));
   assert.ok(styles.includes(".theme-day .moon-icon"));
   assert.ok(frontend.includes("Add Device"), "Zero-device state should enter the add-device wizard");
+  assert.ok(frontend.includes("Welcome to the Belabox Manager Agent Installation Wizard"));
+  assert.ok(frontend.includes("Belabox FTP Photo Agent"));
+  assert.ok(frontend.includes("Stream Safe Photo Transfer"));
+  assert.ok(frontend.includes("/belabox/api/ssh/check"));
+  assert.ok(frontend.includes("LAST_DEVICE_KEY"), "Belabox Manager should restore the last viewed device");
+  assert.ok(frontend.includes('user: formValue(form, "pair-user", "user").trim()'), "Wizard submit should preserve the default SSH username");
+  assert.ok(frontend.includes('id="pair-display-name"'), "Wizard should ask for a friendly name and derive the technical device ID");
+  assert.ok(frontend.includes("displayNameExists"), "Wizard should reject duplicate friendly names before SSH work");
+  assert.ok(backend.includes("safeDisplayName"), "Pairing and rename APIs should share device-name validation");
+  assert.ok(frontend.includes("elements.deviceTabs.hidden = state.selectedDeviceId === ADD_DEVICE_ID"), "Add Device wizard should hide device tabs");
+  assert.ok(!frontend.includes("ssh_credentials?.devices || []).some"), "Stale saved SSH credentials must not block re-adding a removed host");
   assert.ok(frontend.includes("SSH Maintenance"));
+  assert.ok(frontend.includes("criticalAction"));
+  assert.ok(frontend.includes("beginCriticalAction"));
+  assert.ok(frontend.includes("blockCriticalNavigation"));
+  assert.ok(frontend.includes("handleCriticalBeforeUnload"));
+  assert.ok(frontend.includes("panelHoldKey"), "Heartbeat refreshes should not replace an active device panel");
+  assert.ok(frontend.includes("panelRenderHeld(panelKey)"), "Device panel rendering should respect the interaction hold");
+  assert.ok(frontend.includes('form.querySelector("#pair-output") || elements.devicePanel.querySelector("#pair-output")'), "Repair jobs should use the panel-level SSH log");
   assert.ok(frontend.includes("Photo Transfer"));
   assert.ok(frontend.includes("Protect Stream"));
   assert.ok(frontend.includes("What is slowing things down?"));
@@ -392,10 +418,62 @@ test("Belabox pairing UI hides MQTT implementation details", async () => {
   assert.ok(frontend.includes("/belabox/api/pair"));
   assert.ok(frontend.includes("/belabox/api/pair/jobs"));
   assert.ok(frontend.includes("/belabox/api/ftp-connector/jobs"));
-  assert.ok(frontend.includes("Enable Chunk Relay"));
+  assert.ok(frontend.includes('role="switch"'), "Photo transport should expose one mutually exclusive mode switch");
+  assert.ok(frontend.includes('sliderControl("photo-jpeg-quality"'), "Photo quality should use the shared slider control");
+  assert.ok(frontend.includes('sliderControl("photo-max-output"'), "Maximum prepared image size should use the shared slider control");
+  assert.ok(frontend.includes('id="photo-resize-enabled"'), "Dimension resizing should use an explicit control");
+  assert.ok(frontend.includes('id="photo-size-limit-enabled"'), "Output size limiting should use an explicit control");
+  assert.ok(frontend.includes('"Maximum output", 1, 25, 0.5'), "Prepared JPEG size should use a practical 25 MiB range");
+  assert.ok(frontend.includes('"Chunk size", 262144, 8388608'), "Chunk sliders should stop at 8 MiB");
+  assert.ok(frontend.includes('id="photo-upload-uncapped"'), "Upload caps should use an explicit uncapped control");
+  assert.ok(frontend.includes("Apply changes to"), "Pending settings should expose the large device-specific apply action");
+  assert.ok(frontend.includes("updateFormPendingState"), "Editable settings should expose acknowledged and pending states");
+  assert.ok(frontend.includes("Discard changes"), "Users should be able to discard staged settings");
+  assert.ok(frontend.includes('if (event.target.matches("#chunk-form")) return runTransferSubmit(event);'), "Transfer settings should apply through one form action");
+  assert.ok(!frontend.includes('applyPhotoTransport(requested ? "chunked_https"'), "Changing transfer mode should remain local until Apply is pressed");
+  assert.ok(styles.includes(".form-commit .form-apply-button"), "Pending actions should span their settings section");
+  assert.ok(!frontend.includes('id="enable-chunk-relay"'), "Transport mode should not expose competing action buttons");
   assert.ok(frontend.includes("Run Upload Speed Test"));
-  assert.ok(frontend.includes("SSH required"));
+  assert.ok(frontend.includes("Hybrid required"));
   assert.ok(frontend.includes("remember_ssh"));
+  assert.ok(!frontend.includes("Private key"), "Belabox Manager should not ask users for SSH private keys");
+  assert.ok(frontend.includes('type="range"'), "Wizard transfer controls should use sliders");
+  assert.ok(styles.includes(".device-tabs::-webkit-scrollbar"), "Device tabs should not show a scrollbar");
+  assert.ok(styles.includes(".device-panel:has(#device-wizard) .wizard-step"), "Add wizard pages should use the Overlay Wizard panel rhythm");
+  assert.ok(styles.includes('grid-template-areas: "notice" "tabs" "content"'), "Belabox Manager should keep one compact manager shell");
+  assert.ok(frontend.includes('class="workspace-section status-workspace"'), "Daily device status should be grouped into one overview");
+  assert.ok(frontend.includes('class="workspace-section photo-workspace"'), "Photo Transfer should be the primary work surface");
+  assert.ok(frontend.includes('data-section="maintenance"'), "Maintenance tools should be collapsed together");
+  assert.ok(frontend.includes('data-section="advanced-tools"'), "Raw telemetry and logs should stay behind Advanced");
+  assert.ok(!html.includes('id="mqtt-state"'), "The manager shell should not expose protocol status cards");
+  assert.ok(frontend.includes('id="device-name-form"'), "Paired devices should have editable display names");
+  assert.ok(frontend.includes('class="agent-card"'), "Installed agent health should be visible without opening Advanced");
+  assert.ok(frontend.includes("Agent update available"), "Agent version drift should have a quiet update state");
+  assert.ok(backend.includes('app.patch("/belabox/api/devices/:deviceId"'), "Display names should persist through the manager API");
+  assert.ok(backend.includes("bundled_version: bundledAgentVersion"), "Agent status should publish the bundled update target");
+  assert.ok(backend.includes("Device name is already assigned"), "Display names should remain unique");
+  assert.ok(frontend.includes("transferResultNotice"), "Recent transfer outcomes should remain visible after the active card advances");
+  assert.ok(frontend.includes("FRAME Processing"), "Belabox acceptance and FRAME publication should be separate states");
+  assert.ok(frontend.includes("photoTelemetryReady ? streamSafetyLabel"), "Unknown photo telemetry should not be presented as Direct FTP");
+  assert.ok(agent.includes("last_result: transferResult(status.last_result)"), "Belabox telemetry should carry the last authoritative transfer result");
+  assert.ok(photoAgent.includes('last_result = {"status": "completed"'), "Photo Agent should retain the completed filename for result feedback");
+  assert.ok(photoAgent.includes("next_scale_percent"), "Photo Agent should adapt dimensions when quality alone cannot meet the size target");
+  assert.ok(!photoAgent.includes("MAX_OUTPUT_DEFAULT_LONG_EDGE"), "A size limit should not silently force a 2400 px edge");
+  assert.ok(backend.includes("photoPipelineStatus"), "Manager status should include FRAME pipeline health");
+  assert.ok(styles.includes(".install-action"), "Install action should use the large action button style");
+  assert.ok(styles.includes(".critical-action-modal"), "Critical SSH work should use a blocking progress dialog");
+  assert.ok(styles.includes(".critical-action-active"), "Critical SSH work should lock page scrolling");
+  assert.ok(frontend.includes("setManagerInert(true)"), "Blocking work should remove background controls from keyboard navigation");
+  assert.ok(styles.includes(":focus-visible"), "Manager controls should expose keyboard focus");
+  assert.ok(html.includes('role="tabpanel"'), "Device content should be associated with the tab interface");
+  assert.ok(frontend.includes("ensureConfirmationDialog"), "Destructive actions should share a themed confirmation dialog");
+  assert.ok(!frontend.includes("if (!confirm("), "Destructive actions should not use native confirmation prompts");
+  assert.ok(frontend.includes('sendPhotoCommand("photo_queue_reset"'), "Maintenance should expose guarded photo queue recovery");
+  assert.ok(agent.includes("archivePhotoQueue"), "Queue reset should archive managed spool files on the Belabox");
+  assert.ok(backend.includes('"photo_queue_reset"'), "Queue reset should be a signed allowlisted command");
+  assert.ok(!agent.includes("?."), "Belabox agent syntax should remain compatible with the image's Node runtime");
+  assert.ok(backend.includes('"$node_bin" --check "$agent_dir/belabox-agent.mjs"'), "Repair should validate agent syntax before stopping the working service");
+  assert.ok(backend.includes("waitForFreshHeartbeat(record.device_id, installedAt"), "Repair should only accept a post-install heartbeat");
   assert.ok(frontend.includes("Forget Saved SSH"));
   assert.ok(frontend.includes("detailsOpen"));
   assert.ok(frontend.includes("setButtonBusy"));
@@ -405,6 +483,11 @@ test("Belabox pairing UI hides MQTT implementation details", async () => {
   assert.ok(frontend.includes('method: "DELETE"'));
   assert.ok(backend.includes("ftp_connectors:"));
   assert.ok(backend.includes("ssh_credentials:"));
+  assert.ok(backend.includes('"/belabox/api/ssh/check"'));
+  assert.ok(backend.includes("parsePairJobInput(request.body)"), "Repair jobs should allow saved SSH credentials");
+  assert.ok(backend.includes("Saved SSH credential is not available"), "Repair jobs should explain missing saved SSH");
+  assert.ok(backend.includes("Belabox host/IP is already assigned"));
+  assert.ok(backend.includes("SSH password is required."));
   assert.ok(backend.includes("aes-256-gcm"));
   assert.ok(backend.includes("safeFtpPassword"));
   assert.ok(backend.includes("if (!device.last_heartbeat_at) return false"));
@@ -419,7 +502,9 @@ test("Belabox pairing UI hides MQTT implementation details", async () => {
   assert.ok(backend.includes("remoteBelauiShellPage"));
   assert.ok(backend.includes("REMOTE_BELAUI_STATUS_TIMEOUT_MS"));
   assert.ok(backend.includes("REMOTE_BELAUI_STATUS_POLL_MS"));
+  assert.ok(backend.includes("REMOTE_BELAUI_READY_STATUS_POLL_MS"));
   assert.ok(backend.includes("REMOTE_BELAUI_OFFLINE_FAILURES"));
+  assert.ok(backend.includes("probe_only: true"));
   assert.ok(backend.includes("noteOffline"));
   assert.ok(backend.includes("requireReachable: false"));
   assert.ok(backend.includes("Reconnecting to encoder..."));
@@ -430,6 +515,7 @@ test("Belabox pairing UI hides MQTT implementation details", async () => {
   assert.ok(agent.includes("network_speed_test"));
   assert.ok(agent.includes("BELABOX_CHUNK_UPLOAD_TOKEN"));
   assert.ok(agent.includes("BELABOX_EGRESS_STATUS_PATH"));
+  assert.ok(agent.includes("message.probe_only === true"));
   assert.ok(agent.includes("routeForSource"));
   assert.ok(agent.includes("agent-wss-proxy"));
   assert.ok(photoAgent.includes("source_address="));

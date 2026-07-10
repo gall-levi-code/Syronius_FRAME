@@ -50,8 +50,10 @@ interface DeviceState {
 
 interface ProvisionedDevice {
   device_id: string;
+  display_name?: string;
   mqtt_username: string;
   mqtt_password: string;
+  host?: string;
   created_at: string;
   updated_at: string;
 }
@@ -63,6 +65,7 @@ interface PairInput {
   password: string;
   privateKey: string;
   deviceId: string;
+  displayName?: string;
   installDiagnostics: boolean;
   enableSshOnBoot: boolean;
   rememberSsh: boolean;
@@ -161,6 +164,7 @@ type CommandName =
   | "photo_transport_config_set"
   | "photo_processing_config_set"
   | "photo_module_status"
+  | "photo_queue_reset"
   | "network_speed_test";
 
 const TOPIC_ROOT = "frame/belabox";
@@ -168,6 +172,7 @@ const REMOTE_BELAUI_ROUTE_PREFIX = "/belabox/remote";
 const REMOTE_BELAUI_HTTP_TIMEOUT_MS = 8000;
 const REMOTE_BELAUI_STATUS_TIMEOUT_MS = 1500;
 const REMOTE_BELAUI_STATUS_POLL_MS = 500;
+const REMOTE_BELAUI_READY_STATUS_POLL_MS = 5000;
 const REMOTE_BELAUI_OFFLINE_FAILURES = 4;
 const REMOTE_BELAUI_MAX_HTTP_BODY_BYTES = 2 * 1024 * 1024;
 const REMOTE_BELAUI_STREAM_CHUNK_BYTES = 48 * 1024;
@@ -192,11 +197,13 @@ const ALLOWED_COMMANDS = new Set<CommandName>([
   "photo_transport_config_set",
   "photo_processing_config_set",
   "photo_module_status",
+  "photo_queue_reset",
   "network_speed_test",
 ]);
-const CONFIRM_COMMANDS = new Set<CommandName>(["agent_update", "agent_restart", "log_bundle_collect"]);
+const CONFIRM_COMMANDS = new Set<CommandName>(["agent_update", "agent_restart", "log_bundle_collect", "photo_queue_reset"]);
 
 const config = {
+  frameMode: process.env.FRAME_MODE?.trim().toUpperCase() || "LAN",
   port: readPort("PORT", 3741),
   dataRoot: path.resolve(process.env.DATA_ROOT?.trim() || "./data"),
   host: process.env.BELABOX_HOST?.trim() || "",
@@ -254,6 +261,9 @@ const config = {
     apiUrl: normalizeUrl(process.env.PHOTO_UPLOAD_API_URL?.trim() || "http://frame-photo-upload:3736"),
     serviceToken: process.env.PORTAL_SERVICE_TOKEN?.trim() || "",
   },
+  photoPipeline: {
+    apiUrl: normalizeUrl(process.env.PHOTO_PIPELINE_URL?.trim() || "http://frame-pipeline-photos:3735"),
+  },
 };
 
 mkdirSync(config.dataRoot, { recursive: true });
@@ -297,6 +307,7 @@ const mqttHealth = {
 
 const app = express();
 const publicDir = path.resolve(process.cwd(), "public");
+const bundledAgentVersion = /^const VERSION = "([^"]+)";/m.exec(readFileSync(path.join(process.cwd(), "agent", "belabox-agent.mjs"), "utf8"))?.[1] || null;
 
 app.disable("x-powered-by");
 app.use(express.json({ limit: "64kb" }));
@@ -316,8 +327,8 @@ app.get("/healthz", (_request, response) => {
   });
 });
 
-app.get("/belabox/api/status", (_request, response) => {
-  response.json(statusPayload());
+app.get("/belabox/api/status", async (_request, response) => {
+  response.json({ ...statusPayload(), photo_pipeline: await photoPipelineStatus() });
 });
 
 app.post("/belabox-chunks/api/transfers", (request, response, next) => {
@@ -408,10 +419,29 @@ app.post("/belabox/api/pair", async (request, response, next) => {
   }
 });
 
+app.post("/belabox/api/ssh/check", async (request, response, next) => {
+  try {
+    const input = parsePairInput(request.body);
+    const result = await runPairSsh(input, ["printf frame-belabox-ok"], "", 10000);
+    if (!result.stdout.includes("frame-belabox-ok")) throw new RequestError(502, "SSH check did not return the expected response.");
+    saveSshCredential(input);
+    response.json({
+      ok: true,
+      device_id: input.deviceId,
+      host: input.host,
+      user: input.user,
+      port: input.port,
+      saved_ssh: input.rememberSsh && Boolean(config.sshCredentialKey),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/belabox/api/pair/jobs", (request, response, next) => {
   try {
     cleanupPairJobs();
-    const input = parsePairInput(request.body);
+    const input = parsePairJobInput(request.body);
     const existing = [...pairJobs.values()].find((job) => job.device_id === input.deviceId && job.status === "running");
     if (existing) throw new RequestError(409, "Pairing is already running for this device.");
     const now = new Date().toISOString();
@@ -478,6 +508,22 @@ app.get("/belabox/api/ftp-connector/jobs/:jobId", (request, response, next) => {
     const job = ftpConnectorJobs.get(request.params.jobId);
     if (!job) throw new RequestError(404, "FTP connector job was not found.");
     response.json(pairJobView(job));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.patch("/belabox/api/devices/:deviceId", (request, response, next) => {
+  try {
+    const deviceId = sanitizeDeviceId(request.params.deviceId);
+    const device = provisionedDevices.find((record) => record.device_id === deviceId);
+    if (!device) throw new RequestError(404, "Device was not found.");
+    const displayName = safeDisplayName(request.body?.display_name);
+    assertUniqueDisplayName(displayName, deviceId);
+    device.display_name = displayName;
+    device.updated_at = new Date().toISOString();
+    saveProvisionedDevices();
+    response.json({ device: redactDevice(device) });
   } catch (error) {
     next(error);
   }
@@ -726,7 +772,7 @@ app.get([REMOTE_BELAUI_ROUTE_PREFIX, `${REMOTE_BELAUI_ROUTE_PREFIX}/`], (request
   }
   response.setHeader("Cache-Control", "no-store");
   const links = provisionedDevices.map((device) =>
-    `<li><a href="${REMOTE_BELAUI_ROUTE_PREFIX}?key=${encodeURIComponent(device.device_id)}">${device.device_id}</a></li>`,
+    `<li><a href="${REMOTE_BELAUI_ROUTE_PREFIX}?key=${encodeURIComponent(device.device_id)}">${escapeHtml(device.display_name || device.device_id)}</a></li>`,
   ).join("");
   response.type("html").send(`<!doctype html><html><head><meta charset="utf-8"><title>FRAME Remote</title></head><body><h1>FRAME Remote</h1><ul>${links || "<li>No Belabox devices paired.</li>"}</ul></body></html>`);
 });
@@ -907,6 +953,7 @@ async function remoteBelauiStatusPayload(deviceId: string): Promise<JsonRecord> 
     const probe = await requestAgentRemoteBelauiHttp(deviceId, {
       method: "GET",
       path: "/",
+      probe_only: true,
       headers: { host: target.host, "accept-encoding": "identity", accept: "text/html,*/*" },
     }, { requireReachable: false, timeoutMs: REMOTE_BELAUI_STATUS_TIMEOUT_MS });
     if (probe.error) throw new Error(probe.error);
@@ -1020,15 +1067,20 @@ function remoteBelauiShellPage(deviceId: string): string {
     }
 
     async function poll() {
+      let nextPollMs = ${REMOTE_BELAUI_STATUS_POLL_MS};
       try {
         const response = await fetch(statusUrl, { cache: "no-store" });
         const status = await response.json();
-        if (status.ready) showFrame();
-        else noteOffline(status.message);
+        if (status.ready) {
+          showFrame();
+          nextPollMs = ${REMOTE_BELAUI_READY_STATUS_POLL_MS};
+        } else {
+          noteOffline(status.message);
+        }
       } catch (error) {
         noteOffline("Reconnecting to encoder...");
       } finally {
-        setTimeout(poll, ${REMOTE_BELAUI_STATUS_POLL_MS});
+        setTimeout(poll, nextPollMs);
       }
     }
 
@@ -1343,6 +1395,9 @@ function handleMqttMessage(topic: string, payload: Buffer): void {
 function statusPayload() {
   return {
     service: "frame-belabox-manager",
+    frame: {
+      mode: config.frameMode,
+    },
     configured: isConfigured(),
     commands_enabled: commandsAreEnabled(),
     command_execution: commandsAreEnabled() ? "manual-diagnostics-only" : "disabled",
@@ -1385,6 +1440,7 @@ function statusPayload() {
     agent: {
       remote_path: config.agentRemotePath,
       install_enabled: config.installEnabled,
+      bundled_version: bundledAgentVersion,
       runtime: "mqtt-over-websockets",
       status: devices.size > 0 ? "mqtt_seen" : "not_seen",
     },
@@ -1433,6 +1489,19 @@ function statusPayload() {
     },
     issues: configurationIssues(),
   };
+}
+
+async function photoPipelineStatus(): Promise<JsonRecord> {
+  try {
+    const result = await fetch(`${config.photoPipeline.apiUrl}/api/internal/photo-pipeline/status`, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(config.requestTimeoutMs),
+    });
+    if (!result.ok) throw new Error(`status ${result.status}`);
+    return { available: true, ...objectValue(await result.json()) };
+  } catch {
+    return { available: false, error: "FRAME photo processing is unavailable." };
+  }
 }
 
 function loadProvisionedDevices(): ProvisionedDevice[] {
@@ -1606,17 +1675,37 @@ function loadSigningKeys(): { privateKeyPem: string; publicKeyPem: string } {
   return keys;
 }
 
-function upsertProvisionedDevice(deviceId: string, rotate: boolean, reuseExisting = false): ProvisionedDevice {
+function upsertProvisionedDevice(deviceId: string, rotate: boolean, reuseExisting = false, host = "", displayName = ""): ProvisionedDevice {
   const existing = provisionedDevices.find((device) => device.device_id === deviceId);
+  const duplicateHost = host && provisionedDevices.find((device) => device.host === host && device.device_id !== deviceId);
+  if (duplicateHost) throw new RequestError(409, `Belabox host/IP is already assigned to ${duplicateHost.device_id}.`);
+  if (displayName) assertUniqueDisplayName(displayName, deviceId);
   if (existing && !rotate) {
-    if (reuseExisting) return existing;
+    if (reuseExisting) {
+      let changed = false;
+      if (host && existing.host !== host) {
+        existing.host = host;
+        changed = true;
+      }
+      if (displayName && existing.display_name !== displayName) {
+        existing.display_name = displayName;
+        changed = true;
+      }
+      if (changed) {
+        existing.updated_at = new Date().toISOString();
+        saveProvisionedDevices();
+      }
+      return existing;
+    }
     throw new RequestError(409, "Device already exists.");
   }
   const now = new Date().toISOString();
   const record: ProvisionedDevice = {
     device_id: deviceId,
+    display_name: displayName || existing?.display_name || deviceId,
     mqtt_username: `belabox-${deviceId}`,
     mqtt_password: randomSecret(32),
+    host: host || existing?.host,
     created_at: existing?.created_at || now,
     updated_at: now,
   };
@@ -1629,19 +1718,19 @@ function upsertProvisionedDevice(deviceId: string, rotate: boolean, reuseExistin
 
 async function pairBelabox(input: PairInput, progress: (message: string) => void, waitForMqtt: boolean): Promise<PairResult> {
   const snapshot = provisionedDevices.map((device) => ({ ...device }));
-  const startedAt = Date.now();
   try {
     progress("Validating SSH access");
     await runPairSsh(input, ["printf frame-belabox-ok"], "", 10000);
     progress("Preparing device credentials");
-    const record = upsertProvisionedDevice(input.deviceId, false, true);
+    const record = upsertProvisionedDevice(input.deviceId, false, true, input.host, input.displayName);
     progress("Installing agent and boot service");
     await installAgent(input, record);
+    const installedAt = Date.now();
     saveSshCredential(input);
     let heartbeatSeen = false;
     if (waitForMqtt) {
       progress("Waiting for MQTT heartbeat");
-      heartbeatSeen = await waitForFreshHeartbeat(record.device_id, startedAt, 60000);
+      heartbeatSeen = await waitForFreshHeartbeat(record.device_id, installedAt, 60000);
     }
     appendAudit({
       at: new Date().toISOString(),
@@ -1931,25 +2020,66 @@ function ftpConnectorTargetReady(input?: Pick<FtpConnectorInput, "targetHost" | 
   return Boolean((input?.targetHost || config.ftpConnector.host) && (input?.targetPort || config.ftpConnector.port) && config.ftpConnector.username && config.ftpConnector.password);
 }
 
+function safeDisplayName(value: unknown): string {
+  const displayName = stringValue(value);
+  if (!displayName || displayName.length > 64 || /[\r\n]/.test(displayName)) {
+    throw new RequestError(400, "Device name must be between 1 and 64 characters on one line.");
+  }
+  return displayName;
+}
+
+function assertUniqueDisplayName(displayName: string, deviceId: string): void {
+  const normalized = displayName.toLocaleLowerCase();
+  const duplicate = provisionedDevices.find((record) => record.device_id !== deviceId && (
+    record.device_id.toLocaleLowerCase() === normalized
+    || (record.display_name || record.device_id).toLocaleLowerCase() === normalized
+  ));
+  if (duplicate) throw new RequestError(409, `Device name is already assigned to ${duplicate.device_id}.`);
+}
+
 function parsePairInput(body: unknown): PairInput {
   const data = body && typeof body === "object" ? body as JsonRecord : {};
   const host = safeHost(requiredString(data.host, "Belabox host"));
   const user = safeUser(requiredString(data.user, "SSH username"));
   const port = bodyPort(data.port);
   const password = stringValue(data.password) || "";
-  const privateKey = stringValue(data.private_key) || "";
-  if (!password && !privateKey) throw new RequestError(400, "SSH password or private key is required.");
+  if (!password) throw new RequestError(400, "SSH password is required.");
   const deviceId = sanitizeDeviceId(stringValue(data.device_id) || `belabox-${host.replace(/[^A-Za-z0-9]+/g, "-")}`);
+  const displayName = stringValue(data.display_name) ? safeDisplayName(data.display_name) : undefined;
+  if (displayName) assertUniqueDisplayName(displayName, deviceId);
   return {
     host,
     user,
     port,
     password,
-    privateKey,
+    privateKey: "",
     deviceId,
+    displayName,
     installDiagnostics: data.install_diagnostics === true,
     enableSshOnBoot: data.enable_ssh_on_boot === true,
     rememberSsh: data.remember_ssh === true,
+  };
+}
+
+function parsePairJobInput(body: unknown): PairInput {
+  const data = body && typeof body === "object" ? body as JsonRecord : {};
+  if (stringValue(data.password)) return parsePairInput(body);
+  const requestedDeviceId = sanitizeDeviceId(stringValue(data.device_id) || "");
+  if (!requestedDeviceId || !provisionedDevices.some((device) => device.device_id === requestedDeviceId)) {
+    return parsePairInput(body);
+  }
+  let saved: PairInput | null = null;
+  try {
+    saved = savedSshCredential(requestedDeviceId);
+  } catch {
+    throw new RequestError(400, "Saved SSH credential could not be decrypted. Enter SSH credentials in SSH Maintenance and save again.");
+  }
+  if (!saved) throw new RequestError(400, "Saved SSH credential is not available. Enter the SSH password in SSH Maintenance and save it again.");
+  return {
+    ...saved,
+    installDiagnostics: data.install_diagnostics === true,
+    enableSshOnBoot: data.enable_ssh_on_boot === true,
+    rememberSsh: false,
   };
 }
 
@@ -1969,7 +2099,7 @@ function parseSpeedTestInput(body: unknown): { deviceId: string; bytes: number; 
 function sshInputForMaintenance(body: unknown): PairInput {
   const data = body && typeof body === "object" ? body as JsonRecord : {};
   const requestedDeviceId = sanitizeDeviceId(stringValue(data.device_id) || "");
-  const hasInlineSsh = Boolean(stringValue(data.host) && stringValue(data.user) && (stringValue(data.password) || stringValue(data.private_key)));
+  const hasInlineSsh = Boolean(stringValue(data.host) && stringValue(data.user) && stringValue(data.password));
   let sshInput: PairInput | null = null;
   if (hasInlineSsh) {
     sshInput = parsePairInput(body);
@@ -2081,6 +2211,10 @@ if [ "${input.enableSshOnBoot ? "1" : "0"}" = "1" ] && ! enable_ssh_on_boot; the
   exit 45
 fi
 "$npm_bin" --prefix "$agent_dir" install --omit=dev --no-audit --no-fund >/dev/null
+if ! "$node_bin" --check "$agent_dir/belabox-agent.mjs" >/dev/null; then
+  echo "agent_runtime_syntax_check_failed" >&2
+  exit 46
+fi
 start_agent_background() {
   ( cd "$agent_dir"; set -a; . "$agent_dir/agent.env"; set +a; nohup "$node_bin" "$agent_dir/belabox-agent.mjs" >> "$agent_dir/agent.log" 2>&1 & echo $! > "$agent_dir/agent.pid" )
 }
@@ -2228,7 +2362,7 @@ async function runFtpConnectorJob(jobId: string, input: FtpConnectorInput): Prom
     updatePairJob(job, "Validating SSH access");
     await runPairSsh(input, ["printf frame-belabox-ok"], "", 10000);
     updatePairJob(job, "Refreshing Belabox agent");
-    const record = upsertProvisionedDevice(input.deviceId, false, true);
+    const record = upsertProvisionedDevice(input.deviceId, false, true, input.host);
     await installAgent(input, record);
     updatePairJob(job, "Installing Photo Agent");
     const result = await installFtpConnector(input);
@@ -2249,7 +2383,7 @@ async function installFtpConnector(input: FtpConnectorInput): Promise<JsonRecord
   if (!ftpConnectorTargetReady(input)) {
     throw new RequestError(400, "FRAME Photo FTP target is not configured. Check PHOTO_FTP_PASSIVE_HOST, PHOTO_FTP_USERNAME, and PHOTO_FTP_PASSWORD.");
   }
-  const device = provisionedDevices.find((record) => record.device_id === input.deviceId) || upsertProvisionedDevice(input.deviceId, false, true);
+  const device = provisionedDevices.find((record) => record.device_id === input.deviceId) || upsertProvisionedDevice(input.deviceId, false, true, input.host);
   const record = upsertFtpConnector(input.deviceId, input);
   const connector = readFileSync(path.join(process.cwd(), "agent", "photo-agent.py"), "utf8");
   const sudoPasswordB64 = input.password ? Buffer.from(input.password, "utf8").toString("base64") : "";
@@ -2711,6 +2845,8 @@ function loadAuditLog(): CommandAuditEntry[] {
 function redactDevice(device: ProvisionedDevice) {
   return {
     device_id: device.device_id,
+    display_name: device.display_name || device.device_id,
+    host: device.host || null,
     mqtt_username: device.mqtt_username,
     password_configured: Boolean(device.mqtt_password),
     created_at: device.created_at,

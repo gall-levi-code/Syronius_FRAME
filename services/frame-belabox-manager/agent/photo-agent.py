@@ -3,6 +3,7 @@ import ftplib
 import hashlib
 import http.client
 import ipaddress
+import math
 import threading
 import json
 import os
@@ -55,7 +56,8 @@ PROCESSING_DEFAULTS = {
     "jpeg_quality": 92,
     "max_output_mb": 0,
 }
-MAX_OUTPUT_DEFAULT_LONG_EDGE = 2400
+MAX_ADAPTIVE_RESIZE_ATTEMPTS = 4
+MIN_ADAPTIVE_SCALE_PERCENT = 10
 
 
 def env_int(name, fallback, minimum, maximum):
@@ -70,6 +72,7 @@ PREPROCESS_AHEAD = env_int("FRAME_PHOTO_PREPROCESS_AHEAD", 2, 1, 3)
 
 last_completed_at = None
 last_error = None
+last_result = None
 preprocess_state = {}
 preprocess_lock = threading.Lock()
 
@@ -145,7 +148,7 @@ def processing_settings(config=None):
     long_edge_px = bounded_int(source.get("long_edge_px"), PROCESSING_DEFAULTS["long_edge_px"], 0, 12000)
     return {
         "enabled": source.get("enabled") is True,
-        "long_edge_px": long_edge_px or (MAX_OUTPUT_DEFAULT_LONG_EDGE if max_output_mb > 0 else 0),
+        "long_edge_px": long_edge_px,
         "jpeg_quality": bounded_int(source.get("jpeg_quality"), PROCESSING_DEFAULTS["jpeg_quality"], 40, 100),
         "max_output_mb": max_output_mb,
     }
@@ -248,6 +251,7 @@ def write_status(**status):
         "updated_at": iso_now(),
         "last_completed_at": last_completed_at,
         "last_error": last_error,
+        "last_result": last_result,
     }
     payload.update(status)
     fd, tmp = tempfile.mkstemp(prefix=".status-", dir=str(STATUS_PATH.parent))
@@ -407,6 +411,8 @@ def process_image(path, settings):
     temp_target.unlink(missing_ok=True)
 
     try:
+        size = 0
+        quality = settings["jpeg_quality"]
         for quality in quality_steps(settings["jpeg_quality"]):
             temp_target.unlink(missing_ok=True)
             run_imagemagick(processor, path, temp_target, settings, quality)
@@ -414,9 +420,20 @@ def process_image(path, settings):
             size = target.stat().st_size
             if not max_bytes or size <= max_bytes:
                 return target
-            if quality == 40:
-                target.unlink(missing_ok=True)
-                raise RuntimeError(f"Processed image exceeds {settings['max_output_mb']} MB at minimum quality")
+        scale_percent = 100
+        for _ in range(MAX_ADAPTIVE_RESIZE_ATTEMPTS):
+            next_percent = next_scale_percent(scale_percent, size, max_bytes)
+            if next_percent >= scale_percent:
+                break
+            scale_percent = next_percent
+            temp_target.unlink(missing_ok=True)
+            run_imagemagick(processor, path, temp_target, settings, quality, scale_percent)
+            os.replace(temp_target, target)
+            size = target.stat().st_size
+            if size <= max_bytes:
+                return target
+        target.unlink(missing_ok=True)
+        raise RuntimeError(f"Processed image exceeds {settings['max_output_mb']} MB after adaptive resize")
     except Exception:
         temp_target.unlink(missing_ok=True)
         raise
@@ -432,8 +449,15 @@ def quality_steps(start):
         quality = max(40, quality - 5)
 
 
-def run_imagemagick(processor, source, target, settings, quality):
-    command = imagemagick_command(processor, source, target, settings, quality)
+def next_scale_percent(current_percent, size_bytes, max_bytes):
+    if size_bytes <= max_bytes or current_percent <= MIN_ADAPTIVE_SCALE_PERCENT:
+        return current_percent
+    estimated = int(current_percent * math.sqrt(max_bytes / max(size_bytes, 1)) * 0.95)
+    return max(MIN_ADAPTIVE_SCALE_PERCENT, min(current_percent - 1, estimated))
+
+
+def run_imagemagick(processor, source, target, settings, quality, scale_percent=100):
+    command = imagemagick_command(processor, source, target, settings, quality, scale_percent)
     completed = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True)
     if completed.returncode != 0:
         output = (completed.stderr or completed.stdout).strip()
@@ -446,7 +470,7 @@ def run_imagemagick(processor, source, target, settings, quality):
         raise RuntimeError(detail[:160])
 
 
-def imagemagick_command(processor, source, target, settings, quality):
+def imagemagick_command(processor, source, target, settings, quality, scale_percent=100):
     command = [processor]
     if settings["long_edge_px"] > 0:
         edge = str(settings["long_edge_px"])
@@ -467,12 +491,14 @@ def imagemagick_command(processor, source, target, settings, quality):
     if settings["long_edge_px"] > 0:
         edge = str(settings["long_edge_px"])
         command.extend(["-resize", f"{edge}x{edge}>"])
+    if scale_percent < 100:
+        command.extend(["-resize", f"{scale_percent}%"])
     command.extend(["-quality", str(quality), str(target)])
     return command
 
 
 def upload_direct_ftp(path, prepared=False):
-    global last_completed_at, last_error
+    global last_completed_at, last_error, last_result
     upload_path = path
     upload_name = path.name
     cleanup_path = None
@@ -527,10 +553,13 @@ def upload_direct_ftp(path, prepared=False):
                 ftp.storbinary(f"STOR {upload_name}", handle, blocksize=65536, callback=progress)
         sent = total
         last_completed_at = iso_now()
+        last_error = None
+        last_result = {"status": "completed", "file": upload_name, "at": last_completed_at}
         mark("complete", "Complete", done=True, last_completed_at=last_completed_at)
         path.unlink(missing_ok=True)
     except Exception as error:
         last_error = str(error)[:160]
+        last_result = {"status": "failed", "file": upload_name, "at": iso_now(), "error": last_error}
         mark("failed", "Retrying", last_error=last_error)
         time.sleep(RETRY_SECONDS)
     finally:
@@ -539,7 +568,7 @@ def upload_direct_ftp(path, prepared=False):
 
 
 def upload_chunked(path, prepared=False):
-    global last_completed_at, last_error
+    global last_completed_at, last_error, last_result
     upload_url = chunk_upload_url()
     if not upload_url or not CHUNK_UPLOAD_TOKEN:
         last_error = "Chunk upload URL/token is not configured"
@@ -640,10 +669,13 @@ def upload_chunked(path, prepared=False):
         request_json(f"{upload_url.rstrip('/')}/{transfer_id}/complete", "POST", {"device_id": manifest["device_id"]})
         sent = total
         last_completed_at = iso_now()
+        last_error = None
+        last_result = {"status": "completed", "file": upload_name, "at": last_completed_at}
         mark("complete", "Complete", done=True, last_completed_at=last_completed_at)
         path.unlink(missing_ok=True)
     except Exception as error:
         last_error = str(error)[:160]
+        last_result = {"status": "failed", "file": upload_name, "at": iso_now(), "error": last_error}
         mark("failed", "Retrying", last_error=last_error)
         time.sleep(RETRY_SECONDS)
     finally:
@@ -917,7 +949,7 @@ def self_test():
     }})
     assert settings == {"enabled": True, "long_edge_px": 1600, "jpeg_quality": 85, "max_output_mb": 2.5}
     assert processing_settings({"image_processing": {"long_edge_px": "13000"}})["long_edge_px"] == 0
-    assert processing_settings({"image_processing": {"enabled": True, "max_output_mb": "2"}})["long_edge_px"] == MAX_OUTPUT_DEFAULT_LONG_EDGE
+    assert processing_settings({"image_processing": {"enabled": True, "max_output_mb": "2"}})["long_edge_px"] == 0
     assert upload_name_for(Path("photo.png"), {"enabled": True}) == "photo.jpg"
     assert upload_name_for(Path("photo.jpeg"), {"enabled": True}) == "photo.jpeg"
     assert prepare_upload(Path("photo.jpg"), {"enabled": False}) == (Path("photo.jpg"), "photo.jpg", None, None)
@@ -926,6 +958,9 @@ def self_test():
     assert "-resize" in command
     assert "-thumbnail" not in command
     assert command[command.index("-orient") + 1] == "TopLeft"
+    assert "-resize" not in imagemagick_command("convert", Path("photo.jpg"), Path("out.jpg"), {"long_edge_px": 0}, 85)
+    assert "50%" in imagemagick_command("convert", Path("photo.jpg"), Path("out.jpg"), {"long_edge_px": 0}, 85, 50)
+    assert next_scale_percent(100, 4 * 1024 * 1024, 1024 * 1024) == 47
     assert chunk_parallel_uploads({"chunk_parallel_uploads": "3"}) == 3
     assert chunk_parallel_uploads({"chunk_parallel_uploads": "9"}) == CHUNK_PARALLEL_UPLOADS
     assert chunk_upload_kbps({"chunk_upload_kbps": "512"}) == 512

@@ -111,8 +111,6 @@ removed.
   staged/completed events; true percent remains unavailable unless the sender reports total size.
 - [x] Phase 4B: add `/api/internal/photo-ftp/progress` and enable the Overlay Wizard `ftp` adapter once
   `frame-photo-ftp` exposes progress directly.
-- [ ] Add an optional upload-result bubble lane for short-lived completed/failed file notices while the
-  main upload card immediately advances to the next active file.
 - Define a `frame-remote-photo-agent` capability for deploying a managed photo relay helper onto a Belabox or similar Linux encoder on the local network.
 - Build a FRAME-side setup wizard that can detect or accept the Belabox LAN IP, explain how to enable Belabox SSH, and connect with the fixed `user` SSH account plus the rotating password from the Belabox Advanced/developer panel.
 - Generate FRAME-managed usernames, paths, script names, and systemd unit names instead of reusing personal prototype paths from the reference scripts.
@@ -122,30 +120,61 @@ removed.
 - Define a remote photo upload progress event schema for future overlays: discovered, stable, queued, transferring, transferred, failed, retried, and archived/deleted.
 - Add a remote-agent status dashboard showing connection health, queue depth, last transfer, failures, and installed helper version.
 - Belabox Manager UX simplification pass:
-  - Rename `MQTT Controls` to `Photo Transfer`.
-  - Hide protocol terms like MQTT, WSS, chunk relay, and egress binding behind Advanced.
-  - Add an `Encoder Status` strip for online state, remote UI, Photo Agent, and stream health.
-  - Make `Open Encoder Remote` the primary online action.
-  - Replace raw state strings with user-facing states such as `Ready`, `Uploading`, `Processing`, `Waiting for encoder`, and `Needs setup`.
-  - Add a visual photo pipeline: camera received, processing, upload-ready, sending, published.
-  - Add a stream-safe upload preset that caps photo upload while live.
-  - Add transfer presets: `Protect Stream`, `Balanced`, and `Fast`.
-  - Show upload caps in Mbps with helper context instead of kbps-only.
-  - Show egress lanes as `Ethernet`, `Wi-Fi 1`, and `Wi-Fi 2` health chips.
-  - Show the active upload lane during transfer.
-  - Add a `What is slowing things down?` summary for CPU prep, network upload, FRAME ingest, or waiting.
-  - Collapse SSH maintenance unless the agent is missing or repair is needed.
-  - Rename `Install / Repair Photo Agent` to `Repair Agent`.
-  - Add an installed-agent card with version and last heartbeat.
-  - Move dangerous actions into confirmation modals.
-  - Combine Photo Agent and Photo Transfer into one guided panel.
-  - Add live upload stats: current file, rate, queue depth, and ETA.
-  - Warn when uploads are uncapped while streaming.
-  - Add a diagnostics drawer for raw MQTT, route, and chunk details.
-  - Add editable device display names instead of exposing only device IDs.
-  - Add a remote access URL row with copy/open buttons.
-  - Add a quiet `Agent update available` banner.
-  - Add a guarded `Reset photo queue` action that clears stuck pending files while preserving config.
+  - [x] Rename `MQTT Controls` to `Photo Transfer`.
+  - [x] Hide protocol terms like MQTT, WSS, chunk relay, and egress binding behind Advanced.
+  - [x] Add an `Encoder Status` strip for online state, remote UI, Photo Agent, and stream health.
+  - [x] Make `Open Encoder Remote` the primary online action.
+  - [x] Replace raw state strings with user-facing states such as `Ready`, `Uploading`, `Processing`, `Waiting for encoder`, and `Needs setup`.
+  - [x] Add a visual photo pipeline: camera received, processing, upload-ready, sending, published.
+  - [x] Add a stream-safe upload preset that caps photo upload while live.
+  - [x] Add transfer presets: `Protect Stream`, `Balanced`, and `Fast`.
+  - [x] Show upload caps in Mbps with helper context instead of kbps-only.
+  - [x] Show egress lanes as `Ethernet`, `Wi-Fi 1`, and `Wi-Fi 2` health chips.
+  - [x] Show the active upload lane during transfer.
+  - [x] Add a `What is slowing things down?` summary for CPU prep, network upload, FRAME ingest, or waiting.
+  - [x] Collapse SSH maintenance unless the agent is missing or repair is needed.
+  - [x] Rename `Install / Repair Photo Agent` to `Repair Agent`.
+  - [x] Add live upload stats: current file, rate, queue depth, and ETA.
+  - [x] Warn when uploads are uncapped while streaming.
+  - [x] Add a diagnostics drawer for raw MQTT, route, and chunk details.
+  - [x] Add a remote access URL row with copy/open buttons.
+- Belabox Manager UX completion goal: make first-time setup, daily monitoring, photo transfer, and
+  maintenance understandable without requiring knowledge of MQTT, WSS, SSH jobs, or egress internals.
+  - [x] Phase UX-1 - Device workspace: reshape the device page into a compact status band, one guided
+    Photo Transfer workspace, and collapsed Maintenance/Advanced sections; remove duplicate controls and
+    keep heartbeat refreshes from moving, collapsing, or replacing active fields.
+    - Acceptance: the first viewport answers whether the encoder is online, what it is doing, what is
+      slowing it down, and the next useful action without opening Advanced.
+  - [x] Phase UX-2 - Device identity and agent lifecycle: add editable unique display names, preserve the
+    immutable device ID as a technical detail, and add an installed-agent summary with version, last
+    heartbeat, health, and a quiet update-available state.
+    - Acceptance: users can distinguish devices and identify a missing, stale, unhealthy, or outdated
+      agent without reading raw telemetry.
+  - [x] Phase UX-3 - Guided photo transfer: combine Photo Agent and Photo Transfer into one operational
+    flow covering camera receipt, preparation, queue, active route, upload, FRAME processing, and result;
+    retain stream-safe presets and add short-lived completed/failed result notices.
+    - Acceptance: routine transfers and bottlenecks can be understood and controlled without opening
+      Maintenance or Advanced.
+  - [x] Phase UX-4 - Safe maintenance: move uninstall, queue reset, saved-credential removal, and other
+    destructive actions into explicit confirmation dialogs; keep repair/install actions blocking with
+    visible steps, progress, failure detail, and a clear retry path. Queue reset must preserve settings.
+    - Acceptance: no critical operation runs silently, can be triggered accidentally, or leaves the user
+      without a useful success/failure state.
+  - [x] Phase UX-5 - Installation and navigation polish: bring the setup wizard, manager tabs, typography,
+    spacing, controls, and action dialogs into one visual system; verify hybrid/SSH gates, uniqueness checks,
+    back navigation, final checks, redirect to the installed device, and last-viewed-device restoration.
+    - Acceptance: setup remains inside the wizard until verification completes and returning users land on
+      the device they last viewed.
+  - [ ] Phase UX-6 - Production verification: test desktop/mobile layouts, keyboard and focus behavior,
+    long labels, heartbeat polling during edits, offline/online recovery, failed SSH jobs, active uploads,
+    and real-device install/repair/uninstall flows.
+    - [x] Automated contracts, syntax checks, TypeScript builds, agent self-tests, graph refresh, container
+      health, live manager/pipeline status, keyboard focus, and blocking-dialog isolation.
+    - [x] Real-device Repair Agent and guarded empty-queue reset, including post-install heartbeat and
+      installed-version verification.
+    - [ ] Rendered desktop/mobile inspection and transfer-result checks during an actual photo upload.
+    - Acceptance: no overflow, unintended navigation, stale modal, lost input, or control-state regression
+      remains in the supported workflows.
 - Revisit chunked HTTPS or multi-connection transfer later if SFTP reliability is not enough for bonded or multi-WAN scenarios.
 - Keep remote photo overlay widgets in their own schema/preset namespace so they do not overwrite FRAME's stock connectivity presets.
 - Refactor the overlay wizard so stock defaults are immutable, OBS URL slugs can be chosen before first save, and saving a renamed preset creates a new preset instead of rewriting `default-connectivity`.
