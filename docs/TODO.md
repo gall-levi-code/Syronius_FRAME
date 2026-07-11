@@ -100,6 +100,13 @@ removed.
 
 ### Remote Photo Agent / Belabox Module
 
+- [x] Merge revisioned FRAME relay servers and publisher accounts into the FRAME remote belaUI
+  session, translating FRAME selections to stock manual SRTLA fields without modifying belaUI.
+- [x] Add lightweight per-interface FRAME relay-host RTT probes and native-style green/yellow/red
+  latency labels to the FRAME remote belaUI relay list.
+- Implement the source-backed BCRPT compatibility plan in `docs/belabox-frame-remote-plan.md` so
+  FRAME relay profiles can gain per-interface RTT and MTU feedback.
+
 - [x] Phase 4B: reuse the existing overlay SSE path for all photo-upload progress instead of adding a
   separate WebSocket transport.
 - [x] Phase 4B: expose a shared upload-progress shape for `web_upload`, `belabox_agent`, and `ftp`

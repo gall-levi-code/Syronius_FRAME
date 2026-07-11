@@ -487,6 +487,10 @@ function buildEnvironment(existing, options, mode, capabilities) {
     mode === "HYBRID",
   );
   const edgePublicBaseUrl = mode === "HYBRID" ? `https://${cloudflarePublicHostname}` : edgeLanBaseUrl;
+  const publicRelayHost = normalizeRelayHost(
+    options["public-relay-host"] ?? setting(existing, "PUBLIC_RELAY_HOST", mode === "HYBRID" ? "" : "localhost"),
+    capabilities["frame-video-relay"] && mode === "HYBRID",
+  );
   const portalPort = normalizePort(options["portal-port"] ?? setting(existing, "PORTAL_PORT", "3730"), "portal port");
   const audioPort = normalizePort(
     options["audio-bridge-port"] ?? setting(existing, "AUDIO_BRIDGE_PORT", "3729"),
@@ -636,7 +640,7 @@ function buildEnvironment(existing, options, mode, capabilities) {
     SESSION_IDLE_TIMEOUT_MINUTES: setting(existing, "SESSION_IDLE_TIMEOUT_MINUTES", "30"),
     READONLY_OBS_TOKEN: existing.READONLY_OBS_TOKEN ?? "",
     SLS_API_KEY: preserveSecret(existing.SLS_API_KEY, 32),
-    PUBLIC_RELAY_HOST: setting(existing, "PUBLIC_RELAY_HOST", "localhost"),
+    PUBLIC_RELAY_HOST: publicRelayHost,
     SRTLA_PORT: srtlaPort,
     SRT_PLAYER_PORT: srtPlayerPort,
     SRT_SENDER_PORT: srtSenderPort,
@@ -738,8 +742,8 @@ function validateEnvironment(env, config, forStart) {
   if (config.capabilities["frame-audio-relay"] && !isHttpUrl(env.AUDIO_CAPTURE_BASE_URL)) {
     throw new Error("AUDIO_CAPTURE_BASE_URL must be a valid http:// or https:// URL.");
   }
-  if (config.capabilities["frame-video-relay"] && !String(env.PUBLIC_RELAY_HOST ?? "").trim()) {
-    throw new Error("PUBLIC_RELAY_HOST is required when the Video Relay is enabled.");
+  if (config.capabilities["frame-video-relay"]) {
+    normalizeRelayHost(env.PUBLIC_RELAY_HOST, env.FRAME_MODE === "HYBRID");
   }
   if (config.capabilities["frame-photo-ftp"] && String(env.PHOTO_FTP_PASSWORD ?? "").length < Number(photoFtpMinPasswordLength)) {
     throw new Error(`PHOTO_FTP_PASSWORD is missing or shorter than ${photoFtpMinPasswordLength} characters. Re-run stack install.`);
@@ -1152,6 +1156,23 @@ function normalizeHostname(value, required = false) {
   return hostname;
 }
 
+function normalizeRelayHost(value, required = false) {
+  const host = String(value ?? "").trim().toLowerCase().replace(/\.$/, "");
+  if (!host && !required) return "localhost";
+  if (host === "localhost") {
+    if (required) throw new Error("Public relay host must be a bare DNS name or IPv4 address that reaches FRAME over UDP.");
+    return host;
+  }
+  const octets = host.split(".");
+  const ipv4 = octets.length === 4 && octets.every((octet) => /^\d{1,3}$/.test(octet) && Number(octet) <= 255);
+  if (ipv4) return host;
+  try {
+    return normalizeHostname(host, true);
+  } catch {
+    throw new Error("Public relay host must be a bare DNS name or IPv4 address that reaches FRAME over UDP.");
+  }
+}
+
 function formatLocalHttpUrl(port) {
   return port === "80" ? "http://localhost" : `http://localhost:${port}`;
 }
@@ -1196,6 +1217,7 @@ function assertAllowedOptions(command, options) {
       "portal-port",
       "audio-bridge-port",
       "public-hostname",
+      "public-relay-host",
       "import-env",
       "enable",
       "disable",
@@ -1491,6 +1513,7 @@ Usage:
 Install options:
   --mode LAN|HYBRID        Stage a LAN or Cloudflare Tunnel deployment
   --public-hostname <host> Required for HYBRID, for example frame.syroni.us
+  --public-relay-host <host> Public DNS name or IPv4 address for SRT/SRTLA
   --data-root <path>       FRAME data directory, repo-relative or absolute
   --host-data-root <path>  Advanced .ready manifest path override
   --edge-http-port 80      Shared FRAME web entry point

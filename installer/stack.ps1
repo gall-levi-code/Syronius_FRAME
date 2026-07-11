@@ -471,6 +471,10 @@ function Configure-NetworkStorage {
   if ($mode -eq "HYBRID") {
     $hostname = Read-Default "Cloudflare public hostname" $env.CLOUDFLARE_PUBLIC_HOSTNAME
     $arguments += @("--public-hostname", $hostname)
+    $relayHost = $env.PUBLIC_RELAY_HOST
+    if ($relayHost -eq "localhost") { $relayHost = "" }
+    $relayHost = Read-Default "Public SRTLA relay hostname or IPv4 address" $relayHost
+    if ($relayHost) { $arguments += @("--public-relay-host", $relayHost) }
   }
   $edgePort = "80"
   if ($env.EDGE_HTTP_PORT) { $edgePort = $env.EDGE_HTTP_PORT }

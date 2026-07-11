@@ -101,8 +101,6 @@ SSH user. For the full remote-control target, keep the privilege model explicit:
   reboot, poweroff, stream start/stop, and bitrate file reload.
 - If a command only needs agent-owned files, keep it unprivileged.
 - Use root only where belaUI cannot cover the operation cleanly:
-  - writing/reloading stock `relays_cache.json` if file ownership requires it
-  - restarting belaUI for relay-cache reloads
   - installing systemd units and package dependencies
   - future low-level network shaping, if app-level throttling is insufficient
 
@@ -113,7 +111,7 @@ Root install options:
 - User agent plus root helper: keep the main MQTT agent unprivileged and expose a local helper for
   a tiny allowlist of root actions.
 - User agent plus sudoers allowlist: possible, but likely harder to keep correct as Wi-Fi, modem,
-  systemd, and relay-cache operations grow.
+  systemd, and network-shaping operations grow.
 
 Preferred direction: user agent plus belaUI websocket bridge first, with a tiny root helper only if
 stock belaUI relay sync or future network shaping needs it.
@@ -121,22 +119,69 @@ stock belaUI relay sync or future network shaping needs it.
 ### Stock belaUI Relay Integration
 
 We want users who install the FRAME agent but do not use the FRAME native relay page to still see
-FRAME relay resources in stock belaUI.
+FRAME relay resources in the stock belaUI experience served through FRAME Remote.
 
 Options:
 
-- Cache injection: agent writes `/opt/belaUI/relays_cache.json` and restarts belaUI while idle.
-  This is the least invasive path.
+- Cache injection: rejected while BELABOX Cloud is enabled. The cloud connection replaces
+  `/opt/belaUI/relays_cache.json` and the in-memory catalog immediately after belaUI starts.
 - belaUI companion patch: add a local-only reload path or FRAME relay provider. This gives better
   live updates but creates GPL distribution obligations.
-- BCRPT-compatible probe service: FRAME relays expose the probe behavior expected by belaUI's
-  existing BCRPT integration. This allows stock latency badges if we match the protocol.
-- Name annotation fallback: agent periodically writes relay names like
-  `green FRAME Central (54 ms)` into the relay cache. This works without BCRPT compatibility but
-  needs a belaUI restart/reload to appear in stock UI.
+- Remote relay bridge: merge FRAME entries into relay messages in the authenticated FRAME proxy
+  and translate selections to stock manual SRTLA fields. This preserves both belaUI and its cloud
+  connection and is the selected path.
+- Agent-owned probes: probe FRAME relays from each interface and add measured status to the remote
+  bridge catalog without changing belaUI.
 
-Ultimate target: cache injection plus BCRPT-compatible probes if the protocol can be reproduced
-cleanly. Use native FRAME relay UI for richer behavior.
+Ultimate target: remote relay bridge plus agent-owned per-interface probes. Use native FRAME relay
+UI for richer behavior.
+
+Implemented remote relay synchronization:
+
+- Stream Management exports a revisioned internal catalog containing the configured FRAME SRTLA
+  endpoint and only stream profiles that own publisher keys.
+- Belabox Manager checks the catalog every two seconds and sends a signed update only when its
+  revision changes or an agent reconnects.
+- The agent persists the same catalog for future local diagnostics and BCRPT work.
+- The agent probes the relay host's configurable TCP health port from each routed interface every
+  five seconds and publishes one compact health message. The remote bridge mirrors belaUI's native
+  RTT thresholds using the lowest successful interface response.
+- The authenticated FRAME remote page overlays only `frame-*` records onto each relay message and
+  translates a FRAME selection to belaUI's existing manual SRTLA address, port, and stream ID
+  fields before sending it to the encoder.
+- Stock belaUI files, its cloud connection, and its on-device relay cache remain untouched. This is
+  necessary because BELABOX Cloud replaces the cache after connecting.
+
+#### BCRPT Service Implementation Plan
+
+This does not require a belaUI patch. The agent persists the FRAME catalog and can run probes across
+available source interfaces while idle, then publish RTT and low-MTU state for the remote bridge.
+
+1. Capture the contract from an unmodified Belabox before writing a server:
+   - record the installed belaUI and BCRPT revisions
+   - inspect the generated `/var/run/bcrpt/source_ips`, `server_ips`, and `key` inputs
+   - capture an authorized probe exchange to determine transport, framing, authentication,
+     retry timing, RTT fields, MTU behavior, and maximum packet sizes
+   - store sanitized request/response fixtures and a protocol note in FRAME
+2. Add one small `frame-bcrpt` UDP service beside `frame-ingest-video`:
+   - bind a dedicated configurable UDP port and advertise that port as `bcrp_port`
+   - use one generated FRAME secret as `bcrp_key`
+   - remain stateless unless the captured protocol proves state is required
+   - reject invalid authentication and malformed packets without producing larger responses
+3. Extend the existing FRAME relay catalog with `bcrp_port` and the shared key reference. The
+   agent's persisted catalog remains the delivery path for local probe configuration.
+4. Publish service health and catalog-sync state through Belabox Manager. Per-interface RTT and MTU
+   results come from the agent and are merged into the remote relay presentation.
+5. Verify against an unmodified Belabox image:
+   - FRAME streams appear as selectable relay accounts
+   - selecting one resolves to `PUBLIC_RELAY_HOST`, `SRTLA_PORT`, and the profile publisher key
+   - native green/yellow/red RTT labels update and recover after packet loss
+   - low-MTU detection is preserved
+   - probes stop while streaming as stock belaUI expects
+   - malformed or unauthenticated traffic cannot turn the service into a UDP amplifier
+
+Do not ship a guessed BCRPT responder. If the wire contract cannot be reproduced safely, retain
+FRAME-native probes and omit native latency badges rather than modifying belaUI.
 
 ### FRAME Native Relay Integration
 
@@ -337,8 +382,9 @@ Deliverable: shippable full-stack behavior.
 ## Decisions Needed
 
 1. Stock belaUI integration level:
-   - selected: preserve stock belaUI and support both stock relay list and FRAME-native relay UI
-   - open: cache injection only, BCRPT compatibility, or both
+   - selected: preserve stock belaUI and its cloud connection
+   - selected: merge FRAME entries only in the authenticated FRAME Remote surface
+   - local LAN belaUI remains unchanged unless a GPL-compatible companion patch is chosen later
 
 2. Agent privilege model:
    - selected direction: local belaUI websocket bridge first
@@ -394,7 +440,7 @@ Deliverable: shippable full-stack behavior.
 - Let the agent own a local belaUI token if that is compatible with stock belaUI's auth storage.
 - Build FRAME-native relay probes first, but keep the relay profile schema compatible with stock
   belaUI's relay cache.
-- Sync FRAME relay profiles into stock belaUI with cache injection and idle restart first.
-- Research BCRPT compatibility after relay profiles and native probes exist.
+- Sync FRAME relay profiles into the authenticated remote belaUI bridge.
+- Research BCRPT compatibility for agent-owned probes after relay profiles exist.
 - Default photo transfer to chunked HTTPS while streaming.
 - Add the FRAME bitrate ceiling governor instead of patching belacoder first.

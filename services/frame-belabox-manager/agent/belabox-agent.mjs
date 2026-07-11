@@ -8,6 +8,7 @@ import dns from "node:dns";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import {
+  createHash,
   createPrivateKey,
   createPublicKey,
   generateKeyPairSync,
@@ -16,7 +17,7 @@ import {
   verify as verifyBytes,
 } from "node:crypto";
 
-const VERSION = "0.7.3";
+const VERSION = "0.8.1";
 const REMOTE_BELAUI_HTTP_TIMEOUT_MS = 8000;
 const REMOTE_BELAUI_MAX_HTTP_BODY_BYTES = 2 * 1024 * 1024;
 const REMOTE_BELAUI_STREAM_CHUNK_BYTES = 48 * 1024;
@@ -34,6 +35,7 @@ const ALLOWED_COMMANDS = new Set([
   "photo_processing_config_set",
   "photo_module_status",
   "photo_queue_reset",
+  "relay_catalog_sync",
   "network_speed_test",
 ]);
 const selfTestMode = process.argv.includes("--self-test");
@@ -50,6 +52,10 @@ const keepalive = readInt("BELABOX_MQTT_KEEPALIVE", 30, 5, 300);
 const photoConfigPath = process.env.BELABOX_PHOTO_CONFIG_PATH || `${os.homedir()}/.frame-belabox-agent/photo-config.json`;
 const egressStatusPath = process.env.BELABOX_EGRESS_STATUS_PATH || `${os.homedir()}/.frame-belabox-agent/egress.json`;
 const egressProbeMs = readInt("BELABOX_EGRESS_PROBE_INTERVAL_MS", 1000, 500, 60000);
+const relayCatalogPath = process.env.BELABOX_RELAY_CATALOG_PATH || `${os.homedir()}/.frame-belabox-agent/relay-catalog.json`;
+const relayProbeMs = readInt("BELABOX_RELAY_PROBE_INTERVAL_MS", 5000, 1000, 60000);
+const relayProbePort = readInt("BELABOX_RELAY_PROBE_PORT", 443, 1, 65535);
+const relayProbeTimeoutMs = readInt("BELABOX_RELAY_PROBE_TIMEOUT_MS", 1200, 200, 5000);
 const remoteBelaui = {
   enabled: readBool("BELABOX_REMOTE_BELAUI_ENABLED", true),
   localUrl: loopbackHttpUrl(process.env.BELABOX_REMOTE_BELAUI_LOCAL_URL || "http://127.0.0.1"),
@@ -62,7 +68,9 @@ let diagnosticRunning = false;
 let remoteBelauiState = remoteBelauiSnapshot(remoteBelaui.enabled ? "unchecked" : "disabled");
 let egressState = egressSnapshot([]);
 let egressRefreshRunning = false;
+let relayHealthRunning = false;
 let photoTelemetryWasActive = false;
+let relayCatalogState = initialRelayCatalogState();
 const proxyStreams = new Map();
 let client;
 
@@ -129,8 +137,10 @@ async function main() {
   setInterval(publishActivePhotoTelemetry, activePhotoTelemetryMs);
   setInterval(refreshRemoteBelauiState, telemetryMs);
   setInterval(() => { void refreshEgressState(); }, egressProbeMs);
+  setInterval(() => { void refreshRelayHealth(); }, relayProbeMs);
   refreshRemoteBelauiState();
   void refreshEgressState();
+  void refreshRelayHealth();
 }
 
 function publishHeartbeat() {
@@ -208,6 +218,8 @@ async function runCommand(command) {
       publishTelemetry();
       return `photo queue reset archived ${result.moved} file${result.moved === 1 ? "" : "s"}${result.preserved ? `; preserved ${result.preserved} active` : ""}`;
     }
+    case "relay_catalog_sync":
+      return await syncRelayCatalog(command.args);
     case "network_speed_test":
       return await runNetworkSpeedTest(command.args);
     case "agent_update":
@@ -261,7 +273,8 @@ function verifyCommand(command, keyPem, nonceSet) {
 
 function validateArgs(command, args) {
   if (!args || typeof args !== "object" || Array.isArray(args)) throw new Error("args must be an object");
-  if (JSON.stringify(args).length > 4096) throw new Error("args too large");
+  if (JSON.stringify(args).length > (command === "relay_catalog_sync" ? 65536 : 4096)) throw new Error("args too large");
+  if (command === "relay_catalog_sync") validateRelayCatalog(args);
   if (command === "log_bundle_collect" && args.lines !== undefined && (!Number.isInteger(args.lines) || args.lines < 1 || args.lines > 500)) {
     throw new Error("log_bundle_collect lines must be 1-500");
   }
@@ -885,15 +898,163 @@ function collectTelemetry(ftpUpload = readFtpUploadStatus()) {
     },
     disk,
     temperature_c: readTemperature(),
-    active_streaming_services: [],
+    active_streaming_services: processRunning("belacoder") ? ["belacoder"] : [],
     network_interfaces: networkSummary(),
     egress: egressState,
     agent_version: VERSION,
     remote_belaui: remoteBelauiState,
+    relay_catalog: relayCatalogState,
   };
   if (ftpUpload) telemetry.ftp_upload = ftpUpload;
   if (diagnosticState) telemetry.network_diagnostics = diagnosticState;
   return telemetry;
+}
+
+async function syncRelayCatalog(value) {
+  const catalog = validateRelayCatalog(value);
+  if (relayCatalogState.revision === catalog.revision && relayCatalogState.state === "cached") {
+    return `relay catalog ${catalog.revision.slice(0, 12)} already cached`;
+  }
+  writeAtomicJson(relayCatalogPath, catalog);
+  relayCatalogState = relayCatalogSnapshot("cached", catalog);
+  publishTelemetry();
+  void refreshRelayHealth();
+  return `relay catalog ${catalog.revision.slice(0, 12)} cached`;
+}
+
+async function refreshRelayHealth() {
+  if (relayHealthRunning) return;
+  relayHealthRunning = true;
+  try {
+    const catalog = validateRelayCatalog(JSON.parse(fs.readFileSync(relayCatalogPath, "utf8")));
+    const [serverId, server] = Object.entries(catalog.servers)[0] || [];
+    if (!serverId || !server) throw new Error("relay catalog is empty");
+    const target = await lookupIpv4(server.addr);
+    const lanes = networkSummary()
+      .filter((entry) => entry.family === "IPv4" && usableSourceAddress(entry.address))
+      .map((entry) => egressLane(entry, target.address))
+      .filter((lane) => lane.state === "healthy");
+    const results = await Promise.all(lanes.map(async (lane) => ({
+      interface_name: lane.name,
+      address: lane.address,
+      ...await tcpRelayProbe(target.address, relayProbePort, lane.address),
+    })));
+    publishJson(topics.relayHealth, summarizeRelayHealth(serverId, server, results));
+  } catch (error) {
+    publishJson(topics.relayHealth, {
+      state: "error",
+      rtt_ms: null,
+      reachable_lane_count: 0,
+      lane_count: 0,
+      error: text(error && error.message, 160) || "relay probe failed",
+      updated_at: new Date().toISOString(),
+    });
+  } finally {
+    relayHealthRunning = false;
+  }
+}
+
+function tcpRelayProbe(targetAddress, port, sourceAddress) {
+  return new Promise((resolve) => {
+    const started = Date.now();
+    const socket = net.connect({ host: targetAddress, port, family: 4, localAddress: sourceAddress });
+    let settled = false;
+    const finish = (reachable, error = null) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve({ reachable, rtt_ms: reachable ? Math.max(1, Date.now() - started) : null, error });
+    };
+    socket.setTimeout(relayProbeTimeoutMs);
+    socket.once("connect", () => finish(true));
+    socket.once("timeout", () => finish(false, "timeout"));
+    socket.once("error", (error) => finish(false, text(error.code || error.message, 80) || "unreachable"));
+  });
+}
+
+function summarizeRelayHealth(serverId, server, lanes) {
+  const reachable = lanes.filter((lane) => lane.reachable && Number.isFinite(lane.rtt_ms));
+  const rtt = reachable.length ? Math.min(...reachable.map((lane) => lane.rtt_ms)) : null;
+  return {
+    state: reachable.length === lanes.length && lanes.length ? "online" : reachable.length ? "degraded" : "offline",
+    server_id: serverId,
+    host: server.addr,
+    port: server.port,
+    probe_port: relayProbePort,
+    rtt_ms: rtt,
+    reachable_lane_count: reachable.length,
+    lane_count: lanes.length,
+    lanes,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function initialRelayCatalogState() {
+  try {
+    const catalog = validateRelayCatalog(JSON.parse(fs.readFileSync(relayCatalogPath, "utf8")));
+    return relayCatalogSnapshot("cached", catalog);
+  } catch {
+    return { state: "empty", revision: null, accounts: 0, reason: null, error: null, updated_at: new Date().toISOString() };
+  }
+}
+
+function relayCatalogSnapshot(state, catalog, reason = null) {
+  return {
+    state,
+    revision: catalog.revision,
+    accounts: Object.keys(catalog.accounts).length,
+    reason,
+    error: null,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function validateRelayCatalog(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value) || value.version !== 1 || typeof value.revision !== "string" || !/^[a-f0-9]{64}$/.test(value.revision)) {
+    throw new Error("relay catalog version or revision is invalid");
+  }
+  const servers = value.servers;
+  const accounts = value.accounts;
+  if (!servers || typeof servers !== "object" || Array.isArray(servers) || Object.keys(servers).length < 1 || Object.keys(servers).length > 20) {
+    throw new Error("relay catalog server count is invalid");
+  }
+  if (!accounts || typeof accounts !== "object" || Array.isArray(accounts) || Object.keys(accounts).length > 500) {
+    throw new Error("relay catalog account count is invalid");
+  }
+  for (const [id, server] of Object.entries(servers)) {
+    if (!/^frame-[a-z0-9-]{1,64}$/.test(id) || !server || server.type !== "srtla" || typeof server.name !== "string" || !server.name.trim() || server.name.length > 120 || typeof server.addr !== "string" || !validRelayAddress(server.addr) || !Number.isInteger(server.port) || server.port < 1 || server.port > 65535) {
+      throw new Error("relay catalog contains an invalid server");
+    }
+  }
+  for (const [id, account] of Object.entries(accounts)) {
+    if (!/^frame-[a-z0-9-]{1,64}$/.test(id) || !account || typeof account.name !== "string" || !account.name.trim() || account.name.length > 120 || typeof account.ingest_key !== "string" || !account.ingest_key || account.ingest_key.length > 500) {
+      throw new Error("relay catalog contains an invalid account");
+    }
+  }
+  return { version: 1, revision: value.revision, servers, accounts };
+}
+
+function validRelayAddress(value) {
+  return value.length <= 253 && !value.includes("://") && !/[\s/:]/.test(value);
+}
+
+function processRunning(name) {
+  try {
+    return fs.readdirSync("/proc", { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && /^\d+$/.test(entry.name))
+      .some((entry) => {
+        try { return fs.readFileSync(`/proc/${entry.name}/comm`, "utf8").trim() === name; } catch { return false; }
+      });
+  } catch {
+    return false;
+  }
+}
+
+function writeAtomicJson(file, value) {
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  const temporary = `${file}.tmp-${process.pid}`;
+  fs.writeFileSync(temporary, `${JSON.stringify(value)}\n`, { encoding: "utf8", mode: 0o600 });
+  fs.renameSync(temporary, file);
 }
 
 function refreshRemoteBelauiState() {
@@ -1364,6 +1525,21 @@ function selfTest() {
   validateArgs("photo_processing_config_set", { enabled: true, long_edge_px: 1600, jpeg_quality: 85, max_output_mb: 2.5 });
   assertReject(() => validateArgs("photo_processing_config_set", { jpeg_quality: 20 }), "jpeg quality");
   validateArgs("photo_queue_reset", {});
+  const relayCatalog = {
+    version: 1,
+    revision: createHash("sha256").update("selftest").digest("hex"),
+    servers: { "frame-primary": { type: "srtla", name: "FRAME", addr: "relay.example.test", port: 5000 } },
+    accounts: { "frame-test": { name: "Test", ingest_key: "publisher" } },
+  };
+  assertEqual(validateRelayCatalog(relayCatalog).revision, relayCatalog.revision, "relay catalog");
+  assertReject(() => validateRelayCatalog({ ...relayCatalog, servers: {} }), "empty relay servers");
+  const relayHealth = summarizeRelayHealth("frame-primary", relayCatalog.servers["frame-primary"], [
+    { reachable: true, rtt_ms: 120 },
+    { reachable: true, rtt_ms: 40 },
+    { reachable: false, rtt_ms: null },
+  ]);
+  assertEqual(relayHealth.state, "degraded", "relay health state");
+  assertEqual(relayHealth.rtt_ms, 40, "relay health RTT");
   const queueRoot = fs.mkdtempSync(path.join(os.tmpdir(), "frame-photo-queue-"));
   try {
     for (const directory of ["incoming", "ready", "processed"]) fs.mkdirSync(path.join(queueRoot, directory));
@@ -1399,6 +1575,7 @@ function topicSet(id) {
     status: `${root}/status`,
     heartbeat: `${root}/heartbeat`,
     telemetry: `${root}/telemetry`,
+    relayHealth: `${root}/relay/health`,
     logs: `${root}/logs`,
     version: `${root}/agent/version`,
     cmdRequest: `${root}/cmd/request`,

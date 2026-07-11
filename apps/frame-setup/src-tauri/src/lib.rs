@@ -1303,7 +1303,7 @@ fn parse_env_value(value: &str) -> String {
 fn build_apply_environment(
     plan: &InstallPlan,
     mode: &str,
-    _capabilities: &BTreeMap<String, bool>,
+    capabilities: &BTreeMap<String, bool>,
     profiles: &[String],
     existing: &BTreeMap<String, String>,
 ) -> Result<BTreeMap<String, String>, String> {
@@ -1335,6 +1335,24 @@ fn build_apply_environment(
     } else {
         edge_lan_base_url.clone()
     };
+    let public_relay_host = plan
+        .advanced_settings
+        .get("PUBLIC_RELAY_HOST")
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| value.trim().to_lowercase())
+        .unwrap_or_else(|| existing_or(existing, "PUBLIC_RELAY_HOST", "localhost"));
+    if capabilities
+        .get("frame-video-relay")
+        .copied()
+        .unwrap_or(false)
+        && mode == "HYBRID"
+        && (public_relay_host == "localhost" || !is_valid_relay_host(&public_relay_host))
+    {
+        return Err(
+            "Hybrid Video Relay requires an advertised public DNS name or IPv4 address."
+                .to_string(),
+        );
+    }
 
     let mut env = BTreeMap::new();
     env.insert("FRAME_MODE".to_string(), mode.to_string());
@@ -1724,18 +1742,7 @@ fn build_apply_environment(
         "SLS_API_KEY".to_string(),
         preserve_secret(existing, "SLS_API_KEY", 32),
     );
-    env.insert(
-        "PUBLIC_RELAY_HOST".to_string(),
-        existing_or(
-            existing,
-            "PUBLIC_RELAY_HOST",
-            if mode == "HYBRID" {
-                plan.public_hostname.trim()
-            } else {
-                "localhost"
-            },
-        ),
-    );
+    env.insert("PUBLIC_RELAY_HOST".to_string(), public_relay_host);
     env.insert(
         "SRTLA_PORT".to_string(),
         validate_port(plan.ports.srtla, "SRTLA port")?.to_string(),
@@ -1815,13 +1822,17 @@ fn validate_integer_string(
 ) -> Result<String, String> {
     let trimmed = value.trim();
     if trimmed != value {
-        return Err(format!("{label} must be an integer from {minimum} to {maximum}."));
+        return Err(format!(
+            "{label} must be an integer from {minimum} to {maximum}."
+        ));
     }
     let integer = trimmed
         .parse::<u32>()
         .map_err(|_| format!("{label} must be an integer from {minimum} to {maximum}."))?;
     if integer < minimum || integer > maximum {
-        return Err(format!("{label} must be an integer from {minimum} to {maximum}."));
+        return Err(format!(
+            "{label} must be an integer from {minimum} to {maximum}."
+        ));
     }
     Ok(integer.to_string())
 }
@@ -1910,6 +1921,10 @@ fn is_valid_public_hostname(hostname: &str) -> bool {
             && !label.starts_with('-')
             && !label.ends_with('-')
     })
+}
+
+fn is_valid_relay_host(host: &str) -> bool {
+    host.parse::<std::net::Ipv4Addr>().is_ok() || is_valid_public_hostname(host)
 }
 
 fn serialize_env(env: &BTreeMap<String, String>) -> String {

@@ -182,6 +182,13 @@ const ADVANCED_SETTINGS = [
 
 const ADVANCED_VALUE_FIELDS = [
   {
+    key: "PUBLIC_RELAY_HOST",
+    label: "Advertised SRTLA host",
+    defaultValue: "",
+    type: "text",
+    placeholder: "relay.example.com or 203.0.113.10",
+  },
+  {
     key: "PHOTO_FTP_MIN_PASSWORD_LENGTH",
     label: "FTP password minimum",
     defaultValue: "5",
@@ -572,10 +579,12 @@ function renderPortsPanel() {
   const visiblePorts = exposedPortsForSelection();
   const hybrid = state.deploymentMode === "HYBRID";
   const hostnameStatus = publicHostnameValidation();
+  const relayHostStatus = publicRelayHostValidation();
   const portStatus = portValidation();
   const stageNotice = validationMessageForVisibleStage(4);
   const showStageNotice = stageNotice &&
     stageNotice !== hostnameStatus.message &&
+    stageNotice !== relayHostStatus.message &&
     stageNotice !== portStatus.message;
   return `
     <section class="panel ${stepPageClass()}">
@@ -604,9 +613,20 @@ function renderPortsPanel() {
             <input id="public-hostname" value="${escapeHtml(state.publicHostname)}" placeholder="frame.example.com" />
           </label>
         ` : ""}
+        ${state.selectedServices["frame-video-relay"] ? `
+          <label class="field ${relayHostStatus.status === "bad" ? "invalid" : ""}">
+            <span>Advertised SRTLA host</span>
+            <input
+              id="public-relay-host"
+              value="${escapeHtml(state.advancedSettings.PUBLIC_RELAY_HOST ?? "")}"
+              placeholder="relay.example.com or 203.0.113.10"
+            />
+          </label>
+        ` : ""}
       </div>
       <div class="network-validation">
         ${hybrid ? `<small class="field-help ${hostnameStatus.status}" data-public-host-status>${hostnameStatus.message}</small>` : ""}
+        ${state.selectedServices["frame-video-relay"] ? `<small class="field-help ${relayHostStatus.status}" data-public-relay-host-status>${relayHostStatus.message}</small>` : ""}
         ${showStageNotice ? renderStageNotice(4, "compact") : ""}
         <small class="field-help ${portStatus.status}" data-port-status>${portStatus.message}</small>
       </div>
@@ -707,6 +727,19 @@ function renderAdvancedCard(key, description) {
 }
 
 function renderAdvancedInput(field) {
+  if (field.type === "text") {
+    return `
+      <label class="field advanced-field">
+        <span>${field.label}</span>
+        <input
+          data-advanced-setting="${field.key}"
+          type="text"
+          value="${escapeHtml(state.advancedSettings[field.key] ?? field.defaultValue)}"
+          placeholder="${escapeHtml(field.placeholder ?? "")}"
+        />
+      </label>
+    `;
+  }
   return `
     <label class="field advanced-field">
       <span>${field.label}</span>
@@ -938,6 +971,12 @@ function bindEvents() {
   });
   document.querySelector("#public-hostname")?.addEventListener("input", (event) => {
     state.publicHostname = event.target.value;
+    clearValidation();
+    invalidatePreflight();
+    syncProgressControls();
+  });
+  document.querySelector("#public-relay-host")?.addEventListener("input", (event) => {
+    state.advancedSettings.PUBLIC_RELAY_HOST = event.target.value;
     clearValidation();
     invalidatePreflight();
     syncProgressControls();
@@ -1282,7 +1321,7 @@ function canProceedFromStage(stage) {
   if (stage === 1) return Boolean(state.mode);
   if (stage === 2) return Boolean(state.installRoot.trim());
   if (stage === 3) return servicesStageComplete();
-  if (stage === 4) return portValidation().status === "good" && publicHostnameValidation().status === "good";
+  if (stage === 4) return portValidation().status === "good" && publicHostnameValidation().status === "good" && publicRelayHostValidation().status === "good";
   if (stage === 5) return readinessPassed();
   return false;
 }
@@ -1305,6 +1344,9 @@ function validationMessageForStage(stage) {
   if (stage === 4) {
     const hostnameStatus = publicHostnameValidation();
     if (hostnameStatus.status !== "good") return hostnameStatus.message;
+
+    const relayHostStatus = publicRelayHostValidation();
+    if (relayHostStatus.status !== "good") return relayHostStatus.message;
 
     const portStatus = portValidation();
     if (portStatus.status !== "good") return portStatus.message;
@@ -1394,6 +1436,7 @@ function syncProgressControls() {
   }
 
   syncPublicHostnameStatus();
+  syncPublicRelayHostStatus();
   syncPortStatus();
 }
 
@@ -1424,6 +1467,16 @@ function syncPortStatus() {
   }
 }
 
+function syncPublicRelayHostStatus() {
+  const statusNode = document.querySelector("[data-public-relay-host-status]");
+  if (!statusNode) return;
+
+  const relayHostStatus = publicRelayHostValidation();
+  statusNode.className = `field-help ${relayHostStatus.status}`;
+  statusNode.textContent = relayHostStatus.message;
+  document.querySelector("#public-relay-host")?.closest(".field")?.classList.toggle("invalid", relayHostStatus.status === "bad");
+}
+
 function publicHostnameValidation() {
   if (state.deploymentMode !== "HYBRID") {
     return { status: "good", message: "LAN mode does not need a public hostname." };
@@ -1439,6 +1492,23 @@ function publicHostnameValidation() {
   }
 
   return { status: "good", message: "Hostname format looks good." };
+}
+
+function publicRelayHostValidation() {
+  if (!state.selectedServices["frame-video-relay"]) {
+    return { status: "good", message: "Video Relay is not selected." };
+  }
+
+  const host = String(state.advancedSettings.PUBLIC_RELAY_HOST ?? "").trim();
+  if (!host) {
+    return state.deploymentMode === "HYBRID"
+      ? { status: "warn", message: "Enter the public DNS name or IPv4 address that forwards SRTLA UDP traffic to FRAME." }
+      : { status: "good", message: "Optional in LAN mode; localhost will be used when empty." };
+  }
+  if (!isValidRelayHost(host) || (state.deploymentMode === "HYBRID" && host.toLowerCase() === "localhost")) {
+    return { status: "bad", message: "Use a bare DNS name or IPv4 address, without a scheme, port, path, or localhost." };
+  }
+  return { status: "good", message: "Relay senders will use this host; Docker continues to bind the UDP port below." };
 }
 
 function portValidation() {
@@ -1538,6 +1608,15 @@ function isValidPublicHostname(hostname) {
       label.length <= 63 &&
       /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(label),
     );
+}
+
+function isValidRelayHost(host) {
+  const value = host.trim().toLowerCase();
+  const octets = value.split(".");
+  if (octets.length === 4 && octets.every((octet) => /^\d{1,3}$/.test(octet))) {
+    return octets.every((octet) => Number(octet) <= 255);
+  }
+  return isValidPublicHostname(value);
 }
 
 function clearValidation() {

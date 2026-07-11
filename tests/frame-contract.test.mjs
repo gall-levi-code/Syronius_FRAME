@@ -583,6 +583,20 @@ test("Belabox agent rejects invalid signed commands", async () => {
   await execFileAsync("node", ["services/frame-belabox-manager/agent/belabox-agent.mjs", "--self-test"]);
 });
 
+test("Stream Management exports FRAME destinations through the remote BelaUI bridge", async () => {
+  const [streams, manager, agent] = await Promise.all([
+    readFile("services/frame-streams/src/index.ts", "utf8"),
+    readFile("services/frame-belabox-manager/src/index.ts", "utf8"),
+    readFile("services/frame-belabox-manager/agent/belabox-agent.mjs", "utf8"),
+  ]);
+  assert.ok(streams.includes('app.get("/internal/belabox-relay-catalog"'));
+  assert.ok(streams.includes('profile.source_type === "sls" && profile.publisher'));
+  assert.ok(manager.includes('publishSignedCommand(deviceId, "relay_catalog_sync"'));
+  assert.ok(manager.includes("frameRelayBridgeScript"));
+  assert.ok(manager.includes("WebSocket.prototype.send"));
+  assert.ok(agent.includes('relayCatalogSnapshot("cached"'));
+});
+
 test("Hybrid exposes Belabox agent routes and remote UI without exposing the manager UI/API", () => {
   const capabilities = Object.fromEntries(CAPABILITIES.map((name) => [name, false]));
   capabilities["frame-belabox-manager"] = true;
@@ -708,6 +722,9 @@ test("FRAME Setup app captures the approved GUI installer decisions", async () =
   for (const expected of ["validationMessageForStage", "renderStageNotice", "portValidation", "numericPortInput", "network-controls"]) {
     assert.ok(frontend.includes(expected) || styles.includes(expected), `${expected} is missing from installer validation`);
   }
+  for (const expected of ["Advertised SRTLA host", "PUBLIC_RELAY_HOST", "publicRelayHostValidation", "isValidRelayHost"]) {
+    assert.ok(frontend.includes(expected), `${expected} is missing from relay host setup`);
+  }
   for (const expected of ["renderGuidedServicePanel", "guidedServiceIndex", "guidedReviewedServices", "Next service", "Finish service review", "markCurrentGuidedServiceReviewed", "service-detail-card"]) {
     assert.ok(frontend.includes(expected) || styles.includes(expected), `${expected} is missing from guided service review`);
   }
@@ -746,6 +763,7 @@ test("FRAME Setup app captures the approved GUI installer decisions", async () =
   for (const expected of ["docker", "compose", "docker-compose.yml", "COMPOSE_PROFILES", "find_stack_source", "frame-stack", "resource_dir", "hidden_command", "CREATE_NO_WINDOW", "BUILDKIT_PROGRESS", "advanced_settings", "PHOTO_FTP_MIN_PASSWORD_LENGTH", "PHOTO_UPLOAD_MAX_FILES"]) {
     assert.ok(rust.includes(expected), `${expected} is missing from native install/apply backend`);
   }
+  assert.ok(rust.includes("is_valid_relay_host"), "Native setup must validate the advertised SRTLA host");
   assert.ok(rust.includes("30000-30019"), "Native setup should describe the current FTP passive range");
   assert.match(rust, /"PHOTO_FTP_MAX_SESSIONS"[\s\S]*?"20"/, "Native setup should write the current FTP session default");
   assert.match(rust, /"PHOTO_UPLOAD_MAX_FILES"[\s\S]*?"100"/, "Native setup should write the current browser upload queue default");

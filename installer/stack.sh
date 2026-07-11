@@ -394,6 +394,10 @@ configure_network_storage() {
   if [ "$mode" = "HYBRID" ]; then
     read_default "Cloudflare public hostname" "$(env_value CLOUDFLARE_PUBLIC_HOSTNAME "")"
     hostname=$REPLY
+    relay_host=$(env_value PUBLIC_RELAY_HOST "")
+    if [ "$relay_host" = "localhost" ]; then relay_host=; fi
+    read_default "Public SRTLA relay hostname or IPv4 address" "$relay_host"
+    relay_host=$REPLY
   fi
 
   read_default "FRAME Edge HTTP port" "$(env_value EDGE_HTTP_PORT 80)"
@@ -403,7 +407,11 @@ configure_network_storage() {
   read_timezone "$(env_value TIMEZONE America/Chicago)"
   timezone=$REPLY
   if [ "$mode" = "HYBRID" ]; then
-    run_install --mode HYBRID --public-hostname "$hostname" --edge-http-port "$edge_port" --data-root "$data_root" --set "TIMEZONE=$timezone"
+    if [ -n "$relay_host" ]; then
+      run_install --mode HYBRID --public-hostname "$hostname" --public-relay-host "$relay_host" --edge-http-port "$edge_port" --data-root "$data_root" --set "TIMEZONE=$timezone"
+    else
+      run_install --mode HYBRID --public-hostname "$hostname" --edge-http-port "$edge_port" --data-root "$data_root" --set "TIMEZONE=$timezone"
+    fi
   else
     run_install --mode LAN --edge-http-port "$edge_port" --data-root "$data_root" --set "TIMEZONE=$timezone"
   fi

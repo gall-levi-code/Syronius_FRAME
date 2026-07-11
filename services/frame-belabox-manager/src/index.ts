@@ -44,6 +44,7 @@ interface DeviceState {
   last_telemetry_at: string | null;
   agent_version: string | null;
   telemetry: JsonRecord | null;
+  relay_health: JsonRecord | null;
   logs: Array<{ at: string; message: string }>;
   command_interface_enabled: false;
 }
@@ -165,7 +166,15 @@ type CommandName =
   | "photo_processing_config_set"
   | "photo_module_status"
   | "photo_queue_reset"
+  | "relay_catalog_sync"
   | "network_speed_test";
+
+interface RelayCatalog {
+  version: 1;
+  revision: string;
+  servers: JsonRecord;
+  accounts: JsonRecord;
+}
 
 const TOPIC_ROOT = "frame/belabox";
 const REMOTE_BELAUI_ROUTE_PREFIX = "/belabox/remote";
@@ -180,6 +189,7 @@ const TOPICS = {
   status: "status",
   heartbeat: "heartbeat",
   telemetry: "telemetry",
+  relayHealth: "relay/health",
   logs: "logs",
   version: "agent/version",
   cmdRequest: "cmd/request",
@@ -198,6 +208,7 @@ const ALLOWED_COMMANDS = new Set<CommandName>([
   "photo_processing_config_set",
   "photo_module_status",
   "photo_queue_reset",
+  "relay_catalog_sync",
   "network_speed_test",
 ]);
 const CONFIRM_COMMANDS = new Set<CommandName>(["agent_update", "agent_restart", "log_bundle_collect", "photo_queue_reset"]);
@@ -217,6 +228,11 @@ const config = {
   commandsEnabled: readBool("BELABOX_AGENT_COMMANDS_ENABLED", false),
   installEnabled: readBool("BELABOX_AGENT_INSTALL_ENABLED", false),
   requestTimeoutMs: readInt("REQUEST_TIMEOUT_MS", 3000, 500, 30000),
+  relayCatalog: {
+    apiUrl: normalizeUrl(process.env.STREAMS_API_URL?.trim() || "http://frame-streams:3732"),
+    apiKey: process.env.SLS_API_KEY || "",
+    pollMs: readInt("BELABOX_RELAY_CATALOG_POLL_MS", 2000, 500, 60000),
+  },
   mqtt: {
     internalUrl: process.env.BELABOX_MQTT_INTERNAL_URL?.trim() || "mqtt://frame-belabox-broker:1883",
     publicHost: normalizePublicUrl(process.env.BELABOX_MQTT_HOST?.trim() || "http://localhost"),
@@ -294,6 +310,11 @@ const remoteBelauiHttpWaiters = new Map<string, {
   timeout: NodeJS.Timeout;
 }>();
 const remoteBelauiStreams = new Map<string, { socket: net.Socket; closed: boolean }>();
+const relayCatalogSent = new Map<string, string>();
+const relayCatalogSending = new Set<string>();
+let currentRelayCatalog: RelayCatalog | null = null;
+let relayCatalogPollRunning = false;
+let relayCatalogLastError: string | null = null;
 let mqttClient: MqttClient | null = null;
 const mqttHealth = {
   enabled: Boolean(config.mqtt.username && config.mqtt.password),
@@ -314,6 +335,8 @@ app.use(express.json({ limit: "64kb" }));
 
 syncBrokerAuthFiles();
 mqttClient = startMqtt();
+setInterval(() => void refreshRelayCatalog(), config.relayCatalog.pollMs).unref();
+void refreshRelayCatalog();
 
 app.get("/healthz", (_request, response) => {
   response.json({
@@ -1011,6 +1034,7 @@ function remoteBelauiStatusJson(
     agent_online: Boolean(live && deviceIsOnline(live)),
     remote_belaui_state: remoteState,
     agent_version: live?.agent_version || null,
+    relay_health: live?.relay_health || null,
     last_heartbeat_at: live?.last_heartbeat_at || null,
     checked_at: new Date().toISOString(),
     message,
@@ -1186,8 +1210,20 @@ function rewriteRemoteBelauiText(deviceId: string, text: string): string {
     .replace(/url\((['"]?)\/(?!\/)/gi, `url($1${route}/`)
     .replace(/new WebSocket\(\s*["']ws:\/\/["']\s*\+\s*window\.location\.host\s*\)/g, `new WebSocket(${wsExpression})`)
     .replace(/new WebSocket\(\s*wsProtocol\s*\+\s*window\.location\.host\s*\)/g, `new WebSocket(${wsExpression})`);
-  if (/<base\b/i.test(rewritten)) return rewritten.replace(/<base\b[^>]*>/i, `<base href="${route}/">`);
-  return rewritten.replace(/(<head[^>]*>)/i, `$1<base href="${route}/">`);
+  if (!/<html\b/i.test(rewritten)) return rewritten;
+  const bridge = frameRelayBridgeScript(deviceId);
+  if (/<base\b/i.test(rewritten)) return rewritten.replace(/<base\b[^>]*>/i, `<base href="${route}/">${bridge}`);
+  return rewritten.replace(/(<head[^>]*>)/i, `$1<base href="${route}/">${bridge}`);
+}
+
+function frameRelayBridgeScript(deviceId: string): string {
+  if (!currentRelayCatalog) return "";
+  const catalog = JSON.stringify({
+    servers: currentRelayCatalog.servers,
+    accounts: currentRelayCatalog.accounts,
+  }).replace(/</g, "\\u003c");
+  const statusUrl = `${REMOTE_BELAUI_ROUTE_PREFIX}/status?key=${encodeURIComponent(deviceId)}`;
+  return `<script>(()=>{const frame=${catalog};const baseNames=Object.fromEntries(Object.entries(frame.servers).map(([id,server])=>[id,server.name]));const decorate=health=>{if(!health||!health.server_id||!frame.servers[health.server_id])return;const rtt=health.rtt_ms===null?NaN:Number(health.rtt_ms);const color=health.state==="offline"||health.state==="error"?"red":rtt<=80?"green":rtt<=150?"yellow":"red";const dots={green:"\\u{1F7E2}",yellow:"\\u{1F7E1}",red:"\\u{1F534}"};const suffix=Number.isFinite(rtt)?" ("+Math.round(rtt)+" ms)":" (offline)";const name=dots[color]+" "+baseNames[health.server_id]+suffix;frame.servers[health.server_id].name=name;for(const option of document.querySelectorAll("#relayServer option")){if(option.value===health.server_id)option.textContent=name}};const poll=()=>fetch(${JSON.stringify(statusUrl)},{cache:"no-store"}).then(response=>response.ok?response.json():null).then(status=>decorate(status&&status.relay_health)).catch(()=>{});setInterval(poll,2000);poll();const merge=r=>({...r,servers:{...(r&&r.servers),...frame.servers},accounts:{...(r&&r.accounts),...frame.accounts}});const mapIncoming=c=>{if(!c)return c;const server=Object.entries(frame.servers).find(([,v])=>v.addr===c.srtla_addr&&Number(v.port)===Number(c.srtla_port));const account=Object.entries(frame.accounts).find(([,v])=>v.ingest_key===c.srt_streamid);if(!server||!account)return c;const next={...c,relay_server:server[0],relay_account:account[0]};delete next.srtla_addr;delete next.srtla_port;delete next.srt_streamid;return next};const add=WebSocket.prototype.addEventListener;WebSocket.prototype.addEventListener=function(type,listener,options){if(type!=="message"||typeof listener!=="function")return add.call(this,type,listener,options);return add.call(this,type,function(event){try{const msg=JSON.parse(event.data);if(msg.relays)msg.relays=merge(msg.relays);if(msg.config)msg.config=mapIncoming(msg.config);event=new MessageEvent("message",{data:JSON.stringify(msg),origin:event.origin,lastEventId:event.lastEventId})}catch{}return listener.call(this,event)},options)};const send=WebSocket.prototype.send;WebSocket.prototype.send=function(data){try{const msg=JSON.parse(data);const start=msg.start;const server=start&&frame.servers[start.relay_server];const account=start&&frame.accounts[start.relay_account];if(server&&account){const next={...start,srtla_addr:server.addr,srtla_port:server.port,srt_streamid:account.ingest_key};delete next.relay_server;delete next.relay_account;msg.start=next;data=JSON.stringify(msg)}}catch{}return send.call(this,data)}})();</script>`;
 }
 
 function remoteBelauiRequestBody(request: express.Request): Buffer | null {
@@ -1332,12 +1368,14 @@ function startMqtt(): MqttClient | null {
       `${TOPIC_ROOT}/+/status`,
       `${TOPIC_ROOT}/+/heartbeat`,
       `${TOPIC_ROOT}/+/telemetry`,
+      `${TOPIC_ROOT}/+/relay/health`,
       `${TOPIC_ROOT}/+/logs`,
       `${TOPIC_ROOT}/+/agent/version`,
       `${TOPIC_ROOT}/+/cmd/response`,
       `${TOPIC_ROOT}/+/proxy/http/response/+`,
       `${TOPIC_ROOT}/+/proxy/stream/+/server`,
     ]);
+    void refreshRelayCatalog();
   });
 
   client.on("close", () => {
@@ -1354,6 +1392,46 @@ function startMqtt(): MqttClient | null {
 
   client.on("message", (topic, payload) => handleMqttMessage(topic, payload));
   return client;
+}
+
+async function refreshRelayCatalog(): Promise<void> {
+  if (relayCatalogPollRunning || !config.relayCatalog.apiKey) return;
+  relayCatalogPollRunning = true;
+  try {
+    const response = await fetch(`${config.relayCatalog.apiUrl}/internal/belabox-relay-catalog`, {
+      headers: { Authorization: `Bearer ${config.relayCatalog.apiKey}` },
+      signal: AbortSignal.timeout(config.requestTimeoutMs),
+    });
+    if (!response.ok) throw new Error(`Stream catalog returned HTTP ${response.status}`);
+    const catalog = relayCatalogFromValue(await response.json());
+    if (catalog.revision !== currentRelayCatalog?.revision) {
+      currentRelayCatalog = catalog;
+      relayCatalogSent.clear();
+      await Promise.all(provisionedDevices.map((device) => sendRelayCatalogToDevice(device.device_id)));
+    }
+    relayCatalogLastError = null;
+  } catch (error) {
+    const message = errorMessage(error).slice(0, 200);
+    if (message !== relayCatalogLastError) console.warn(`[belabox-manager] Relay catalog unavailable: ${message}`);
+    relayCatalogLastError = message;
+  } finally {
+    relayCatalogPollRunning = false;
+  }
+}
+
+async function sendRelayCatalogToDevice(deviceId: string): Promise<void> {
+  const catalog = currentRelayCatalog;
+  const device = devices.get(deviceId);
+  if (!catalog || !device || !deviceIsOnline(device) || relayCatalogSent.get(deviceId) === catalog.revision || relayCatalogSending.has(deviceId)) return;
+  relayCatalogSending.add(deviceId);
+  try {
+    await publishSignedCommand(deviceId, "relay_catalog_sync", catalog as unknown as JsonRecord);
+    relayCatalogSent.set(deviceId, catalog.revision);
+  } catch (error) {
+    console.warn(`[belabox-manager] Relay catalog sync failed for ${deviceId}: ${errorMessage(error)}`);
+  } finally {
+    relayCatalogSending.delete(deviceId);
+  }
 }
 
 function handleMqttMessage(topic: string, payload: Buffer): void {
@@ -1379,7 +1457,11 @@ function handleMqttMessage(topic: string, payload: Buffer): void {
     device.last_status_at = readTimestamp(message) || now;
     const state = typeof message.state === "string" ? message.state.toLowerCase() : "";
     if (state === "offline") device.online = false;
-    if (state === "online") device.online = true;
+    if (state === "online") {
+      device.online = true;
+      relayCatalogSent.delete(parsedTopic.deviceId);
+      void sendRelayCatalogToDevice(parsedTopic.deviceId);
+    }
     return;
   }
 
@@ -1388,6 +1470,7 @@ function handleMqttMessage(topic: string, payload: Buffer): void {
     device.online = true;
     const version = stringValue(message.agent_version);
     if (version) device.agent_version = version;
+    void sendRelayCatalogToDevice(parsedTopic.deviceId);
     return;
   }
 
@@ -1397,6 +1480,12 @@ function handleMqttMessage(topic: string, payload: Buffer): void {
     device.online = true;
     const version = stringValue(message.agent_version);
     if (version) device.agent_version = version;
+    return;
+  }
+
+  if (parsedTopic.kind === TOPICS.relayHealth) {
+    device.relay_health = message;
+    device.online = true;
     return;
   }
 
@@ -1441,6 +1530,11 @@ function statusPayload() {
       telemetry_interval_ms: config.mqtt.telemetryMs,
       active_photo_telemetry_interval_ms: config.mqtt.activePhotoTelemetryMs,
       topics: topicTemplates(),
+    },
+    relay_catalog: {
+      revision: currentRelayCatalog?.revision || null,
+      accounts: currentRelayCatalog ? Object.keys(currentRelayCatalog.accounts).length : 0,
+      last_error: relayCatalogLastError,
     },
     provisioning: {
       devices: provisionedDevices.map(redactDevice),
@@ -2210,6 +2304,7 @@ async function installAgent(input: PairInput, device: ProvisionedDevice): Promis
     "BELABOX_FTP_CONNECTOR_STATUS_PATH=$HOME/.frame-belabox-agent/photo-agent/status.json",
     "BELABOX_EGRESS_STATUS_PATH=$HOME/.frame-belabox-agent/egress.json",
     "BELABOX_PHOTO_CONFIG_PATH=$HOME/.frame-belabox-agent/photo-config.json",
+    "BELABOX_RELAY_CATALOG_PATH=$HOME/.frame-belabox-agent/relay-catalog.json",
   ].join("\n");
   const pkg = JSON.stringify({ type: "module", dependencies: { mqtt: "^4.3.8" } }, null, 2);
   const script = `set -eu
@@ -2382,6 +2477,9 @@ fi
 pkill -f "$agent_dir/ftp-connector/ftp-connector.py" 2>/dev/null || true
 pkill -f "$agent_dir/photo-agent/photo-agent.py" 2>/dev/null || true
 pkill -f "$agent_dir/belabox-agent.mjs" 2>/dev/null || true
+if [ -x /usr/local/sbin/frame-belabox-relay-sync ]; then sudo_run /usr/local/sbin/frame-belabox-relay-sync --remove >/dev/null 2>&1 || true; fi
+sudo_run rm -f /etc/sudoers.d/frame-belabox-relay-sync /etc/frame-belabox-relay-sync.json /usr/local/sbin/frame-belabox-relay-sync >/dev/null 2>&1 || true
+sudo_run rm -rf /usr/local/lib/frame-belabox /var/lib/frame-belabox-relay-sync >/dev/null 2>&1 || true
 if [ "$purge" = "1" ]; then
   rm -rf "$agent_dir"
   printf 'frame-belabox-agent-removed purge'
@@ -2741,6 +2839,7 @@ function brokerAcl(): string {
     "topic write frame/belabox/+/status",
     "topic read frame/belabox/+/heartbeat",
     "topic read frame/belabox/+/telemetry",
+    "topic read frame/belabox/+/relay/health",
     "topic read frame/belabox/+/logs",
     "topic read frame/belabox/+/agent/version",
     "topic write frame/belabox/+/agent/version",
@@ -2757,6 +2856,7 @@ function brokerAcl(): string {
     `topic write ${topicFor(device.device_id, TOPICS.status)}`,
     `topic write ${topicFor(device.device_id, TOPICS.heartbeat)}`,
     `topic write ${topicFor(device.device_id, TOPICS.telemetry)}`,
+    `topic write ${topicFor(device.device_id, TOPICS.relayHealth)}`,
     `topic write ${topicFor(device.device_id, TOPICS.logs)}`,
     `topic write ${topicFor(device.device_id, TOPICS.version)}`,
     `topic read ${topicFor(device.device_id, TOPICS.cmdRequest)}`,
@@ -2837,11 +2937,12 @@ function parseCommandArgs(value: unknown): JsonRecord {
   if (value === undefined || value === null) return {};
   if (typeof value !== "object" || Array.isArray(value)) throw new RequestError(400, "Command args must be an object.");
   const text = JSON.stringify(value);
-  if (text.length > 4096) throw new RequestError(400, "Command args are too large.");
+  if (text.length > 65536) throw new RequestError(400, "Command args are too large.");
   return value as JsonRecord;
 }
 
 function validateCommandArgs(command: CommandName, args: JsonRecord): void {
+  if (command === "relay_catalog_sync") relayCatalogFromValue(args);
   if (command === "photo_transfer_mode_set" && !["direct_ftp", "chunked_https"].includes(String(args.mode || ""))) {
     throw new RequestError(400, "photo_transfer_mode_set mode must be direct_ftp or chunked_https.");
   }
@@ -2937,6 +3038,33 @@ function diagnosticUploadUrl(): string {
   return config.chunkUpload.publicUrl.replace(/\/api\/transfers\/?$/, "/api/diagnostics/speed-test");
 }
 
+function relayCatalogFromValue(value: unknown): RelayCatalog {
+  const catalog = objectValue(value);
+  const servers = objectValue(catalog?.servers);
+  const accounts = objectValue(catalog?.accounts);
+  if (!catalog || catalog.version !== 1 || typeof catalog.revision !== "string" || !/^[a-f0-9]{64}$/.test(catalog.revision)) {
+    throw new RequestError(400, "Relay catalog version or revision is invalid.");
+  }
+  if (!servers || Object.keys(servers).length < 1 || Object.keys(servers).length > 20 || !accounts || Object.keys(accounts).length > 500) {
+    throw new RequestError(400, "Relay catalog server or account count is invalid.");
+  }
+  for (const [id, value] of Object.entries(servers)) {
+    const server = objectValue(value);
+    if (!/^frame-[a-z0-9-]{1,64}$/.test(id) || server?.type !== "srtla" || !stringValue(server.name) || !stringValue(server.addr)) {
+      throw new RequestError(400, "Relay catalog contains an invalid server.");
+    }
+    safePositiveInt(server.port, "relay server port", 1, 65535);
+  }
+  for (const [id, value] of Object.entries(accounts)) {
+    const account = objectValue(value);
+    if (!/^frame-[a-z0-9-]{1,64}$/.test(id) || !stringValue(account?.name) || !stringValue(account?.ingest_key)) {
+      throw new RequestError(400, "Relay catalog contains an invalid account.");
+    }
+  }
+  if (JSON.stringify(catalog).length > 65536) throw new RequestError(400, "Relay catalog is too large.");
+  return catalog as unknown as RelayCatalog;
+}
+
 function streamDiagnosticBytes(response: express.Response, totalBytes: number): void {
   if (totalBytes <= 0) {
     response.end();
@@ -3008,6 +3136,7 @@ function ensureDevice(deviceId: string): DeviceState {
     last_telemetry_at: null,
     agent_version: null,
     telemetry: null,
+    relay_health: null,
     logs: [],
     command_interface_enabled: false,
   };
@@ -3040,6 +3169,7 @@ function topicTemplates() {
     status: topicFor("{device_id}", TOPICS.status),
     heartbeat: topicFor("{device_id}", TOPICS.heartbeat),
     telemetry: topicFor("{device_id}", TOPICS.telemetry),
+    relay_health: topicFor("{device_id}", TOPICS.relayHealth),
     logs: topicFor("{device_id}", TOPICS.logs),
     version: topicFor("{device_id}", TOPICS.version),
     cmd_request: topicFor("{device_id}", TOPICS.cmdRequest),

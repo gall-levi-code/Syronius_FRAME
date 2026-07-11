@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import express from "express";
 import path from "node:path";
@@ -69,6 +69,18 @@ interface PublisherStats extends NormalizedStats {
   missing_pkts?: number;
 }
 
+interface RelayCatalog {
+  version: 1;
+  revision: string;
+  servers: Record<string, {
+    type: "srtla";
+    name: string;
+    addr: string;
+    port: number;
+  }>;
+  accounts: Record<string, { name: string; ingest_key: string }>;
+}
+
 interface BelaboxStats {
   status?: unknown;
   relayId?: unknown;
@@ -136,6 +148,17 @@ app.get("/healthz", async (_request, response) => {
 app.get("/internal/streams", requireInternalAuth, async (_request, response, next) => {
   try {
     response.json({ streams: await readProfiles(false) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/internal/belabox-relay-catalog", requireInternalAuth, async (_request, response, next) => {
+  try {
+    const catalog = await buildBelaboxRelayCatalog();
+    response.setHeader("Cache-Control", "no-store");
+    response.setHeader("ETag", `"${catalog.revision}"`);
+    response.json(catalog);
   } catch (error) {
     next(error);
   }
@@ -325,6 +348,32 @@ async function readProfiles(includeStats: boolean): Promise<StreamProfile[]> {
     return profiles;
   }
   return await Promise.all(profiles.map(async (profile) => ({ ...profile, stats: await readStats(profile.id) })));
+}
+
+async function buildBelaboxRelayCatalog(): Promise<RelayCatalog> {
+  const accounts = Object.fromEntries((await readProfiles(false))
+    .filter((profile) => profile.source_type === "sls" && profile.publisher)
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .map((profile) => [
+      `frame-${createHash("sha256").update(profile.id).digest("hex").slice(0, 16)}`,
+      { name: profile.description, ingest_key: profile.publisher as string },
+    ]));
+  const content = {
+    version: 1 as const,
+    servers: {
+      "frame-primary": {
+        type: "srtla" as const,
+        name: `FRAME (${config.relayHost})`,
+        addr: config.relayHost,
+        port: config.srtlaPort,
+      },
+    },
+    accounts,
+  };
+  return {
+    ...content,
+    revision: createHash("sha256").update(JSON.stringify(content)).digest("hex"),
+  };
 }
 
 async function readProfile(id: string): Promise<StreamProfile | null> {
