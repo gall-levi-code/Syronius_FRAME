@@ -6,9 +6,12 @@ const THEME_PROFILE_KEY = "frame-theme-profile";
 const THEME_CUSTOM_PROFILES_KEY = "frame-theme-custom-profiles";
 const COMPAT_THEME_KEYS = ["frame-gallery-theme-mode", "frame-audio-bridge-color-mode"];
 const LAST_DEVICE_KEY = "frame-belabox-last-device";
+const LAST_WORKSPACE_TAB_KEY = "frame-belabox-workspace-tab";
+const ADVANCED_VIEW_KEY = "frame-belabox-advanced-view";
 const REFRESH_INTERVAL_MS = 2000;
 const COMMAND_POLL_INTERVAL_MS = 500;
 const WIZARD_STEPS = ["Welcome", "Photo Agent", "Stream Safe Transfer", "Install"];
+const WORKSPACE_TABS = ["overview", "photos", "connections", "diagnostics", "system"];
 const TRANSFER_PRESETS = {
   protect: { label: "Protect Stream", chunk_size_bytes: 1048576, chunk_parallel_uploads: 1, chunk_upload_kbps: 768 },
   balanced: { label: "Balanced", chunk_size_bytes: 1048576, chunk_parallel_uploads: 2, chunk_upload_kbps: 2000 },
@@ -38,6 +41,8 @@ const state = {
   logs: null,
   formDraft: {},
   detailsOpen: {},
+  workspaceTab: readWorkspaceTab(),
+  advancedView: readAdvancedView(),
   ftpOutputs: {},
   panelLocked: false,
   panelHoldKey: "",
@@ -121,6 +126,7 @@ function render() {
     elements.devicePanel.innerHTML = panelKey === ADD_DEVICE_ID
       ? renderAddDeviceWizard(devices.length === 0)
       : renderDevicePanel(panelKey);
+    elements.devicePanel.dataset.advancedView = String(state.advancedView);
     restoreFormDraft();
     restoreDetailsState();
   }
@@ -316,6 +322,11 @@ function renderDevicePanel(deviceId) {
   const transferState = transferResult?.state === "published"
     ? "Published"
     : transferResult?.state === "failed" ? "Needs attention" : friendlyTransferState(ftp, connector);
+  const activeWorkspaceTab = WORKSPACE_TABS.includes(state.workspaceTab) ? state.workspaceTab : "overview";
+  const diagnosticFinished = ["complete", "partial", "failed"].includes(diagnostics.state);
+  const uploadPercent = ftp.file ? Math.max(0, Math.min(100, Math.round(Number(ftp.percent || 0)))) : 0;
+  const uploadQueue = Number(ftp.queue_count || 0);
+  const uploadReady = Number(ftp.processed_count || 0);
   return `<div class="panel-head device-header">
       <div>
         <p class="eyebrow">Belabox</p>
@@ -325,36 +336,39 @@ function renderDevicePanel(deviceId) {
       <div class="panel-actions">
         <span class="pill ${live?.online ? "online" : ""}">${live?.online ? "Online" : "Offline"}</span>
         <a class="primary-action" href="${escapeAttr(remoteUrl)}" target="_blank" rel="noreferrer">Open Encoder Remote</a>
-        <button class="secondary" type="button" data-copy-text="${escapeAttr(remoteUrl)}">Copy URL</button>
+        <button class="secondary advanced-only" type="button" data-copy-text="${escapeAttr(remoteUrl)}">Copy URL</button>
+        <div class="view-mode-toggle" role="group" aria-label="Information level">
+          <button type="button" class="${state.advancedView ? "" : "active"}" data-view-mode="simple" aria-pressed="${!state.advancedView}">Simple</button>
+          <button type="button" class="${state.advancedView ? "active" : ""}" data-view-mode="advanced" aria-pressed="${state.advancedView}">Advanced</button>
+        </div>
       </div>
     </div>
 
+    <nav class="workspace-tabs" role="tablist" aria-label="Belabox tools">
+      ${[
+        ["overview", "Overview"],
+        ["photos", "Photo Transfer"],
+        ["connections", "Connections"],
+        ["diagnostics", "Diagnostics"],
+        ["system", "System"],
+      ].map(([id, label]) => `<button type="button" role="tab" id="workspace-tab-${id}" aria-controls="workspace-pane-${id}" aria-selected="${activeWorkspaceTab === id}" tabindex="${activeWorkspaceTab === id ? "0" : "-1"}" class="workspace-tab ${activeWorkspaceTab === id ? "active" : ""}" data-workspace-tab="${id}">${label}</button>`).join("")}
+    </nav>
+
+    <div id="workspace-pane-overview" class="workspace-pane" role="tabpanel" aria-labelledby="workspace-tab-overview" data-workspace-pane="overview" ${activeWorkspaceTab === "overview" ? "" : "hidden"}>
     <section class="workspace-section status-workspace" aria-label="Encoder overview">
-      <div class="remote-row">
+      <div class="remote-row advanced-only">
         <span>Remote access</span>
         <code>${escapeHtml(remoteUrl)}</code>
       </div>
 
       <div class="encoder-strip" aria-label="Encoder status">
-        ${statusTile("Encoder", live?.online ? "Online" : "Offline", live?.online ? "good" : "warn")}
-        ${statusTile("Remote", remoteBelauiStatus(remoteBelaui), remoteBelaui.state === "reachable" ? "good" : "warn")}
-        ${statusTile("Photo Agent", transferState, connector ? "good" : "warn")}
+        ${statusTile("Device Health", live?.online ? agentHealth : "Offline", live?.online ? "good" : "warn")}
+        ${statusTile("Remote Access", remoteBelauiStatus(remoteBelaui), remoteBelaui.state === "reachable" ? "good" : "warn")}
+        ${statusTile("Photo Transfer", transferState, connector ? "good" : "warn")}
         ${statusTile("Stream Safety", photoTelemetryReady ? streamSafetyLabel(ftp, chunkUploadKbps) : "Waiting", photoTelemetryReady && chunkUploadKbps > 0 ? "good" : "warn")}
       </div>
 
-      <div class="agent-card">
-        <div>
-          <p class="eyebrow">Installed agent</p>
-          <strong class="${live?.online ? "good-text" : ""}">${escapeHtml(agentHealth)}</strong>
-        </div>
-        <dl>${rows([
-          ["Version", live?.agent_version || "Waiting"],
-          ["Last heartbeat", live?.last_heartbeat_at ? formatAge(live.last_heartbeat_at) : "Never"],
-        ])}</dl>
-        ${updateAvailable ? `<span class="pill warn">Agent update available: ${escapeHtml(bundledAgentVersion)}</span>` : ""}
-      </div>
-
-      <div class="insight-card ${slowdown.tone}">
+      <div class="insight-card ${slowdown.tone} ${slowdown.title === "Ready" ? "advanced-only" : ""}">
         <div>
           <p class="eyebrow">What is slowing things down?</p>
           <h3>${escapeHtml(slowdown.title)}</h3>
@@ -362,7 +376,9 @@ function renderDevicePanel(deviceId) {
         <p>${escapeHtml(slowdown.detail)}</p>
       </div>
     </section>
+    </div>
 
+    <div id="workspace-pane-photos" class="workspace-pane" role="tabpanel" aria-labelledby="workspace-tab-photos" data-workspace-pane="photos" ${activeWorkspaceTab === "photos" ? "" : "hidden"}>
     <section class="workspace-section photo-workspace" aria-labelledby="photo-transfer-title">
       <div class="workspace-heading">
         <div>
@@ -379,24 +395,20 @@ function renderDevicePanel(deviceId) {
       </div>
 
       <div class="detail-grid transfer-grid">
-        <div class="status-card">
-          <h3>Live Upload</h3>
-          <dl>${rows([
-            ["Current file", ftp.file || "None"],
-            ["Progress", ftp.file ? `${Math.round(Number(ftp.percent || 0))}%` : "Idle"],
-            ["Rate", formatBytes(Number(ftp.rate_bps || 0)) + "/s"],
-            ["Queue", `${Number(ftp.queue_count || 0)} total, ${Number(ftp.processed_count || 0)} upload-ready`],
-            ["ETA", transferEta(ftp)],
-          ])}</dl>
-        </div>
-        <div class="status-card">
-          <h3>Connections</h3>
-          ${egressLaneChips(egress, ftp)}
-          <dl>${rows([
-            ["Active lane", ftp.active_egress || "Idle"],
-            ["Healthy lanes", `${ftp.egress_lane_count || egress.healthy_lane_count || 0}`],
-            ["Last heartbeat", live?.last_heartbeat_at ? formatAge(live.last_heartbeat_at) : "Waiting"],
-          ])}</dl>
+        <div class="status-card live-upload-card">
+          <div class="status-card-heading">
+            <h3>Live Upload</h3>
+            <span class="result-badge ${ftp.file ? "running" : "neutral"}">${ftp.file ? "Uploading" : "Idle"}</span>
+          </div>
+          <div class="upload-file-row">
+            <strong title="${escapeAttr(ftp.file || "No active upload")}">${escapeHtml(ftp.file || "No active upload")}</strong>
+            <span>${ftp.file ? `${uploadPercent}%` : "Ready"}</span>
+          </div>
+          <progress max="100" value="${uploadPercent}" aria-label="Photo upload progress">${uploadPercent}%</progress>
+          <div class="upload-meta">
+            <span>${escapeHtml(formatBytes(Number(ftp.rate_bps || 0)) + "/s")}</span>
+            <span>${uploadQueue} queued · ${uploadReady} ready · ETA ${escapeHtml(transferEta(ftp))}</span>
+          </div>
         </div>
         <div class="status-card">
           <h3>FRAME Processing</h3>
@@ -418,7 +430,7 @@ function renderDevicePanel(deviceId) {
       </div>
       <p class="hint">Protect Stream is the safest starting point while live. Fast is uncapped and can affect bitrate recovery on weak uplinks.</p>
 
-      <dl class="transfer-summary">${rows([
+      <dl class="transfer-summary advanced-only">${rows([
         ["Mode", photoTelemetryReady ? friendlyTransferMode(ftp) : "Waiting"],
         ["Upload cap", photoTelemetryReady ? formatUploadCap(chunkUploadKbps) : "Waiting"],
         ["Preprocessor", photoTelemetryReady ? preprocess.status_text || preprocess.state || "Idle" : "Waiting"],
@@ -452,7 +464,7 @@ function renderDevicePanel(deviceId) {
         </form>
       </details>
 
-      <details class="nested-details" data-section="advanced-transfer">
+      <details class="nested-details advanced-only" data-section="advanced-transfer">
         <summary>Advanced transfer settings <span class="pending-badge" data-pending-badge hidden>Unsaved</span></summary>
         <dl>${rows([
           ["Endpoint", state.status.chunk_upload?.public_url_configured ? "Configured" : "Missing"],
@@ -482,7 +494,7 @@ function renderDevicePanel(deviceId) {
         </form>
       </details>
 
-      <details class="nested-details">
+      <details class="nested-details advanced-only">
         <summary>Agent setup</summary>
         <dl>${rows([
           ["FRAME target", `${connector?.target_host || state.status.ftp_connector?.target_host || "Not set"}:${connector?.target_port || state.status.ftp_connector?.target_port || 2121}`],
@@ -505,10 +517,82 @@ function renderDevicePanel(deviceId) {
       <p class="hint">${live?.online ? "Online controls use signed commands. No SSH login required." : "Agent must be online before photo settings can be sent."}</p>
       </div>
     </section>
+    </div>
 
-    <details class="workspace-disclosure" data-section="maintenance">
-      <summary><span>Maintenance</span><small>Repair, diagnostics, and local service tools</small></summary>
-      <div class="disclosure-body">
+    <div id="workspace-pane-connections" class="workspace-pane" role="tabpanel" aria-labelledby="workspace-tab-connections" data-workspace-pane="connections" ${activeWorkspaceTab === "connections" ? "" : "hidden"}>
+    <section class="workspace-section connections-workspace" aria-labelledby="connections-title">
+      <div class="workspace-heading">
+        <div><p class="eyebrow">Network paths</p><h3 id="connections-title">Connections</h3></div>
+        <span class="pill ${Number(egress.healthy_lane_count || 0) > 0 ? "online" : "warn"}">${Number(egress.healthy_lane_count || 0)} healthy</span>
+      </div>
+      <div class="connection-lanes">
+        <h3>Available connections</h3>
+        ${egressLaneCards(egress, ftp)}
+      </div>
+      <div class="status-card connection-summary">
+        <h3>Stream protection</h3>
+        <dl>${rows([
+          ["Active upload lane", ftp.active_egress || "Idle"],
+          ["Safety", photoTelemetryReady ? streamSafetyLabel(ftp, chunkUploadKbps) : "Waiting"],
+          ["Upload cap", photoTelemetryReady ? formatUploadCap(chunkUploadKbps) : "Waiting"],
+          ["Transfer mode", photoTelemetryReady ? friendlyTransferMode(ftp) : "Waiting"],
+        ])}</dl>
+      </div>
+      <details class="nested-details advanced-only" data-section="connection-details">
+        <summary>Technical route details</summary>
+        <dl>${rows([
+          ["Egress binding", ftp.egress_binding || "Waiting"],
+          ["Chunk size", formatChunkSize(chunkSize)],
+          ["Parallel uploads", `${chunkParallel}`],
+          ["Last heartbeat", live?.last_heartbeat_at ? formatAge(live.last_heartbeat_at) : "Waiting"],
+        ])}</dl>
+      </details>
+    </section>
+    </div>
+
+    <div id="workspace-pane-diagnostics" class="workspace-pane" role="tabpanel" aria-labelledby="workspace-tab-diagnostics" data-workspace-pane="diagnostics" ${activeWorkspaceTab === "diagnostics" ? "" : "hidden"}>
+    <section class="workspace-section diagnostics-workspace" data-section="network-diagnostics" aria-labelledby="diagnostics-title">
+      <div class="workspace-heading">
+        <div><p class="eyebrow">Connection testing</p><h3 id="diagnostics-title">Network Diagnostics</h3></div>
+        <span class="pill ${diagnostics.state === "complete" ? "online" : diagnostics.state === "failed" ? "warn" : ""}">${escapeHtml(diagnosticStateLabel(diagnostics.state))}</span>
+      </div>
+      <p class="hint">Test each Belabox interface against the Internet or this FRAME host. Tests are uncapped and can compete with an active stream.</p>
+      <dl class="advanced-only">${rows([
+        ["Target", diagnosticTargetLabel(diagnostics)],
+        ["Current", diagnostics.current_interface ? `${diagnostics.current_interface} - ${diagnosticPhaseLabel(diagnostics.current_phase)}` : "Idle"],
+        ["Progress", diagnostics.bytes_total ? `${Math.round((Number(diagnostics.bytes_completed ?? diagnostics.bytes_sent ?? 0) / Number(diagnostics.bytes_total)) * 100)}%` : "None"],
+        ["Streams", diagnostics.parallel || state.status.diagnostics?.parallel_streams || 1],
+      ])}</dl>
+      <form id="speed-test-form" class="form-grid">
+        <fieldset class="diagnostic-target-selector wide">
+          <legend>Test destination</legend>
+          <label><input type="radio" name="diagnostic_target" value="internet" ${diagnostics.target !== "frame" ? "checked" : ""}><span><strong>External Internet</strong><small>Cloudflare edge</small></span></label>
+          <label><input type="radio" name="diagnostic_target" value="frame" ${diagnostics.target === "frame" ? "checked" : ""}><span><strong>FRAME endpoint</strong><small>This hosted FRAME device</small></span></label>
+        </fieldset>
+        <label>Interface<select id="speed-test-interface" name="interface_name">${diagnosticInterfaceOptions(telemetry.network_interfaces, diagnostics.requested_interface)}</select></label>
+        ${sliderControl("speed-test-mib", "mib", "Data per direction", 1, Math.max(1, Math.floor((state.status.diagnostics?.max_upload_bytes || 67108864) / 1024 / 1024)), 1, Math.max(1, Math.round((diagnostics.bytes_per_direction || state.status.diagnostics?.upload_bytes || 8388608) / 1024 / 1024)), (value) => `${value} MiB`)}
+        <div class="wide advanced-only">${sliderControl("speed-test-parallel", "parallel", "Parallel streams", 1, 8, 1, state.status.diagnostics?.parallel_streams || 1, (value) => `${value} stream${Number(value) === 1 ? "" : "s"}`)}</div>
+        <div class="actions wide"><button id="run-speed-test" class="install-action" type="submit" ${live?.online ? "" : "disabled"}>Run Interface Speed Test</button></div>
+      </form>
+      <pre id="speed-test-output" class="diagnostic-live-output ${diagnosticFinished ? "advanced-only" : ""}">${diagnosticSummary(diagnostics)}</pre>
+      ${diagnosticResultsMarkup(diagnostics)}
+    </section>
+    </div>
+
+    <div id="workspace-pane-system" class="workspace-pane" role="tabpanel" aria-labelledby="workspace-tab-system" data-workspace-pane="system" ${activeWorkspaceTab === "system" ? "" : "hidden"}>
+    <section class="workspace-section system-workspace" aria-labelledby="system-title">
+      <div class="workspace-heading">
+        <div><p class="eyebrow">Device management</p><h3 id="system-title">System</h3></div>
+        <span class="pill ${live?.online ? "online" : "warn"}">${escapeHtml(agentHealth)}</span>
+      </div>
+      <div class="agent-card">
+        <div><p class="eyebrow">Installed agent</p><strong class="${live?.online ? "good-text" : ""}">${escapeHtml(agentHealth)}</strong></div>
+        <dl>${rows([
+          ["Version", live?.agent_version || "Waiting"],
+          ["Last heartbeat", live?.last_heartbeat_at ? formatAge(live.last_heartbeat_at) : "Never"],
+        ])}</dl>
+        ${updateAvailable ? `<span class="pill warn">Agent update available: ${escapeHtml(bundledAgentVersion)}</span>` : ""}
+      </div>
     <details class="nested-details" data-section="queue-recovery">
       <summary>Photo queue recovery</summary>
       <p class="hint">${queueResetAvailable ? "Archives pending photos on the Belabox while preserving transfer settings and any file currently uploading or preprocessing." : "Repair the agent to enable queue recovery."}</p>
@@ -518,22 +602,6 @@ function renderDevicePanel(deviceId) {
       ])}</dl>
       <div class="actions"><button class="danger" type="button" data-reset-photo-queue ${queueResetAvailable ? "" : "disabled"}>Reset Photo Queue</button></div>
     </details>
-    <details class="nested-details" data-section="network-diagnostics">
-      <summary>Connection test</summary>
-      <dl>${rows([
-        ["State", diagnostics.state || "Idle"],
-        ["Progress", diagnostics.bytes_total ? `${Math.round((Number(diagnostics.bytes_sent || 0) / Number(diagnostics.bytes_total)) * 100)}%` : "None"],
-        ["Speed", diagnostics.mbps ? `${diagnostics.mbps} Mbps` : "Unknown"],
-        ["Streams", diagnostics.parallel || state.status.diagnostics?.parallel_streams || 1],
-      ])}</dl>
-      <form id="speed-test-form" class="form-grid">
-        <label>Upload test size MiB<input id="speed-test-mib" name="mib" type="number" min="1" max="${Math.max(1, Math.floor((state.status.diagnostics?.max_upload_bytes || 67108864) / 1024 / 1024))}" step="1" value="${Math.max(1, Math.round((state.status.diagnostics?.upload_bytes || 8388608) / 1024 / 1024))}"></label>
-        <label>Parallel streams<input id="speed-test-parallel" name="parallel" type="number" min="1" max="8" step="1" value="${escapeAttr(state.status.diagnostics?.parallel_streams || 1)}"></label>
-        <div class="actions wide"><button id="run-speed-test" type="submit" ${live?.online ? "" : "disabled"}>Run Upload Speed Test</button></div>
-      </form>
-      <pre id="speed-test-output">${diagnosticSummary(diagnostics)}</pre>
-    </details>
-
     <details class="nested-details" data-section="ssh-maintenance">
       <summary>SSH Maintenance</summary>
       <p class="hint">SSH is only needed for agent repair, optional tool install, or reinstalling local services.</p>
@@ -557,12 +625,7 @@ function renderDevicePanel(deviceId) {
       </form>
       <pre id="pair-output">${savedSsh ? "Saved SSH can be reused for installer jobs. Enter a password or key to rotate it." : "Enter SSH credentials when an installer or repair job needs local access."}</pre>
     </details>
-      </div>
-    </details>
-
-    <details class="workspace-disclosure" data-section="advanced-tools">
-      <summary><span>Advanced</span><small>Telemetry, logs, and device removal</small></summary>
-      <div class="disclosure-body">
+    <div class="advanced-only system-advanced">
     <details class="nested-details" data-section="device-identity">
       <summary>Device identity</summary>
       <form id="device-name-form" class="form-grid">
@@ -596,7 +659,8 @@ function renderDevicePanel(deviceId) {
       </div>
     </details>
       </div>
-    </details>`;
+    </section>
+    </div>`;
 }
 
 function formCommitMarkup(displayName, online) {
@@ -611,6 +675,10 @@ function formCommitMarkup(displayName, online) {
 }
 
 async function handlePanelClick(event) {
+  const viewMode = event.target.closest("[data-view-mode]");
+  if (viewMode) return setAdvancedView(viewMode.dataset.viewMode === "advanced");
+  const workspaceTab = event.target.closest("[data-workspace-tab]");
+  if (workspaceTab) return selectWorkspaceTab(workspaceTab.dataset.workspaceTab);
   const cancelWizard = event.target.closest("[data-wizard-cancel]");
   if (cancelWizard) return closeWizard();
   const backWizard = event.target.closest("[data-wizard-back]");
@@ -1032,27 +1100,54 @@ async function runSpeedTest(form) {
   const output = elements.devicePanel.querySelector("#speed-test-output");
   const mib = Math.max(1, Number(form.querySelector("#speed-test-mib")?.value || 8));
   const parallel = Math.max(1, Number(form.querySelector("#speed-test-parallel")?.value || 1));
+  const target = form.querySelector('input[name="diagnostic_target"]:checked')?.value || "internet";
+  const interfaceName = form.querySelector("#speed-test-interface")?.value || "all";
+  const requestedAt = Date.now();
   const resetButton = setButtonBusy(button, "Running...");
   state.panelLocked = true;
   output.textContent = "Queued network speed test...";
-  showNotice("Running Belabox upload speed test...", "busy");
+  showNotice("Running Belabox interface speed test...", "busy");
   try {
     const queued = await fetchJson("/belabox/api/diagnostics/speed-test", postJson({
       device_id: state.selectedDeviceId,
+      target,
+      interface_name: interfaceName,
       bytes: Math.round(mib * 1024 * 1024),
       parallel,
     }));
-    const result = await pollCommandResult(queued.command.command_id, output);
-    output.textContent = result.error_message || result.result_summary || "Speed test finished.";
-    showNotice("Belabox upload speed test finished.", "success");
-    await refresh();
+    const result = await pollCommandResult(queued.command.command_id, output, 1000, 300);
+    if (result.status === "rejected" || result.error_message) {
+      throw new Error(result.error_message || result.result_summary || "Speed test failed.");
+    }
+    const completed = await waitForDiagnosticCompletion(requestedAt, output);
+    output.textContent = completed ? diagnosticSummary(completed) : result.result_summary || "Speed test finished.";
+    showNotice("Belabox interface speed test finished.", "success");
   } catch (error) {
     output.textContent = `Speed test failed: ${error.message}`;
     showNotice(`Speed test failed: ${error.message}`, "error");
   } finally {
+    state.workspaceTab = "diagnostics";
+    try { localStorage.setItem(LAST_WORKSPACE_TAB_KEY, state.workspaceTab); } catch {}
     state.panelLocked = false;
+    state.panelHoldKey = "";
     resetButton();
+    try { await refresh(); } catch {}
   }
+}
+
+async function waitForDiagnosticCompletion(requestedAt, output) {
+  let latest = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    await refresh();
+    latest = liveDevice(state.selectedDeviceId)?.telemetry?.network_diagnostics || null;
+    if (latest && output) output.textContent = diagnosticSummary(latest);
+    const startedAt = Date.parse(latest?.started_at || "");
+    if (Number.isFinite(startedAt) && startedAt >= requestedAt - 2000 && ["complete", "partial", "failed"].includes(latest.state)) {
+      return latest;
+    }
+    await delay(250);
+  }
+  return latest;
 }
 
 async function pollPairJob(jobId, output) {
@@ -1075,8 +1170,8 @@ async function pollFtpConnectorJob(jobId, output) {
   }
 }
 
-async function pollCommandResult(commandId, output, intervalMs = 1000) {
-  for (let attempt = 0; attempt < 90; attempt += 1) {
+async function pollCommandResult(commandId, output, intervalMs = 1000, maxAttempts = 90) {
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     await refresh();
     const diagnostic = liveDevice(state.selectedDeviceId)?.telemetry?.network_diagnostics;
     if (diagnostic && output) output.textContent = diagnosticSummary(diagnostic);
@@ -1620,6 +1715,7 @@ function sshCredentialSaveEnabled() {
 }
 
 function openSshMaintenance(message) {
+  selectWorkspaceTab("system");
   let section = elements.devicePanel.querySelector("#repair-form")?.closest("details");
   while (section) {
     section.open = true;
@@ -1717,6 +1813,35 @@ function updateSliderValue(input) {
   else if (input.id === "photo-long-edge") output.textContent = formatPixelEdge(value);
   else if (input.id === "photo-jpeg-quality") output.textContent = `${value}%`;
   else if (input.id === "photo-max-output") output.textContent = formatMaxOutput(value);
+  else if (input.id === "speed-test-mib") output.textContent = `${value} MiB`;
+  else if (input.id === "speed-test-parallel") output.textContent = `${value} stream${value === 1 ? "" : "s"}`;
+}
+
+function selectWorkspaceTab(tabName) {
+  state.workspaceTab = WORKSPACE_TABS.includes(tabName) ? tabName : "overview";
+  try { localStorage.setItem(LAST_WORKSPACE_TAB_KEY, state.workspaceTab); } catch {}
+  elements.devicePanel.querySelectorAll("[data-workspace-tab]").forEach((tab) => {
+    const active = tab.dataset.workspaceTab === state.workspaceTab;
+    tab.classList.toggle("active", active);
+    tab.setAttribute("aria-selected", String(active));
+    tab.tabIndex = active ? 0 : -1;
+  });
+  elements.devicePanel.querySelectorAll("[data-workspace-pane]").forEach((pane) => {
+    pane.hidden = pane.dataset.workspacePane !== state.workspaceTab;
+  });
+  state.panelHoldKey = "";
+}
+
+function setAdvancedView(enabled) {
+  state.advancedView = enabled === true;
+  elements.devicePanel.dataset.advancedView = String(state.advancedView);
+  elements.devicePanel.querySelectorAll("[data-view-mode]").forEach((button) => {
+    const active = button.dataset.viewMode === (state.advancedView ? "advanced" : "simple");
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  try { localStorage.setItem(ADVANCED_VIEW_KEY, String(state.advancedView)); } catch {}
+  state.panelHoldKey = "";
 }
 
 function wizardSummary() {
@@ -1961,18 +2086,26 @@ function transferResultNotice(ftp, framePipeline) {
   return Number.isFinite(at) && Date.now() - at >= 0 && Date.now() - at <= 45000 ? { state, title, detail } : null;
 }
 
-function egressLaneChips(egress, ftp) {
+function egressLaneCards(egress, ftp) {
   const lanes = Array.isArray(egress?.lanes) ? egress.lanes : [];
   if (!lanes.length) return `<p class="hint">Waiting for connection telemetry.</p>`;
-  return `<div class="lane-chips">${lanes.map((lane, index) => {
+  return `<div class="lane-grid">${lanes.map((lane, index) => {
     const stateName = lane.state === "healthy" ? "healthy" : lane.state === "unreachable" ? "offline" : "warn";
     const active = String(ftp?.active_egress || "").includes(lane.address) || String(ftp?.active_egress || "").includes(lane.name);
-    return `<span class="lane-chip ${stateName}${active ? " active" : ""}">${escapeHtml(friendlyLaneName(lane, index))}</span>`;
+    const label = active ? "Upload" : stateName === "healthy" ? "Ready" : stateName === "offline" ? "Down" : "Check";
+    const badgeTone = active ? "running" : stateName === "healthy" ? "ok" : "warn";
+    return `<article class="lane-card ${stateName}${active ? " active" : ""}">
+      <div><strong>${escapeHtml(friendlyLaneName(lane, index))}</strong><span class="result-badge ${badgeTone}">${label}</span></div>
+      <dl class="advanced-only">${rows([
+        ["Interface", lane.name || lane.interface_name || "Unknown"],
+        ["Address", lane.address || "Unavailable"],
+      ])}</dl>
+    </article>`;
   }).join("")}</div>`;
 }
 
 function friendlyLaneName(lane, index) {
-  const name = String(lane?.name || "");
+  const name = String(lane?.name || lane?.interface_name || "");
   if (name.startsWith("eth")) return "Ethernet";
   if (name.startsWith("wlan")) return `Wi-Fi ${index + 1}`;
   return name || `Lane ${index + 1}`;
@@ -2014,14 +2147,80 @@ function nonNegativeNumber(value, fallback) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
 }
 
+function diagnosticTargetLabel(diagnostics) {
+  if (diagnostics?.target_name) return diagnostics.target_name;
+  if (diagnostics?.target === "frame") return "FRAME endpoint";
+  if (diagnostics?.target === "internet") return "External Internet";
+  return "Not selected";
+}
+
+function diagnosticStateLabel(state) {
+  return ({ preparing: "Preparing", running: "Running", complete: "Complete", partial: "Partially complete", failed: "Failed" })[state] || "Idle";
+}
+
+function diagnosticPhaseLabel(phase) {
+  return ({
+    route_check: "Checking route",
+    latency: "Latency",
+    download: "Download",
+    upload: "Upload",
+    complete: "Complete",
+  })[phase] || "Waiting";
+}
+
+function diagnosticInterfaceOptions(interfaces, selected = "all") {
+  const seen = new Set();
+  const options = (Array.isArray(interfaces) ? interfaces : [])
+    .filter((entry) => {
+      if (entry?.family !== "IPv4" || !entry.name || !entry.address || String(entry.address).startsWith("169.254.") || seen.has(entry.name)) return false;
+      seen.add(entry.name);
+      return true;
+    })
+    .map((entry, index) => `<option value="${escapeAttr(entry.name)}" ${selected === entry.name ? "selected" : ""}>${escapeHtml(friendlyLaneName(entry, index))} · ${escapeHtml(entry.name)} · ${escapeHtml(entry.address)}</option>`)
+    .join("");
+  return `<option value="all" ${selected === "all" || !selected ? "selected" : ""}>All available interfaces (sequential)</option>${options}`;
+}
+
+function diagnosticResultsMarkup(diagnostics) {
+  const results = Array.isArray(diagnostics?.results) ? diagnostics.results : [];
+  if (!results.length) return `<p class="hint">No interface results yet.</p>`;
+  return `<div class="diagnostic-results" aria-label="Interface speed test results">${results.map((result, index) => {
+    const stateName = result.state === "complete" ? "complete" : result.state === "failed" ? "failed" : "running";
+    const badgeLabel = stateName === "complete" ? "OK" : stateName === "failed" ? "Warn" : "Testing";
+    const badgeTone = stateName === "complete" ? "ok" : stateName === "failed" ? "warn" : "running";
+    return `<article class="diagnostic-result ${stateName}">
+      <div class="diagnostic-result-head"><div><strong>${escapeHtml(friendlyLaneName(result, index))}</strong><span>${escapeHtml(result.interface_name || "Unknown")} · ${escapeHtml(result.address || "No address")}</span></div><span class="result-badge ${badgeTone}">${badgeLabel}</span></div>
+      <dl>${rows([
+        ["Latency", diagnosticMetric(result.latency_ms, "ms")],
+        ["Download", diagnosticMetric(result.download_mbps, "Mbps")],
+        ["Upload", diagnosticMetric(result.upload_mbps, "Mbps")],
+        ["Status", result.state === "complete" ? "Complete" : result.state === "failed" ? "Failed" : diagnosticPhaseLabel(diagnostics.current_phase)],
+      ])}</dl>
+      ${result.error ? `<p>${escapeHtml(result.error)}</p>` : ""}
+    </article>`;
+  }).join("")}</div>`;
+}
+
+function diagnosticMetric(value, unit) {
+  return value !== null && value !== undefined && Number.isFinite(Number(value)) ? `${Number(value)} ${unit}` : "Waiting";
+}
+
 function diagnosticSummary(diagnostics) {
-  if (!diagnostics?.state) return "Run a short upload test to measure Belabox-to-FRAME throughput.";
+  if (!diagnostics?.state) return "Run a per-interface Internet or FRAME endpoint test.";
   const total = Number(diagnostics.bytes_total || 0);
-  const sent = Number(diagnostics.bytes_sent || 0);
-  const pct = total ? `${Math.round((sent / total) * 100)}%` : "0%";
-  const speed = diagnostics.mbps ? `${diagnostics.mbps} Mbps` : "calculating";
-  const error = diagnostics.error ? `\nError: ${diagnostics.error}` : "";
-  return `${diagnostics.state}: ${pct} (${formatBytes(sent)} / ${formatBytes(total)})\nSpeed: ${speed}\nStreams: ${diagnostics.parallel || 1}${error}`;
+  const completed = Number(diagnostics.bytes_completed ?? diagnostics.bytes_sent ?? 0);
+  const pct = total ? `${Math.round((completed / total) * 100)}%` : "0%";
+  const lines = [
+    `${diagnosticStateLabel(diagnostics.state)}: ${diagnosticTargetLabel(diagnostics)}`,
+    `${pct} (${formatBytes(completed)} / ${formatBytes(total)})`,
+    diagnostics.current_interface ? `${diagnostics.current_interface}: ${diagnosticPhaseLabel(diagnostics.current_phase)}` : `${diagnostics.parallel || 1} stream${Number(diagnostics.parallel || 1) === 1 ? "" : "s"}`,
+  ];
+  for (const result of Array.isArray(diagnostics.results) ? diagnostics.results : []) {
+    if (result.state === "complete") lines.push(`${result.interface_name}: ${result.download_mbps} Mbps down / ${result.upload_mbps} Mbps up / ${result.latency_ms} ms`);
+    if (result.state === "failed") lines.push(`${result.interface_name}: failed · ${result.error || "Unknown error"}`);
+  }
+  if (diagnostics.error) lines.push(`Error: ${diagnostics.error}`);
+  return lines.join("\n");
 }
 
 function transferEta(ftp) {
@@ -2105,6 +2304,23 @@ function readLastDeviceId() {
     return localStorage.getItem(LAST_DEVICE_KEY) || "";
   } catch {
     return "";
+  }
+}
+
+function readWorkspaceTab() {
+  try {
+    const stored = localStorage.getItem(LAST_WORKSPACE_TAB_KEY) || "";
+    return WORKSPACE_TABS.includes(stored) ? stored : "overview";
+  } catch {
+    return "overview";
+  }
+}
+
+function readAdvancedView() {
+  try {
+    return localStorage.getItem(ADVANCED_VIEW_KEY) === "true";
+  } catch {
+    return false;
   }
 }
 

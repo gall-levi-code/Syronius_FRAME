@@ -111,6 +111,7 @@ removed.
   staged/completed events; true percent remains unavailable unless the sender reports total size.
 - [x] Phase 4B: add `/api/internal/photo-ftp/progress` and enable the Overlay Wizard `ftp` adapter once
   `frame-photo-ftp` exposes progress directly.
+- [x] Add a short-lived `Transfer complete` bubble to the upload overlay without waiting for FRAME image processing.
 - Define a `frame-remote-photo-agent` capability for deploying a managed photo relay helper onto a Belabox or similar Linux encoder on the local network.
 - Build a FRAME-side setup wizard that can detect or accept the Belabox LAN IP, explain how to enable Belabox SSH, and connect with the fixed `user` SSH account plus the rotating password from the Belabox Advanced/developer panel.
 - Generate FRAME-managed usernames, paths, script names, and systemd unit names instead of reusing personal prototype paths from the reference scripts.
@@ -176,5 +177,10 @@ removed.
     - Acceptance: no overflow, unintended navigation, stale modal, lost input, or control-state regression
       remains in the supported workflows.
 - Revisit chunked HTTPS or multi-connection transfer later if SFTP reliability is not enough for bonded or multi-WAN scenarios.
+- Belabox per-interface network diagnostics:
+  - [x] Bind latency, download, and upload requests to each route-checked Belabox IPv4 interface.
+  - [x] Offer an external Internet target using Cloudflare and an authenticated FRAME endpoint target.
+  - [x] Run all-interface tests sequentially and report latency/download/upload results per interface.
+  - [ ] Verify both targets on every live Belabox interface and compare against an aggregate SRTLA transfer.
 - Keep remote photo overlay widgets in their own schema/preset namespace so they do not overwrite FRAME's stock connectivity presets.
 - Refactor the overlay wizard so stock defaults are immutable, OBS URL slugs can be chosen before first save, and saving a renamed preset creates a new preset instead of rewriting `default-connectivity`.

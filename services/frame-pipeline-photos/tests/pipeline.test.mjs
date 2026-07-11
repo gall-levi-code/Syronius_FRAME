@@ -61,7 +61,7 @@ test("extracts camera EXIF into the reusable camera information sidecar", async 
     .jpeg()
     .withExif({
       IFD0: { Make: "FRAME", Model: "Test Camera" },
-      IFD2: { ISOSpeedRatings: "200", FNumber: "2.8", ExposureTime: "0.008", FocalLength: "35" },
+      IFD2: { ISOSpeedRatings: "200", FNumber: "2.8", ExposureTime: "0.008", FocalLength: "35", LensModel: "Test Lens\0\0" },
     })
     .toFile(path.join(root, "staging", "Camera Photo.jpg"));
 
@@ -71,7 +71,8 @@ test("extracts camera EXIF into the reusable camera information sidecar", async 
   const gallery = path.join(root, "galleries", latest.date_folder);
   const cameraText = await readFile(path.join(gallery, `${latest.latest_base}.txt`), "utf8");
   const sidecar = JSON.parse(await readFile(path.join(gallery, `${latest.latest_base}.json`), "utf8"));
-  assert.equal(cameraText, "Shot on Test Camera with the Unknown Lens @ 35mm\n1/125s • f/2.8 • ISO 200\n");
+  assert.equal(cameraText, "Shot on Test Camera with the Test Lens @ 35mm\n1/125s • f/2.8 • ISO 200\n");
+  assert.equal(JSON.stringify(sidecar.exif).includes("\\u0000"), false);
   assert.ok(Object.keys(sidecar.exif).length > 0);
 });
 

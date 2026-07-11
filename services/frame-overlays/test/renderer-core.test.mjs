@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { QUALITY, QualityStabilizer, ServiceReloadWatchdog, canvasPixelSize, compactTelemetryBlockWidth, formatTelemetryDuration, layoutGrowth, normalizedTelemetryBlockWidth, normalizedTelemetryColumns, previewElementSize, qualityStatusText, resolvedTelemetryColumnCount, shouldResetRuntimeState, telemetryAvailability, telemetryGridPixelWidth, telemetryIsStale } from "../public/renderer-core.js";
 import { clampBitrateLevels, clampNumericValue, clampRttLevels, samplingWindowLabel } from "../public/wizard-core.js";
-import { deriveUploadView, uploadSummary } from "../public/upload-renderer-core.js";
+import { deriveUploadView, newlyCompletedTransfers, uploadSummary } from "../public/upload-renderer-core.js";
 
 test("quality requires a streak before showing BAD and avoids initial BAD flicker", () => {
   const quality = new QualityStabilizer();
@@ -164,6 +164,13 @@ test("upload renderer only flashes published files briefly", () => {
   const transfer={transfer_id:"done",adapter:"belabox_agent",phase:"published",bytes_received:1000,bytes_total:1000,speed_bps:null,started_at:"2026-06-21T12:00:00Z",updated_at:"2026-06-21T12:00:01Z"};
   assert.equal(deriveUploadView([transfer],1000,Date.parse("2026-06-21T12:00:01.500Z")).focus.transfer_id,"done");
   assert.equal(deriveUploadView([transfer],1000,Date.parse("2026-06-21T12:00:02.500Z")).focus,null);
+});
+
+test("upload renderer reports a completed transfer once when it becomes published", () => {
+  const active={transfer_id:"photo",adapter:"belabox_agent",phase:"processing"};
+  const complete={...active,phase:"published",filename:"TCL_3806.JPG"};
+  assert.deepEqual(newlyCompletedTransfers([active],[complete]),[complete]);
+  assert.deepEqual(newlyCompletedTransfers([complete],[complete]),[]);
 });
 
 test("upload renderer keeps queued files visible while waiting to start", () => {

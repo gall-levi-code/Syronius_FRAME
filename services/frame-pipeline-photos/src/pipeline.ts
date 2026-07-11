@@ -933,7 +933,11 @@ function pickExifFields(record: Record<string, unknown>, fields: string[]): Reco
   const selected: Record<string, unknown> = {};
   for (const field of fields) {
     const value = record[field];
-    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    if (typeof value === "string") {
+      selected[field] = value.replaceAll("\0", "").trim();
+      continue;
+    }
+    if (typeof value === "number" || typeof value === "boolean") {
       selected[field] = value;
       continue;
     }
@@ -942,7 +946,7 @@ function pickExifFields(record: Record<string, unknown>, fields: string[]): Reco
       continue;
     }
     if (Array.isArray(value) && value.every((item) => typeof item === "number" || typeof item === "string")) {
-      selected[field] = value.slice(0, 8);
+      selected[field] = value.slice(0, 8).map((item) => typeof item === "string" ? item.replaceAll("\0", "").trim() : item);
     }
   }
   return selected;

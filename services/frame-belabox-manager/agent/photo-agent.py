@@ -194,6 +194,11 @@ def stream_block_size(rate_limiter=None):
 
 
 def image_processor():
+    try:
+        from PIL import Image  # noqa: F401
+        return "pillow"
+    except ImportError:
+        pass
     return shutil.which("magick") or shutil.which("convert")
 
 
@@ -202,7 +207,7 @@ def image_processing_status():
     processor = image_processor()
     return {
         **settings,
-        "processor": Path(processor).name if processor else None,
+        "processor": "pillow" if processor == "pillow" else Path(processor).name if processor else None,
     }
 
 
@@ -410,6 +415,14 @@ def process_image(path, settings):
     target.unlink(missing_ok=True)
     temp_target.unlink(missing_ok=True)
 
+    if processor == "pillow":
+        try:
+            return process_image_pillow(path, target, temp_target, settings, max_bytes)
+        except Exception:
+            temp_target.unlink(missing_ok=True)
+            target.unlink(missing_ok=True)
+            raise
+
     try:
         size = 0
         quality = settings["jpeg_quality"]
@@ -438,6 +451,58 @@ def process_image(path, settings):
         temp_target.unlink(missing_ok=True)
         raise
     raise RuntimeError("Unable to process image")
+
+
+def process_image_pillow(path, target, temp_target, settings, max_bytes):
+    from PIL import Image, ImageOps
+
+    with Image.open(path) as source:
+        edge = settings["long_edge_px"]
+        if edge > 0:
+            source.draft("RGB", (edge, edge))
+        image = ImageOps.exif_transpose(source)
+        if edge > 0:
+            image.thumbnail((edge, edge), getattr(Image, "Resampling", Image).LANCZOS)
+        if image.mode != "RGB":
+            image = image.convert("RGB")
+        exif = image.info.get("exif") or source.info.get("exif")
+        icc = image.info.get("icc_profile") or source.info.get("icc_profile")
+        base = image.copy()
+
+    save_options = {"format": "JPEG"}
+    if exif:
+        save_options["exif"] = exif
+    if icc:
+        save_options["icc_profile"] = icc
+
+    quality = settings["jpeg_quality"]
+    size = 0
+    for quality in quality_steps(settings["jpeg_quality"]):
+        temp_target.unlink(missing_ok=True)
+        base.save(temp_target, quality=quality, **save_options)
+        size = temp_target.stat().st_size
+        if not max_bytes or size <= max_bytes:
+            os.replace(temp_target, target)
+            return target
+
+    scale_percent = 100
+    for _ in range(MAX_ADAPTIVE_RESIZE_ATTEMPTS):
+        next_percent = next_scale_percent(scale_percent, size, max_bytes)
+        if next_percent >= scale_percent:
+            break
+        scale_percent = next_percent
+        width = max(1, round(base.width * scale_percent / 100))
+        height = max(1, round(base.height * scale_percent / 100))
+        resized = base.resize((width, height), getattr(Image, "Resampling", Image).LANCZOS)
+        temp_target.unlink(missing_ok=True)
+        resized.save(temp_target, quality=quality, **save_options)
+        size = temp_target.stat().st_size
+        if size <= max_bytes:
+            os.replace(temp_target, target)
+            return target
+
+    temp_target.unlink(missing_ok=True)
+    raise RuntimeError(f"Processed image exceeds {settings['max_output_mb']} MB after adaptive resize")
 
 
 def quality_steps(start):
@@ -633,14 +698,22 @@ def upload_chunked(path, prepared=False):
         total = upload_path.stat().st_size
         chunk_count = max(1, (total + chunk_size - 1) // chunk_size)
         active_parallel = min(parallel_limit, chunk_count)
-        mark("preparing", "Preparing chunks")
+        def live_lanes():
+            return healthy_egress_lanes() if CHUNK_EGRESS_BINDING else []
+
+        lanes = live_lanes()
+        mark(
+            "preparing",
+            "Preparing transfer",
+            egress_binding="source_ip" if lanes else "default_route",
+            egress_lane_count=len(lanes),
+            egress_lanes=lane_status(lanes),
+        )
         manifest = build_manifest(upload_path, transfer_id, chunk_size, upload_name)
-        request_json(upload_url, "POST", manifest)
+        request_json_with_lanes(upload_url, "POST", manifest, lanes)
         sent_by_chunk = {}
         progress_lock = threading.Lock()
         limiter = RateLimiter(upload_kbps)
-        def live_lanes():
-            return healthy_egress_lanes() if CHUNK_EGRESS_BINDING else []
 
         def progress(chunk_index, sent_in_chunk, lane=None):
             nonlocal sent
@@ -666,7 +739,12 @@ def upload_chunked(path, prepared=False):
             egress_lane_count=len(lanes),
             egress_lanes=lane_status(lanes),
         )
-        request_json(f"{upload_url.rstrip('/')}/{transfer_id}/complete", "POST", {"device_id": manifest["device_id"]})
+        request_json_with_lanes(
+            f"{upload_url.rstrip('/')}/{transfer_id}/complete",
+            "POST",
+            {"device_id": manifest["device_id"]},
+            live_lanes(),
+        )
         sent = total
         last_completed_at = iso_now()
         last_error = None
@@ -777,13 +855,23 @@ def lane_candidates(lanes, chunk_index):
     return ordered + [None]
 
 
-def request_json(url, method, payload):
+def request_json(url, method, payload, lane=None):
     body = json.dumps(payload).encode("utf-8")
-    return request_bytes(url, method, body, "application/json")
+    return request_bytes(url, method, body, "application/json", lane=lane)
+
+
+def request_json_with_lanes(url, method, payload, lanes):
+    last_error = None
+    for lane in list(lanes) + [None]:
+        try:
+            return request_json(url, method, payload, lane)
+        except Exception as error:
+            last_error = error
+    raise last_error or RuntimeError("FRAME request failed")
 
 
 def request_bytes(url, method, body, content_type="application/octet-stream", progress=None, rate_limiter=None, lane=None):
-    if (progress or rate_limiter) and method.upper() in {"PUT", "POST"}:
+    if method.upper() in {"PUT", "POST"}:
         return request_stream(url, method, body, content_type, progress or (lambda _sent: None), rate_limiter, lane)
     request = urllib.request.Request(
         url,
@@ -807,6 +895,7 @@ def request_stream(url, method, body, content_type, progress, rate_limiter=None,
     connection_type = http.client.HTTPSConnection if parsed.scheme == "https" else http.client.HTTPConnection
     source_address = (lane["address"], 0) if lane and lane.get("address") else None
     connection = connection_type(parsed.hostname, parsed.port, timeout=CHUNK_CONNECT_TIMEOUT_SECONDS, source_address=source_address)
+    connection._create_connection = create_ipv4_connection
     try:
         connection.connect()
         if connection.sock:
@@ -835,6 +924,28 @@ def request_stream(url, method, body, content_type, progress, rate_limiter=None,
         raise RuntimeError(f"chunk upload stalled on {lane_label(lane)}") from error
     finally:
         connection.close()
+
+
+def create_ipv4_connection(address, timeout=socket._GLOBAL_DEFAULT_TIMEOUT, source_address=None):
+    host, port = address
+    last_error = None
+    for family, socktype, protocol, _canonname, socket_address in ipv4_socket_addresses(host, port):
+        connection = socket.socket(family, socktype, protocol)
+        try:
+            if timeout is not socket._GLOBAL_DEFAULT_TIMEOUT:
+                connection.settimeout(timeout)
+            if source_address:
+                connection.bind(source_address)
+            connection.connect(socket_address)
+            return connection
+        except OSError as error:
+            last_error = error
+            connection.close()
+    raise last_error or OSError(f"No IPv4 address found for {host}")
+
+
+def ipv4_socket_addresses(host, port):
+    return socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM)
 
 
 def request_headers(content_type, length, lane=None):
@@ -968,6 +1079,7 @@ def self_test():
     assert chunk_upload_url({"chunk_upload_url": "https://example.test/chunks"}) == "https://example.test/chunks"
     assert chunk_upload_url({"chunk_upload_url": "ftp://example.test/chunks"}) == ""
     assert chunk_offset({"index": 2}, 4096) == 8192
+    assert all(entry[0] == socket.AF_INET for entry in ipv4_socket_addresses("127.0.0.1", 443))
 
     original_dirs = (UPLOAD_DIR, READY_DIR, PROCESSED_DIR, INFLIGHT_DIR)
     with tempfile.TemporaryDirectory() as root:

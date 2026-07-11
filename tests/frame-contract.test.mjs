@@ -433,7 +433,7 @@ test("Belabox pairing UI hides MQTT implementation details", async () => {
   assert.ok(!frontend.includes('applyPhotoTransport(requested ? "chunked_https"'), "Changing transfer mode should remain local until Apply is pressed");
   assert.ok(styles.includes(".form-commit .form-apply-button"), "Pending actions should span their settings section");
   assert.ok(!frontend.includes('id="enable-chunk-relay"'), "Transport mode should not expose competing action buttons");
-  assert.ok(frontend.includes("Run Upload Speed Test"));
+  assert.ok(frontend.includes("Run Interface Speed Test"));
   assert.ok(frontend.includes("Hybrid required"));
   assert.ok(frontend.includes("remember_ssh"));
   assert.ok(!frontend.includes("Private key"), "Belabox Manager should not ask users for SSH private keys");
@@ -443,8 +443,15 @@ test("Belabox pairing UI hides MQTT implementation details", async () => {
   assert.ok(styles.includes('grid-template-areas: "notice" "tabs" "content"'), "Belabox Manager should keep one compact manager shell");
   assert.ok(frontend.includes('class="workspace-section status-workspace"'), "Daily device status should be grouped into one overview");
   assert.ok(frontend.includes('class="workspace-section photo-workspace"'), "Photo Transfer should be the primary work surface");
-  assert.ok(frontend.includes('data-section="maintenance"'), "Maintenance tools should be collapsed together");
-  assert.ok(frontend.includes('data-section="advanced-tools"'), "Raw telemetry and logs should stay behind Advanced");
+  for (const tab of ["overview", "photos", "connections", "diagnostics", "system"]) {
+    assert.ok(frontend.includes(`data-workspace-pane="${tab}"`), `Belabox workspace should include the ${tab} tab`);
+  }
+  assert.ok(frontend.includes("LAST_WORKSPACE_TAB_KEY"), "Belabox Manager should restore the selected workflow tab");
+  assert.ok(frontend.includes("ADVANCED_VIEW_KEY"), "Belabox Manager should restore the Simple/Advanced preference");
+  assert.ok(frontend.includes('data-view-mode="simple"') && frontend.includes('data-view-mode="advanced"'), "Technical details should use an explicit Simple/Advanced segmented control");
+  assert.ok(frontend.includes('querySelectorAll("[data-view-mode]")'), "Simple/Advanced state should stay synchronized without replacing the panel");
+  assert.ok(frontend.includes('class="advanced-only system-advanced"'), "Raw telemetry and logs should stay behind Advanced");
+  assert.ok(styles.includes('.device-panel[data-advanced-view="false"] .advanced-only'), "Simple view should hide advanced information");
   assert.ok(!html.includes('id="mqtt-state"'), "The manager shell should not expose protocol status cards");
   assert.ok(frontend.includes('id="device-name-form"'), "Paired devices should have editable display names");
   assert.ok(frontend.includes('class="agent-card"'), "Installed agent health should be visible without opening Advanced");
@@ -454,6 +461,8 @@ test("Belabox pairing UI hides MQTT implementation details", async () => {
   assert.ok(backend.includes("Device name is already assigned"), "Display names should remain unique");
   assert.ok(frontend.includes("transferResultNotice"), "Recent transfer outcomes should remain visible after the active card advances");
   assert.ok(frontend.includes("FRAME Processing"), "Belabox acceptance and FRAME publication should be separate states");
+  assert.ok(frontend.includes('aria-label="Photo upload progress"'), "Live upload status should expose visual progress");
+  assert.ok(frontend.includes("egressLaneCards"), "Connections should expose lane-level Upload, Ready, and Down states");
   assert.ok(frontend.includes("photoTelemetryReady ? streamSafetyLabel"), "Unknown photo telemetry should not be presented as Direct FTP");
   assert.ok(agent.includes("last_result: transferResult(status.last_result)"), "Belabox telemetry should carry the last authoritative transfer result");
   assert.ok(photoAgent.includes('last_result = {"status": "completed"'), "Photo Agent should retain the completed filename for result feedback");
@@ -493,6 +502,10 @@ test("Belabox pairing UI hides MQTT implementation details", async () => {
   assert.ok(backend.includes("if (!device.last_heartbeat_at) return false"));
   assert.ok(backend.includes("/belabox/api/diagnostics/speed-test"));
   assert.ok(backend.includes("network_speed_test"));
+  assert.ok(backend.includes('app.get("/belabox-chunks/api/diagnostics/speed-test"'), "FRAME diagnostics should provide authenticated downloads");
+  assert.ok(backend.includes("streamDiagnosticBytes"), "FRAME diagnostic downloads should stream without buffering the full response");
+  assert.ok(backend.includes('mode: "interface_speed_test"'), "Manager diagnostics should request the per-interface agent test");
+  assert.ok(backend.includes("interface_name: input.interfaceName"), "Manager diagnostics should preserve the selected interface");
   assert.ok(backend.includes("isProvisionedDevice(parsedTopic.deviceId)"));
   assert.ok(backend.includes("proxy/http/request"));
   assert.ok(backend.includes("agent-wss-only"));
@@ -513,6 +526,10 @@ test("Belabox pairing UI hides MQTT implementation details", async () => {
   assert.ok(dockerfile.includes("sshpass"));
   assert.ok(dockerfile.includes("iperf3"));
   assert.ok(agent.includes("network_speed_test"));
+  assert.ok(agent.includes('EXTERNAL_SPEEDTEST_BASE_URL = "https://speed.cloudflare.com"'), "External diagnostics should use Cloudflare's published speed endpoint");
+  assert.ok(agent.includes("downloadDiagnosticBytes"), "Agent diagnostics should measure download throughput");
+  assert.ok(agent.includes("localAddress: lane.address"), "Every diagnostic request should bind to its tested interface");
+  assert.ok(agent.includes("selectDiagnosticLanes"), "Agent diagnostics should reject unroutable interfaces");
   assert.ok(agent.includes("BELABOX_CHUNK_UPLOAD_TOKEN"));
   assert.ok(agent.includes("BELABOX_EGRESS_STATUS_PATH"));
   assert.ok(agent.includes("message.probe_only === true"));
@@ -521,6 +538,17 @@ test("Belabox pairing UI hides MQTT implementation details", async () => {
   assert.ok(photoAgent.includes("source_address="));
   assert.ok(photoAgent.includes("healthy_egress_lanes"));
   assert.ok(photoAgent.includes("FRAME_EGRESS_STATUS_PATH"));
+  assert.ok(photoAgent.includes('return "pillow"'), "Photo Agent should prefer a single-decode Pillow processor");
+  assert.ok(photoAgent.includes("request_json_with_lanes"), "Chunk control requests should use healthy egress lanes");
+  assert.ok(photoAgent.includes("create_ipv4_connection"), "Chunk uploads should avoid unusable IPv6 routes");
+  assert.ok(backend.includes("python3-pil"), "Photo Agent repair should install the Pillow decoder");
+  assert.ok(frontend.includes('name="diagnostic_target"'), "Diagnostics should expose Internet and FRAME targets");
+  assert.ok(frontend.includes('id="speed-test-interface"'), "Diagnostics should expose an interface selector");
+  assert.ok(frontend.includes("diagnosticResultsMarkup"), "Diagnostics should present per-interface results");
+  assert.ok(frontend.includes('class="result-badge ${badgeTone}"'), "Diagnostic results should expose authoritative status badges");
+  assert.ok(frontend.includes("waitForDiagnosticCompletion"), "Diagnostics should wait for final telemetry after command acknowledgement");
+  assert.ok(frontend.includes('state.workspaceTab = "diagnostics"'), "Completed diagnostics should remain on their result tab");
+  assert.ok(styles.includes(".diagnostic-target-selector"), "Diagnostic targets should use a segmented selector");
   assert.ok(backend.includes("frame-belabox-photo-agent.service"));
   assert.ok(backend.includes("photo-agent.py"));
   assert.ok(!html.includes("MQTT password"));

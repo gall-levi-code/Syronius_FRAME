@@ -1,5 +1,5 @@
-import { deriveUploadView, formatBytes, formatDuration, uploadSummary } from "./upload-renderer-core.js?v=live-stack-v1";
-import { ServiceReloadWatchdog, previewElementSize } from "./renderer-core.js";
+import { deriveUploadView, formatBytes, formatDuration, newlyCompletedTransfers } from "./upload-renderer-core.js?v=live-stack-v1";
+import { ServiceReloadWatchdog, layoutGrowth, previewElementSize } from "./renderer-core.js";
 
 let payload = window.FRAME_OVERLAY;
 let preset = payload.preset;
@@ -10,11 +10,16 @@ let restTimer;
 let settingsTimer;
 let restInflight = false;
 let lastSnapshot;
-let displayedPercent = null;
-let displayedTransferId = null;
+let completionTimer;
+let completionCount = 0;
+let completionExpiresAt = 0;
 const reloadWatchdog = new ServiceReloadWatchdog();
 const previewMode = new URLSearchParams(location.search).has("preview");
+const uploadStack = document.querySelector("#upload-stack");
 const widget = document.querySelector("#widget");
+const completionBubble = document.querySelector("#completion-bubble");
+const completionTitle = document.querySelector("#completion-title");
+const completionFile = document.querySelector("#completion-file");
 const status = document.querySelector("#upload-status");
 const sourceName = document.querySelector("#source-name");
 const adapterLabel = document.querySelector("#adapter-label");
@@ -40,9 +45,19 @@ const elementPreviewMode = query.has("elementPreview");
 if (previewMode) document.body.classList.add("preview");
 if (elementPreviewMode) document.body.classList.add("element-preview");
 applyPayload(payload);
-if (previewMode) acceptSnapshot(mockSnapshot()); else connectEvents();
+if (previewMode) {
+  const preview = mockSnapshot();
+  acceptSnapshot(preview);
+  setTimeout(() => acceptSnapshot({
+    ...preview,
+    sequence: preview.sequence + 1,
+    transfers: preview.transfers.map((transfer, index) => index === 0
+      ? { ...transfer, phase: "published", bytes_received: transfer.bytes_total, updated_at: new Date().toISOString(), status_text: "Transfer complete" }
+      : transfer),
+  }), 1200);
+} else connectEvents();
 setInterval(render, 500);
-if (elementPreviewMode) new ResizeObserver(publishPreviewSize).observe(widget);
+if (elementPreviewMode) new ResizeObserver(publishPreviewSize).observe(uploadStack);
 window.addEventListener("message", (event) => {
   if (event.origin !== location.origin || event.data?.type !== "frame-preview" || !event.data.preset) return;
   applyPayload({ ...payload, ...event.data });
@@ -85,15 +100,15 @@ async function refreshSettings() {
 }
 function acceptSnapshot(snapshot) {
   if(lastSnapshot && snapshot.sequence < lastSnapshot.sequence)return;
+  if(lastSnapshot) showCompletionBubble(newlyCompletedTransfers(lastSnapshot.transfers, snapshot.transfers));
   lastSnapshot=snapshot;
   render();
 }
 
 function render() {
   if (preset.enabled === false || payload.source?.enabled === false) return widget.classList.add("hidden");
-  const completeFlashMs = Math.min(500, Math.max(0, Number(config.complete_hide_ms ?? 500) || 0));
-  const view = deriveUploadView(lastSnapshot?.transfers, completeFlashMs);
-  if (!view.focus) {
+  const view = deriveUploadView(lastSnapshot?.transfers, 2200);
+  if (!view.focus || view.focus.phase === "published") {
     status.textContent = lastSnapshot?.error ? "UNAVAILABLE" : config.idle_label || "WAITING FOR UPLOAD";
     sourceName.textContent = payload.source?.display_name || preset.name;
     focusName.textContent = lastSnapshot?.error || "No active transfers";
@@ -115,31 +130,25 @@ function render() {
     elapsedValue.textContent = "--";
     errorValue.hidden = true;
     errorValue.textContent = "";
-    displayedPercent = null;
-    displayedTransferId = null;
-    widget.classList.toggle("hidden", !lastSnapshot?.error && config.idle_behavior !== "show_idle");
+    const completionVisible = !completionBubble.hidden;
+    uploadStack.classList.toggle("completion-only", completionVisible);
+    widget.classList.toggle("hidden", completionVisible || (!lastSnapshot?.error && config.idle_behavior !== "show_idle"));
     return;
   }
   const focus = view.focus;
   const targetPercent = view.current_percent ?? (focus.phase === "published" ? 100 : 0);
-  if (displayedTransferId !== focus.transfer_id || view.current_percent === null) {
-    displayedTransferId = focus.transfer_id;
-    displayedPercent = targetPercent;
-  } else {
-    const next = displayedPercent === null ? targetPercent : displayedPercent + ((targetPercent - displayedPercent) * .45);
-    displayedPercent = Math.abs(next - targetPercent) < .5 ? targetPercent : next;
-  }
+  uploadStack.classList.remove("completion-only");
   widget.classList.remove("hidden");
-  status.textContent = focus.phase === "queued" ? phaseStatus(focus.phase) : focus.status_text || phaseStatus(focus.phase);
+  status.textContent = stageStatus(focus);
   sourceName.textContent = payload.source?.display_name || preset.name;
   adapterLabel.textContent = adapterLabelFor(view.adapters.length ? view.adapters : [focus.adapter]);
   focusName.textContent = focusOrdinal(view);
-  summary.textContent = uploadSummary(view);
+  summary.textContent = remainingSummary(view);
   currentProgressName.textContent = focus.filename || "Unnamed transfer";
   currentProgressName.title = focus.filename || "";
   currentProgressValue.textContent = percentText(view.current_percent);
   currentProgressTrack.classList.toggle("indeterminate", focus.phase !== "queued" && view.current_percent === null);
-  currentProgressFill.style.width = `${displayedPercent ?? 0}%`;
+  currentProgressFill.style.width = `${targetPercent}%`;
   overallProgressValue.textContent = `${view.overall_complete}/${view.overall_total}`;
   overallProgressTrack.classList.remove("indeterminate");
   overallProgressFill.style.width = `${view.overall_percent}%`;
@@ -164,22 +173,43 @@ function render() {
   publishPreviewSize();
 }
 
+function showCompletionBubble(completed) {
+  if (!completed.length) return;
+  const now = Date.now();
+  completionCount = now < completionExpiresAt ? completionCount + completed.length : completed.length;
+  completionExpiresAt = now + 2200;
+  const latest = completed.at(-1);
+  completionTitle.textContent = completionCount === 1 ? "Transfer complete" : `${completionCount} transfers complete`;
+  completionFile.textContent = completionCount === 1 ? latest.filename || "Photo received by FRAME" : `${latest.filename || "Latest photo"} most recent`;
+  completionBubble.hidden = false;
+  clearTimeout(completionTimer);
+  completionTimer = setTimeout(() => {
+    completionBubble.hidden = true;
+    completionCount = 0;
+    render();
+  }, 2200);
+}
+
 function applyTheme() {
   const root=document.documentElement;
   const vars={"--text":theme.text_color||"#eef8ff","--muted":theme.muted_color||"#9fc6dc","--good":theme.good_color||"#2cb4fb","--warn":theme.warn_color||"#ffd166","--bad":theme.bad_color||"#ff5f6d","--plot-primary":theme.plot_primary||"#2cb4fb","--plot-secondary":theme.plot_secondary||"#8de7ff","--panel-bg":colorWithAlpha(theme.panel_bg_color||"#000000",panelAlpha(1)),"--panel-border":theme.panel_border_color||"color-mix(in srgb,var(--plot-primary,#2cb4fb) 40%,transparent)","--panel-glow":theme.panel_glow_color||"#000000","--block-bg":colorWithAlpha(theme.block_bg_color||"#132f3d",blockAlpha(1)),"--block-border":theme.block_border_color||"transparent","--radius":`${theme.border_radius_px??10}px`,"--blur":`${theme.backdrop_blur_px??4}px`,"--panel-padding":`${theme.panel_padding_px??14}px`,"--block-padding":`${theme.block_padding_px??8}px`,"--block-gap":`${theme.block_gap_px??7}px`,"--panel-border-width":`${theme.panel_border_width_px??1}px`,"--block-border-width":`${theme.block_border_width_px??0}px`,"--glow-blur":`${theme.glow_blur_px??50}px`,"--shadow-spread":`${theme.glow_spread_px??0}px`,"--shadow-x":`${theme.glow_offset_x_px??0}px`,"--shadow-y":`${theme.glow_offset_y_px??16}px`,"--font-size":`${theme.font_size_base_px??16}px`,"--font-family":theme.font_family||"Inter, system-ui, sans-serif","--font-weight":String(theme.font_weight??400),"--subheader-font-family":theme.subheader_font_family||theme.font_family||"Inter, system-ui, sans-serif","--subheader-font-size":`${theme.subheader_font_size_px??12}px`,"--subheader-font-weight":String(theme.subheader_font_weight??500),"--scale":String(preset.layout.scale??1),"--transition":"250ms","--widget-opacity":String(theme.bg_opacity_warn??.52)};
   for(const [name,value] of Object.entries(vars))root.style.setProperty(name,value);
 }
 function applyLayout() {
+  const dock=preset.layout.dock||"bl";
+  const growth=layoutGrowth(preset.layout);
   const pad=`${preset.layout.pad??20}px`;
-  const placement={tl:{top:pad,left:pad,origin:"top left"},t:{top:pad,left:"50%",transform:"translateX(-50%)",origin:"top center"},tr:{top:pad,right:pad,origin:"top right"},l:{left:pad,top:"50%",transform:"translateY(-50%)",origin:"center left"},c:{left:"50%",top:"50%",transform:"translate(-50%, -50%)",origin:"center"},r:{right:pad,top:"50%",transform:"translateY(-50%)",origin:"center right"},bl:{bottom:pad,left:pad,origin:"bottom left"},b:{bottom:pad,left:"50%",transform:"translateX(-50%)",origin:"bottom center"},br:{bottom:pad,right:pad,origin:"bottom right"}}[preset.layout.dock||"bl"];
+  const placement={tl:{top:pad,left:pad,origin:"top left"},t:{top:pad,left:"50%",transform:"translateX(-50%)",origin:"top center"},tr:{top:pad,right:pad,origin:"top right"},l:{left:pad,top:"50%",transform:"translateY(-50%)",origin:"center left"},c:{left:"50%",top:"50%",transform:"translate(-50%, -50%)",origin:"center"},r:{right:pad,top:"50%",transform:"translateY(-50%)",origin:"center right"},bl:{bottom:pad,left:pad,origin:"bottom left"},b:{bottom:pad,left:"50%",transform:"translateX(-50%)",origin:"bottom center"},br:{bottom:pad,right:pad,origin:"bottom right"}}[dock];
   const {origin,transform="",...position}=placement;
-  if(elementPreviewMode){Object.assign(widget.style,{top:"",right:"",bottom:"",left:""});widget.style.transform="scale(var(--scale, 1))";widget.style.transformOrigin="top left";}
-  else{Object.assign(widget.style,{top:"",right:"",bottom:"",left:""},position);widget.style.transform=`${transform} scale(var(--scale, 1))`.trim();widget.style.transformOrigin=origin;}
-  widget.style.width=`${config.width_px||preset.layout.width_px||520}px`;
+  uploadStack.dataset.dock=dock;
+  uploadStack.dataset.growthY=growth.y === "center" ? (dock.startsWith("t") ? "down" : "up") : growth.y;
+  if(elementPreviewMode){Object.assign(uploadStack.style,{top:"",right:"",bottom:"",left:""});uploadStack.style.transform="scale(var(--scale, 1))";uploadStack.style.transformOrigin="top left";}
+  else{Object.assign(uploadStack.style,{top:"",right:"",bottom:"",left:""},position);uploadStack.style.transform=`${transform} scale(var(--scale, 1))`.trim();uploadStack.style.transformOrigin=origin;}
+  uploadStack.style.width=`min(${config.width_px||preset.layout.width_px||520}px, calc(100vw - 20px))`;
 }
 function publishPreviewSize(){
   if(!elementPreviewMode||window.parent===window)return;
-  requestAnimationFrame(()=>{const size=previewElementSize(widget);if(!size.content_width||!size.content_height)return;window.parent.postMessage({type:"frame-preview-size",...size},"*");});
+  requestAnimationFrame(()=>{const size=previewElementSize(uploadStack);if(!size.content_width||!size.content_height)return;window.parent.postMessage({type:"frame-preview-size",...size},"*");});
 }
 function panelAlpha(fallback){return Number.isFinite(Number(theme.panel_bg_alpha))?Number(theme.panel_bg_alpha):fallback;}
 function blockAlpha(fallback){return Number.isFinite(Number(theme.block_bg_alpha))?Number(theme.block_bg_alpha):fallback;}
@@ -190,9 +220,17 @@ function phaseStatus(phase) {
   if (phase === "processing") return "PREPARING";
   return phase.toUpperCase();
 }
+function stageStatus(focus) {
+  if (focus.phase === "processing" && /assembl|final/i.test(focus.status_text || "")) return "FINALIZING";
+  return phaseStatus(focus.phase);
+}
 function focusOrdinal(view) {
-  if (!view.overall_total || view.focus_index < 0) return phaseStatus(view.focus?.phase || "receiving");
-  return `${phaseStatus(view.focus.phase)} ${view.focus_index + 1}/${view.overall_total}`;
+  if (!view.overall_total || view.focus_index < 0) return "Current file";
+  return view.overall_total === 1 ? "Current file" : `File ${view.focus_index + 1} of ${view.overall_total}`;
+}
+function remainingSummary(view) {
+  const remaining = Math.max(0, view.receiving + view.processing + view.queued - 1);
+  return remaining ? `${remaining} remaining` : "";
 }
 function percentText(value) {
   return value === null ? "--" : `${Math.round(value)}%`;

@@ -42,6 +42,13 @@ export function deriveUploadView(transfers, completeHideMs = 5000, now = Date.no
   };
 }
 
+export function newlyCompletedTransfers(previousTransfers, nextTransfers) {
+  const previousPhases = new Map((Array.isArray(previousTransfers) ? previousTransfers : [])
+    .map((transfer) => [transfer.transfer_id, transfer.phase]));
+  return (Array.isArray(nextTransfers) ? nextTransfers : [])
+    .filter((transfer) => transfer.phase === "published" && previousPhases.get(transfer.transfer_id) !== "published");
+}
+
 export function uploadSummary(view) {
   const parts = [];
   if (view.receiving) parts.push(`${view.receiving} uploading`);
@@ -77,7 +84,7 @@ function focusTransfer(groups) {
     if (leftPercent !== null || rightPercent !== null) return (rightPercent ?? -1) - (leftPercent ?? -1);
     return compareTransfers(left, right);
   });
-  return receiving[0] ?? groups.processing[0] ?? groups.queued[0] ?? groups.published[0] ?? groups.failed[0] ?? null;
+  return receiving[0] ?? groups.processing[0] ?? groups.queued[0] ?? groups.failed[0] ?? groups.published[0] ?? null;
 }
 
 function transferPercent(transfer) {

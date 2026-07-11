@@ -16,10 +16,12 @@ import {
   verify as verifyBytes,
 } from "node:crypto";
 
-const VERSION = "0.6.0";
+const VERSION = "0.7.3";
 const REMOTE_BELAUI_HTTP_TIMEOUT_MS = 8000;
 const REMOTE_BELAUI_MAX_HTTP_BODY_BYTES = 2 * 1024 * 1024;
 const REMOTE_BELAUI_STREAM_CHUNK_BYTES = 48 * 1024;
+const DIAGNOSTIC_REQUEST_TIMEOUT_MS = 30000;
+const EXTERNAL_SPEEDTEST_BASE_URL = "https://speed.cloudflare.com";
 const ALLOWED_COMMANDS = new Set([
   "agent_update",
   "agent_restart",
@@ -56,9 +58,11 @@ const remoteBelaui = {
 const url = process.env.BELABOX_MQTT_URL || mqttUrlFromHost();
 const topics = topicSet(deviceId);
 let diagnosticState = null;
+let diagnosticRunning = false;
 let remoteBelauiState = remoteBelauiSnapshot(remoteBelaui.enabled ? "unchecked" : "disabled");
 let egressState = egressSnapshot([]);
 let egressRefreshRunning = false;
+let photoTelemetryWasActive = false;
 const proxyStreams = new Map();
 let client;
 
@@ -138,13 +142,17 @@ function publishHeartbeat() {
   });
 }
 
-function publishTelemetry(ftpUpload = undefined) {
+function publishTelemetry(ftpUpload = readFtpUploadStatus()) {
+  if (ftpUpload) photoTelemetryWasActive = photoTransferIsActive(ftpUpload);
   publishJson(topics.telemetry, collectTelemetry(ftpUpload));
 }
 
 function publishActivePhotoTelemetry() {
   const ftpUpload = readFtpUploadStatus();
-  if (ftpUpload && photoTransferIsActive(ftpUpload)) publishTelemetry(ftpUpload);
+  if (!ftpUpload) return;
+  const publish = photoTelemetryNeedsPublish(ftpUpload, photoTelemetryWasActive);
+  photoTelemetryWasActive = photoTransferIsActive(ftpUpload);
+  if (publish) publishJson(topics.telemetry, collectTelemetry(ftpUpload));
 }
 
 async function handleCommand(payload) {
@@ -287,7 +295,13 @@ function validateArgs(command, args) {
     validatePhotoProcessingArgs(args);
   }
   if (command === "network_speed_test") {
-    if (args.mode !== "http_upload") throw new Error("network_speed_test mode must be http_upload");
+    if (!["http_upload", "interface_speed_test"].includes(args.mode)) throw new Error("network_speed_test mode is invalid");
+    if (args.target !== undefined && !["internet", "frame"].includes(args.target)) {
+      throw new Error("network_speed_test target must be internet or frame");
+    }
+    if (args.interface_name !== undefined && (typeof args.interface_name !== "string" || !/^(all|[A-Za-z0-9_.:-]{1,64})$/.test(args.interface_name))) {
+      throw new Error("network_speed_test interface_name is invalid");
+    }
     if (args.bytes !== undefined && (!Number.isInteger(args.bytes) || args.bytes < 65536 || args.bytes > 67108864)) {
       throw new Error("network_speed_test bytes must be 65536-67108864");
     }
@@ -321,64 +335,148 @@ function numberArg(args, key, minimum, maximum) {
 }
 
 async function runNetworkSpeedTest(args) {
-  const bytesTotal = Number.isInteger(args.bytes) ? args.bytes : 8 * 1024 * 1024;
+  if (diagnosticRunning) throw new Error("a network diagnostic is already running");
+  diagnosticRunning = true;
+  const bytesPerDirection = Number.isInteger(args.bytes) ? args.bytes : 8 * 1024 * 1024;
   const parallel = Number.isInteger(args.parallel) ? args.parallel : 1;
-  const uploadUrl = diagnosticUploadUrl();
-  const token = process.env.BELABOX_CHUNK_UPLOAD_TOKEN || "";
-  if (!uploadUrl || !token) throw new Error("diagnostic upload URL/token is not configured");
-  let bytesSent = 0;
-  let lastPublish = 0;
+  const targetId = args.target || (args.mode === "http_upload" ? "frame" : "internet");
+  const requestedInterface = text(args.interface_name, 64) || "all";
   const testId = randomId();
   const started = Date.now();
   diagnosticState = {
-    type: "http_upload",
+    type: "interface_speed_test",
     test_id: testId,
-    state: "running",
-    bytes_total: bytesTotal,
+    state: "preparing",
+    target: targetId,
+    requested_interface: requestedInterface,
+    bytes_per_direction: bytesPerDirection,
+    bytes_total: 0,
+    bytes_completed: 0,
     bytes_sent: 0,
     parallel,
-    mbps: 0,
+    current_interface: null,
+    current_phase: "route_check",
+    results: [],
     started_at: new Date(started).toISOString(),
     updated_at: new Date(started).toISOString(),
   };
   publishTelemetry();
-  const onProgress = (count) => {
-    bytesSent += count;
-    const now = Date.now();
-    diagnosticState = {
-      ...diagnosticState,
-      bytes_sent: Math.min(bytesSent, bytesTotal),
-      mbps: mbps(bytesSent, now - started),
-      updated_at: new Date(now).toISOString(),
-    };
-    if (now - lastPublish > 500) {
-      lastPublish = now;
-      publishTelemetry();
-    }
-  };
   try {
-    const sizes = splitBytes(bytesTotal, parallel);
-    await Promise.all(sizes.map((size, index) => postDiagnosticBytes(uploadUrl, token, size, testId, index, onProgress)));
-    const elapsedMs = Math.max(1, Date.now() - started);
+    const target = await resolveDiagnosticTarget(targetId);
+    const lanes = await diagnosticLanes(target, requestedInterface);
+    const bytesTotal = bytesPerDirection * 2 * lanes.length;
+    const results = [];
+    let bytesCompleted = 0;
+    let lastPublish = 0;
     diagnosticState = {
       ...diagnosticState,
-      state: "complete",
-      bytes_sent: bytesTotal,
-      elapsed_ms: elapsedMs,
-      mbps: mbps(bytesTotal, elapsedMs),
+      state: "running",
+      target_name: target.label,
+      target_host: target.host,
+      target_address: target.address,
+      interface_count: lanes.length,
+      bytes_total: bytesTotal,
       updated_at: new Date().toISOString(),
     };
     publishTelemetry();
-    return `HTTP upload ${formatBytes(bytesTotal)} in ${(elapsedMs / 1000).toFixed(1)}s (${diagnosticState.mbps} Mbps, ${parallel} stream${parallel === 1 ? "" : "s"})`;
+
+    for (let laneIndex = 0; laneIndex < lanes.length; laneIndex += 1) {
+      const lane = lanes[laneIndex];
+      const laneStartBytes = laneIndex * bytesPerDirection * 2;
+      const result = {
+        interface_name: lane.name,
+        address: lane.address,
+        route_via: lane.route_via || null,
+        state: "running",
+        latency_ms: null,
+        download_mbps: null,
+        upload_mbps: null,
+        error: null,
+      };
+      const setPhase = (phase) => {
+        diagnosticState = {
+          ...diagnosticState,
+          current_interface: lane.name,
+          current_address: lane.address,
+          current_phase: phase,
+          results: results.concat(result),
+          updated_at: new Date().toISOString(),
+        };
+        publishTelemetry();
+      };
+      const onProgress = (count) => {
+        bytesCompleted = Math.min(bytesTotal, bytesCompleted + count);
+        const now = Date.now();
+        diagnosticState = {
+          ...diagnosticState,
+          bytes_completed: bytesCompleted,
+          bytes_sent: bytesCompleted,
+          updated_at: new Date(now).toISOString(),
+        };
+        if (now - lastPublish > 500) {
+          lastPublish = now;
+          publishTelemetry();
+        }
+      };
+
+      try {
+        setPhase("latency");
+        result.latency_ms = await measureDiagnosticLatency(target, lane, testId);
+        setPhase("download");
+        const download = await runParallelDiagnostic(bytesPerDirection, parallel, (size, streamIndex) =>
+          downloadDiagnosticBytes(target, lane, size, testId, streamIndex, onProgress));
+        result.download_mbps = mbps(bytesPerDirection, download.elapsed_ms);
+        setPhase("upload");
+        const upload = await runParallelDiagnostic(bytesPerDirection, parallel, (size, streamIndex) =>
+          uploadDiagnosticBytes(target, lane, size, testId, streamIndex, onProgress));
+        result.upload_mbps = mbps(bytesPerDirection, upload.elapsed_ms);
+        result.state = "complete";
+      } catch (error) {
+        result.state = "failed";
+        result.error = error instanceof Error ? error.message.slice(0, 160) : String(error).slice(0, 160);
+      }
+
+      bytesCompleted = Math.max(bytesCompleted, laneStartBytes + bytesPerDirection * 2);
+      results.push(result);
+      diagnosticState = {
+        ...diagnosticState,
+        bytes_completed: bytesCompleted,
+        bytes_sent: bytesCompleted,
+        results: results.slice(),
+        updated_at: new Date().toISOString(),
+      };
+      publishTelemetry();
+    }
+
+    const succeeded = results.filter((result) => result.state === "complete").length;
+    const elapsedMs = Math.max(1, Date.now() - started);
+    diagnosticState = {
+      ...diagnosticState,
+      state: succeeded === results.length ? "complete" : succeeded > 0 ? "partial" : "failed",
+      bytes_completed: bytesTotal,
+      bytes_sent: bytesTotal,
+      elapsed_ms: elapsedMs,
+      current_interface: null,
+      current_address: null,
+      current_phase: "complete",
+      finished_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    publishTelemetry();
+    if (!succeeded) throw new Error(`No ${target.label} interface test succeeded`);
+    return `${target.label} speed test completed on ${succeeded}/${results.length} interface${results.length === 1 ? "" : "s"}`;
   } catch (error) {
     diagnosticState = {
       ...diagnosticState,
       state: "failed",
       error: error instanceof Error ? error.message.slice(0, 160) : String(error).slice(0, 160),
+      finished_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
     publishTelemetry();
     throw error;
+  } finally {
+    diagnosticRunning = false;
   }
 }
 
@@ -390,45 +488,199 @@ function diagnosticUploadUrl() {
   return chunkUrl.replace(/\/api\/transfers\/?$/, "/api/diagnostics/speed-test");
 }
 
+async function resolveDiagnosticTarget(targetId) {
+  if (targetId === "internet") {
+    const base = externalSpeedtestBaseUrl();
+    const downloadUrl = new URL("/__down", base).toString();
+    const uploadUrl = new URL("/__up", base).toString();
+    const parsed = new URL(downloadUrl);
+    const resolved = await lookupIpv4(parsed.hostname);
+    return {
+      id: "internet",
+      label: "External Internet",
+      host: parsed.hostname,
+      address: resolved.address,
+      download_url: downloadUrl,
+      upload_url: uploadUrl,
+      token: "",
+    };
+  }
+
+  const frameUrl = diagnosticUploadUrl();
+  const token = process.env.BELABOX_CHUNK_UPLOAD_TOKEN || "";
+  if (!frameUrl || !token) throw new Error("FRAME diagnostic URL/token is not configured");
+  const parsed = new URL(frameUrl);
+  const resolved = await lookupIpv4(parsed.hostname);
+  return {
+    id: "frame",
+    label: "FRAME endpoint",
+    host: parsed.hostname,
+    address: resolved.address,
+    download_url: frameUrl,
+    upload_url: frameUrl,
+    token,
+  };
+}
+
+function externalSpeedtestBaseUrl() {
+  try {
+    const parsed = new URL(process.env.BELABOX_EXTERNAL_SPEEDTEST_BASE_URL || EXTERNAL_SPEEDTEST_BASE_URL);
+    if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("invalid protocol");
+    return parsed.toString();
+  } catch {
+    return EXTERNAL_SPEEDTEST_BASE_URL;
+  }
+}
+
+async function diagnosticLanes(target, requestedInterface) {
+  const lanes = networkSummary()
+    .filter((entry) => entry.family === "IPv4" && usableSourceAddress(entry.address))
+    .map((entry) => egressLane(entry, target.address));
+  const selected = selectDiagnosticLanes(lanes, requestedInterface);
+  if (!selected.length) {
+    throw new Error(requestedInterface === "all"
+      ? `No interface has a valid route to ${target.label}`
+      : `${requestedInterface} has no valid route to ${target.label}`);
+  }
+  return selected;
+}
+
+function selectDiagnosticLanes(lanes, requestedInterface) {
+  return lanes.filter((lane) => lane.state === "healthy" && (requestedInterface === "all" || lane.name === requestedInterface));
+}
+
+async function measureDiagnosticLatency(target, lane, testId) {
+  const parsed = diagnosticRequestUrl(target, "download", 0, testId, "latency-warmup");
+  const Agent = parsed.protocol === "https:" ? https.Agent : http.Agent;
+  const connectionAgent = new Agent({
+    keepAlive: true,
+    maxSockets: 1,
+    localAddress: lane.address,
+    lookup: diagnosticLookup(target),
+  });
+  const samples = [];
+  try {
+    await downloadDiagnosticBytes(target, lane, 0, testId, "latency-warmup", () => undefined, connectionAgent);
+    for (let index = 0; index < 3; index += 1) {
+      const started = Date.now();
+      await downloadDiagnosticBytes(target, lane, 0, testId, `latency-${index}`, () => undefined, connectionAgent);
+      samples.push(Math.max(1, Date.now() - started));
+    }
+  } finally {
+    connectionAgent.destroy();
+  }
+  return median(samples);
+}
+
+async function runParallelDiagnostic(totalBytes, parallel, worker) {
+  const sizes = splitBytes(totalBytes, parallel);
+  const started = Date.now();
+  await Promise.all(sizes.map((size, index) => worker(size, index)));
+  return { elapsed_ms: Math.max(1, Date.now() - started) };
+}
+
 function splitBytes(total, parts) {
   const base = Math.floor(total / parts);
   return Array.from({ length: parts }, (_, index) => index === parts - 1 ? total - base * (parts - 1) : base);
 }
 
-function postDiagnosticBytes(uploadUrl, token, byteCount, testId, streamIndex, onProgress) {
-  const parsed = new URL(uploadUrl);
+function downloadDiagnosticBytes(target, lane, byteCount, testId, streamIndex, onProgress, connectionAgent = null) {
+  const parsed = diagnosticRequestUrl(target, "download", byteCount, testId, streamIndex);
   const transport = parsed.protocol === "https:" ? https : http;
-  const headers = {
-    authorization: `Bearer ${token}`,
-    "content-type": "application/octet-stream",
-    "content-length": String(byteCount),
-    "x-belabox-device-id": deviceId,
-    "x-belabox-test-id": testId,
-    "x-belabox-stream": String(streamIndex),
-  };
+  const headers = diagnosticRequestHeaders(target, testId, streamIndex, 0);
   return new Promise((resolve, reject) => {
-    const request = transport.request(parsed, { method: "POST", headers }, (response) => {
-      let body = "";
-      response.setEncoding("utf8");
-      response.on("data", (chunk) => { body += chunk; });
+    const request = transport.request(parsed, diagnosticRequestOptions(target, lane, "GET", headers, connectionAgent), (response) => {
+      let received = 0;
+      response.on("data", (chunk) => {
+        received += chunk.length;
+        onProgress(chunk.length);
+      });
       response.on("end", () => {
-        if (response.statusCode && response.statusCode >= 200 && response.statusCode < 300) resolve(body);
+        if (!response.statusCode || response.statusCode < 200 || response.statusCode >= 300) {
+          reject(new Error(`diagnostic download HTTP ${response.statusCode || 0}`));
+          return;
+        }
+        if (byteCount > 0 && received !== byteCount) {
+          reject(new Error(`diagnostic download expected ${byteCount} bytes, received ${received}`));
+          return;
+        }
+        resolve(received);
+      });
+    });
+    request.on("timeout", () => request.destroy(new Error(`diagnostic download timed out on ${lane.name}`)));
+    request.on("error", reject);
+    request.end();
+  });
+}
+
+function uploadDiagnosticBytes(target, lane, byteCount, testId, streamIndex, onProgress) {
+  const parsed = diagnosticRequestUrl(target, "upload", byteCount, testId, streamIndex);
+  const transport = parsed.protocol === "https:" ? https : http;
+  const headers = diagnosticRequestHeaders(target, testId, streamIndex, byteCount);
+  return new Promise((resolve, reject) => {
+    const request = transport.request(parsed, diagnosticRequestOptions(target, lane, "POST", headers), (response) => {
+      response.resume();
+      response.on("end", () => {
+        if (response.statusCode && response.statusCode >= 200 && response.statusCode < 300) resolve(byteCount);
         else reject(new Error(`diagnostic upload HTTP ${response.statusCode || 0}`));
       });
     });
+    request.on("timeout", () => request.destroy(new Error(`diagnostic upload timed out on ${lane.name}`)));
     request.on("error", reject);
     writeRandomBody(request, byteCount, onProgress);
   });
 }
 
+function diagnosticRequestUrl(target, direction, byteCount, testId, streamIndex) {
+  const parsed = new URL(direction === "download" ? target.download_url : target.upload_url);
+  parsed.searchParams.set("measId", testId);
+  parsed.searchParams.set("stream", String(streamIndex));
+  if (direction === "download") parsed.searchParams.set("bytes", String(byteCount));
+  return parsed;
+}
+
+function diagnosticRequestHeaders(target, testId, streamIndex, byteCount) {
+  const headers = {
+    "content-type": "application/octet-stream",
+    "user-agent": `FRAME-Belabox-Agent/${VERSION}`,
+  };
+  if (byteCount > 0) headers["content-length"] = String(byteCount);
+  if (target.id === "frame") {
+    headers.authorization = `Bearer ${target.token}`;
+    headers["x-belabox-device-id"] = deviceId;
+    headers["x-belabox-test-id"] = testId;
+    headers["x-belabox-stream"] = String(streamIndex);
+  }
+  return headers;
+}
+
+function diagnosticRequestOptions(target, lane, method, headers, connectionAgent = null) {
+  return {
+    method,
+    headers,
+    localAddress: lane.address,
+    agent: connectionAgent || false,
+    timeout: DIAGNOSTIC_REQUEST_TIMEOUT_MS,
+    lookup: diagnosticLookup(target),
+  };
+}
+
+function diagnosticLookup(target) {
+  return (_hostname, options, callback) => {
+    if (options && options.all) callback(null, [{ address: target.address, family: 4 }]);
+    else callback(null, target.address, 4);
+  };
+}
+
 function writeRandomBody(request, byteCount, onProgress) {
   let sent = 0;
+  const payload = randomBytes(Math.min(64 * 1024, Math.max(1, byteCount)));
   const writeMore = () => {
     while (sent < byteCount) {
-      const size = Math.min(64 * 1024, byteCount - sent);
+      const size = Math.min(payload.length, byteCount - sent);
       sent += size;
       onProgress(size);
-      if (!request.write(randomBytes(size))) {
+      if (!request.write(size === payload.length ? payload : payload.subarray(0, size))) {
         request.once("drain", writeMore);
         return;
       }
@@ -436,6 +688,13 @@ function writeRandomBody(request, byteCount, onProgress) {
     request.end();
   };
   writeMore();
+}
+
+function median(values) {
+  const sorted = values.slice().sort((left, right) => left - right);
+  if (!sorted.length) return 0;
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : Math.round(((sorted[middle - 1] + sorted[middle]) / 2) * 10) / 10;
 }
 
 function mbps(bytes, elapsedMs) {
@@ -677,6 +936,10 @@ function photoTransferIsActive(status) {
   return Boolean(status.file)
     || status.queue_count > 0
     || ["queued", "processing", "connecting", "preparing", "uploading", "assembling", "complete", "failed"].includes(status.state);
+}
+
+function photoTelemetryNeedsPublish(status, wasActive) {
+  return Boolean(status) && (wasActive || photoTransferIsActive(status));
 }
 
 function diskUsage(target) {
@@ -1079,10 +1342,21 @@ function selfTest() {
   assertEqual(photoTransferIsActive({ file: "a.jpg", queue_count: 0, state: "processing" }), true, "processing upload");
   assertEqual(photoTransferIsActive({ file: null, queue_count: 1, state: "idle" }), true, "queued upload");
   assertEqual(photoTransferIsActive({ file: null, queue_count: 0, state: "idle" }), false, "idle upload");
+  assertEqual(photoTelemetryNeedsPublish({ file: null, queue_count: 0, state: "idle" }, true), true, "publish terminal idle");
+  assertEqual(photoTelemetryNeedsPublish({ file: null, queue_count: 0, state: "idle" }, false), false, "skip repeated idle");
   assertEqual(transferResult({ status: "completed", file: "photo.jpg", at: new Date().toISOString() }).file, "photo.jpg", "transfer result");
   assertEqual(transferResult({ status: "pending" }), null, "invalid transfer result");
-  validateArgs("network_speed_test", { mode: "http_upload", bytes: 65536, parallel: 2 });
+  validateArgs("network_speed_test", { mode: "interface_speed_test", target: "internet", interface_name: "eth0", bytes: 65536, parallel: 2 });
+  validateArgs("network_speed_test", { mode: "http_upload", target: "frame", interface_name: "all", bytes: 65536, parallel: 1 });
   assertReject(() => validateArgs("network_speed_test", { mode: "iperf3_tcp" }), "speed mode");
+  assertReject(() => validateArgs("network_speed_test", { mode: "interface_speed_test", target: "other" }), "speed target");
+  assertReject(() => validateArgs("network_speed_test", { mode: "interface_speed_test", interface_name: "bad interface" }), "speed interface");
+  assertEqual(selectDiagnosticLanes([
+    { name: "eth0", state: "healthy" },
+    { name: "wlan0", state: "unreachable" },
+  ], "all").length, 1, "healthy diagnostic lanes");
+  assertEqual(selectDiagnosticLanes([{ name: "eth0", state: "healthy" }], "wlan0").length, 0, "selected diagnostic lane");
+  assertEqual(median([30, 10, 20]), 20, "diagnostic latency median");
   validateArgs("photo_transport_config_set", { chunk_size_bytes: 4194304, chunk_parallel_uploads: 4, chunk_upload_kbps: 2500, chunk_upload_url: "https://example.test/chunks" });
   assertReject(() => validateArgs("photo_transport_config_set", { chunk_parallel_uploads: 5 }), "chunk parallel");
   assertReject(() => validateArgs("photo_transport_config_set", { chunk_upload_kbps: -1 }), "chunk cap");

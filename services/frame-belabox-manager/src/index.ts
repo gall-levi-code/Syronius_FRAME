@@ -368,6 +368,25 @@ app.post("/belabox-chunks/api/transfers/:transferId/complete", async (request, r
   }
 });
 
+app.get("/belabox-chunks/api/diagnostics/speed-test", (request, response, next) => {
+  try {
+    const deviceId = sanitizeDeviceId(stringValue(request.header("x-belabox-device-id")) || "");
+    authorizeChunkUpload(request, deviceId);
+    const bytes = request.query.bytes === undefined
+      ? 0
+      : safePositiveInt(request.query.bytes, "bytes", 0, config.diagnostics.maxUploadBytes);
+    response.status(200);
+    response.setHeader("Cache-Control", "no-store");
+    response.setHeader("Content-Type", "application/octet-stream");
+    response.setHeader("Content-Length", String(bytes));
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    response.flushHeaders();
+    streamDiagnosticBytes(response, bytes);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/belabox-chunks/api/diagnostics/speed-test", express.raw({ type: "*/*", limit: config.diagnostics.maxUploadBytes + 1024 }), (request, response, next) => {
   try {
     const deviceId = sanitizeDeviceId(stringValue(request.header("x-belabox-device-id")) || "");
@@ -720,7 +739,9 @@ app.post("/belabox/api/diagnostics/speed-test", async (request, response, next) 
   try {
     const input = parseSpeedTestInput(request.body);
     const signed = await publishSignedCommand(input.deviceId, "network_speed_test", {
-      mode: "http_upload",
+      mode: "interface_speed_test",
+      target: input.target,
+      interface_name: input.interfaceName,
       bytes: input.bytes,
       parallel: input.parallel,
     });
@@ -1825,10 +1846,10 @@ function ftpProgressTransfers(): JsonRecord[] {
   return deviceList().flatMap((device) => {
     const ftp = objectValue(device.telemetry?.ftp_upload);
     if (!ftp) return [];
+    const transfers: JsonRecord[] = [];
     const filename = stringValue(ftp.file) || stringValue(ftp.filename);
     const state = (stringValue(ftp.state) || "").toLowerCase();
     const phase = ftpPhase(state, ftp.done === true);
-    if (!filename && phase !== "failed") return [];
     const updatedAt = readTimestamp(ftp) || device.last_telemetry_at || new Date().toISOString();
     const startedAt = stringValue(ftp.started_at) && Number.isFinite(Date.parse(String(ftp.started_at)))
       ? new Date(Date.parse(String(ftp.started_at))).toISOString()
@@ -1836,21 +1857,43 @@ function ftpProgressTransfers(): JsonRecord[] {
     const size = numberValue(ftp.size_bytes);
     const sent = numberValue(ftp.sent_bytes);
     const elapsed = numberValue(ftp.elapsed);
-    return [{
-      transfer_id: stringValue(ftp.transfer_id) || `${device.device_id}:${filename || "ftp"}:${startedAt}`,
-      adapter: stringValue(ftp.transport) === "chunked_https" ? "belabox_chunked" : "belabox_agent",
-      phase,
-      filename,
-      bytes_received: sent,
-      bytes_total: size > 0 ? size : null,
-      speed_bps: numberOrNull(ftp.rate_bps),
-      elapsed_ms: elapsed > 0 ? Math.round(elapsed * 1000) : null,
-      started_at: startedAt,
-      updated_at: updatedAt,
-      status_text: stringValue(ftp.status_text) || undefined,
-      transport: stringValue(ftp.transport) || stringValue(ftp.transfer_mode) || "direct_ftp",
-      ...(phase === "failed" ? { error: stringValue(ftp.last_error) || "FTP upload failed" } : {}),
-    }];
+    const adapter = stringValue(ftp.transport) === "chunked_https" ? "belabox_chunked" : "belabox_agent";
+    if (filename || phase === "failed") {
+      transfers.push({
+        transfer_id: stringValue(ftp.transfer_id) || `${device.device_id}:${filename || "ftp"}:${startedAt}`,
+        adapter,
+        phase,
+        filename,
+        bytes_received: sent,
+        bytes_total: size > 0 ? size : null,
+        speed_bps: numberOrNull(ftp.rate_bps),
+        elapsed_ms: elapsed > 0 ? Math.round(elapsed * 1000) : null,
+        started_at: startedAt,
+        updated_at: updatedAt,
+        status_text: stringValue(ftp.status_text) || undefined,
+        transport: stringValue(ftp.transport) || stringValue(ftp.transfer_mode) || "direct_ftp",
+        ...(phase === "failed" ? { error: stringValue(ftp.last_error) || "FTP upload failed" } : {}),
+      });
+    }
+    const result = objectValue(ftp.last_result) || {};
+    const completedAt = stringValue(result.at);
+    if (stringValue(result.status) === "completed" && completedAt && Number.isFinite(Date.parse(completedAt))) {
+      const timestamp = new Date(Date.parse(completedAt)).toISOString();
+      transfers.push({
+        transfer_id: `${device.device_id}:completed:${timestamp}`,
+        adapter,
+        phase: "published",
+        filename: stringValue(result.file) || null,
+        bytes_received: 0,
+        bytes_total: null,
+        speed_bps: null,
+        elapsed_ms: null,
+        started_at: timestamp,
+        updated_at: timestamp,
+        status_text: "Transfer complete",
+      });
+    }
+    return transfers;
   });
 }
 
@@ -2083,16 +2126,22 @@ function parsePairJobInput(body: unknown): PairInput {
   };
 }
 
-function parseSpeedTestInput(body: unknown): { deviceId: string; bytes: number; parallel: number } {
+function parseSpeedTestInput(body: unknown): { deviceId: string; bytes: number; parallel: number; target: "internet" | "frame"; interfaceName: string } {
   const data = body && typeof body === "object" ? body as JsonRecord : {};
   const deviceId = sanitizeDeviceId(stringValue(data.device_id) || "");
   if (!provisionedDevices.some((device) => device.device_id === deviceId)) throw new RequestError(404, "Device is not provisioned.");
   const live = deviceList().find((device) => device.device_id === deviceId);
   if (!live?.online) throw new RequestError(409, "Belabox agent must be online before running diagnostics.");
+  const target = stringValue(data.target) || "internet";
+  if (target !== "internet" && target !== "frame") throw new RequestError(400, "target must be internet or frame.");
+  const interfaceName = stringValue(data.interface_name) || "all";
+  if (!/^(all|[A-Za-z0-9_.:-]{1,64})$/.test(interfaceName)) throw new RequestError(400, "interface_name is invalid.");
   return {
     deviceId,
     bytes: data.bytes === undefined ? config.diagnostics.uploadBytes : safePositiveInt(data.bytes, "bytes", 64 * 1024, config.diagnostics.maxUploadBytes),
     parallel: data.parallel === undefined ? config.diagnostics.parallel : safePositiveInt(data.parallel, "parallel", 1, 8),
+    target,
+    interfaceName,
   };
 }
 
@@ -2461,6 +2510,20 @@ ensure_imagemagick() {
   if command -v apt-get >/dev/null 2>&1; then sudo_run apt-get update >/dev/null && sudo_run apt-get install -y imagemagick >/dev/null || true; fi
   return 0
 }
+ensure_image_processor() {
+  if "$python_bin" - <<'PY' >/dev/null 2>&1
+from PIL import Image
+PY
+  then return 0; fi
+  if command -v apt-get >/dev/null 2>&1; then
+    sudo_run apt-get update >/dev/null && sudo_run apt-get install -y python3-pil >/dev/null || true
+  fi
+  if "$python_bin" - <<'PY' >/dev/null 2>&1
+from PIL import Image
+PY
+  then return 0; fi
+  ensure_imagemagick
+}
 test_frame_ftp() {
   set -a; . "$connector_dir/photo-agent.env"; set +a
   "$python_bin" - <<'PY'
@@ -2549,7 +2612,7 @@ pkill -f "$agent_dir/ftp-connector/ftp-connector.py" 2>/dev/null || true
 pkill -f "$connector_dir/photo-agent.py" 2>/dev/null || true
 if [ -d "$agent_dir/ftp-connector" ]; then mv "$agent_dir/ftp-connector" "$agent_dir/ftp-connector.removed-$(date +%Y%m%d%H%M%S)" 2>/dev/null || true; fi
 ensure_pyftpdlib || { echo "pyftpdlib_install_failed" >&2; exit 43; }
-ensure_imagemagick
+ensure_image_processor
 test_frame_ftp || { echo "frame_ftp_test_failed" >&2; exit 44; }
 if install_system_service; then
   :
@@ -2803,7 +2866,13 @@ function validateCommandArgs(command: CommandName, args: JsonRecord): void {
     if (args.max_output_mb !== undefined) safeNumber(args.max_output_mb, "max_output_mb", 0, 500);
   }
   if (command === "network_speed_test") {
-    if (args.mode !== "http_upload") throw new RequestError(400, "network_speed_test mode must be http_upload.");
+    if (args.mode !== "http_upload" && args.mode !== "interface_speed_test") throw new RequestError(400, "network_speed_test mode is invalid.");
+    if (args.target !== undefined && args.target !== "internet" && args.target !== "frame") {
+      throw new RequestError(400, "network_speed_test target must be internet or frame.");
+    }
+    if (args.interface_name !== undefined && (typeof args.interface_name !== "string" || !/^(all|[A-Za-z0-9_.:-]{1,64})$/.test(args.interface_name))) {
+      throw new RequestError(400, "network_speed_test interface_name is invalid.");
+    }
     if (args.bytes !== undefined) safePositiveInt(args.bytes, "bytes", 64 * 1024, config.diagnostics.maxUploadBytes);
     if (args.parallel !== undefined) safePositiveInt(args.parallel, "parallel", 1, 8);
   }
@@ -2866,6 +2935,27 @@ function websocketUrl(): string {
 
 function diagnosticUploadUrl(): string {
   return config.chunkUpload.publicUrl.replace(/\/api\/transfers\/?$/, "/api/diagnostics/speed-test");
+}
+
+function streamDiagnosticBytes(response: express.Response, totalBytes: number): void {
+  if (totalBytes <= 0) {
+    response.end();
+    return;
+  }
+  const payload = randomBytes(Math.min(64 * 1024, totalBytes));
+  let sent = 0;
+  const writeMore = (): void => {
+    while (sent < totalBytes) {
+      const size = Math.min(payload.length, totalBytes - sent);
+      sent += size;
+      if (!response.write(size === payload.length ? payload : payload.subarray(0, size))) {
+        response.once("drain", writeMore);
+        return;
+      }
+    }
+    response.end();
+  };
+  writeMore();
 }
 
 function canonicalJson(value: unknown): string {

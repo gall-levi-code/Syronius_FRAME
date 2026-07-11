@@ -96,7 +96,7 @@ export class UploadProgressHub {
     }
     await Promise.all(normalizedAdapters.map((adapter) => {
       const state = this.stateFor(adapter);
-      const active = state.transfers.some((transfer) => transfer.phase === "receiving");
+      const active = state.transfers.some((transfer) => transfer.phase === "receiving" || transfer.phase === "processing");
       const interval = active ? state.activePollMs : state.idlePollMs;
       return state.receivedAt && this.now().getTime() - Date.parse(state.receivedAt) < interval ? Promise.resolve() : this.refresh(adapter);
     }));
@@ -131,7 +131,7 @@ export class UploadProgressHub {
 
   private schedule(state: AdapterState): void {
     if (this.stopped || state.timer || state.listeners.size === 0) return;
-    const active = state.transfers.some((transfer) => transfer.phase === "receiving");
+    const active = state.transfers.some((transfer) => transfer.phase === "receiving" || transfer.phase === "processing");
     state.timer = setTimeout(() => {
       state.timer = undefined;
       void this.refresh(state.adapter);
@@ -195,10 +195,11 @@ function normalizeTransfers(raw: unknown, adapter: IngestAdapterId): IngestTrans
   return transfers.flatMap((value) => {
     const transfer = objectValue(value);
     const transferId = textValue(transfer.transfer_id, 96);
-    const phase = phaseValue(transfer.phase);
+    const sourcePhase = phaseValue(transfer.phase);
     const startedAt = dateValue(transfer.started_at);
     const updatedAt = dateValue(transfer.updated_at);
-    if (!transferId || !phase || !startedAt || !updatedAt) return [];
+    if (!transferId || !sourcePhase || !startedAt || !updatedAt) return [];
+    const phase = sourcePhase === "queued" && adapter !== "belabox_agent" ? "published" : sourcePhase;
     const filename = textValue(transfer.filename, 180) || null;
     const bytesTotal = nullableNumber(transfer.bytes_total);
     const speed = nullableNumber(transfer.speed_bps);
