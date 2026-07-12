@@ -102,6 +102,10 @@ removed.
 
 - Implement the source-backed BCRPT compatibility plan in `docs/belabox-frame-remote-plan.md` so
   FRAME relay profiles can gain per-interface RTT and MTU feedback.
+- Add an on-demand recent stream health report to Belabox Manager Diagnostics using bounded,
+  redacted agent-collected logs. Summarize disconnects, recovery, bitrate degradation, low MTU,
+  encoder restarts, network failures, and photo-transfer overlap with an evidence timeline and
+  confidence instead of exposing raw logs or an uncalibrated score.
 - Optional: replace the agent's log-bundle metadata stub with a bounded downloadable support bundle
   if field diagnostics justify the additional collection and transfer surface.
 
