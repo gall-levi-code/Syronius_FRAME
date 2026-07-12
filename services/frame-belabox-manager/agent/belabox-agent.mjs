@@ -17,7 +17,7 @@ import {
   verify as verifyBytes,
 } from "node:crypto";
 
-const VERSION = "0.8.1";
+const VERSION = "0.8.2";
 const REMOTE_BELAUI_HTTP_TIMEOUT_MS = 8000;
 const REMOTE_BELAUI_MAX_HTTP_BODY_BYTES = 2 * 1024 * 1024;
 const REMOTE_BELAUI_STREAM_CHUNK_BYTES = 48 * 1024;
@@ -54,6 +54,7 @@ const egressStatusPath = process.env.BELABOX_EGRESS_STATUS_PATH || `${os.homedir
 const egressProbeMs = readInt("BELABOX_EGRESS_PROBE_INTERVAL_MS", 1000, 500, 60000);
 const relayCatalogPath = process.env.BELABOX_RELAY_CATALOG_PATH || `${os.homedir()}/.frame-belabox-agent/relay-catalog.json`;
 const relayProbeMs = readInt("BELABOX_RELAY_PROBE_INTERVAL_MS", 5000, 1000, 60000);
+const relayProbeHost = (process.env.BELABOX_RELAY_PROBE_HOST || "").trim();
 const relayProbePort = readInt("BELABOX_RELAY_PROBE_PORT", 443, 1, 65535);
 const relayProbeTimeoutMs = readInt("BELABOX_RELAY_PROBE_TIMEOUT_MS", 1200, 200, 5000);
 const remoteBelaui = {
@@ -929,7 +930,8 @@ async function refreshRelayHealth() {
     const catalog = validateRelayCatalog(JSON.parse(fs.readFileSync(relayCatalogPath, "utf8")));
     const [serverId, server] = Object.entries(catalog.servers)[0] || [];
     if (!serverId || !server) throw new Error("relay catalog is empty");
-    const target = await lookupIpv4(server.addr);
+    const probeHost = relayProbeHost || egressTargetHost();
+    const target = await lookupIpv4(probeHost);
     const lanes = networkSummary()
       .filter((entry) => entry.family === "IPv4" && usableSourceAddress(entry.address))
       .map((entry) => egressLane(entry, target.address))
@@ -939,7 +941,7 @@ async function refreshRelayHealth() {
       address: lane.address,
       ...await tcpRelayProbe(target.address, relayProbePort, lane.address),
     })));
-    publishJson(topics.relayHealth, summarizeRelayHealth(serverId, server, results));
+    publishJson(topics.relayHealth, summarizeRelayHealth(serverId, server, results, probeHost));
   } catch (error) {
     publishJson(topics.relayHealth, {
       state: "error",
@@ -972,7 +974,7 @@ function tcpRelayProbe(targetAddress, port, sourceAddress) {
   });
 }
 
-function summarizeRelayHealth(serverId, server, lanes) {
+function summarizeRelayHealth(serverId, server, lanes, probeHost = server.addr) {
   const reachable = lanes.filter((lane) => lane.reachable && Number.isFinite(lane.rtt_ms));
   const rtt = reachable.length ? Math.min(...reachable.map((lane) => lane.rtt_ms)) : null;
   return {
@@ -980,6 +982,7 @@ function summarizeRelayHealth(serverId, server, lanes) {
     server_id: serverId,
     host: server.addr,
     port: server.port,
+    probe_host: probeHost,
     probe_port: relayProbePort,
     rtt_ms: rtt,
     reachable_lane_count: reachable.length,
@@ -1537,9 +1540,10 @@ function selfTest() {
     { reachable: true, rtt_ms: 120 },
     { reachable: true, rtt_ms: 40 },
     { reachable: false, rtt_ms: null },
-  ]);
+  ], "health.example.test");
   assertEqual(relayHealth.state, "degraded", "relay health state");
   assertEqual(relayHealth.rtt_ms, 40, "relay health RTT");
+  assertEqual(relayHealth.probe_host, "health.example.test", "relay health target");
   const queueRoot = fs.mkdtempSync(path.join(os.tmpdir(), "frame-photo-queue-"));
   try {
     for (const directory of ["incoming", "ready", "processed"]) fs.mkdirSync(path.join(queueRoot, directory));

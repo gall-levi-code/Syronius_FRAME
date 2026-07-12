@@ -1204,6 +1204,18 @@ progress::-moz-progress-bar {
 
 #run-speed-test { width: 100%; }
 
+.relay-probe-block {
+  display: grid;
+  gap: 12px;
+  padding-block: 14px;
+  border-block: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+}
+
+.relay-probe-details {
+  display: grid;
+  gap: 12px;
+}
+
 .diagnostic-results {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));

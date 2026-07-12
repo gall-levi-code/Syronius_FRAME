@@ -8,6 +8,7 @@ removed.
 
 ### Current Relay / Overlay Milestone
 
+- Add live SRT publisher integration tests so renderer quality states are exercised with real traffic.
 - [x] Build `frame-ingest-video` around the OpenIRL SRTLA Receiver.
 - [x] Build a FRAME-owned, themed `frame-streams` management UI against the receiver API.
 - [x] Build the `frame-overlays` connectivity renderer and wizard.
@@ -19,7 +20,6 @@ removed.
 - [x] Provide keyed `/overlays/view/<slug>/<source-key>` URLs while preserving V1 aliases.
 - [x] Add a top-level Manage Overlays action and per-stream bound-source counts/listing.
 - [x] Add the immutable upload-progress template, type-isolated presets, web-upload telemetry adapter, and multi-file renderer foundation.
-- Add live SRT publisher integration tests so renderer quality states are exercised with real traffic.
 
 ### Keep Separate For Later
 
@@ -29,27 +29,27 @@ removed.
 
 ## Audio Monitor
 
+- Add relay retention controls and long-session soak tests.
+- Remember recently seen browser audio devices so users do not have to refresh or reselect as often.
 - [x] Build browser audio-device capture and one-publisher-per-source enforcement.
 - [x] Relay browser audio through ffmpeg as AAC/HLS with stable listener pages.
 - [x] Add always-on silence generation for uninterrupted listener URLs.
 - [x] Integrate Audio Monitor with FRAME Edge, the installer, and the unified data root.
-- Add relay retention controls and long-session soak tests.
-- Remember recently seen browser audio devices so users do not have to refresh or reselect as often.
 
 ## Installer / Platform
 
+- Add API integration tests for implemented HTTP services.
+- Split installer environment/state responsibilities out of `frame-installer.mjs`.
+- Add host-port conflict preflight detection.
+- Add LAN HTTPS and optional Cloudflare Access policy automation.
 - [x] Add a canonical service/capability registry with dependency and profile activation tests.
 - [x] Add a root `stack verify` command and GitHub verification workflow.
 - [x] Decide that `frame-pipeline-photos` is an internal service activated by photo capabilities.
-- Add API integration tests for implemented HTTP services.
 - [x] Add Audio Bridge session, profile, and control mutation tests before splitting `SessionManager`.
 - [x] Add Audio Bridge HTTP route tests for portal status, bridge pages, and token gates.
-- Split installer environment/state responsibilities out of `frame-installer.mjs`.
 - [x] Add a numbered interactive command center with issue-first Standard/Advanced guided setup.
-- Add host-port conflict preflight detection.
 - [x] Build the shared Traefik LAN HTTP edge and route implemented web services through it.
 - [x] Add capability-aware Cloudflare Tunnel routing and staged HYBRID deployment.
-- Add LAN HTTPS and optional Cloudflare Access policy automation.
 
 ### Update System
 
@@ -88,66 +88,43 @@ removed.
 
 ## Photo Workflow
 
-- [x] Freeze V1 processing, recovery, sidecar, and quarantine contracts.
-- [x] Build the read-only FRAME photo gallery and thumbnail cache.
-- [x] Build Photo Stage with a direct multi-day gallery, OBS viewer, live EXIF display, and authenticated mobile remote.
-- [x] Add protected Gallery Admin with reversible trash, album management, and authoritative latest-state recalculation.
 - Add `/stage/*` Photo Stage routes while preserving `/today/*` compatibility aliases.
 - Build the Discord delivery outbox after Photo Stage stabilizes.
 - Add archive retention controls and disk-pressure policy.
 - Add reliable HEIC decoding when the pinned production image runtime supports it.
 - Add camera and long-running FTP soak tests.
+- [x] Freeze V1 processing, recovery, sidecar, and quarantine contracts.
+- [x] Build the read-only FRAME photo gallery and thumbnail cache.
+- [x] Build Photo Stage with a direct multi-day gallery, OBS viewer, live EXIF display, and authenticated mobile remote.
+- [x] Add protected Gallery Admin with reversible trash, album management, and authoritative latest-state recalculation.
 
 ### Remote Photo Agent / Belabox Module
 
-- [x] Merge revisioned FRAME relay servers and publisher accounts into the FRAME remote belaUI
-  session, translating FRAME selections to stock manual SRTLA fields without modifying belaUI.
-- [x] Add lightweight per-interface FRAME relay-host RTT probes and native-style green/yellow/red
-  latency labels to the FRAME remote belaUI relay list.
 - Implement the source-backed BCRPT compatibility plan in `docs/belabox-frame-remote-plan.md` so
   FRAME relay profiles can gain per-interface RTT and MTU feedback.
+- Optional: replace the agent's log-bundle metadata stub with a bounded downloadable support bundle
+  if field diagnostics justify the additional collection and transfer surface.
 
-- [x] Phase 4B: reuse the existing overlay SSE path for all photo-upload progress instead of adding a
-  separate WebSocket transport.
-- [x] Phase 4B: expose a shared upload-progress shape for `web_upload`, `belabox_agent`, and `ftp`
-  adapters: transfer ID, adapter, phase, filename, received/sent bytes, optional total bytes,
-  speed, elapsed time, status text, and timestamps.
-- [x] Phase 4B: keep Belabox chunk/FTP connector progress authoritative from the Belabox agent because
-  the sender knows the local file size and exact bytes sent.
-- [x] Phase 4B: add lightweight `frame-photo-ftp` ingest progress by tracking growing inbox files and
-  staged/completed events; true percent remains unavailable unless the sender reports total size.
-- [x] Phase 4B: add `/api/internal/photo-ftp/progress` and enable the Overlay Wizard `ftp` adapter once
-  `frame-photo-ftp` exposes progress directly.
-- [x] Add a short-lived `Transfer complete` bubble to the upload overlay without waiting for FRAME image processing.
-- Define a `frame-remote-photo-agent` capability for deploying a managed photo relay helper onto a Belabox or similar Linux encoder on the local network.
-- Build a FRAME-side setup wizard that can detect or accept the Belabox LAN IP, explain how to enable Belabox SSH, and connect with the fixed `user` SSH account plus the rotating password from the Belabox Advanced/developer panel.
-- Generate FRAME-managed usernames, paths, script names, and systemd unit names instead of reusing personal prototype paths from the reference scripts.
-- Configure a Belabox-local FTP ingest path for cameras, with a user-chosen camera FTP password and a reinstall option that rewrites the managed helper cleanly instead of creating duplicate services.
-- Keep the first production version on SFTP for reliability, landing files in a FRAME inbox/remote-agent path before the normal stability gate moves them into staging.
-- Default to deleting successfully transferred files on the Belabox, with an archive-completed-files option for users who want local recovery.
-- Define a remote photo upload progress event schema for future overlays: discovered, stable, queued, transferring, transferred, failed, retried, and archived/deleted.
-- Add a remote-agent status dashboard showing connection health, queue depth, last transfer, failures, and installed helper version.
-- Belabox Manager UX simplification pass:
-  - [x] Rename `MQTT Controls` to `Photo Transfer`.
-  - [x] Hide protocol terms like MQTT, WSS, chunk relay, and egress binding behind Advanced.
-  - [x] Add an `Encoder Status` strip for online state, remote UI, Photo Agent, and stream health.
-  - [x] Make `Open Encoder Remote` the primary online action.
-  - [x] Replace raw state strings with user-facing states such as `Ready`, `Uploading`, `Processing`, `Waiting for encoder`, and `Needs setup`.
-  - [x] Add a visual photo pipeline: camera received, processing, upload-ready, sending, published.
-  - [x] Add a stream-safe upload preset that caps photo upload while live.
-  - [x] Add transfer presets: `Protect Stream`, `Balanced`, and `Fast`.
-  - [x] Show upload caps in Mbps with helper context instead of kbps-only.
-  - [x] Show egress lanes as `Ethernet`, `Wi-Fi 1`, and `Wi-Fi 2` health chips.
-  - [x] Show the active upload lane during transfer.
-  - [x] Add a `What is slowing things down?` summary for CPU prep, network upload, FRAME ingest, or waiting.
-  - [x] Collapse SSH maintenance unless the agent is missing or repair is needed.
-  - [x] Rename `Install / Repair Photo Agent` to `Repair Agent`.
-  - [x] Add live upload stats: current file, rate, queue depth, and ETA.
-  - [x] Warn when uploads are uncapped while streaming.
-  - [x] Add a diagnostics drawer for raw MQTT, route, and chunk details.
-  - [x] Add a remote access URL row with copy/open buttons.
+- Add an opt-in completed-file archive and retention policy for users who need Belabox-local recovery.
+- Belabox per-interface network diagnostics:
+  - [ ] Verify both targets on every live Belabox interface and compare against an aggregate SRTLA transfer.
+  - [x] Bind latency, download, and upload requests to each route-checked Belabox IPv4 interface.
+  - [x] Offer an external Internet target using Cloudflare and an authenticated FRAME endpoint target.
+  - [x] Run all-interface tests sequentially and report latency/download/upload results per interface.
+- Keep remote photo overlay widgets in their own schema/preset namespace so they do not overwrite FRAME's stock connectivity presets.
+- Refactor the overlay wizard so stock defaults are immutable, OBS URL slugs can be chosen before first save, and saving a renamed preset creates a new preset instead of rewriting `default-connectivity`.
 - Belabox Manager UX completion goal: make first-time setup, daily monitoring, photo transfer, and
   maintenance understandable without requiring knowledge of MQTT, WSS, SSH jobs, or egress internals.
+  - [ ] Phase UX-6 - Production verification: test desktop/mobile layouts, keyboard and focus behavior,
+    long labels, heartbeat polling during edits, offline/online recovery, failed SSH jobs, active uploads,
+    and real-device install/repair/uninstall flows.
+    - [ ] Rendered desktop/mobile inspection and transfer-result checks during an actual photo upload.
+    - [x] Automated contracts, syntax checks, TypeScript builds, agent self-tests, graph refresh, container
+      health, live manager/pipeline status, keyboard focus, and blocking-dialog isolation.
+    - [x] Real-device Repair Agent and guarded empty-queue reset, including post-install heartbeat and
+      installed-version verification.
+    - Acceptance: no overflow, unintended navigation, stale modal, lost input, or control-state regression
+      remains in the supported workflows.
   - [x] Phase UX-1 - Device workspace: reshape the device page into a compact status band, one guided
     Photo Transfer workspace, and collapsed Maintenance/Advanced sections; remove duplicate controls and
     keep heartbeat refreshes from moving, collapsing, or replacing active fields.
@@ -173,21 +150,56 @@ removed.
     back navigation, final checks, redirect to the installed device, and last-viewed-device restoration.
     - Acceptance: setup remains inside the wizard until verification completes and returning users land on
       the device they last viewed.
-  - [ ] Phase UX-6 - Production verification: test desktop/mobile layouts, keyboard and focus behavior,
-    long labels, heartbeat polling during edits, offline/online recovery, failed SSH jobs, active uploads,
-    and real-device install/repair/uninstall flows.
-    - [x] Automated contracts, syntax checks, TypeScript builds, agent self-tests, graph refresh, container
-      health, live manager/pipeline status, keyboard focus, and blocking-dialog isolation.
-    - [x] Real-device Repair Agent and guarded empty-queue reset, including post-install heartbeat and
-      installed-version verification.
-    - [ ] Rendered desktop/mobile inspection and transfer-result checks during an actual photo upload.
-    - Acceptance: no overflow, unintended navigation, stale modal, lost input, or control-state regression
-      remains in the supported workflows.
-- Revisit chunked HTTPS or multi-connection transfer later if SFTP reliability is not enough for bonded or multi-WAN scenarios.
-- Belabox per-interface network diagnostics:
-  - [x] Bind latency, download, and upload requests to each route-checked Belabox IPv4 interface.
-  - [x] Offer an external Internet target using Cloudflare and an authenticated FRAME endpoint target.
-  - [x] Run all-interface tests sequentially and report latency/download/upload results per interface.
-  - [ ] Verify both targets on every live Belabox interface and compare against an aggregate SRTLA transfer.
-- Keep remote photo overlay widgets in their own schema/preset namespace so they do not overwrite FRAME's stock connectivity presets.
-- Refactor the overlay wizard so stock defaults are immutable, OBS URL slugs can be chosen before first save, and saving a renamed preset creates a new preset instead of rewriting `default-connectivity`.
+- [x] Merge revisioned FRAME relay servers and publisher accounts into the FRAME remote belaUI
+  session, translating FRAME selections to stock manual SRTLA fields without modifying belaUI.
+- [x] Add lightweight per-interface FRAME relay-host RTT probes and native-style green/yellow/red
+  latency labels to the FRAME remote belaUI relay list.
+- [x] Expose the lightweight probe target, sample age, and per-interface response/error details in
+  Belabox Manager while identifying it as control-path TCP rather than SRTLA RTT.
+- [x] Phase 4B: reuse the existing overlay SSE path for all photo-upload progress instead of adding a
+  separate WebSocket transport.
+- [x] Phase 4B: expose a shared upload-progress shape for `web_upload`, `belabox_agent`, and `ftp`
+  adapters: transfer ID, adapter, phase, filename, received/sent bytes, optional total bytes,
+  speed, elapsed time, status text, and timestamps.
+- [x] Phase 4B: keep Belabox chunk/FTP connector progress authoritative from the Belabox agent because
+  the sender knows the local file size and exact bytes sent.
+- [x] Phase 4B: add lightweight `frame-photo-ftp` ingest progress by tracking growing inbox files and
+  staged/completed events; true percent remains unavailable unless the sender reports total size.
+- [x] Phase 4B: add `/api/internal/photo-ftp/progress` and enable the Overlay Wizard `ftp` adapter once
+  `frame-photo-ftp` exposes progress directly.
+- [x] Add a short-lived `Transfer complete` bubble to the upload overlay without waiting for FRAME image processing.
+- [x] Fold managed remote photo-agent deployment into the existing `frame-belabox-manager` capability
+  instead of creating a second user-facing capability.
+- [x] Build a FRAME-side staged setup wizard that accepts the Belabox LAN IP, tests the fixed `user`
+  SSH account and rotating password, and can save the credential for repair.
+- [x] Use FRAME-owned agent paths, generated credentials, script names, and systemd unit names.
+- [x] Configure Belabox-local camera FTP ingest with a user-selected password and idempotent
+  install/repair behavior that replaces the managed service instead of duplicating it.
+- [x] Supersede the proposed SFTP-first transport with camera FTP into the local spool plus selectable
+  throttled chunked HTTPS or direct FTP delivery to FRAME.
+- [x] Delete successfully transferred spool files from the Belabox by default.
+- [x] Use the shared upload-progress contract for discovery, preparation, queue, transfer, completion,
+  failure, and result reporting instead of a separate remote-agent overlay schema.
+- [x] Show agent connection health, queue depth, current/last transfer, failures, and installed version
+  in the Belabox Manager device workspace.
+- Belabox Manager UX simplification pass:
+  - [x] Rename `MQTT Controls` to `Photo Transfer`.
+  - [x] Hide protocol terms like MQTT, WSS, chunk relay, and egress binding behind Advanced.
+  - [x] Add an `Encoder Status` strip for online state, remote UI, Photo Agent, and stream health.
+  - [x] Make `Open Encoder Remote` the primary online action.
+  - [x] Replace raw state strings with user-facing states such as `Ready`, `Uploading`, `Processing`, `Waiting for encoder`, and `Needs setup`.
+  - [x] Add a visual photo pipeline: camera received, processing, upload-ready, sending, published.
+  - [x] Add a stream-safe upload preset that caps photo upload while live.
+  - [x] Add transfer presets: `Protect Stream`, `Balanced`, and `Fast`.
+  - [x] Show upload caps in Mbps with helper context instead of kbps-only.
+  - [x] Show egress lanes as `Ethernet`, `Wi-Fi 1`, and `Wi-Fi 2` health chips.
+  - [x] Show the active upload lane during transfer.
+  - [x] Add a `What is slowing things down?` summary for CPU prep, network upload, FRAME ingest, or waiting.
+  - [x] Collapse SSH maintenance unless the agent is missing or repair is needed.
+  - [x] Rename `Install / Repair Photo Agent` to `Repair Agent`.
+  - [x] Add live upload stats: current file, rate, queue depth, and ETA.
+  - [x] Warn when uploads are uncapped while streaming.
+  - [x] Add a diagnostics drawer for raw MQTT, route, and chunk details.
+  - [x] Add a remote access URL row with copy/open buttons.
+- [x] Add throttled chunked HTTPS with bounded parallel connections and optional healthy-interface
+  source binding for bonded or multi-WAN photo transfers.

@@ -7,9 +7,10 @@
 FRAME is a modular, Docker-based streaming appliance for IRL and live production workflows.
 The official project name is FRAME; the full styled name is Syronius' F.R.A.M.E.
 
-This repository is the platform stack: a shared portal, routing edge, video relay, OBS overlays,
-photo upload and gallery tools, Photo Stage controls, audio tools, and optional Discord audio
-bridge. Each service has its own README under `services/` for deeper setup and operating details.
+This repository is the platform stack: a shared portal, routing edge, video relay, Belabox remote
+management, OBS overlays, photo upload and gallery tools, Photo Stage controls, audio tools, and an
+optional Discord audio bridge. Each service has its own README under `services/` for deeper setup
+and operating details.
 
 Current release target: `v1.0.0-Alpha`.
 
@@ -86,6 +87,7 @@ Useful first pages:
 - Photo Gallery: `http://localhost/today/gallery`
 - OBS Photo Stage Viewer: `http://localhost/today/viewer`
 - Phone Photo Stage Remote: `http://localhost/today/remote`
+- Belabox Manager: `http://localhost/belabox`
 
 Check status or logs:
 
@@ -125,6 +127,19 @@ Photo Upload defaults to 10 selected files and 10 concurrent upload sessions. Tu
 `PHOTO_UPLOAD_MAX_FILES` and `PHOTO_UPLOAD_MAX_SESSIONS` from Advanced setup or `.env`.
 Photo FTP passwords default to a 5-character minimum through `PHOTO_FTP_MIN_PASSWORD_LENGTH`.
 
+Connect a Belabox to FRAME:
+
+1. Open `stack.cmd` or `stack.sh` and choose **Configure network/storage**.
+2. Select **HYBRID** mode.
+3. Enter the browser-facing public hostname and the public SRTLA relay hostname or IPv4 address.
+4. Enable **Video Relay and Stream Management** and **Belabox Manager**.
+5. Start or update the stack.
+6. Open `http://localhost/belabox` and follow the **Add device** wizard while the Belabox is on the
+   same LAN and reachable through SSH.
+
+The SRTLA address is stored as `PUBLIC_RELAY_HOST`. It may differ from the Cloudflare/browser
+hostname when web traffic and SRTLA traffic use different public endpoints.
+
 Run verification:
 
 - Choose **Validate and verify** from the menu.
@@ -163,7 +178,7 @@ Start with the service README when you want to understand, operate, or customize
 | Photo Stage viewer and remote | [`services/frame-today/`](services/frame-today/README.md) |
 | Audio monitor | [`services/frame-audio/`](services/frame-audio/README.md) |
 | Discord audio bridge | [`services/frame-audio-bridge/`](services/frame-audio-bridge/README.md) |
-| Belabox manager | [`services/frame-belabox-manager/`](services/frame-belabox-manager/README.md) |
+| Belabox Manager | [`services/frame-belabox-manager/`](services/frame-belabox-manager/README.md) |
 
 ## Container Breakdown
 
@@ -185,6 +200,12 @@ flowchart TD
   edge --> streams["frame-streams"]
   streams --> ingestVideo["frame-ingest-video"]
   edge --> overlays["frame-overlays"]
+
+  belabox["Belabox agent"] --> publicGateway
+  edge --> belaboxBroker["frame-belabox-broker"]
+  belaboxManager["frame-belabox-manager"] --> belaboxBroker
+  edge --> belaboxManager
+  streams --> belaboxManager
 
   edge --> audio["frame-audio"]
   edge --> audioBridge["frame-audio-bridge"]
@@ -219,7 +240,8 @@ flowchart TD
 | `frame-overlays` | Overlays | OBS overlay sources and the Overlay Wizard. |
 | `frame-audio` | Audio Monitor | Browser capture, audio relay, listen pages, and HLS output. |
 | `frame-audio-bridge` | Discord Audio Bridge | Discord voice audio, OBS mixes, speaking overlay, and controls. |
-| `frame-belabox-manager` | Belabox Manager | Authenticated MQTT/WSS telemetry scaffold for roaming Belabox devices; SSH is maintenance-only. |
+| `frame-belabox-broker` | Belabox Manager | Per-device MQTT/WSS transport with generated credentials and topic ACLs. |
+| `frame-belabox-manager` | Belabox Manager | Agent installation, FRAME Remote belaUI, relay selection, photo controls, diagnostics, and maintenance. |
 | `frame-photo-upload` | Browser Photo Upload | Protected browser/phone upload page. |
 | `frame-photo-ftp` | Photo FTP Ingest | Camera FTP upload intake. |
 | `frame-pipeline-photos` | Any photo feature | Photo validation, conversion, sidecars, `.ready` files, and archive output. |
@@ -235,8 +257,12 @@ The public-facing backlog for the alpha release line:
 
 **Overlay System**
 
-- Add FTP/BELABOX upload-progress adapters and photo-pipeline correlation.
 - Add latest-photo overlay and Photo Stage integration.
+
+**Belabox Manager**
+
+- Add BCRPT-compatible UDP and MTU relay probing beyond the current TCP RTT indicator.
+- Add the planned stream-safe bitrate governor and recovery controls.
 
 **Audio Monitor**
 

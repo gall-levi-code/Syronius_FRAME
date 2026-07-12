@@ -2283,6 +2283,7 @@ async function installAgent(input: PairInput, device: ProvisionedDevice): Promis
   const dir = "$HOME/.frame-belabox-agent";
   const agent = readFileSync(path.join(process.cwd(), "agent", "belabox-agent.mjs"), "utf8");
   const sudoPasswordB64 = input.password ? Buffer.from(input.password, "utf8").toString("base64") : "";
+  const relayProbeUrl = new URL(config.mqtt.publicHost);
   const envFile = [
     `BELABOX_DEVICE_ID=${device.device_id}`,
     `BELABOX_MQTT_USERNAME=${device.mqtt_username}`,
@@ -2294,6 +2295,8 @@ async function installAgent(input: PairInput, device: ProvisionedDevice): Promis
     `BELABOX_ACTIVE_PHOTO_TELEMETRY_INTERVAL_MS=${config.mqtt.activePhotoTelemetryMs}`,
     `BELABOX_MQTT_RECONNECT_MS=${config.mqtt.reconnectMs}`,
     `BELABOX_MQTT_KEEPALIVE=${config.mqtt.keepalive}`,
+    `BELABOX_RELAY_PROBE_HOST=${relayProbeUrl.hostname}`,
+    `BELABOX_RELAY_PROBE_PORT=${relayProbeUrl.port || (relayProbeUrl.protocol === "https:" ? "443" : "80")}`,
     `BELABOX_CHUNK_UPLOAD_URL=${config.chunkUpload.publicUrl}`,
     `BELABOX_CHUNK_UPLOAD_TOKEN=${device.mqtt_password}`,
     `BELABOX_DIAGNOSTIC_UPLOAD_URL=${diagnosticUploadUrl()}`,

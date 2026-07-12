@@ -283,6 +283,7 @@ function renderDevicePanel(deviceId) {
   const photoTelemetryReady = Object.keys(ftp).length > 0;
   const diagnostics = telemetry.network_diagnostics || {};
   const egress = telemetry.egress || {};
+  const relayHealth = live?.relay_health || {};
   const framePipeline = state.status.photo_pipeline || {};
   const remoteBelaui = telemetry.remote_belaui || state.status.remote_belaui || {};
   const cameraFtp = ftp.camera_ftp || {};
@@ -557,6 +558,7 @@ function renderDevicePanel(deviceId) {
         <span class="pill ${diagnostics.state === "complete" ? "online" : diagnostics.state === "failed" ? "warn" : ""}">${escapeHtml(diagnosticStateLabel(diagnostics.state))}</span>
       </div>
       <p class="hint">Test each Belabox interface against the Internet or this FRAME host. Tests are uncapped and can compete with an active stream.</p>
+      ${relayProbeMarkup(relayHealth)}
       <dl class="advanced-only">${rows([
         ["Target", diagnosticTargetLabel(diagnostics)],
         ["Current", diagnostics.current_interface ? `${diagnostics.current_interface} - ${diagnosticPhaseLabel(diagnostics.current_phase)}` : "Idle"],
@@ -2114,6 +2116,55 @@ function friendlyLaneName(lane, index) {
 function egressSummary(value) {
   if (!value?.lane_count) return "Waiting";
   return `${value.healthy_lane_count || 0}/${value.lane_count} healthy`;
+}
+
+function relayProbeMarkup(health) {
+  const lanes = Array.isArray(health?.lanes) ? health.lanes : [];
+  const updatedAt = Date.parse(health?.updated_at || "");
+  const hasSample = Number.isFinite(updatedAt);
+  const stale = !hasSample || Date.now() - updatedAt > 15000;
+  const stateName = stale ? "stale" : health.state || "waiting";
+  const healthy = stateName === "online" || stateName === "degraded";
+  const label = stateName === "online" ? "Online" : stateName === "degraded" ? "Degraded" : stateName === "offline" ? "Offline" : stateName === "error" ? "Error" : stale ? "Stale" : "Waiting";
+  const lowest = Number.isFinite(Number(health?.rtt_ms)) ? `${Math.round(Number(health.rtt_ms))} ms` : "Unavailable";
+  const probeTarget = health?.probe_host ? `${health.probe_host}:${health.probe_port || 443}` : "Waiting for agent";
+  const relayTarget = health?.host ? `${health.host}:${health.port || 5000}/UDP` : "Waiting for catalog";
+
+  return `<div class="relay-probe-block" aria-label="Continuous FRAME control-path probe">
+    <div class="status-card-heading">
+      <div><p class="eyebrow">Continuous check</p><h4>FRAME Control Path</h4></div>
+      <span class="pill ${healthy ? "online" : "warn"}">${label}</span>
+    </div>
+    <dl>${rows([
+      ["Lowest response", lowest],
+      ["Sample age", hasSample ? formatAge(health.updated_at) : "Waiting"],
+    ])}</dl>
+    <p class="hint">Lightweight TCP reachability used by the remote BelaUI badge. This is not UDP SRTLA RTT or an MTU test.</p>
+    <div class="relay-probe-details advanced-only">
+      <dl>${rows([
+        ["Probe target", `${probeTarget}/TCP`],
+        ["Relay destination", relayTarget],
+        ["Reachable interfaces", `${Number(health?.reachable_lane_count || 0)}/${Number(health?.lane_count || lanes.length || 0)}`],
+      ])}</dl>
+      ${relayProbeLaneMarkup(lanes, stale)}
+    </div>
+  </div>`;
+}
+
+function relayProbeLaneMarkup(lanes, stale) {
+  if (!lanes.length) return `<p class="hint">Waiting for per-interface relay checks.</p>`;
+  return `<div class="diagnostic-results" aria-label="Relay probe interface results">${lanes.map((lane, index) => {
+    const stateName = stale ? "running" : lane.reachable === true ? "complete" : lane.reachable === false ? "failed" : "running";
+    const badgeLabel = stale ? "Stale" : lane.reachable === true ? "Online" : lane.reachable === false ? "Offline" : "Waiting";
+    const badgeTone = stateName === "complete" ? "ok" : stateName === "failed" ? "warn" : "running";
+    return `<article class="diagnostic-result ${stateName}">
+      <div class="diagnostic-result-head"><div><strong>${escapeHtml(friendlyLaneName(lane, index))}</strong><span>${escapeHtml(lane.interface_name || "Unknown")} · ${escapeHtml(lane.address || "No address")}</span></div><span class="result-badge ${badgeTone}">${badgeLabel}</span></div>
+      <dl>${rows([
+        ["Response", diagnosticMetric(lane.rtt_ms, "ms")],
+        ["Error", lane.error || "None"],
+      ])}</dl>
+    </article>`;
+  }).join("")}</div>`;
 }
 
 function formatUploadCap(value) {

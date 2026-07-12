@@ -9,6 +9,7 @@ import {
   renderStatsOutput,
   type NormalizedStats,
 } from "./statsOutput";
+import { createLastGoodCache } from "./lastGoodCache";
 
 type SourceType = "sls" | "custom";
 
@@ -129,6 +130,14 @@ if (Boolean(config.username) !== Boolean(config.password)) {
 const app = express();
 const publicDir = path.resolve(process.cwd(), "public");
 const customStatePath = path.join(config.dataRoot, "state/custom-streams.json");
+const slsProfiles = createLastGoodCache(
+  async () => {
+    const result = await upstreamJson<{ data?: StreamId[] }>("/api/stream-ids");
+    return result.data ?? [];
+  },
+  10_000,
+  (error) => console.warn(`[streams] Receiver stream registry unavailable; using last known list: ${errorMessage(error)}`),
+);
 app.disable("x-powered-by");
 app.use(express.json({ limit: "32kb" }));
 
@@ -263,6 +272,7 @@ app.post("/slsui/api/streams", async (request, response, next) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(stream),
     });
+    if (upstream.ok) slsProfiles.invalidate();
     response.status(upstream.status).json(await upstream.json());
   } catch (error) {
     next(error);
@@ -287,6 +297,7 @@ app.delete("/slsui/api/streams/:id", async (request, response, next) => {
       response.status(upstream.status).json(result);
       return;
     }
+    slsProfiles.invalidate();
     response.status(upstream.status).json(await withOverlayCleanup(id, result));
   } catch (error) {
     next(error);
@@ -381,12 +392,7 @@ async function readProfile(id: string): Promise<StreamProfile | null> {
 }
 
 async function readSlsProfiles(): Promise<StreamId[]> {
-  try {
-    const result = await upstreamJson<{ data?: StreamId[] }>("/api/stream-ids");
-    return result.data ?? [];
-  } catch {
-    return [];
-  }
+  return await slsProfiles.read();
 }
 
 async function readStats(id: string): Promise<PublisherStats | null> {

@@ -545,6 +545,10 @@ test("Belabox pairing UI hides MQTT implementation details", async () => {
   assert.ok(frontend.includes('name="diagnostic_target"'), "Diagnostics should expose Internet and FRAME targets");
   assert.ok(frontend.includes('id="speed-test-interface"'), "Diagnostics should expose an interface selector");
   assert.ok(frontend.includes("diagnosticResultsMarkup"), "Diagnostics should present per-interface results");
+  assert.ok(frontend.includes("relayProbeMarkup"), "Diagnostics should present continuous relay probe results");
+  assert.ok(frontend.includes("FRAME Control Path"), "Relay diagnostics should distinguish control-path RTT from SRTLA RTT");
+  assert.ok(frontend.includes("probe_host"), "Relay diagnostics should identify the endpoint being measured");
+  assert.ok(frontend.includes("Sample age"), "Relay diagnostics should expose stale probe samples");
   assert.ok(frontend.includes('class="result-badge ${badgeTone}"'), "Diagnostic results should expose authoritative status badges");
   assert.ok(frontend.includes("waitForDiagnosticCompletion"), "Diagnostics should wait for final telemetry after command acknowledgement");
   assert.ok(frontend.includes('state.workspaceTab = "diagnostics"'), "Completed diagnostics should remain on their result tab");
