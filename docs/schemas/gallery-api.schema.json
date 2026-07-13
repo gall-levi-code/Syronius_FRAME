@@ -5,14 +5,15 @@
     "date": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["date_folder", "count", "first_at", "latest_at", "duration_ms", "cover_thumbnail_url"],
+      "required": ["date_folder", "count", "first_at", "latest_at", "duration_ms", "cover_thumbnail_url", "has_explore"],
       "properties": {
         "date_folder": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
         "count": { "type": "integer", "minimum": 1 },
         "first_at": { "type": ["string", "null"], "format": "date-time" },
         "latest_at": { "type": ["string", "null"], "format": "date-time" },
         "duration_ms": { "type": "integer", "minimum": 0 },
-        "cover_thumbnail_url": { "type": ["string", "null"], "pattern": "^/gallery/thumb/" }
+        "cover_thumbnail_url": { "type": ["string", "null"], "pattern": "^/gallery/thumb/" },
+        "has_explore": { "type": "boolean" }
       }
     },
     "photo": {
@@ -27,6 +28,7 @@
         "height",
         "orientation",
         "processed_at",
+        "capture_clock",
         "camera_text"
       ],
       "properties": {
@@ -38,6 +40,7 @@
         "height": { "type": ["integer", "null"], "minimum": 1 },
         "orientation": { "type": "integer", "enum": [0, 1] },
         "processed_at": { "type": "string", "format": "date-time" },
+        "capture_clock": { "type": ["string", "null"] },
         "camera_text": { "type": "string" }
       }
     },
@@ -158,6 +161,20 @@
       "required": ["branding"],
       "properties": {
         "branding": { "$ref": "#/$defs/branding" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["date_folder", "explore"],
+      "properties": {
+        "date_folder": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "explore": {
+          "oneOf": [
+            { "$ref": "gallery-explore.schema.json" },
+            { "type": "null" }
+          ]
+        }
       }
     }
   ]

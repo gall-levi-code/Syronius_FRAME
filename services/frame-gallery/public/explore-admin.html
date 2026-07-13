@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#071923">
+    <title>Gallery Explore Admin | FRAME</title>
+    <link rel="icon" href="/gallery/assets/frame-logo-square.svg" type="image/svg+xml">
+    <script>
+      (() => {
+        try {
+          const mode = localStorage.getItem("frame-theme") || localStorage.getItem("frame-gallery-theme-mode");
+          if (mode === "day" || mode === "night") {
+            document.documentElement.dataset.theme = mode;
+            document.documentElement.dataset.themeMode = mode;
+          }
+        } catch {}
+      })();
+    </script>
+    <script src="/assets/frame-theme.js?v=global-theme-v1"></script>
+    <link rel="stylesheet" href="/gallery/assets/admin.css?v=explore-6">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  </head>
+  <body class="explore-admin-page">
+    <header class="topbar">
+      <a class="brand" href="/gallery/admin" aria-label="Back to Gallery Admin">
+        <img src="/gallery/assets/frame-logo-square.svg" alt="">
+        <span><small>Syronius FRAME</small><strong>Explore Admin</strong></span>
+      </a>
+      <div class="header-actions">
+        <a class="gallery-button" href="/gallery/admin">Gallery Admin</a>
+        <a id="open-gallery" class="gallery-button" href="/gallery">Open gallery</a>
+      </div>
+    </header>
+
+    <main>
+      <section class="page-heading">
+        <div>
+          <p>Gallery route and photo placement</p>
+          <h1 id="page-title">Explore</h1>
+          <span id="page-summary">Loading gallery...</span>
+        </div>
+        <span id="status" class="status" role="status" aria-live="polite">Connecting</span>
+      </section>
+
+      <div class="explore-admin-layout">
+        <section class="branding-panel explore-controls" aria-labelledby="route-heading">
+          <div class="mini-heading">
+            <div><strong id="route-heading">GPX routes</strong><small>Add each stream session for this day.</small></div>
+          </div>
+          <aside id="privacy-warning" class="privacy-warning" role="note" aria-label="Precise location privacy warning">
+            <button id="dismiss-privacy-warning" class="privacy-warning-dismiss" type="button" aria-label="Acknowledge and dismiss precise location warning" title="Acknowledge and do not show again">&times;</button>
+            <strong>Review precise locations before publishing.</strong>
+            <span>Saving Explore publishes the route and mapped photo locations to everyone who can view this gallery. Configure RTIRL privacy zones first: they disable tracking near home or other unsafe locations. Check every route here before saving.</span>
+          </aside>
+          <label class="gpx-picker">
+            <span>Attach GPX files</span>
+            <input id="gpx-input" type="file" multiple accept=".gpx,application/gpx+xml,application/xml,text/xml">
+          </label>
+          <ol id="route-list" class="route-list"></ol>
+          <p id="no-routes" class="inline-empty">No route attached yet.</p>
+
+          <div class="mini-heading explore-subheading">
+            <div><strong>Camera time alignment</strong><small>Use camera capture time, then fine-tune clock drift.</small></div>
+          </div>
+          <div class="field-grid explore-time-fields">
+            <label>Coarse shift (seconds)<input id="time-shift" type="number" min="-86400" max="86400" step="900" inputmode="numeric"></label>
+            <label>Fine adjustment (seconds)<input id="time-adjustment" type="number" min="-86400" max="86400" step="1" inputmode="numeric"></label>
+          </div>
+          <button id="auto-align" class="secondary-button" type="button">Auto-align camera time</button>
+          <small id="alignment-summary">Waiting for a route and capture timestamps.</small>
+        </section>
+
+        <section class="branding-panel explore-map-panel" aria-labelledby="map-heading">
+          <div class="mini-heading explore-map-heading">
+            <div><strong id="map-heading">Map preview</strong><small id="map-summary">No mapped photos</small></div>
+            <div class="map-preview-actions">
+              <button id="delete-explore" class="danger-button compact-button" type="button" hidden>Unpublish</button>
+              <button id="save-explore" class="restore-button compact-button" type="button">Save and publish Explore</button>
+            </div>
+          </div>
+          <div id="explore-map" class="explore-admin-map" role="region" aria-label="Route and photo placement map"></div>
+          <div class="explore-photo-strip">
+            <button id="photo-previous" class="explore-strip-nav explore-strip-previous" type="button" aria-label="Previous photo">&#8249;</button>
+            <div id="photo-list" class="explore-photo-list"></div>
+            <button id="photo-next" class="explore-strip-nav explore-strip-next" type="button" aria-label="Next photo">&#8250;</button>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <dialog id="unpublish-dialog" class="preset-dialog confirm-dialog" aria-labelledby="unpublish-title">
+      <form method="dialog" class="dialog-panel">
+        <div class="dialog-heading"><p>Unpublish Explore</p><h2 id="unpublish-title">Remove this Explore view?</h2></div>
+        <p class="dialog-copy">This removes the published routes and manual photo placements from Explore. Your photos remain published.</p>
+        <div class="dialog-actions">
+          <button class="secondary-button" type="submit" value="cancel" autofocus>Cancel</button>
+          <button class="danger-button" type="submit" value="unpublish">Unpublish Explore</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <script type="module" src="/gallery/assets/explore-admin.js?v=explore-8"></script>
+  </body>
+</html>

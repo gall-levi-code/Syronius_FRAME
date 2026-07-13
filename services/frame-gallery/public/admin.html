@@ -29,7 +29,7 @@
       })();
     </script>
     <script src="/assets/frame-theme.js?v=global-theme-v1"></script>
-    <link rel="stylesheet" href="/gallery/assets/admin.css?v=logo-crop-4">
+    <link rel="stylesheet" href="/gallery/assets/admin.css?v=explore-4">
   </head>
   <body>
     <header class="topbar">
@@ -72,7 +72,10 @@
           <section id="album-detail" class="album-detail" hidden>
             <div class="section-heading">
               <div><p>Published album</p><h2 id="album-title"></h2><span id="album-summary"></span></div>
-              <button id="trash-album" class="danger-button" type="button">Move album to trash</button>
+              <div class="section-actions">
+                <a id="manage-explore" class="restore-button" href="/gallery/admin/explore">Manage Explore</a>
+                <button id="trash-album" class="danger-button" type="button">Move album to trash</button>
+              </div>
             </div>
             <div id="photos" class="photo-grid"></div>
           </section>
@@ -274,6 +277,6 @@
       </article>
     </template>
 
-    <script type="module" src="/gallery/assets/admin.js?v=logo-crop-4"></script>
+    <script type="module" src="/gallery/assets/admin.js?v=explore-4"></script>
   </body>
 </html>

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import { watch } from "node:fs";
-import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -61,7 +61,14 @@ test("extracts camera EXIF into the reusable camera information sidecar", async 
     .jpeg()
     .withExif({
       IFD0: { Make: "FRAME", Model: "Test Camera" },
-      IFD2: { ISOSpeedRatings: "200", FNumber: "2.8", ExposureTime: "0.008", FocalLength: "35", LensModel: "Test Lens\0\0" },
+      IFD2: {
+        ISOSpeedRatings: "200",
+        FNumber: "2.8",
+        ExposureTime: "0.008",
+        FocalLength: "35",
+        LensModel: "Test Lens\0\0",
+        DateTimeOriginal: "2026:07:12 20:00:30",
+      },
     })
     .toFile(path.join(root, "staging", "Camera Photo.jpg"));
 
@@ -73,6 +80,7 @@ test("extracts camera EXIF into the reusable camera information sidecar", async 
   const sidecar = JSON.parse(await readFile(path.join(gallery, `${latest.latest_base}.json`), "utf8"));
   assert.equal(cameraText, "Shot on Test Camera with the Test Lens @ 35mm\n1/125s • f/2.8 • ISO 200\n");
   assert.equal(JSON.stringify(sidecar.exif).includes("\\u0000"), false);
+  assert.equal(sidecar.exif.Photo.DateTimeOriginal, "2026-07-12T20:00:30.000Z");
   assert.ok(Object.keys(sidecar.exif).length > 0);
 });
 
@@ -194,6 +202,35 @@ test("pipeline still resizes oversized JPEGs", async () => {
   assert.notDeepEqual(await readFile(outputPath), original);
 });
 
+test("persists multiple validated Explore routes", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-pipeline-"));
+  const pipeline = new PhotoPipeline(config(root));
+  await pipeline.init();
+  const date = currentDateFolder();
+  const candidate = exploreCandidate("manual-photo");
+
+  const saved = await pipeline.saveExplore(date, candidate);
+
+  assert.equal(saved.routes.length, 2);
+  assert.equal(saved.time_adjustment_seconds, -14.5);
+  assert.deepEqual(saved.placements, {});
+  assert.notEqual(saved.updated_at, candidate.updated_at);
+  assert.deepEqual(JSON.parse(await readFile(path.join(root, "galleries", date, "_explore.json"), "utf8")), saved);
+
+  await writeFile(path.join(root, "galleries", date, "manual-photo.ready"), "ready\n");
+  assert.equal((await pipeline.saveExplore(date, candidate)).placements["manual-photo"].timestamp, 1_500);
+
+  const invalidTimestamp = structuredClone(candidate);
+  invalidTimestamp.placements["manual-photo"].timestamp = 1.5;
+  await assert.rejects(pipeline.saveExplore(date, invalidTimestamp), /timestamp/);
+
+  const invalid = structuredClone(candidate);
+  invalid.routes[0].segments[0][1][2] = 181;
+  await assert.rejects(pipeline.saveExplore(date, invalid), /coordinates/);
+  await pipeline.deleteExplore(date);
+  await assert.rejects(readFile(path.join(root, "galleries", date, "_explore.json"), "utf8"));
+});
+
 test("trash and restore preserve ready while every management change advances latest state", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-pipeline-"));
   const pipeline = new PhotoPipeline(config(root));
@@ -206,12 +243,15 @@ test("trash and restore preserve ready while every management change advances la
   const published = JSON.parse(await readFile(path.join(root, "state", "latest.json"), "utf8"));
   const gallery = path.join(root, "galleries", published.date_folder);
   const ready = path.join(gallery, `${published.latest_base}.ready`);
+  await pipeline.saveExplore(published.date_folder, exploreCandidate(published.latest_base));
   const trashed = await pipeline.managePhotos("trash-photo", published.date_folder, published.latest_base);
   assert.equal(trashed.latest_base, null);
   assert.equal(trashed.count_today, 0);
   assert.notEqual(trashed.updated_at, published.updated_at);
   assert.equal((await readFile(ready, "utf8")).length > 0, true);
   assert.equal(JSON.parse(await readFile(path.join(gallery, `${published.latest_base}.trashed.json`), "utf8")).base, published.latest_base);
+  assert.ok(JSON.parse(await readFile(path.join(gallery, "_explore.json"), "utf8")).placements[published.latest_base]);
+  assert.ok((await pipeline.saveExplore(published.date_folder, exploreCandidate(published.latest_base))).placements[published.latest_base]);
 
   const restored = await pipeline.managePhotos("restore-photo", published.date_folder, published.latest_base);
   assert.equal(restored.latest_base, published.latest_base);
@@ -223,7 +263,38 @@ test("trash and restore preserve ready while every management change advances la
   const purged = await pipeline.managePhotos("purge-photo", published.date_folder, published.latest_base);
   assert.equal(purged.latest_base, null);
   await assert.rejects(readFile(ready, "utf8"));
+  assert.equal(JSON.parse(await readFile(path.join(gallery, "_explore.json"), "utf8")).placements[published.latest_base], undefined);
+  assert.equal((await pipeline.saveExplore(published.date_folder, exploreCandidate(published.latest_base))).placements[published.latest_base], undefined);
   assert.equal((await readdir(root)).includes("today"), false);
+});
+
+test("failed permanent deletion keeps its trash marker and Explore placement for retry", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-pipeline-"));
+  const pipeline = new PhotoPipeline(config(root));
+  await pipeline.init();
+  await sharp({ create: { width: 160, height: 90, channels: 3, background: "#2cb4fb" } })
+    .jpeg()
+    .toFile(path.join(root, "staging", "Retry Photo.jpg"));
+  await pipeline.processOnce();
+
+  const published = JSON.parse(await readFile(path.join(root, "state", "latest.json"), "utf8"));
+  const gallery = path.join(root, "galleries", published.date_folder);
+  const image = path.join(gallery, `${published.latest_base}.jpg`);
+  const marker = path.join(gallery, `${published.latest_base}.trashed.json`);
+  await pipeline.saveExplore(published.date_folder, exploreCandidate(published.latest_base));
+  await pipeline.managePhotos("trash-photo", published.date_folder, published.latest_base);
+  await rm(image);
+  await mkdir(image);
+  await writeFile(path.join(image, "locked"), "retry\n");
+
+  await assert.rejects(pipeline.managePhotos("purge-photo", published.date_folder, published.latest_base));
+  await readFile(marker, "utf8");
+  assert.ok(JSON.parse(await readFile(path.join(gallery, "_explore.json"), "utf8")).placements[published.latest_base]);
+
+  await rm(image, { recursive: true, force: true });
+  assert.equal((await pipeline.managePhotos("purge-photo", published.date_folder, published.latest_base)).affected, 1);
+  await assert.rejects(readFile(marker, "utf8"));
+  assert.equal(JSON.parse(await readFile(path.join(gallery, "_explore.json"), "utf8")).placements[published.latest_base], undefined);
 });
 
 test("trashing the latest photo recalculates latest_base to the newest visible publication", async () => {
@@ -278,4 +349,19 @@ function currentDateFolder() {
     month: "2-digit",
     day: "2-digit",
   }).format(new Date());
+}
+
+function exploreCandidate(base) {
+  const importedAt = "2026-07-13T01:00:00.000Z";
+  return {
+    schema_version: 1,
+    updated_at: "2000-01-01T00:00:00.000Z",
+    time_shift_seconds: 18_000,
+    time_adjustment_seconds: -14.5,
+    routes: [
+      { id: "round-one", name: "Round one.gpx", imported_at: importedAt, segments: [[[1_000, 41, -87], [2_000, 41.1, -87.1]]] },
+      { id: "round-two", name: "Round two.gpx", imported_at: importedAt, segments: [[[3_000, 41.2, -87.2], [4_000, 41.3, -87.3]]] },
+    ],
+    placements: { [base]: { lat: 41.05, lon: -87.05, timestamp: 1_500, updated_at: importedAt } },
+  };
 }
