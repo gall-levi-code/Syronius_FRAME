@@ -1,7 +1,7 @@
 const elements = Object.fromEntries([
   "summary", "status", "content-management-tab", "gallery-styling-tab", "published-tab",
   "trash-tab", "published-count", "trash-count", "content-management-view", "gallery-styling-view",
-  "published-view", "trash-view", "albums", "album-detail", "album-title", "album-summary", "trash-album",
+  "published-view", "trash-view", "albums", "album-detail", "album-title", "album-summary", "manage-explore", "trash-album",
   "photos", "trash-albums", "empty-trash", "empty", "branding-summary", "save-branding", "branding-form",
   "brand-name-input", "gallery-title-input", "default-mode", "preset-trigger", "preset-trigger-swatches",
   "preset-trigger-name", "preset-trigger-meta", "preset-menu", "new-preset", "logo-preview", "logo-input",
@@ -42,7 +42,7 @@ const state = {
   dates: [],
   photos: [],
   trash: [],
-  selectedDate: null,
+  selectedDate: new URLSearchParams(location.search).get("date"),
   section: "content",
   contentView: "published",
   busy: false,
@@ -206,6 +206,7 @@ function renderAlbums() {
   if (!selected) return;
   elements.album_title.textContent = formatDate(selected.date_folder);
   elements.album_summary.textContent = `${photoLabel(selected.count)} - ${durationLabel(selected.duration_ms)}`;
+  elements.manage_explore.href = `/gallery/admin/explore?date=${encodeURIComponent(selected.date_folder)}`;
   elements.photos.replaceChildren(...state.photos.map((photo) => {
     const card = templates.photo.content.firstElementChild.cloneNode(true);
     card.querySelector("img").src = photo.thumbnail_url;

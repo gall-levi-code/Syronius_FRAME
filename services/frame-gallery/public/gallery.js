@@ -1,8 +1,11 @@
+import { captureTimestamp, matchExplorePhotos, routeSegments, simulatedRouteSegments } from "./explore.js?v=gallery-explore-7";
+
 const elements = {
   home: document.querySelector("#gallery-home"),
   brandLogo: document.querySelector("#brand-logo"),
   brandName: document.querySelector("#brand-name"),
   galleryTitle: document.querySelector("#gallery-title"),
+  manage: document.querySelector("#manage-gallery"),
   allGalleries: document.querySelector("#all-galleries"),
   headingEyebrow: document.querySelector("#heading-eyebrow"),
   heading: document.querySelector("#date-heading"),
@@ -12,6 +15,16 @@ const elements = {
   themeToggle: document.querySelector("#theme-toggle"),
   dateGallery: document.querySelector("#date-gallery"),
   photoGallery: document.querySelector("#photo-gallery"),
+  viewSwitch: document.querySelector("#view-switch"),
+  photosView: document.querySelector("#photos-view"),
+  exploreView: document.querySelector("#explore-view"),
+  explorePanel: document.querySelector("#explore-panel"),
+  exploreMap: document.querySelector("#explore-map"),
+  exploreMapState: document.querySelector("#explore-map-state"),
+  exploreSummary: document.querySelector("#explore-summary"),
+  explorePrevious: document.querySelector("#explore-previous"),
+  exploreNext: document.querySelector("#explore-next"),
+  exploreFilmstrip: document.querySelector("#explore-filmstrip"),
   empty: document.querySelector("#empty"),
   dateTemplate: document.querySelector("#date-template"),
   photoTemplate: document.querySelector("#photo-template"),
@@ -21,6 +34,8 @@ const elements = {
   lightboxTitle: document.querySelector("#lightbox-title"),
   lightboxPosition: document.querySelector("#lightbox-position"),
   lightboxDetails: document.querySelector("#lightbox-details"),
+  lightboxCameraText: document.querySelector("#lightbox-camera-text"),
+  lightboxExplore: document.querySelector("#lightbox-explore"),
   lightboxPrevious: document.querySelector("#lightbox-previous"),
   lightboxNext: document.querySelector("#lightbox-next"),
   lightboxClose: document.querySelector("#lightbox-close"),
@@ -31,6 +46,7 @@ const elements = {
 const icons = {
   moon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.4 15.1A8.4 8.4 0 0 1 8.9 3.6 8.5 8.5 0 1 0 20.4 15.1Z"/></svg>`,
   sun: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/></svg>`,
+  map: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18-6 3V6l6-3 6 3 6-3v15l-6 3-6-3Z"/><path d="M9 3v15"/><path d="M15 6v15"/><circle cx="12" cy="10" r="2"/></svg>`,
 };
 
 const ZOOM_MIN = 25;
@@ -41,9 +57,19 @@ const PAN_DRAG_THRESHOLD = 12;
 const PAN_EASING_RATE = 0.2;
 const PAN_SETTLE_THRESHOLD = 0.75;
 const route = parseRoute();
+const initialUrlState = readUrlState();
 const state = {
   dates: [],
   photos: [],
+  explore: null,
+  exploreCheckedAt: 0,
+  matches: new Map(),
+  view: initialUrlState.view,
+  selectedBase: initialUrlState.photo,
+  map: null,
+  mapLayers: null,
+  mapDirty: true,
+  markers: new Map(),
   currentIndex: -1,
   signature: "",
   branding: null,
@@ -60,8 +86,19 @@ const finePointer = matchMedia("(pointer: fine)");
 elements.home.href = route.root;
 elements.allGalleries.href = route.root;
 elements.lightboxImage.draggable = false;
+elements.lightboxExplore.innerHTML = `${icons.map}<span>View on map</span>`;
 
 elements.themeToggle.addEventListener("click", toggleTheme);
+elements.photosView.addEventListener("click", () => setGalleryView("photos", { history: "push" }));
+elements.exploreView.addEventListener("click", () => setGalleryView("explore", { history: "push" }));
+elements.explorePrevious.addEventListener("click", () => moveExplore(-1));
+elements.exploreNext.addEventListener("click", () => moveExplore(1));
+elements.lightboxExplore.addEventListener("click", () => {
+  const photo = state.photos[state.currentIndex];
+  if (!photo || !state.matches.has(photo.base)) return;
+  elements.lightbox.close();
+  selectExplorePhoto(photo.base, { history: "push", focus: true });
+});
 systemTheme.addEventListener("change", () => applyBranding());
 window.addEventListener("storage", (event) => {
   if (event.key === "frame-theme-profile") {
@@ -110,10 +147,21 @@ document.addEventListener("keydown", (event) => {
     moveLightbox(1);
   }
 });
+window.addEventListener("popstate", () => {
+  const urlState = readUrlState();
+  state.view = urlState.view;
+  state.selectedBase = urlState.photo;
+  if (route.date) applyGalleryView({ openPopup: true });
+});
 
 await loadBranding();
 await refresh(true);
-setInterval(() => refresh(false), 5000);
+setInterval(() => {
+  if (!document.hidden) refresh(false);
+}, 5000);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) refresh(false);
+});
 
 async function loadBranding() {
   try {
@@ -206,15 +254,36 @@ function writeStoredTheme(mode) {
 async function refresh(forceRender) {
   try {
     elements.refreshState.textContent = "Refreshing...";
-    const datesResult = await requestJson("/gallery/api/dates");
-    state.dates = datesResult.dates;
     if (route.date) {
-      const photosResult = await requestJson(`/gallery/api/photos?date=${encodeURIComponent(route.date)}`);
+      const [datesResult, photosResult] = await Promise.all([
+        requestJson("/gallery/api/dates"),
+        requestJson(`/gallery/api/photos?date=${encodeURIComponent(route.date)}`),
+      ]);
+      state.dates = datesResult.dates;
       state.photos = photosResult.photos;
+      const date = state.dates.find((item) => item.date_folder === route.date);
+      if (date?.has_explore === false) {
+        state.explore = null;
+        state.exploreCheckedAt = Date.now();
+      } else if (forceRender || (!state.explore && date?.has_explore) || Date.now() - state.exploreCheckedAt >= 30_000) {
+        state.explore = unwrapExplore(await requestOptionalJson(
+          `/gallery/api/explore?date=${encodeURIComponent(route.date)}`,
+          { cache: "no-cache" },
+        ));
+        state.exploreCheckedAt = Date.now();
+      }
+      state.matches = matchExplorePhotos(state.photos, state.explore);
+    } else {
+      state.dates = (await requestJson("/gallery/api/dates")).dates;
     }
     const signature = JSON.stringify([
-      state.dates.map((date) => [date.date_folder, date.count, date.latest_at]),
-      state.photos.map((photo) => [photo.base, photo.processed_at]),
+      state.dates.map((date) => [date.date_folder, date.count, date.latest_at, date.has_explore]),
+      state.photos.map((photo) => [photo.base, photo.processed_at, photo.capture_clock]),
+      state.explore && [
+        state.explore.updated_at,
+        state.explore.routes?.map((item) => [item.id, item.segments?.length, item.segments?.reduce((sum, segment) => sum + segment.length, 0)]),
+        Object.keys(state.explore.placements || {}).sort(),
+      ],
     ]);
     if (forceRender || signature !== state.signature) {
       state.signature = signature;
@@ -234,31 +303,44 @@ function renderDates() {
   elements.count.textContent = `${total} photo${total === 1 ? "" : "s"}`;
   elements.empty.hidden = state.dates.length > 0;
   elements.photoGallery.hidden = true;
+  elements.explorePanel.hidden = true;
+  document.body.classList.remove("is-exploring");
+  elements.viewSwitch.hidden = true;
   elements.dateGallery.hidden = false;
   elements.allGalleries.hidden = true;
   elements.dateGallery.replaceChildren(...state.dates.map((date) => {
     const card = elements.dateTemplate.content.firstElementChild.cloneNode(true);
     const link = card.querySelector("a");
     const image = card.querySelector("img");
-    link.href = `${route.root}/${date.date_folder}/`;
+    const dayHref = `${route.root}/${date.date_folder}/`;
+    link.href = dayHref;
     image.src = date.cover_thumbnail_url || "/gallery/assets/frame-logo-square.svg";
     image.alt = `First photo from ${formatLongDate(date.date_folder)}`;
     card.querySelector("strong").textContent = formatLongDate(date.date_folder);
     card.querySelector(".date-card-stats").textContent = `${photoLabel(date.count)} - ${durationLabel(date.duration_ms)}`;
+    const mapLink = card.querySelector(".date-map-jump");
+    if (date.has_explore) {
+      mapLink.hidden = false;
+      mapLink.href = `${dayHref}?view=explore`;
+      mapLink.innerHTML = icons.map;
+      mapLink.setAttribute("aria-label", `Explore ${formatLongDate(date.date_folder)} on a map`);
+      mapLink.title = "Explore map";
+    }
     return card;
   }));
 }
 
 function renderDay() {
   const date = state.dates.find((item) => item.date_folder === route.date);
+  const canExplore = hasExplore();
   elements.headingEyebrow.textContent = "Published photos";
   elements.heading.textContent = formatLongDate(route.date);
   elements.summary.textContent = date ? `${photoLabel(date.count)} - ${durationLabel(date.duration_ms)}` : photoLabel(state.photos.length);
   elements.count.textContent = photoLabel(state.photos.length);
-  elements.empty.hidden = state.photos.length > 0;
   elements.dateGallery.hidden = true;
-  elements.photoGallery.hidden = false;
+  elements.viewSwitch.hidden = !canExplore;
   elements.allGalleries.hidden = false;
+  state.mapDirty = true;
   elements.photoGallery.replaceChildren(...state.photos.map((photo, index) => {
     const card = elements.photoTemplate.content.firstElementChild.cloneNode(true);
     const image = card.querySelector("img");
@@ -266,12 +348,23 @@ function renderDay() {
     image.alt = friendlyBase(photo.base);
     card.querySelector("strong").textContent = friendlyBase(photo.base);
     card.querySelector("small").textContent = formatTime(photo.processed_at);
-    card.querySelector("button").addEventListener("click", () => openLightbox(index));
+    card.querySelector(".photo-open").addEventListener("click", () => openLightbox(index));
+    const mapButton = card.querySelector(".photo-map-jump");
+    if (state.matches.has(photo.base)) {
+      mapButton.hidden = false;
+      mapButton.innerHTML = icons.map;
+      mapButton.setAttribute("aria-label", `Show ${friendlyBase(photo.base)} on the map`);
+      mapButton.title = "Show on map";
+      mapButton.addEventListener("click", () => selectExplorePhoto(photo.base, { history: "push", focus: true }));
+    }
     return card;
   }));
+  renderExploreFilmstrip();
+  applyGalleryView({ rebuildMap: true, openPopup: Boolean(state.selectedBase) });
 }
 
 function openLightbox(index) {
+  if (!state.photos[index]) return;
   state.currentIndex = index;
   resetZoomState();
   elements.lightbox.showModal();
@@ -293,11 +386,242 @@ function renderLightbox() {
   elements.lightboxImage.alt = friendlyBase(photo.base);
   elements.lightboxTitle.textContent = friendlyBase(photo.base);
   elements.lightboxPosition.textContent = `${state.currentIndex + 1} of ${state.photos.length}`;
-  elements.lightboxDetails.textContent = photo.camera_text || "Camera information unavailable";
-  elements.lightboxDetails.hidden = !photo.camera_text;
+  elements.lightboxCameraText.textContent = photo.camera_text || "";
+  elements.lightboxCameraText.hidden = !photo.camera_text;
+  elements.lightboxExplore.hidden = !state.matches.has(photo.base);
+  elements.lightboxDetails.hidden = !photo.camera_text && elements.lightboxExplore.hidden;
   elements.lightboxPrevious.disabled = state.currentIndex <= 0;
   elements.lightboxNext.disabled = state.currentIndex >= state.photos.length - 1;
   applyZoom();
+}
+
+function hasExplore() {
+  return routeSegments(state.explore).some((segment) => segment.length > 0) || state.matches.size > 0;
+}
+
+function setGalleryView(view, options = {}) {
+  const nextView = view === "explore" && hasExplore() ? "explore" : "photos";
+  const changed = state.view !== nextView || (nextView === "photos" && state.selectedBase);
+  state.view = nextView;
+  if (state.view === "photos") state.selectedBase = null;
+  if (options.history && changed) writeUrlState(options.history);
+  applyGalleryView();
+}
+
+function applyGalleryView(options = {}) {
+  if (state.view === "explore" && !hasExplore()) {
+    state.view = "photos";
+    state.selectedBase = null;
+    writeUrlState("replace");
+  }
+  const exploring = state.view === "explore";
+  document.body.classList.toggle("is-exploring", exploring);
+  elements.manage.href = route.date
+    ? exploring
+      ? `/gallery/admin/explore?date=${encodeURIComponent(route.date)}`
+      : `/gallery/admin?date=${encodeURIComponent(route.date)}`
+    : "/today/gallery/admin";
+  elements.photosView.setAttribute("aria-pressed", String(!exploring));
+  elements.exploreView.setAttribute("aria-pressed", String(exploring));
+  elements.photoGallery.hidden = exploring;
+  elements.explorePanel.hidden = !exploring;
+  elements.empty.hidden = exploring || state.photos.length > 0;
+  if (!exploring) return;
+
+  requestAnimationFrame(() => {
+    if (options.rebuildMap || state.mapDirty || !state.mapLayers) renderExploreMap();
+    else state.map?.invalidateSize();
+    if (state.selectedBase && state.matches.has(state.selectedBase)) {
+      showExploreSelection(state.selectedBase, options);
+    } else if (state.selectedBase) {
+      state.selectedBase = null;
+      writeUrlState("replace");
+      clearExploreSelection();
+    } else {
+      clearExploreSelection();
+    }
+  });
+}
+
+function selectExplorePhoto(base, options = {}) {
+  if (!state.matches.has(base)) return;
+  const changed = state.view !== "explore" || state.selectedBase !== base;
+  state.view = "explore";
+  state.selectedBase = base;
+  if (options.history && changed) writeUrlState(options.history);
+  applyGalleryView({ openPopup: true, ...options });
+}
+
+function moveExplore(offset) {
+  const bases = [...elements.exploreFilmstrip.querySelectorAll("button[data-base]")].map((button) => button.dataset.base);
+  if (!bases.length) return;
+  let index = bases.indexOf(state.selectedBase);
+  if (index < 0) index = offset > 0 ? -1 : 0;
+  selectExplorePhoto(bases[(index + offset + bases.length) % bases.length], { history: "push", openPopup: true, focus: true });
+}
+
+function renderExploreFilmstrip() {
+  const mapped = state.photos.map((photo, index) => ({ photo, index, match: state.matches.get(photo.base) }))
+    .filter((item) => item.match)
+    .sort((left, right) => {
+      const leftTime = Number.isFinite(left.match.time) ? left.match.time : captureSortTime(left.photo);
+      const rightTime = Number.isFinite(right.match.time) ? right.match.time : captureSortTime(right.photo);
+      if (leftTime !== null && rightTime !== null) return leftTime - rightTime;
+      if (leftTime !== null) return -1;
+      if (rightTime !== null) return 1;
+      return left.index - right.index;
+    });
+  elements.exploreSummary.textContent = `${mapped.length} of ${state.photos.length} mapped`;
+  elements.explorePrevious.disabled = mapped.length < 2;
+  elements.exploreNext.disabled = mapped.length < 2;
+  elements.exploreFilmstrip.replaceChildren(...mapped.map(({ photo }) => {
+    const item = document.createElement("div");
+    const button = document.createElement("button");
+    const image = document.createElement("img");
+    const copy = document.createElement("span");
+    const title = document.createElement("strong");
+    const time = document.createElement("small");
+    item.setAttribute("role", "listitem");
+    button.type = "button";
+    button.dataset.base = photo.base;
+    button.setAttribute("aria-label", `Show ${friendlyBase(photo.base)} on the map`);
+    image.src = photo.thumbnail_url;
+    image.alt = "";
+    image.loading = "lazy";
+    title.textContent = friendlyBase(photo.base);
+    time.textContent = captureTimeLabel(photo);
+    copy.append(title, time);
+    button.append(image, copy);
+    button.addEventListener("click", () => selectExplorePhoto(photo.base, { history: "push", openPopup: true }));
+    item.append(button);
+    return item;
+  }));
+}
+
+function renderExploreMap() {
+  if (!window.L) {
+    elements.exploreMapState.textContent = "The map could not load. Check your connection and try again.";
+    elements.exploreMapState.hidden = false;
+    return;
+  }
+  elements.exploreMapState.hidden = true;
+  if (!state.map) {
+    state.map = window.L.map(elements.exploreMap, { preferCanvas: true });
+    window.L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(state.map);
+    state.mapLayers = window.L.layerGroup().addTo(state.map);
+  }
+  state.map.invalidateSize();
+  state.mapLayers.clearLayers();
+  state.markers.clear();
+  const bounds = window.L.latLngBounds();
+  const accent = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#2cb4fb";
+  const markerBorder = getComputedStyle(document.documentElement).getPropertyValue("--surface").trim() || "#0b222e";
+
+  for (const segment of routeSegments(state.explore)) {
+    const points = segment.filter((point) => validMapPoint(point)).map(([, lat, lon]) => [lat, lon]);
+    if (!points.length) continue;
+    window.L.polyline(points, { color: accent, weight: 4, opacity: 0.82 }).addTo(state.mapLayers);
+    points.forEach((point) => bounds.extend(point));
+  }
+  for (const segment of simulatedRouteSegments(state.photos, state.explore)) {
+    const points = segment.filter((point) => validMapPoint(point)).map(([, lat, lon]) => [lat, lon]);
+    if (points.length < 2) continue;
+    window.L.polyline(points, { color: accent, weight: 3, opacity: 0.75, dashArray: "7 8", interactive: false }).addTo(state.mapLayers);
+    points.forEach((point) => bounds.extend(point));
+  }
+  for (const photo of state.photos) {
+    const match = state.matches.get(photo.base);
+    if (!match) continue;
+    const marker = window.L.circleMarker([match.lat, match.lon], {
+      radius: 6,
+      color: markerBorder,
+      weight: 2,
+      fillColor: accent,
+      fillOpacity: 0.95,
+    }).bindPopup(photoPopup(photo), { minWidth: 180, maxWidth: 230, autoPan: false });
+    marker.on("click", () => selectExplorePhoto(photo.base, { history: "push", openPopup: true }));
+    marker.addTo(state.mapLayers);
+    state.markers.set(photo.base, marker);
+    bounds.extend(marker.getLatLng());
+  }
+  if (bounds.isValid()) state.map.fitBounds(bounds, { padding: [24, 24], maxZoom: 16 });
+  state.mapDirty = false;
+}
+
+function showExploreSelection(base, options = {}) {
+  const marker = state.markers.get(base);
+  if (!marker) return;
+  const styles = getComputedStyle(document.documentElement);
+  const accent = styles.getPropertyValue("--secondary").trim() || "#2cfbb3";
+  const defaultColor = styles.getPropertyValue("--accent").trim() || "#2cb4fb";
+  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  for (const [markerBase, item] of state.markers) {
+    item.setStyle({ radius: markerBase === base ? 9 : 6, fillColor: markerBase === base ? accent : defaultColor });
+  }
+  let selectedButton = null;
+  for (const button of elements.exploreFilmstrip.querySelectorAll("button[data-base]")) {
+    const selected = button.dataset.base === base;
+    button.classList.toggle("is-selected", selected);
+    if (selected) {
+      button.setAttribute("aria-current", "true");
+      selectedButton = button;
+    } else {
+      button.removeAttribute("aria-current");
+    }
+  }
+  if (options.center !== false) {
+    const zoom = Math.max(state.map.getZoom(), 15);
+    if (reducedMotion) state.map.setView(marker.getLatLng(), zoom);
+    else state.map.flyTo(marker.getLatLng(), zoom, { duration: 0.65 });
+  }
+  if (options.openPopup) marker.openPopup();
+  selectedButton?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "nearest", inline: "center" });
+  if (options.focus) selectedButton?.focus({ preventScroll: true });
+}
+
+function clearExploreSelection() {
+  state.map?.closePopup();
+  const color = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#2cb4fb";
+  for (const marker of state.markers.values()) marker.setStyle({ radius: 6, fillColor: color });
+  for (const button of elements.exploreFilmstrip.querySelectorAll("button[data-base]")) {
+    button.classList.remove("is-selected");
+    button.removeAttribute("aria-current");
+  }
+}
+
+function photoPopup(photo) {
+  const button = document.createElement("button");
+  const image = document.createElement("img");
+  const title = document.createElement("strong");
+  const time = document.createElement("small");
+  button.type = "button";
+  button.className = "map-popup-photo";
+  button.setAttribute("aria-label", `Open ${friendlyBase(photo.base)}`);
+  image.src = photo.thumbnail_url;
+  image.alt = "";
+  title.textContent = friendlyBase(photo.base);
+  time.textContent = captureTimeLabel(photo);
+  button.append(image, title, time);
+  button.addEventListener("click", () => openLightbox(state.photos.findIndex((item) => item.base === photo.base)));
+  return button;
+}
+
+function validMapPoint(point) {
+  return Array.isArray(point) && Number.isFinite(point[1]) && Number.isFinite(point[2]) && point[1] >= -90 && point[1] <= 90 && point[2] >= -180 && point[2] <= 180;
+}
+
+function captureSortTime(photo) {
+  const value = captureTimestamp(photo.capture_clock);
+  return Number.isFinite(value) ? value : null;
+}
+
+function captureTimeLabel(photo) {
+  const match = String(photo.capture_clock || "").match(/[T ](\d{2}):(\d{2})/);
+  if (!match) return photo.capture_clock ? "Captured" : "Manually placed";
+  return `Captured ${new Date(2000, 0, 1, +match[1], +match[2]).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
 }
 
 function resetZoom() {
@@ -571,11 +895,44 @@ function parseRoute() {
   return { root: match?.[1] || "/today/gallery", date: match?.[2] || null };
 }
 
+function readUrlState() {
+  const params = new URLSearchParams(location.search);
+  const view = params.get("view") === "explore" ? "explore" : "photos";
+  return { view, photo: view === "explore" ? params.get("photo") : null };
+}
+
+function writeUrlState(mode) {
+  if (!route.date) return;
+  const url = new URL(location.href);
+  if (state.view === "explore") {
+    url.searchParams.set("view", "explore");
+    if (state.selectedBase) url.searchParams.set("photo", state.selectedBase);
+    else url.searchParams.delete("photo");
+  } else {
+    url.searchParams.delete("view");
+    url.searchParams.delete("photo");
+  }
+  window.history[mode === "replace" ? "replaceState" : "pushState"]({}, "", url);
+}
+
 async function requestJson(url) {
   const response = await fetch(url, { cache: "no-store" });
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`);
   return body;
+}
+
+async function requestOptionalJson(url, options = {}) {
+  const response = await fetch(url, { cache: "no-store", ...options });
+  if (response.status === 404) return null;
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`);
+  return body;
+}
+
+function unwrapExplore(result) {
+  if (!result) return null;
+  return Object.prototype.hasOwnProperty.call(result, "explore") ? result.explore : result;
 }
 
 function formatLongDate(date) {

@@ -10,7 +10,7 @@ pipeline.start();
 
 const app = express();
 app.disable("x-powered-by");
-app.use(express.json({ limit: "16kb" }));
+app.use(express.json({ limit: "5mb" }));
 
 app.get("/healthz", (_request, response) => {
   response.json({ ok: true, service: "frame-pipeline-photos", ...pipeline.status });
@@ -44,6 +44,27 @@ app.put("/api/internal/photo-pipeline/settings", requireServiceToken, async (req
   }
 });
 
+app.put("/api/internal/photo-pipeline/explore", requireServiceToken, async (request, response, next) => {
+  try {
+    const date = typeof request.query.date === "string" ? request.query.date : "";
+    response.setHeader("Cache-Control", "no-store");
+    response.json({ date_folder: date, explore: await pipeline.saveExplore(date, request.body) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/internal/photo-pipeline/explore", requireServiceToken, async (request, response, next) => {
+  try {
+    const date = typeof request.query.date === "string" ? request.query.date : "";
+    await pipeline.deleteExplore(date);
+    response.setHeader("Cache-Control", "no-store");
+    response.json({ date_folder: date, explore: null });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/api/internal/photo-pipeline/manage", requireServiceToken, async (request, response, next) => {
   try {
     const candidate = typeof request.body?.action === "string" ? request.body.action : "";
@@ -61,7 +82,10 @@ app.post("/api/internal/photo-pipeline/manage", requireServiceToken, async (requ
 });
 
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
-  const status = error instanceof PhotoManagementError ? error.status : 500;
+  const candidateStatus = (error as { status?: unknown })?.status;
+  const status = error instanceof PhotoManagementError
+    ? error.status
+    : typeof candidateStatus === "number" && candidateStatus >= 400 && candidateStatus < 600 ? candidateStatus : 500;
   if (status === 500) console.error(`[photo-pipeline] management request failed: ${errorMessage(error)}`);
   response.status(status).json({ error: status === 500 ? "Photo management request failed." : errorMessage(error) });
 });

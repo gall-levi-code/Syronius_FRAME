@@ -29,7 +29,9 @@
       })();
     </script>
     <script src="/assets/frame-theme.js?v=global-theme-v1"></script>
-    <link rel="stylesheet" href="/gallery/assets/styles.css?v=gallery-zoom-slider-5">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="/gallery/assets/styles.css?v=gallery-explore-5">
   </head>
   <body>
     <header class="topbar">
@@ -54,7 +56,11 @@
           <span id="date-summary" class="date-summary"></span>
         </div>
         <div class="heading-actions">
-          <a class="secondary-button" href="/today/gallery/admin">Manage</a>
+          <div id="view-switch" class="view-switch" role="group" aria-label="Gallery view" hidden>
+            <button id="photos-view" type="button" aria-pressed="true">Photos</button>
+            <button id="explore-view" type="button" aria-pressed="false">Explore</button>
+          </div>
+          <a id="manage-gallery" class="secondary-button" href="/today/gallery/admin">Manage</a>
           <a id="all-galleries" class="secondary-button" href="/today/gallery" hidden>All galleries</a>
         </div>
       </section>
@@ -65,13 +71,31 @@
       </section>
       <section id="date-gallery" class="date-grid" aria-live="polite"></section>
       <section id="photo-gallery" class="gallery-grid" aria-live="polite" hidden></section>
+      <section id="explore-panel" class="explore-panel" aria-label="Explore photos on a map" hidden>
+        <div class="explore-map-shell">
+          <div id="explore-map" role="region" aria-label="Route and photo map" tabindex="0"></div>
+          <p id="explore-map-state" class="explore-map-state" role="status" hidden></p>
+        </div>
+        <div class="explore-strip-heading">
+          <strong>Photos on this route</strong>
+          <span id="explore-summary"></span>
+        </div>
+        <div class="explore-filmstrip-shell">
+          <button id="explore-previous" class="explore-strip-nav explore-strip-previous" type="button" aria-label="Previous mapped photo">&#8249;</button>
+          <div id="explore-filmstrip" class="explore-filmstrip" role="list" aria-label="Mapped photos in capture order"></div>
+          <button id="explore-next" class="explore-strip-nav explore-strip-next" type="button" aria-label="Next mapped photo">&#8250;</button>
+        </div>
+      </section>
     </main>
 
     <dialog id="lightbox" class="lightbox">
       <div id="lightbox-viewport" class="lightbox-viewport">
         <img id="lightbox-image" alt="">
       </div>
-      <aside id="lightbox-details" class="lightbox-details"></aside>
+      <aside id="lightbox-details" class="lightbox-details">
+        <span id="lightbox-camera-text"></span>
+        <button id="lightbox-explore" class="lightbox-map-button" type="button" hidden>View on map</button>
+      </aside>
       <div class="lightbox-toolbar">
         <div class="lightbox-identity">
           <strong id="lightbox-title"></strong>
@@ -93,13 +117,14 @@
 
     <template id="date-template">
       <article class="date-card">
-        <a>
+        <a class="date-open">
           <img alt="" loading="lazy">
-          <span class="date-card-copy">
+          <span class="date-card-meta">
             <strong></strong>
             <span class="date-card-stats"></span>
           </span>
         </a>
+        <a class="map-jump date-map-jump" hidden></a>
       </article>
     </template>
     <template id="photo-template">
@@ -108,8 +133,9 @@
           <img alt="" loading="lazy">
           <span class="photo-meta"><strong></strong><small></small></span>
         </button>
+        <button class="map-jump photo-map-jump" type="button" hidden></button>
       </article>
     </template>
-    <script type="module" src="/gallery/assets/gallery.js?v=gallery-zoom-slider-8"></script>
+    <script type="module" src="/gallery/assets/gallery.js?v=gallery-explore-7"></script>
   </body>
 </html>

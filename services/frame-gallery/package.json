@@ -8,7 +8,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "npm run build && node --test tests/gallery.test.mjs"
+    "test": "npm run build && node --test tests/*.test.mjs"
   },
   "license": "MIT",
   "dependencies": {

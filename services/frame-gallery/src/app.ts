@@ -13,7 +13,7 @@ export async function createApp(store: GalleryStore, publicDir: string, manageme
   await store.init();
   const app = express();
   app.disable("x-powered-by");
-  app.use(express.json({ limit: "2mb" }));
+  app.use(express.json({ limit: "5mb" }));
 
   app.get("/healthz", async (_request, response, next) => {
     try {
@@ -51,6 +51,9 @@ export async function createApp(store: GalleryStore, publicDir: string, manageme
     app.get(["/gallery/admin", "/gallery/admin/", "/today/gallery/admin", "/today/gallery/admin/"], protect, (_request, response) => {
       response.sendFile(path.join(publicDir, "admin.html"));
     });
+    app.get(["/gallery/admin/explore", "/today/gallery/admin/explore"], protect, (_request, response) => {
+      response.sendFile(path.join(publicDir, "explore-admin.html"));
+    });
     app.get(["/gallery/admin/api/trash", "/today/gallery/admin/api/trash"], protect, async (_request, response, next) => {
       try {
         response.setHeader("Cache-Control", "no-store");
@@ -62,7 +65,43 @@ export async function createApp(store: GalleryStore, publicDir: string, manageme
     app.post(["/gallery/admin/api/manage", "/today/gallery/admin/api/manage"], protect, async (request, response, next) => {
       try {
         response.setHeader("Cache-Control", "no-store");
-        response.json(await pipelineRequest(management, "/api/internal/photo-pipeline/manage", request.body));
+        response.json(await pipelineRequest(management, "/api/internal/photo-pipeline/manage", "POST", request.body));
+      } catch (error) {
+        next(error);
+      }
+    });
+    app.get(["/gallery/admin/api/explore", "/today/gallery/admin/api/explore"], protect, async (request, response, next) => {
+      try {
+        const date = typeof request.query.date === "string" ? request.query.date : "";
+        response.setHeader("Cache-Control", "no-store");
+        response.json({ date_folder: date, explore: await store.getExplore(date) });
+      } catch (error) {
+        next(error);
+      }
+    });
+    app.put(["/gallery/admin/api/explore", "/today/gallery/admin/api/explore"], protect, async (request, response, next) => {
+      try {
+        const date = typeof request.query.date === "string" ? request.query.date : "";
+        response.setHeader("Cache-Control", "no-store");
+        response.json(await pipelineRequest(
+          management,
+          `/api/internal/photo-pipeline/explore?date=${encodeURIComponent(date)}`,
+          "PUT",
+          request.body,
+        ));
+      } catch (error) {
+        next(error);
+      }
+    });
+    app.delete(["/gallery/admin/api/explore", "/today/gallery/admin/api/explore"], protect, async (request, response, next) => {
+      try {
+        const date = typeof request.query.date === "string" ? request.query.date : "";
+        response.setHeader("Cache-Control", "no-store");
+        response.json(await pipelineRequest(
+          management,
+          `/api/internal/photo-pipeline/explore?date=${encodeURIComponent(date)}`,
+          "DELETE",
+        ));
       } catch (error) {
         next(error);
       }
@@ -146,6 +185,18 @@ export async function createApp(store: GalleryStore, publicDir: string, manageme
       next(error);
     }
   });
+  app.get("/gallery/api/explore", async (request, response, next) => {
+    try {
+      const date = typeof request.query.date === "string" ? request.query.date : "";
+      response.setHeader("Cache-Control", "private, no-cache");
+      response.json({
+        date_folder: date,
+        explore: await store.getPublicExplore(date),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
   app.get("/gallery/image/:date/:file", async (request, response, next) => {
     try {
       const base = stripExtension(request.params.file, ".jpg");
@@ -165,8 +216,10 @@ export async function createApp(store: GalleryStore, publicDir: string, manageme
     }
   });
   app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
+    const candidateStatus = (error as { status?: unknown })?.status;
     const status = error instanceof GalleryRequestError
       ? error.status
+      : typeof candidateStatus === "number" && candidateStatus >= 400 && candidateStatus < 600 ? candidateStatus
       : (error as NodeJS.ErrnoException).code === "ENOENT" ? 404 : 500;
     if (status === 500) console.error(`[gallery] ${errorMessage(error)}`);
     response.status(status).json({ error: status === 500 ? "Gallery request failed." : errorMessage(error) });
@@ -174,9 +227,14 @@ export async function createApp(store: GalleryStore, publicDir: string, manageme
   return app;
 }
 
-async function pipelineRequest(config: GalleryManagementConfig, pathname: string, body?: unknown): Promise<unknown> {
+async function pipelineRequest(
+  config: GalleryManagementConfig,
+  pathname: string,
+  method: "GET" | "POST" | "PUT" | "DELETE" = "GET",
+  body?: unknown,
+): Promise<unknown> {
   const response = await fetch(`${config.pipelineUrl.replace(/\/+$/, "")}${pathname}`, {
-    method: body === undefined ? "GET" : "POST",
+    method,
     headers: {
       "x-frame-service-token": config.serviceToken,
       ...(body === undefined ? {} : { "content-type": "application/json" }),

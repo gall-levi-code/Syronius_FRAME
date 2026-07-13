@@ -18,6 +18,7 @@ test("lists and serves only ready publications", async () => {
   await publish(gallery, "partial", false);
   await publish(gallery, "trashed", true);
   await writeFile(path.join(gallery, "trashed.trashed.json"), JSON.stringify({ trashed_at: new Date().toISOString() }));
+  await writeFile(path.join(gallery, "_explore.json"), JSON.stringify(exploreDocument("visible")));
   const store = new GalleryStore(root, 320, 80);
   await store.init();
 
@@ -25,7 +26,11 @@ test("lists and serves only ready publications", async () => {
   assert.deepEqual(dates.map((item) => item.date_folder), [date]);
   assert.equal(dates[0].cover_thumbnail_url, `/gallery/thumb/${date}/visible.webp`);
   assert.equal(dates[0].duration_ms, 0);
-  assert.deepEqual((await store.listPhotos(date)).map((photo) => photo.base), ["visible"]);
+  assert.equal(dates[0].has_explore, true);
+  const photos = await store.listPhotos(date);
+  assert.deepEqual(photos.map((photo) => photo.base), ["visible"]);
+  assert.equal(photos[0].capture_clock, "2026-06-13T17:00:00.000Z");
+  assert.equal((await store.getExplore(date)).routes.length, 1);
   const thumbnail = await store.requireThumbnail(date, "visible");
   assert.equal((await sharp(thumbnail).metadata()).format, "webp");
   await assert.rejects(store.requireImage(date, "partial"));
@@ -101,6 +106,11 @@ test("gallery HTTP API blocks unpublished media", async () => {
   await mkdir(gallery, { recursive: true });
   await publish(gallery, "visible", true);
   await publish(gallery, "partial", false);
+  await publish(gallery, "hidden", true);
+  await writeFile(path.join(gallery, "hidden.trashed.json"), JSON.stringify({ trashed_at: new Date().toISOString() }));
+  const storedExplore = exploreDocument("visible");
+  storedExplore.placements.hidden = { lat: 40.5, lon: -86.5, updated_at: "2026-06-13T18:00:00.000Z" };
+  await writeFile(path.join(gallery, "_explore.json"), JSON.stringify(storedExplore));
   const app = await createApp(new GalleryStore(root, 320, 80), path.resolve("public"));
   const server = app.listen(0);
   await once(server, "listening");
@@ -108,6 +118,14 @@ test("gallery HTTP API blocks unpublished media", async () => {
 
   const photos = await fetch(`http://127.0.0.1:${port}/gallery/api/photos?date=${date}`).then((response) => response.json());
   assert.deepEqual(photos.photos.map((photo) => photo.base), ["visible"]);
+  assert.equal(photos.photos[0].capture_clock, "2026-06-13T17:00:00.000Z");
+  const exploreResponse = await fetch(`http://127.0.0.1:${port}/gallery/api/explore?date=${date}`);
+  assert.match(exploreResponse.headers.get("cache-control"), /private, no-cache/);
+  assert.ok(exploreResponse.headers.get("etag"));
+  const publicExplore = (await exploreResponse.json()).explore;
+  assert.equal(publicExplore.routes.length, 1);
+  assert.ok(publicExplore.placements.visible);
+  assert.equal(publicExplore.placements.hidden, undefined);
   assert.equal((await fetch(`http://127.0.0.1:${port}/gallery/image/${date}/visible.jpg`)).status, 200);
   assert.equal((await fetch(`http://127.0.0.1:${port}/gallery/image/${date}/partial.jpg`)).status, 404);
   assert.equal((await fetch(`http://127.0.0.1:${port}/gallery/image/not-a-date/visible.jpg`)).status, 400);
@@ -118,11 +136,28 @@ test("gallery HTTP API blocks unpublished media", async () => {
 
 test("gallery admin is protected and proxies management through the internal service token", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "frame-gallery-"));
+  const date = "2026-06-13";
+  const gallery = path.join(root, "galleries", date);
+  await mkdir(gallery, { recursive: true });
+  await publish(gallery, "hidden", true);
+  await writeFile(path.join(gallery, "hidden.trashed.json"), JSON.stringify({ trashed_at: new Date().toISOString() }));
+  await writeFile(path.join(gallery, "_explore.json"), JSON.stringify(exploreDocument("hidden")));
   const pipeline = createServer(async (request, response) => {
     assert.equal(request.headers["x-frame-service-token"], "service-secret");
     response.setHeader("content-type", "application/json");
     if (request.url === "/api/internal/photo-pipeline/trash") {
       response.end(JSON.stringify({ trash: [] }));
+      return;
+    }
+    if (request.url === "/api/internal/photo-pipeline/explore?date=2026-06-13") {
+      if (request.method === "PUT") {
+        const chunks = [];
+        for await (const chunk of request) chunks.push(chunk);
+        response.end(JSON.stringify({ date_folder: "2026-06-13", explore: JSON.parse(Buffer.concat(chunks).toString("utf8")) }));
+        return;
+      }
+      assert.equal(request.method, "DELETE");
+      response.end(JSON.stringify({ date_folder: "2026-06-13", explore: null }));
       return;
     }
     response.end(JSON.stringify({ ok: true, action: "empty-trash", affected: 0 }));
@@ -160,6 +195,21 @@ test("gallery admin is protected and proxies management through the internal ser
     assert.equal(branding.branding.active_profile.id, "custom-launch-orange");
     assert.equal(branding.branding.presets.length, 6);
     assert.equal((await fetch(`${base}/gallery/api/branding`).then((response) => response.json())).branding.gallery_title, "Launch Photos");
+    assert.equal((await fetch(`${base}/gallery/api/explore?date=${date}`).then((response) => response.json())).explore, null);
+    assert.equal((await fetch(`${base}/gallery/admin/api/explore?date=${date}`)).status, 401);
+    const storedExplore = await fetch(`${base}/gallery/admin/api/explore?date=${date}`, { headers: { authorization } })
+      .then((response) => response.json());
+    assert.equal(storedExplore.explore.routes[0].id, "walk");
+    const explore = exploreDocument("visible");
+    assert.equal((await fetch(`${base}/gallery/admin/api/explore?date=2026-06-13`, {
+      method: "PUT",
+      headers: { authorization, "content-type": "application/json" },
+      body: JSON.stringify(explore),
+    }).then((response) => response.json())).explore.routes[0].id, "walk");
+    assert.equal((await fetch(`${base}/gallery/admin/api/explore?date=2026-06-13`, {
+      method: "DELETE",
+      headers: { authorization },
+    }).then((response) => response.json())).explore, null);
     const result = await fetch(`${base}/gallery/admin/api/manage`, {
       method: "POST",
       headers: { authorization, "content-type": "application/json" },
@@ -183,6 +233,7 @@ async function publish(directory, base, ready) {
     height: 80,
     orientation: 0,
     processed_at: "2026-06-13T12:00:00.000Z",
+    exif: { Photo: { DateTimeOriginal: "2026-06-13T17:00:00.000Z" } },
   }));
   await writeFile(path.join(directory, `${base}.txt`), "Camera: FRAME Test\n");
   if (ready) await writeFile(path.join(directory, `${base}.ready`), "ready\n");
@@ -190,4 +241,20 @@ async function publish(directory, base, ready) {
 
 async function pngBuffer(width, height, background) {
   return sharp({ create: { width, height, channels: 4, background } }).png().toBuffer();
+}
+
+function exploreDocument(base) {
+  return {
+    schema_version: 1,
+    updated_at: "2026-06-13T18:00:00.000Z",
+    time_shift_seconds: 18_000,
+    time_adjustment_seconds: -15,
+    routes: [{
+      id: "walk",
+      name: "Walk.gpx",
+      imported_at: "2026-06-13T18:00:00.000Z",
+      segments: [[[1_000, 41, -87], [2_000, 41.1, -87.1]]],
+    }],
+    placements: { [base]: { lat: 41.05, lon: -87.05, updated_at: "2026-06-13T18:00:00.000Z" } },
+  };
 }

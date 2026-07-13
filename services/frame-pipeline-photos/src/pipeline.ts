@@ -22,6 +22,28 @@ const RAW_EXTENSIONS = new Set([
 ]);
 const RASTER_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp", ".heic", ".heif"]);
 const SETTINGS_FILE = "photo-pipeline-settings.json";
+const EXPLORE_FILE = "_explore.json";
+const EXPLORE_ID_PATTERN = /^[A-Za-z0-9_-]{1,96}$/;
+const MAX_EXPLORE_ROUTES = 20;
+const MAX_EXPLORE_SEGMENTS = 2_000;
+const MAX_EXPLORE_POINTS = 50_000;
+const MAX_EXPLORE_PLACEMENTS = 10_000;
+
+export type ExplorePoint = [number, number, number];
+
+export interface GalleryExplore {
+  schema_version: 1;
+  updated_at: string;
+  time_shift_seconds: number;
+  time_adjustment_seconds: number;
+  routes: Array<{
+    id: string;
+    name: string;
+    imported_at: string;
+    segments: ExplorePoint[][];
+  }>;
+  placements: Record<string, { lat: number; lon: number; timestamp?: number; updated_at: string }>;
+}
 
 export interface PipelineStatus {
   running: boolean;
@@ -207,6 +229,29 @@ export class PhotoPipeline {
     this.settings = normalizeSettings(candidate, this.config.defaultSettings);
     await atomicWriteJson(path.join(this.directories.state, SETTINGS_FILE), this.settings);
     return this.getSettings();
+  }
+
+  async saveExplore(dateFolder: string, candidate: unknown): Promise<GalleryExplore> {
+    return this.withPublishLock(async () => {
+      await this.requireGallery(dateFolder);
+      const explore = normalizeExplore(candidate, new Date().toISOString());
+      const directory = path.join(this.directories.galleries, dateFolder);
+      const readyBases = new Set((await readdir(directory))
+        .filter((entry) => entry.endsWith(".ready"))
+        .map((entry) => entry.slice(0, -6)));
+      explore.placements = Object.fromEntries(
+        Object.entries(explore.placements).filter(([base]) => readyBases.has(base)),
+      );
+      await atomicWriteJson(path.join(directory, EXPLORE_FILE), explore);
+      return explore;
+    });
+  }
+
+  async deleteExplore(dateFolder: string): Promise<void> {
+    await this.withPublishLock(async () => {
+      await this.requireGallery(dateFolder);
+      await rm(path.join(this.directories.galleries, dateFolder, EXPLORE_FILE), { force: true });
+    });
   }
 
   private async loadSettings(): Promise<void> {
@@ -595,11 +640,35 @@ export class PhotoPipeline {
       }
     }
     await Promise.all(
-      ["jpg", "json", "txt", "orientation", "ready", "trashed.json"]
+      ["jpg", "json", "txt", "orientation", "ready"]
         .map((extension) => rm(path.join(directory, `${base}.${extension}`), { force: true })),
     );
+    await this.removeExplorePlacement(dateFolder, base);
     await this.clearThumbnail(dateFolder, base);
+    await rm(marker, { force: true });
     return 1;
+  }
+
+  private async removeExplorePlacement(dateFolder: string, base: string): Promise<void> {
+    const file = path.join(this.directories.galleries, dateFolder, EXPLORE_FILE);
+    const stored = await readJsonOrNull<unknown>(file);
+    if (!stored) return;
+    const explore = normalizeExplore(stored, new Date().toISOString());
+    if (!Object.hasOwn(explore.placements, base)) return;
+    delete explore.placements[base];
+    await atomicWriteJson(file, explore);
+  }
+
+  private async requireGallery(dateFolder: string): Promise<void> {
+    if (!isDateFolder(dateFolder)) throw new PhotoManagementError("A valid date_folder is required.", 400);
+    try {
+      await access(path.join(this.directories.galleries, dateFolder));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        throw new PhotoManagementError("Gallery was not found.", 404);
+      }
+      throw error;
+    }
   }
 
   private async clearThumbnail(dateFolder: string, base: string): Promise<void> {
@@ -653,6 +722,117 @@ function normalizeSettings(candidate: unknown, fallback: PipelineProcessingSetti
     jpeg_quality: boundedInteger(source.jpeg_quality, fallback.jpeg_quality, 40, 100),
     max_output_mb: boundedNumber(source.max_output_mb, fallback.max_output_mb, 0, 500),
   };
+}
+
+function normalizeExplore(candidate: unknown, updatedAt: string): GalleryExplore {
+  if (!isRecord(candidate) || candidate.schema_version !== 1) {
+    throw new PhotoManagementError("Explore data must use schema_version 1.", 400);
+  }
+  if (!Array.isArray(candidate.routes) || candidate.routes.length < 1 || candidate.routes.length > MAX_EXPLORE_ROUTES) {
+    throw new PhotoManagementError(`Explore data must contain 1 to ${MAX_EXPLORE_ROUTES} routes.`, 400);
+  }
+
+  let segmentCount = 0;
+  let pointCount = 0;
+  const routeIds = new Set<string>();
+  const routes = candidate.routes.map((rawRoute, routeIndex) => {
+    if (!isRecord(rawRoute)) throw new PhotoManagementError(`Explore route ${routeIndex + 1} is invalid.`, 400);
+    const id = requiredText(rawRoute.id, 96, "Explore route id");
+    if (!EXPLORE_ID_PATTERN.test(id) || routeIds.has(id)) {
+      throw new PhotoManagementError("Explore route ids must be unique and contain only letters, numbers, underscores, or hyphens.", 400);
+    }
+    routeIds.add(id);
+    const name = requiredText(rawRoute.name, 240, "Explore route name");
+    const importedAt = requiredIsoDate(rawRoute.imported_at, "Explore route imported_at");
+    if (!Array.isArray(rawRoute.segments) || rawRoute.segments.length < 1) {
+      throw new PhotoManagementError(`Explore route ${name} must contain at least one segment.`, 400);
+    }
+    segmentCount += rawRoute.segments.length;
+    if (segmentCount > MAX_EXPLORE_SEGMENTS) {
+      throw new PhotoManagementError(`Explore data cannot exceed ${MAX_EXPLORE_SEGMENTS} segments.`, 413);
+    }
+    const segments = rawRoute.segments.map((rawSegment, segmentIndex) => {
+      if (!Array.isArray(rawSegment) || rawSegment.length < 2) {
+        throw new PhotoManagementError(`Explore route ${name}, segment ${segmentIndex + 1} must contain at least two points.`, 400);
+      }
+      pointCount += rawSegment.length;
+      if (pointCount > MAX_EXPLORE_POINTS) {
+        throw new PhotoManagementError(`Explore data cannot exceed ${MAX_EXPLORE_POINTS} points.`, 413);
+      }
+      let previousTime = -1;
+      return rawSegment.map((rawPoint, pointIndex): ExplorePoint => {
+        if (!Array.isArray(rawPoint) || rawPoint.length !== 3) {
+          throw new PhotoManagementError(`Explore point ${pointIndex + 1} in ${name} is invalid.`, 400);
+        }
+        const [time, lat, lon] = rawPoint;
+        if (!Number.isInteger(time) || time < 0 || time > 8_640_000_000_000_000 || time <= previousTime) {
+          throw new PhotoManagementError(`Explore point times in ${name} must be valid and strictly increasing.`, 400);
+        }
+        if (!finiteCoordinate(lat, -90, 90) || !finiteCoordinate(lon, -180, 180)) {
+          throw new PhotoManagementError(`Explore coordinates in ${name} are invalid.`, 400);
+        }
+        previousTime = time;
+        return [time, lat, lon];
+      });
+    });
+    return { id, name, imported_at: importedAt, segments };
+  });
+
+  if (!isRecord(candidate.placements)) throw new PhotoManagementError("Explore placements must be an object.", 400);
+  const placementEntries = Object.entries(candidate.placements);
+  if (placementEntries.length > MAX_EXPLORE_PLACEMENTS) {
+    throw new PhotoManagementError(`Explore data cannot exceed ${MAX_EXPLORE_PLACEMENTS} manual placements.`, 413);
+  }
+  const placements = Object.fromEntries(placementEntries.map(([base, rawPlacement]) => {
+    if (!isPhotoBase(base) || !isRecord(rawPlacement)) throw new PhotoManagementError("Explore placement is invalid.", 400);
+    const lat = rawPlacement.lat;
+    const lon = rawPlacement.lon;
+    if (!finiteCoordinate(lat, -90, 90) || !finiteCoordinate(lon, -180, 180)) {
+      throw new PhotoManagementError(`Explore placement for ${base} has invalid coordinates.`, 400);
+    }
+    const timestamp = rawPlacement.timestamp;
+    if (timestamp !== undefined && (!Number.isInteger(timestamp) || Math.abs(Number(timestamp)) > 8_640_000_000_000_000)) {
+      throw new PhotoManagementError(`Explore placement for ${base} has an invalid timestamp.`, 400);
+    }
+    return [base, {
+      lat,
+      lon,
+      ...(timestamp === undefined ? {} : { timestamp: Number(timestamp) }),
+      updated_at: requiredIsoDate(rawPlacement.updated_at, `Explore placement ${base} updated_at`),
+    }];
+  }));
+
+  return {
+    schema_version: 1,
+    updated_at: updatedAt,
+    time_shift_seconds: finiteNumberInRange(candidate.time_shift_seconds, -86_400, 86_400, "time_shift_seconds"),
+    time_adjustment_seconds: finiteNumberInRange(candidate.time_adjustment_seconds, -86_400, 86_400, "time_adjustment_seconds"),
+    routes,
+    placements,
+  };
+}
+
+function requiredText(value: unknown, maxLength: number, label: string): string {
+  const text = typeof value === "string" ? value.trim() : "";
+  if (!text || text.length > maxLength) throw new PhotoManagementError(`${label} is required and must be ${maxLength} characters or fewer.`, 400);
+  return text;
+}
+
+function requiredIsoDate(value: unknown, label: string): string {
+  const timestamp = typeof value === "string" ? Date.parse(value) : Number.NaN;
+  if (!Number.isFinite(timestamp)) throw new PhotoManagementError(`${label} must be a valid timestamp.`, 400);
+  return new Date(timestamp).toISOString();
+}
+
+function finiteCoordinate(value: unknown, minimum: number, maximum: number): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= minimum && value <= maximum;
+}
+
+function finiteNumberInRange(value: unknown, minimum: number, maximum: number, label: string): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < minimum || value > maximum) {
+    throw new PhotoManagementError(`Explore ${label} must be a number from ${minimum} to ${maximum}.`, 400);
+  }
+  return value;
 }
 
 function boundedInteger(value: unknown, fallback: number, minimum: number, maximum: number): number {

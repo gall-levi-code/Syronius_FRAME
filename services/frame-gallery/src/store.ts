@@ -29,6 +29,7 @@ export interface GalleryPhoto {
   height: number | null;
   orientation: 0 | 1;
   processed_at: string;
+  capture_clock: string | null;
   camera_text: string;
 }
 
@@ -39,6 +40,21 @@ export interface GalleryDate {
   latest_at: string | null;
   duration_ms: number;
   cover_thumbnail_url: string | null;
+  has_explore: boolean;
+}
+
+export interface GalleryExplore {
+  schema_version: 1;
+  updated_at: string;
+  time_shift_seconds: number;
+  time_adjustment_seconds: number;
+  routes: Array<{
+    id: string;
+    name: string;
+    imported_at: string;
+    segments: Array<Array<[number, number, number]>>;
+  }>;
+  placements: Record<string, { lat: number; lon: number; timestamp?: number; updated_at: string }>;
 }
 
 interface PhotoSidecar {
@@ -46,6 +62,7 @@ interface PhotoSidecar {
   height?: unknown;
   orientation?: unknown;
   processed_at?: unknown;
+  exif?: { Photo?: { DateTimeOriginal?: unknown } };
 }
 
 export class GalleryStore {
@@ -156,6 +173,7 @@ export class GalleryStore {
           ? Math.max(0, new Date(latest.processed_at).getTime() - new Date(first.processed_at).getTime())
           : 0,
         cover_thumbnail_url: first?.thumbnail_url ?? null,
+        has_explore: Boolean(await statOrNull(path.join(this.galleriesRoot, entry.name, "_explore.json"))),
       });
     }
     return dates.filter((date) => date.count > 0).sort((left, right) => right.date_folder.localeCompare(left.date_folder));
@@ -171,13 +189,29 @@ export class GalleryStore {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return [];
       throw error;
     }
-    const names = new Set(entries);
-    const bases = entries
-      .filter((entry) => entry.endsWith(".ready"))
-      .map((entry) => entry.slice(0, -6))
-      .filter((base) => !names.has(`${base}.trashed.json`));
+    const bases = visibleBases(entries);
     const photos = await Promise.all(bases.map((base) => this.readPhoto(dateFolder, base)));
     return photos.sort((left, right) => right.processed_at.localeCompare(left.processed_at));
+  }
+
+  async getExplore(dateFolder: string): Promise<GalleryExplore | null> {
+    assertDate(dateFolder);
+    const explore = await readJsonOrNull<GalleryExplore>(path.join(this.galleriesRoot, dateFolder, "_explore.json"));
+    return explore?.schema_version === 1 && Array.isArray(explore.routes) && explore.routes.length > 0 ? explore : null;
+  }
+
+  async getPublicExplore(dateFolder: string): Promise<GalleryExplore | null> {
+    const explore = await this.getExplore(dateFolder);
+    if (!explore) return null;
+    const entries = await readdir(path.join(this.galleriesRoot, dateFolder));
+    const visible = new Set(visibleBases(entries));
+    if (!visible.size) return null;
+    return {
+      ...explore,
+      placements: Object.fromEntries(
+        Object.entries(explore.placements).filter(([base]) => visible.has(base)),
+      ),
+    };
   }
 
   async requireImage(dateFolder: string, base: string): Promise<string> {
@@ -253,6 +287,9 @@ export class GalleryStore {
       height: integerOrNull(sidecar?.height),
       orientation: sidecar?.orientation === 1 ? 1 : 0,
       processed_at: typeof sidecar?.processed_at === "string" ? sidecar.processed_at : readyInfo.mtime.toISOString(),
+      capture_clock: typeof sidecar?.exif?.Photo?.DateTimeOriginal === "string"
+        ? sidecar.exif.Photo.DateTimeOriginal
+        : null,
       camera_text: cameraText,
     };
   }
@@ -323,6 +360,14 @@ async function statOrNull(file: string): Promise<Awaited<ReturnType<typeof stat>
 
 function integerOrNull(value: unknown): number | null {
   return Number.isInteger(value) && Number(value) > 0 ? Number(value) : null;
+}
+
+function visibleBases(entries: string[]): string[] {
+  const names = new Set(entries);
+  return entries
+    .filter((entry) => entry.endsWith(".ready"))
+    .map((entry) => entry.slice(0, -6))
+    .filter((base) => !names.has(`${base}.trashed.json`));
 }
 
 function parseLogoUpload(input: unknown): { buffer: Buffer; mediaType: string } {
