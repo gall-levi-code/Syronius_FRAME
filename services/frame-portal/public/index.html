@@ -7,7 +7,7 @@
     <title>FRAME Control Center</title>
     <link rel="icon" type="image/svg+xml" href="/assets/frame-logo-square.svg?v=2026-06-07-hardening" />
     <script src="/assets/frame-theme.js?v=global-theme-v1"></script>
-    <link rel="stylesheet" href="/assets/styles.css?v=photo-pipeline-settings" />
+    <link rel="stylesheet" href="/assets/styles.css?v=service-links-v1" />
   </head>
   <body>
     <script>
@@ -224,6 +224,20 @@
       <pre id="logs-output" tabindex="0">Connecting...</pre>
     </dialog>
 
+    <dialog id="tool-links-dialog" class="tool-links-dialog" aria-labelledby="tool-links-title">
+      <div class="dialog-header">
+        <div>
+          <p class="eyebrow">Public and generated links</p>
+          <h2 id="tool-links-title">Service Links</h2>
+        </div>
+        <button id="close-tool-links" class="icon-button" type="button" aria-label="Close links" title="Close links">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div id="tool-links-list" class="tool-links-list"></div>
+      <div id="tool-links-status" class="tool-links-status" role="status" aria-live="polite" hidden></div>
+    </dialog>
+
     <dialog id="theme-preset-dialog" class="theme-dialog">
       <div id="theme-preset-kind-step" class="theme-dialog-panel">
         <div class="dialog-header compact-dialog-header">
@@ -285,6 +299,6 @@
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
-    <script src="/assets/portal.js?v=photo-pipeline-settings"></script>
+    <script src="/assets/portal.js?v=service-links-v1"></script>
   </body>
 </html>
