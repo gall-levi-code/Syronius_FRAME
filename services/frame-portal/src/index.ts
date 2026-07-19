@@ -6,6 +6,7 @@ import { DockerClient } from "./dockerClient";
 import { buildPortalTools, isPhotoPipelineEnabled, loadStackConfig } from "./stackConfig";
 import { StatusCollector } from "./statusCollector";
 import { readTheme, writeTheme } from "./themeStore";
+import { collectToolLinkGroups } from "./toolLinks";
 
 const appConfig = loadConfig();
 const dockerClient = new DockerClient(
@@ -64,9 +65,11 @@ app.use((request, response, next) => {
 
 app.get("/api/portal", async (request, response, next) => {
   try {
-    const [stackConfig, status] = await Promise.all([
-      loadStackConfig(appConfig),
+    response.setHeader("Cache-Control", "no-store");
+    const stackConfig = await loadStackConfig(appConfig);
+    const [status, linkGroups] = await Promise.all([
       statusCollector.collect(),
+      collectToolLinkGroups(appConfig, stackConfig.config),
     ]);
     const accessContext = isPublicRequest(request.header("host"), appConfig.publicHostname)
       ? "public"
@@ -76,7 +79,7 @@ app.get("/api/portal", async (request, response, next) => {
       access_context: accessContext,
       config_source: stackConfig.source,
       pipeline_enabled: isPhotoPipelineEnabled(stackConfig),
-      tools: buildPortalTools(stackConfig, status.services, accessContext),
+      tools: buildPortalTools(stackConfig, status.services, accessContext, linkGroups),
       restarts_enabled: appConfig.enableContainerRestarts,
       refresh_ms: appConfig.statusRefreshMs,
     });

@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import type { AppConfig } from "./config";
-import type { PortalTool, StackConfig } from "./types";
+import type { PortalLinkGroup, PortalTool, StackConfig } from "./types";
 import type { ServiceSummary } from "./types";
 
 export interface LoadedStackConfig {
@@ -34,7 +34,7 @@ const FALLBACK_ROUTES: Record<string, string> = {
 };
 
 const TOOL_DEFINITIONS: Array<
-  Omit<PortalTool, "route" | "enabled" | "access" | "accessible" | "readiness"> & {
+  Omit<PortalTool, "route" | "enabled" | "access" | "accessible" | "readiness" | "link_groups"> & {
     routeKey: string;
     serviceName: string;
   }
@@ -152,6 +152,7 @@ export function buildPortalTools(
   loadedStackConfig: LoadedStackConfig,
   services: ServiceSummary[],
   accessContext: "lan" | "public" = "lan",
+  linkGroups: Partial<Record<string, PortalLinkGroup[]>> = {},
 ): PortalTool[] {
   const { config } = loadedStackConfig;
   const servicesByName = new Map(services.map((service) => [service.name, service]));
@@ -171,6 +172,7 @@ export function buildPortalTools(
       access,
       accessible,
       readiness: getToolReadiness(loadedStackConfig, definition.id, enabled, service),
+      link_groups: accessibleLinkGroups(linkGroups[definition.id] ?? [], config.public_route_prefixes, accessContext),
     };
   });
 }
@@ -184,6 +186,26 @@ export function isPhotoPipelineEnabled(loadedStackConfig: LoadedStackConfig): bo
 function routeIsPublic(route: string, publicPrefixes: string[]): boolean {
   const path = route.split("#", 1)[0] || "/";
   return publicPrefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
+}
+
+function accessibleLinkGroups(
+  groups: PortalLinkGroup[],
+  publicPrefixes: string[],
+  accessContext: "lan" | "public",
+): PortalLinkGroup[] {
+  if (accessContext === "lan") return groups;
+  return groups.flatMap((group) => {
+    const links = group.links.filter((link) => {
+      if (/^srt(?:la)?:\/\//.test(link.url)) return true;
+      try {
+        const url = new URL(link.url, "http://frame.local");
+        return url.origin === "http://frame.local" && routeIsPublic(url.pathname, publicPrefixes);
+      } catch {
+        return false;
+      }
+    });
+    return links.length ? [{ ...group, links }] : [];
+  });
 }
 
 function getToolReadiness(

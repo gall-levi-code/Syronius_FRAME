@@ -9,6 +9,17 @@ export interface StackConfig {
   public_route_prefixes: string[];
 }
 
+export interface PortalLink {
+  label: string;
+  url: string;
+  openable: boolean;
+}
+
+export interface PortalLinkGroup {
+  label: string;
+  links: PortalLink[];
+}
+
 export interface PortalTool {
   id: string;
   name: string;
@@ -19,6 +30,7 @@ export interface PortalTool {
   access: "public" | "lan-only";
   accessible: boolean;
   readiness: "ready" | "needs-setup" | "offline" | "disabled";
+  link_groups: PortalLinkGroup[];
 }
 
 export interface ServiceSummary {

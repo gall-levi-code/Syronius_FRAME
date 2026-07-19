@@ -21,6 +21,15 @@ export interface AppConfig {
   audioBridgeStatusToken?: string;
   photoPipelineUrl?: string;
   photoPipelineToken?: string;
+  streamsApiUrl: string;
+  streamsApiKey?: string;
+  streamsUsername?: string;
+  streamsPassword?: string;
+  overlaysApiUrl: string;
+  overlaysUsername?: string;
+  overlaysPassword?: string;
+  audioApiUrl: string;
+  belaboxApiUrl: string;
   portalUsername?: string;
   portalPassword?: string;
   portalRealm: string;
@@ -95,6 +104,15 @@ export function loadConfig(): AppConfig {
     audioBridgeStatusToken: process.env.AUDIO_BRIDGE_STATUS_TOKEN?.trim() || undefined,
     photoPipelineUrl: process.env.PHOTO_PIPELINE_URL?.trim() || undefined,
     photoPipelineToken: process.env.PHOTO_PIPELINE_TOKEN?.trim() || undefined,
+    streamsApiUrl: readUrl("STREAMS_API_URL", "http://frame-streams:3732"),
+    streamsApiKey: process.env.SLS_API_KEY?.trim() || undefined,
+    streamsUsername: process.env.STREAMS_USERNAME?.trim() || undefined,
+    streamsPassword: process.env.STREAMS_PASSWORD?.trim() || undefined,
+    overlaysApiUrl: readUrl("OVERLAYS_API_URL", "http://frame-overlays:3733"),
+    overlaysUsername: process.env.OVERLAYS_USERNAME?.trim() || undefined,
+    overlaysPassword: process.env.OVERLAYS_PASSWORD?.trim() || undefined,
+    audioApiUrl: readUrl("AUDIO_API_URL", "http://frame-audio:3734"),
+    belaboxApiUrl: readUrl("BELABOX_MANAGER_API_URL", "http://frame-belabox-manager:3741"),
     portalUsername,
     portalPassword,
     portalRealm: process.env.PORTAL_REALM?.trim() || "FRAME Portal",
@@ -102,4 +120,23 @@ export function loadConfig(): AppConfig {
     diskErrorPercent: readInt("DISK_ERROR_PERCENT", 95, 1),
     diskMinimumFreeGb: readInt("DISK_MINIMUM_FREE_GB", 20, 0),
   };
+}
+
+function readUrl(name: string, fallback: string): string {
+  let url: URL;
+  try {
+    url = new URL(process.env[name]?.trim() || fallback);
+  } catch {
+    throw new Error(`${name} must be a valid http:// or https:// URL`);
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error(`${name} must start with http:// or https://`);
+  }
+  if (url.username || url.password) {
+    throw new Error(`${name} must not include credentials`);
+  }
+  if (url.search || url.hash) {
+    throw new Error(`${name} must not include a query or fragment`);
+  }
+  return url.toString().replace(/\/+$/, "");
 }

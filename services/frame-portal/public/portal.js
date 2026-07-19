@@ -28,6 +28,11 @@ const elements = {
   logsTitle: document.getElementById("logs-title"),
   logsOutput: document.getElementById("logs-output"),
   closeLogs: document.getElementById("close-logs"),
+  toolLinksDialog: document.getElementById("tool-links-dialog"),
+  toolLinksTitle: document.getElementById("tool-links-title"),
+  toolLinksList: document.getElementById("tool-links-list"),
+  toolLinksStatus: document.getElementById("tool-links-status"),
+  closeToolLinks: document.getElementById("close-tool-links"),
   toast: document.getElementById("toast"),
   themeModeSelect: document.getElementById("theme-mode-select"),
   newThemePreset: document.getElementById("new-theme-preset"),
@@ -70,7 +75,9 @@ let portalConfig = null;
 let refreshTimer = null;
 let logsSource = null;
 let toastTimer = null;
+let toolLinksStatusTimer = null;
 let logLines = [];
+let activeToolLinksId = null;
 let currentView = "dashboard";
 let themeSettings = null;
 let themePresetDraftKind = "color";
@@ -120,11 +127,7 @@ initialize();
 
 async function initialize() {
   try {
-    portalConfig = await fetchJson("/api/portal");
-    renderPortalNav();
-    initializeView();
-    renderAccessContext();
-    renderTools(portalConfig.tools);
+    await refreshPortalConfig();
     scheduleRefresh(portalConfig.refresh_ms);
     await refreshStatus();
   } catch (error) {
@@ -133,7 +136,7 @@ async function initialize() {
 }
 
 function bindEvents() {
-  elements.refreshButton.addEventListener("click", refreshStatus);
+  elements.refreshButton.addEventListener("click", refreshDashboard);
   elements.themeToggle.addEventListener("click", toggleTheme);
   elements.themeModeSelect.addEventListener("change", () => {
     themeSettings.mode = elements.themeModeSelect.value === "day" ? "day" : "night";
@@ -227,6 +230,39 @@ function bindEvents() {
   });
   elements.closeLogs.addEventListener("click", closeLogs);
   elements.logsDialog.addEventListener("close", closeLogs);
+  elements.closeToolLinks.addEventListener("click", () => elements.toolLinksDialog.close());
+  elements.toolLinksDialog.addEventListener("close", clearToolLinksDialog);
+  elements.toolsGrid.addEventListener("click", async (event) => {
+    const linksButton = event.target.closest("[data-tool-links]");
+    if (!linksButton) return;
+    const toolId = linksButton.dataset.toolLinks;
+    const cachedTool = portalConfig?.tools?.find((candidate) => candidate.id === toolId);
+    if (cachedTool) openToolLinks(cachedTool);
+    try {
+      await refreshPortalConfig({ renderToolCards: false });
+      const currentTool = portalConfig?.tools?.find((candidate) => candidate.id === toolId);
+      if (currentTool && getToolLinkGroups(currentTool).length) {
+        if (elements.toolLinksDialog.open && activeToolLinksId === toolId) openToolLinks(currentTool);
+      } else if (elements.toolLinksDialog.open && activeToolLinksId === toolId) {
+        elements.toolLinksDialog.close();
+        renderTools(portalConfig.tools);
+        elements.refreshButton.focus();
+        showToast("No links are currently available.");
+      }
+    } catch {
+      showToolLinksStatus("Showing the last available links.");
+    }
+  });
+  elements.toolLinksList.addEventListener("click", async (event) => {
+    const copyButton = event.target.closest("[data-copy-link]");
+    if (!copyButton) return;
+    try {
+      await copyText(copyButton.dataset.copyLink);
+      showToolLinksStatus("Link copied.");
+    } catch {
+      showToolLinksStatus("Could not copy link.");
+    }
+  });
   elements.servicesGrid.addEventListener("click", async (event) => {
     const logsButton = event.target.closest("[data-logs]");
     if (logsButton) {
@@ -303,26 +339,138 @@ function renderTools(tools) {
       };
       const state = tool.accessible ? labels[tool.readiness] || "Unknown" : "LAN only";
       const accessLabel = tool.access === "public" ? "Public route" : "LAN only";
-      if (tool.readiness !== "ready" || !tool.accessible) {
-        return `
-          <div class="tool-card disabled readiness-${escapeAttribute(tool.readiness)}" aria-disabled="true">
-            <div><h3>${escapeHtml(tool.name)}</h3><p>${escapeHtml(tool.description)}</p></div>
-            <div class="tool-card-footer">
-              <span class="tool-access access-${escapeAttribute(tool.access)}">${accessLabel}</span>
-              <span class="tool-state">${state}</span>
-            </div>
-          </div>`;
-      }
+      const linkGroups = getToolLinkGroups(tool);
+      const isReady = tool.readiness === "ready" && tool.accessible;
+      const linksButton = linkGroups.length
+        ? `<button class="tool-access access-${escapeAttribute(tool.access)} tool-links-button" type="button" data-tool-links="${escapeAttribute(tool.id)}" aria-label="Show links for ${escapeAttribute(tool.name)}" aria-haspopup="dialog" aria-controls="tool-links-dialog">Links</button>`
+        : "";
       return `
-        <a class="tool-card" href="${escapeAttribute(tool.route)}">
-          <div><h3>${escapeHtml(tool.name)}</h3><p>${escapeHtml(tool.description)}</p></div>
+        <article class="tool-card${isReady ? "" : ` disabled readiness-${escapeAttribute(tool.readiness)}`}">
+          ${isReady ? `<a class="tool-card-target" href="${escapeAttribute(tool.route)}" aria-label="Open ${escapeAttribute(tool.name)}"></a>` : ""}
+          <div class="tool-card-copy"><h3>${escapeHtml(tool.name)}</h3><p>${escapeHtml(tool.description)}</p></div>
           <div class="tool-card-footer">
-            <span class="tool-access access-${escapeAttribute(tool.access)}">${accessLabel}</span>
+            <div class="tool-access-actions">
+              <span class="tool-access access-${escapeAttribute(tool.access)}">${accessLabel}</span>
+              ${linksButton}
+            </div>
             <span class="tool-state">${state}</span>
           </div>
-        </a>`;
+        </article>`;
     })
     .join("");
+}
+
+async function refreshPortalConfig({ renderToolCards = true } = {}) {
+  portalConfig = await fetchJson("/api/portal");
+  renderPortalNav();
+  initializeView();
+  renderAccessContext();
+  if (renderToolCards) renderTools(portalConfig.tools);
+  return portalConfig;
+}
+
+async function refreshDashboard() {
+  elements.refreshButton.classList.add("spinning");
+  try {
+    const [, status] = await Promise.all([refreshPortalConfig(), fetchJson("/status/api")]);
+    renderStatus(status);
+    setConnected();
+  } catch (error) {
+    setDisconnected(error);
+  } finally {
+    window.setTimeout(() => elements.refreshButton.classList.remove("spinning"), 300);
+  }
+}
+
+function openToolLinks(tool) {
+  const groups = getToolLinkGroups(tool);
+  if (!groups.length) return;
+  activeToolLinksId = tool.id;
+  elements.toolLinksTitle.textContent = `${tool.name} Links`;
+  elements.toolLinksList.innerHTML = groups
+    .map(
+      (group) => `
+        <section class="tool-link-group">
+          <h3>${escapeHtml(group.label)}</h3>
+          <div class="tool-link-rows">
+            ${group.links.map(renderToolLink).join("")}
+          </div>
+        </section>`,
+    )
+    .join("");
+  if (!elements.toolLinksDialog.open) elements.toolLinksDialog.showModal();
+}
+
+function clearToolLinksDialog() {
+  activeToolLinksId = null;
+  window.clearTimeout(toolLinksStatusTimer);
+  elements.toolLinksStatus.hidden = true;
+  elements.toolLinksStatus.textContent = "";
+}
+
+function showToolLinksStatus(message) {
+  if (!elements.toolLinksDialog.open) {
+    showToast(message);
+    return;
+  }
+  window.clearTimeout(toolLinksStatusTimer);
+  elements.toolLinksStatus.textContent = message;
+  elements.toolLinksStatus.hidden = false;
+  toolLinksStatusTimer = window.setTimeout(() => {
+    elements.toolLinksStatus.hidden = true;
+    elements.toolLinksStatus.textContent = "";
+  }, 2400);
+}
+
+function renderToolLink(link) {
+  const url = resolveToolLink(link.url);
+  const openUrl = link.openable !== false ? resolveHttpLink(link.url) : null;
+  return `
+    <div class="tool-link-row">
+      <div class="tool-link-copy">
+        <strong>${escapeHtml(link.label)}</strong>
+        <code>${escapeHtml(url)}</code>
+      </div>
+      <div class="tool-link-actions">
+        ${
+          openUrl
+            ? `<a class="icon-button tool-link-action" href="${escapeAttribute(openUrl)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${escapeAttribute(link.label)} in a new tab" title="Open in a new tab">
+                ${openIcon()}
+              </a>`
+            : ""
+        }
+        <button class="icon-button tool-link-action" type="button" data-copy-link="${escapeAttribute(url)}" aria-label="Copy ${escapeAttribute(link.label)}" title="Copy">
+          ${copyIcon()}
+        </button>
+      </div>
+    </div>`;
+}
+
+function getToolLinkGroups(tool) {
+  if (!Array.isArray(tool?.link_groups)) return [];
+  return tool.link_groups
+    .map((group) => ({
+      label: String(group?.label || "Links"),
+      links: Array.isArray(group?.links)
+        ? group.links.filter((link) => link && typeof link.label === "string" && typeof link.url === "string" && link.url.trim())
+        : [],
+    }))
+    .filter((group) => group.links.length);
+}
+
+function resolveToolLink(value) {
+  const url = String(value || "").trim();
+  if (!url.startsWith("/")) return url;
+  return new URL(url, window.location.origin).href;
+}
+
+function resolveHttpLink(value) {
+  try {
+    const url = new URL(String(value || ""), window.location.origin);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
 }
 
 function renderAccessContext() {
@@ -1093,6 +1241,42 @@ function frameStarIcon() {
 
 function trashIcon() {
   return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 11v6M14 11v6"/></svg>';
+}
+
+function openIcon() {
+  return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h6v6M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>';
+}
+
+function copyIcon() {
+  return '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg>';
+}
+
+async function copyText(value) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return;
+    } catch {
+      // LAN-only HTTP pages may not have access to the Clipboard API.
+    }
+  }
+
+  const previousFocus = document.activeElement;
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  const container = elements.toolLinksDialog.open ? elements.toolLinksDialog : document.body;
+  container.appendChild(textarea);
+  try {
+    textarea.focus();
+    textarea.select();
+    if (!document.execCommand("copy")) throw new Error("Copy failed");
+  } finally {
+    textarea.remove();
+    if (typeof previousFocus?.focus === "function") previousFocus.focus();
+  }
 }
 
 async function fetchJson(url, options) {
