@@ -28,7 +28,7 @@
       })();
     </script>
     <script src="/assets/frame-theme.js?v=global-theme-v1"></script>
-    <link rel="stylesheet" href="/slsui/assets/styles.css?v=stream-delete-dialog-v1">
+    <link rel="stylesheet" href="/slsui/assets/styles.css?v=stream-delete-dialog-v1-close-icon-v2">
   </head>
   <body>
     <header class="topbar">
@@ -65,7 +65,7 @@
       <form id="stream-form" method="dialog">
         <div class="dialog-head">
           <div><strong id="dialog-title">Add stream</strong><span>Secure IDs are generated automatically.</span></div>
-          <button type="button" class="icon-button close-dialog" title="Close">Close</button>
+          <button type="button" class="icon-button close-button close-dialog" aria-label="Close stream editor" title="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
         </div>
         <label>Stream name<input id="description-input" required maxlength="160" placeholder="Main IRL feed"></label>
         <label class="source-toggle">
@@ -92,7 +92,7 @@
     <dialog id="links-dialog">
       <div class="dialog-head">
         <div><strong>Stream links</strong><span>Ready for publishers, players, OBS, and diagnostics.</span></div>
-        <button type="button" class="icon-button close-dialog" title="Close">Close</button>
+        <button type="button" class="icon-button close-button close-dialog" aria-label="Close stream links" title="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>
       <div id="links-list" class="links-list"></div>
     </dialog>
@@ -100,7 +100,7 @@
     <dialog id="stats-output-dialog">
       <div class="dialog-head">
         <div><strong id="stats-output-title">Stats outputs</strong><span>Public read-only URLs for apps and diagnostics.</span></div>
-        <button type="button" class="icon-button close-dialog" title="Close">Close</button>
+        <button type="button" class="icon-button close-button close-dialog" aria-label="Close stats outputs" title="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>
       <div id="stats-output-list" class="links-list"></div>
     </dialog>
@@ -108,7 +108,7 @@
     <dialog id="bound-overlays-dialog">
       <div class="dialog-head">
         <div><strong id="bound-overlays-title">Bound overlays</strong><span>Sources using this stream as their data source.</span></div>
-        <button type="button" class="icon-button close-dialog" title="Close">Close</button>
+        <button type="button" class="icon-button close-button close-dialog" aria-label="Close bound overlays" title="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>
       <div id="bound-overlays-list" class="bound-overlays-list"></div>
     </dialog>
@@ -116,7 +116,7 @@
     <dialog id="delete-stream-dialog">
       <div class="dialog-head">
         <div><strong id="delete-stream-title">Delete stream?</strong><span>Related OBS overlay sources will be unbound, not deleted.</span></div>
-        <button type="button" class="icon-button close-dialog" title="Close">Close</button>
+        <button type="button" class="icon-button close-button close-dialog" aria-label="Close delete confirmation" title="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>
       <p id="delete-stream-copy" class="dialog-copy"></p>
       <div id="delete-stream-overlays" class="bound-overlays-list"></div>

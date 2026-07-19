@@ -28,7 +28,7 @@
       })();
     </script>
     <script src="/assets/frame-theme.js?v=global-theme-v1"></script>
-    <link rel="stylesheet" href="/audio/assets/styles.css?v=frame-theme-tab">
+    <link rel="stylesheet" href="/audio/assets/styles.css?v=frame-theme-tab-close-icon-v2">
   </head>
   <body>
     <header class="topbar">
@@ -54,7 +54,7 @@
     </main>
     <dialog id="stream-dialog">
       <form id="stream-form">
-        <div class="dialog-head"><div><strong id="dialog-title">Add audio source</strong><span>Stream IDs become part of stable capture and listen URLs.</span></div><button type="button" class="secondary" id="close-dialog">Close</button></div>
+        <div class="dialog-head"><div><strong id="dialog-title">Add audio source</strong><span>Stream IDs become part of stable capture and listen URLs.</span></div><button type="button" class="secondary close-button" id="close-dialog" aria-label="Close audio source dialog" title="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button></div>
         <div id="dialog-notice" class="notice hidden"></div>
         <div class="form-grid">
           <label class="wide">Source name<input id="name-input" required maxlength="80" placeholder="Main IRL program audio"></label>

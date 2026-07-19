@@ -145,6 +145,24 @@ export function captureTimestamp(value) {
   return Date.parse(value);
 }
 
+export function buildGalleryShareUrls(href, exploreAvailable, selectedBase = null) {
+  const gallery = new URL(href);
+  const exploreRequested = gallery.searchParams.get("view") === "explore";
+  gallery.searchParams.delete("view");
+  gallery.searchParams.delete("photo");
+  if (selectedBase) gallery.searchParams.set("photo", selectedBase);
+  gallery.hash = "";
+  const galleryUrl = gallery.toString();
+  if (!exploreAvailable) return { gallery: galleryUrl, explore: null, current: galleryUrl };
+
+  const explore = new URL(gallery);
+  explore.searchParams.delete("photo");
+  explore.searchParams.set("view", "explore");
+  if (selectedBase) explore.searchParams.set("photo", selectedBase);
+  const exploreUrl = explore.toString();
+  return { gallery: galleryUrl, explore: exploreUrl, current: exploreRequested ? exploreUrl : galleryUrl };
+}
+
 function validCoordinate(lat, lon) {
   return Number.isFinite(lat) && Number.isFinite(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180;
 }

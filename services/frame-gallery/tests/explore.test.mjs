@@ -1,6 +1,41 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { inferTimeShiftSeconds, matchExplorePhotos, routeSegments, simulatedRouteSegments, splitTrackPoints } from "../public/explore.js";
+import { buildGalleryShareUrls, inferTimeShiftSeconds, matchExplorePhotos, routeSegments, simulatedRouteSegments, splitTrackPoints } from "../public/explore.js";
+
+test("builds canonical gallery and selected Explore share links", () => {
+  assert.deepEqual(
+    buildGalleryShareUrls("https://frame.test/gallery/2026-07-12/?view=explore&photo=old&utm_source=frame#map", true, "TCL 3846"),
+    {
+      gallery: "https://frame.test/gallery/2026-07-12/?utm_source=frame&photo=TCL+3846",
+      explore: "https://frame.test/gallery/2026-07-12/?utm_source=frame&view=explore&photo=TCL+3846",
+      current: "https://frame.test/gallery/2026-07-12/?utm_source=frame&view=explore&photo=TCL+3846",
+    },
+  );
+  assert.deepEqual(
+    buildGalleryShareUrls("https://frame.test/gallery/2026-07-12/?view=explore&photo=old", false, "ignored"),
+    {
+      gallery: "https://frame.test/gallery/2026-07-12/?photo=ignored",
+      explore: null,
+      current: "https://frame.test/gallery/2026-07-12/?photo=ignored",
+    },
+  );
+  assert.deepEqual(
+    buildGalleryShareUrls("https://frame.test/gallery/2026-07-12/", true, "TCL 3846"),
+    {
+      gallery: "https://frame.test/gallery/2026-07-12/?photo=TCL+3846",
+      explore: "https://frame.test/gallery/2026-07-12/?view=explore&photo=TCL+3846",
+      current: "https://frame.test/gallery/2026-07-12/?photo=TCL+3846",
+    },
+  );
+  assert.deepEqual(
+    buildGalleryShareUrls("https://frame.test/gallery/2026-06-28/", true),
+    {
+      gallery: "https://frame.test/gallery/2026-06-28/",
+      explore: "https://frame.test/gallery/2026-06-28/?view=explore",
+      current: "https://frame.test/gallery/2026-06-28/",
+    },
+  );
+});
 
 test("sorts GPX points, removes duplicate timestamps, and splits long tracking gaps", () => {
   const start = Date.parse("2026-07-13T01:00:00Z");

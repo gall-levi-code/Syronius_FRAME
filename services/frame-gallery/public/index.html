@@ -31,7 +31,8 @@
     <script src="/assets/frame-theme.js?v=global-theme-v1"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
-    <link rel="stylesheet" href="/gallery/assets/styles.css?v=gallery-explore-5">
+    <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js" integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="/gallery/assets/styles.css?v=gallery-share-7-mobile-compact-v2">
   </head>
   <body>
     <header class="topbar">
@@ -94,7 +95,10 @@
       </div>
       <aside id="lightbox-details" class="lightbox-details">
         <span id="lightbox-camera-text"></span>
-        <button id="lightbox-explore" class="lightbox-map-button" type="button" hidden>View on map</button>
+        <span class="lightbox-photo-actions">
+          <button id="lightbox-explore" class="lightbox-photo-button" type="button" hidden>View on map</button>
+          <button id="lightbox-share" class="lightbox-photo-button" type="button">Share</button>
+        </span>
       </aside>
       <div class="lightbox-toolbar">
         <div class="lightbox-identity">
@@ -108,11 +112,44 @@
             <output id="zoom-value" for="zoom-slider">Fit</output>
           </span>
           <button id="zoom-fit" class="lightbox-control" type="button">Fit</button>
-          <button id="lightbox-close" class="lightbox-control" type="button">Close</button>
+          <button id="lightbox-close" class="lightbox-control close-button" type="button" aria-label="Close photo viewer" title="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
         </div>
       </div>
       <button id="lightbox-previous" class="lightbox-control lightbox-nav previous" type="button" aria-label="Previous photo">&lt;</button>
       <button id="lightbox-next" class="lightbox-control lightbox-nav next" type="button" aria-label="Next photo">&gt;</button>
+    </dialog>
+
+    <dialog id="share-dialog" class="share-dialog" aria-labelledby="share-dialog-title" aria-describedby="share-dialog-copy">
+      <form method="dialog" class="share-dialog-panel">
+        <div class="share-dialog-heading">
+          <div><p>Share</p><h2 id="share-dialog-title">Scan or copy a link</h2></div>
+          <button class="secondary-button close-button" type="submit" value="close" aria-label="Close share dialog" title="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>
+        <p id="share-dialog-copy" class="share-dialog-copy">Scan the current view or copy a direct link. The QR code is generated on this device.</p>
+        <div class="share-dialog-body">
+          <figure id="share-qr" class="share-qr">
+            <div id="share-qr-code" class="share-qr-code" role="img" aria-labelledby="share-qr-label"></div>
+            <figcaption><strong id="share-qr-label">Scan current view</strong><span>Open this view on another device.</span></figcaption>
+          </figure>
+          <div class="share-links">
+            <div class="share-link-row">
+              <label for="share-gallery-url">Gallery view</label>
+              <div class="share-link-controls">
+                <input id="share-gallery-url" type="url" readonly spellcheck="false">
+                <button id="copy-gallery-url" class="secondary-button" type="button" aria-label="Copy gallery view link" autofocus>Copy</button>
+              </div>
+            </div>
+            <div id="share-explore-row" class="share-link-row" hidden>
+              <label for="share-explore-url">Explore view</label>
+              <div class="share-link-controls">
+                <input id="share-explore-url" type="url" readonly spellcheck="false">
+                <button id="copy-explore-url" class="secondary-button" type="button" aria-label="Copy Explore view link">Copy</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p id="share-status" class="share-status" role="status" aria-live="polite"></p>
+      </form>
     </dialog>
 
     <template id="date-template">
@@ -124,7 +161,10 @@
             <span class="date-card-stats"></span>
           </span>
         </a>
-        <a class="map-jump date-map-jump" hidden></a>
+        <span class="card-actions">
+          <a class="card-action date-map-jump" hidden></a>
+          <button class="card-action date-share" type="button"></button>
+        </span>
       </article>
     </template>
     <template id="photo-template">
@@ -133,9 +173,12 @@
           <img alt="" loading="lazy">
           <span class="photo-meta"><strong></strong><small></small></span>
         </button>
-        <button class="map-jump photo-map-jump" type="button" hidden></button>
+        <span class="card-actions">
+          <button class="card-action photo-map-jump" type="button" hidden></button>
+          <button class="card-action photo-share" type="button"></button>
+        </span>
       </article>
     </template>
-    <script type="module" src="/gallery/assets/gallery.js?v=gallery-explore-7"></script>
+    <script type="module" src="/gallery/assets/gallery.js?v=gallery-share-7"></script>
   </body>
 </html>

@@ -7,6 +7,8 @@ button { min-height:44px; border:1px solid transparent; border-radius:8px; paddi
 button:hover { filter:brightness(1.06); }
 button:disabled { opacity:.48; cursor:not-allowed; filter:none; }
 button.secondary,.icon-button { color:var(--text); border-color:var(--line); background:var(--control); }
+.close-button { display:inline-grid; width:44px; min-width:44px; place-items:center; padding:0; }
+.close-button svg { width:19px; height:19px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
 button.icon-reset { width:42px; min-width:42px; min-height:40px; display:inline-grid; place-items:center; padding:0; color:var(--text); border:1px solid var(--line); background:var(--control); }
 button.icon-reset svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:2; }
 .link-action { display:inline-grid; place-items:center; flex:0 0 34px; width:34px; min-width:34px; height:34px; min-height:34px; padding:0; border:1px solid var(--accent); border-radius:50%; color:var(--accent); background:transparent; text-decoration:none; }

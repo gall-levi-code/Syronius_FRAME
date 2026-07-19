@@ -30,6 +30,8 @@ button, input { font: inherit; }
 button { min-height: 42px; border: 1px solid var(--accent); border-radius: 7px; background: var(--accent); color: #032133; font-weight: 750; padding: 0 15px; cursor: pointer; }
 button:hover { filter: brightness(1.08); }
 button.secondary, .icon-button { background: transparent; color: var(--text); border-color: var(--border); }
+.close-button { display: inline-grid; width: 42px; min-width: 42px; place-items: center; padding: 0; }
+.close-button svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 button.danger { background: transparent; color: var(--bad); border-color: rgba(255, 107, 122, 0.4); }
 .link-action { display: inline-grid; place-items: center; flex: 0 0 34px; width: 34px; min-width: 34px; height: 34px; min-height: 34px; padding: 0; border: 1px solid var(--accent); border-radius: 50%; background: transparent; color: var(--accent); text-decoration: none; cursor: pointer; }
 .link-action:hover, .link-action:focus-visible { background: var(--accent-soft); filter: none; }
