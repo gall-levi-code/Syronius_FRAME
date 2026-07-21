@@ -10,11 +10,12 @@ const elements = {
   empty: document.querySelector("#latest-empty"),
   galleryLink: document.querySelector("#today-gallery-link"),
   galleryCopy: document.querySelector("#today-gallery-copy"),
+  galleryCopyButton: document.querySelector("#today-gallery-copy-button"),
+  toolLinks: document.querySelector("#tool-links"),
   latestDate: document.querySelector("#latest-date"),
   latestBase: document.querySelector("#latest-base"),
   latestCount: document.querySelector("#latest-count"),
   latestUpdated: document.querySelector("#latest-updated"),
-  copyViewer: document.querySelector("#copy-viewer"),
   message: document.querySelector("#dashboard-message"),
   themeToggle: document.querySelector("#theme-toggle"),
 };
@@ -32,13 +33,22 @@ window.addEventListener("storage", (event) => {
   }
 });
 
-elements.copyViewer.addEventListener("click", async () => {
+elements.toolLinks.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-copy-path]");
+  if (!(button instanceof HTMLButtonElement)) return;
+  const label = button.dataset.copyLabel;
   try {
-    await navigator.clipboard.writeText(publicUrl("/today/viewer"));
-    elements.copyViewer.textContent = "Viewer URL copied";
-    setTimeout(() => { elements.copyViewer.textContent = "Copy OBS viewer URL"; }, 1800);
+    await navigator.clipboard.writeText(publicUrl(button.dataset.copyPath));
+    button.innerHTML = checkIcon();
+    button.setAttribute("aria-label", `${label} URL copied`);
+    button.title = `${label} URL copied`;
+    setTimeout(() => {
+      button.innerHTML = copyIcon();
+      button.setAttribute("aria-label", `Copy ${label} URL`);
+      button.title = `Copy ${label} URL`;
+    }, 1800);
   } catch {
-    elements.message.textContent = "The viewer URL could not be copied from this browser.";
+    elements.message.textContent = `${label} could not be copied from this browser.`;
   }
 });
 
@@ -108,6 +118,14 @@ function publicUrl(path) {
   }
 }
 
+function checkIcon() {
+  return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>';
+}
+
+function copyIcon() {
+  return '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg>';
+}
+
 function render(summary) {
   const gallery = summary.current_gallery;
   const latest = summary.latest;
@@ -123,12 +141,23 @@ function render(summary) {
   if (photo) elements.image.src = photo.thumbnail_url;
   else elements.image.removeAttribute("src");
   if (gallery) {
-    elements.galleryLink.href = `/today/gallery/${gallery.date_folder}/`;
+    const galleryPath = `/today/gallery/${gallery.date_folder}/`;
+    elements.galleryLink.href = galleryPath;
     elements.galleryLink.removeAttribute("aria-disabled");
+    elements.galleryLink.removeAttribute("tabindex");
+    elements.galleryLink.title = "Open Current Gallery in a new tab";
+    elements.galleryCopyButton.dataset.copyPath = galleryPath;
+    elements.galleryCopyButton.disabled = false;
+    elements.galleryCopyButton.title = "Copy Current Gallery URL";
     elements.galleryCopy.textContent = `${gallery.date_folder} · ${gallery.count} photo${gallery.count === 1 ? "" : "s"}`;
   } else {
-    elements.galleryLink.href = "/today/gallery";
+    elements.galleryLink.removeAttribute("href");
     elements.galleryLink.setAttribute("aria-disabled", "true");
+    elements.galleryLink.setAttribute("tabindex", "-1");
+    elements.galleryLink.title = "No current gallery available";
+    delete elements.galleryCopyButton.dataset.copyPath;
+    elements.galleryCopyButton.disabled = true;
+    elements.galleryCopyButton.title = "No current gallery available";
     elements.galleryCopy.textContent = "No current album";
   }
   elements.latestDate.textContent = latest?.date_folder ?? "None";

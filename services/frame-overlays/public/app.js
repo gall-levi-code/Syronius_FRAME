@@ -78,6 +78,8 @@ const telemetryBlockFields = [
 const telemetryBlockMap = new Map(telemetryBlockFields.map(([id, label, fields]) => [id, { label, fields }]));
 const icons = {
   reset: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6"/></svg>`,
+  trash: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 11v6M14 11v6"/></svg>`,
+  copy: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg>`,
   arrowUp: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 5-7 7"/><path d="m12 5 7 7"/><path d="M12 5v14"/></svg>`,
   arrowDown: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 19-7-7"/><path d="m12 19 7-7"/><path d="M12 5v14"/></svg>`,
   grip: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/></svg>`,
@@ -112,7 +114,6 @@ const fakePreviewToggle = document.querySelector("#fake-preview-toggle");
 const notice = document.querySelector("#notice");
 const saveStatus = document.querySelector("#save-status");
 const receiverStatus = document.querySelector("#receiver-status");
-const dashboardLink = document.querySelector("#dashboard-link");
 const themeToggle = document.querySelector("#theme-toggle");
 const confirmDialog = document.querySelector("#confirm-dialog");
 const confirmTitle = document.querySelector("#confirm-title");
@@ -225,7 +226,6 @@ async function load(preserveSelection = false) {
     state.catalog = catalog;
     state.streams = (streams.streams || []).slice().sort(compareStream);
     state.config = config;
-    if (dashboardLink) dashboardLink.href = dashboardUrl();
     receiverStatus.textContent = streamsAvailable ? "Telemetry ready" : "Telemetry unavailable";
     receiverStatus.classList.toggle("live", streamsAvailable);
     const sources = sortedSources();
@@ -469,12 +469,14 @@ function renderSelectedSource() {
           <p>Editing this source updates the OBS browser URL automatically.</p>
         </div>
         <div class="source-actions">
-          <button id="copy-source" class="secondary" type="button">Copy OBS URL</button>
-          <button id="reset-source" class="secondary" type="button">Reset to base template</button>
-          <button id="delete-source" class="danger" type="button">Delete</button>
+          <button id="reset-source" class="icon-reset" type="button" aria-label="Reset to base template" title="Reset to base template">${icons.reset}</button>
+          <button id="delete-source" class="icon-reset danger" type="button" aria-label="Delete source" title="Delete source">${icons.trash}</button>
         </div>
       </div>
-      <p class="source-url">${escapeHtml(url)}</p>
+      <div class="source-url">
+        <span>${escapeHtml(url)}</span>
+        <button id="copy-source" class="icon-button link-action" type="button" aria-label="Copy ${escapeAttr(source.display_name)} OBS URL" title="Copy ${escapeAttr(source.display_name)} OBS URL">${icons.copy}</button>
+      </div>
       ${sourceDetailsMarkup(source, preset)}
       ${type === "upload_progress" ? uploadDesignMarkup(state.designDraft) : connectivityDesignMarkup(state.designDraft)}
     </section>`;
@@ -986,14 +988,6 @@ function compareStream(a, b) {
 
 function sourceUrl(source) {
   return new URL(`/overlays/view/${encodeURIComponent(source.slug)}/${encodeURIComponent(source.source_key)}`, publicBaseUrl()).href;
-}
-
-function dashboardUrl() {
-  try {
-    return new URL("/dashboard", publicBaseUrl()).href;
-  } catch {
-    return "/dashboard";
-  }
 }
 
 function publicBaseUrl() {

@@ -123,6 +123,45 @@ test("global theme is Portal-backed and available to public surfaces", async () 
   assert.ok(todayViewer.includes("/assets/frame-theme.js"), "Photo Stage viewer must inherit global theme");
 });
 
+test("service URL utilities use icon-only Copy and Open controls", async () => {
+  const paths = [
+    "services/frame-audio/public/admin.js",
+    "services/frame-audio-bridge/public/control.html",
+    "services/frame-belabox-manager/public/app.js",
+    "services/frame-overlays/public/app.js",
+    "services/frame-portal/public/portal.js",
+    "services/frame-streams/public/app.js",
+    "services/frame-today/public/dashboard.html",
+  ];
+  const sources = await Promise.all(paths.map((path) => readFile(path, "utf8")));
+  for (const [index, source] of sources.entries()) {
+    assert.doesNotMatch(source, /<(?:button|a)\b[^>]*>\s*(?:Copy|Open)\b/i, `${paths[index]} must use an icon for Copy/Open utilities`);
+  }
+});
+
+test("LAN tool headers return to Dashboard and use the shared sign-out icon", async () => {
+  const [photoUpload, photoStage, audioAdmin, audioFrontend, audioStyles] = await Promise.all([
+    readFile("services/frame-photo-upload/public/index.html", "utf8"),
+    readFile("services/frame-today/public/dashboard.html", "utf8"),
+    readFile("services/frame-audio/public/admin.html", "utf8"),
+    readFile("services/frame-audio/public/admin.js", "utf8"),
+    readFile("services/frame-audio/public/styles.css", "utf8"),
+  ]);
+  const logoutIcon = "M10 17l5-5-5-5M15 12H3M15 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4";
+  assert.ok(photoUpload.includes('class="brand" href="/dashboard"'), "Photo Upload logo should return to FRAME Dashboard");
+  assert.ok(photoStage.includes('class="brand" href="/dashboard"'), "Photo Stage logo should return to FRAME Dashboard");
+  assert.ok(audioAdmin.includes('class="brand brand-link" href="/dashboard"'), "Audio Monitor logo should return to FRAME Dashboard");
+  for (const source of [photoUpload, photoStage, audioAdmin]) {
+    assert.ok(source.includes('href="/auth/logout" aria-label="Sign out of FRAME" title="Sign out"'));
+    assert.ok(source.includes(logoutIcon), "Sign-out controls should match the Portal icon");
+  }
+  for (const icon of ["microphoneIcon()", "headphonesIcon()", "copyIcon()", "pencilIcon()", "trashIcon()"]) {
+    assert.ok(audioFrontend.includes(icon), `Audio Monitor should render ${icon}`);
+  }
+  assert.ok(audioStyles.includes(".capture-action { color: var(--good)"), "Audio capture should use the green action style");
+  assert.ok(audioStyles.includes(".danger-action { color: var(--bad)"), "Audio delete should use the danger action style");
+});
+
 test("implemented Node services expose build and typecheck scripts", async () => {
   for (const service of [
     "frame-auth",
@@ -152,6 +191,7 @@ test("Stream Management supports a direct add-stream deep link", async () => {
   assert.ok(frontend.includes('window.addEventListener("hashchange", openDialogForHash)'), "SLSUI must react to hash changes");
   assert.ok(frontend.includes('"#add-stream"'), "SLSUI must recognize /slsui#add-stream");
   assert.ok(frontend.includes("clearAddStreamHash"), "SLSUI must clear the add-stream hash after the dialog closes");
+  assert.ok(html.includes('class="brand brand-link" href="/dashboard"'), "Stream Management logo should return to the LAN dashboard");
   assert.ok(html.includes("app.js?v=stream-delete-dialog-v1"), "SLSUI app cache key should change when management behavior changes");
 });
 
@@ -180,13 +220,12 @@ test("Overlay Wizard presents OBS sources as the only editable objects", async (
   assert.ok(html.includes("FRAME Overlay Wizard"));
   assert.ok(html.includes("FrameTheme"), "Overlay Wizard should inherit the shared FRAME theme");
   assert.ok(html.includes("THEME_PROFILE_KEY"), "Overlay Wizard bootstrap should read Portal theme profiles");
-  assert.ok(html.includes('id="dashboard-link"'), "Overlay Wizard logo should link to the dashboard");
+  assert.ok(html.includes('id="dashboard-link" class="brand brand-link" href="/dashboard"'), "Overlay Wizard logo should stay on the current LAN origin");
   assert.ok(html.includes("portal-theme-v2"), "Overlay Wizard assets should cache-bust theme chrome updates");
   assert.ok(html.includes("M21 12.8A9 9 0 1 1 11.2 3"), "Overlay Wizard theme toggle should use the Portal moon icon path");
   assert.ok(html.includes("M4.93 4.93l1.42 1.42"), "Overlay Wizard theme toggle should use the Portal sun icon path");
   assert.ok(frontend.includes("THEME_STORAGE_KEYS"), "Overlay Wizard should listen for Portal theme storage changes");
   assert.ok(frontend.includes("THEME_PROFILE_ID_KEY"), "Overlay Wizard should react when the Portal theme preset changes");
-  assert.ok(frontend.includes("dashboardLink.href = dashboardUrl()"), "Overlay Wizard logo should route through the configured public base");
   assert.ok(frontend.includes("function publicBaseUrl()"), "Overlay Wizard should normalize configured public URLs");
   assert.ok(frontend.includes('url.protocol = "https:"'), "Overlay Wizard should force HTTPS for non-local public links");
   assert.ok(frontend.includes('window.location.href = "/slsui#add-stream"'), "Overlay Wizard should not hardcode localhost for SLSUI");
@@ -413,7 +452,7 @@ test("Belabox pairing UI hides MQTT implementation details", async () => {
   assert.ok(frontend.includes("Photo Transfer"));
   assert.ok(frontend.includes("Protect Stream"));
   assert.ok(frontend.includes("What is slowing things down?"));
-  assert.ok(frontend.includes("Open Encoder Remote"));
+  assert.ok(frontend.includes('aria-label="Open ${escapeAttr(displayName)} encoder remote in a new tab"'));
   assert.ok(frontend.includes("Photo Agent"));
   assert.ok(frontend.includes("/belabox/api/pair"));
   assert.ok(frontend.includes("/belabox/api/pair/jobs"));
@@ -559,13 +598,28 @@ test("Belabox pairing UI hides MQTT implementation details", async () => {
   assert.ok(!frontend.includes("BELABOX_MQTT_PASSWORD"));
 });
 
-test("Photo Stage copies the Hybrid viewer URL", async () => {
-  const [frontend, backend] = await Promise.all([
+test("Photo Stage exposes Open and Copy actions for its Hybrid links", async () => {
+  const [html, frontend, backend] = await Promise.all([
+    readFile("services/frame-today/public/dashboard.html", "utf8"),
     readFile("services/frame-today/public/dashboard.js", "utf8"),
     readFile("services/frame-today/src/app.ts", "utf8"),
   ]);
   assert.ok(backend.includes("public_base_url: publicBaseUrl"), "Today dashboard API should expose the configured public base");
-  assert.ok(frontend.includes('publicUrl("/today/viewer")'), "Today dashboard should copy the public viewer URL");
+  for (const [label, path] of [
+    ["All Galleries", "/today/gallery"],
+    ["Gallery Management", "/today/gallery/admin"],
+    ["Viewer Remote", "/today/remote"],
+    ["Viewer OBS Source", "/today/viewer"],
+    ["Photo Upload", "/photos/upload"],
+  ]) {
+    assert.ok(html.includes(`<strong>${label}</strong>`), `Today dashboard should label ${label}`);
+    assert.ok(html.includes(`data-copy-path="${path}"`), `Today dashboard should copy ${path}`);
+  }
+  assert.ok(html.includes('<strong>Current Gallery</strong>'), "Today dashboard should label Current Gallery");
+  assert.ok(html.includes('id="today-gallery-copy-button"'), "Today dashboard should offer a Current Gallery Copy action");
+  assert.ok(frontend.includes('const galleryPath = `/today/gallery/${gallery.date_folder}/`'), "Today dashboard should generate the current gallery path");
+  assert.ok(frontend.includes('elements.galleryLink.removeAttribute("href")'), "Today dashboard should disable an unavailable Current Gallery link");
+  assert.ok(frontend.includes("publicUrl(button.dataset.copyPath)"), "Today dashboard should copy every tool using the Hybrid public base");
   assert.ok(frontend.includes('url.protocol = "https:"'), "Today dashboard should force HTTPS for non-local public links");
 });
 

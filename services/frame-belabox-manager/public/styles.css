@@ -185,6 +185,36 @@ button.secondary,
   place-items: center;
 }
 
+.link-action {
+  flex: 0 0 34px;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0;
+  border-color: var(--accent);
+  border-radius: 50%;
+  color: var(--accent);
+  background: transparent;
+}
+
+.link-action svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.link-action:hover,
+.link-action:focus-visible {
+  background: color-mix(in srgb, var(--accent) 16%, var(--control));
+  color: var(--accent);
+  filter: none;
+}
+
 .theme-toggle {
   width: 38px;
   min-width: 38px;
@@ -1501,6 +1531,10 @@ pre {
   .primary-action {
     flex: 1;
     text-align: center;
+  }
+
+  .panel-actions .link-action {
+    flex: 0 0 34px;
   }
 
   .remote-row code {

@@ -87,15 +87,13 @@ function render() {
       ${stat("Generation", stream.generation)}
     </div>
     <div class="card-actions">
-      <button data-capture="${escapeAttr(stream.captureUrl)}">Open capture</button>
-      <button data-listen="${escapeAttr(stream.listenUrl)}" class="secondary">Open listener</button>
-      <button data-copy="${escapeAttr(stream.listenUrl)}" class="secondary">Copy listen URL</button>
-      <button data-edit="${escapeAttr(stream.streamId)}" class="secondary">Edit</button>
-      <button data-delete="${escapeAttr(stream.streamId)}" class="danger">Delete</button>
+      <a class="link-action capture-action" href="${escapeAttr(stream.captureUrl)}" target="_blank" rel="noopener noreferrer" aria-label="Open capture for ${escapeAttr(stream.name)} in a new tab" title="Open capture">${microphoneIcon()}</a>
+      <a class="link-action" href="${escapeAttr(stream.listenUrl)}" target="_blank" rel="noopener noreferrer" aria-label="Open listener for ${escapeAttr(stream.name)} in a new tab" title="Open listener">${headphonesIcon()}</a>
+      <button class="link-action" type="button" data-copy="${escapeAttr(stream.listenUrl)}" aria-label="Copy listen URL for ${escapeAttr(stream.name)}" title="Copy listen URL for ${escapeAttr(stream.name)}">${copyIcon()}</button>
+      <button class="link-action edit-action" type="button" data-edit="${escapeAttr(stream.streamId)}" aria-label="Edit ${escapeAttr(stream.name)}" title="Edit">${pencilIcon()}</button>
+      <button class="link-action danger-action" type="button" data-delete="${escapeAttr(stream.streamId)}" aria-label="Delete ${escapeAttr(stream.name)}" title="Delete">${trashIcon()}</button>
     </div>
   </article>`).join("");
-  list.querySelectorAll("[data-capture]").forEach((button) => button.addEventListener("click", () => window.open(button.dataset.capture, "_blank", "noopener")));
-  list.querySelectorAll("[data-listen]").forEach((button) => button.addEventListener("click", () => window.open(button.dataset.listen, "_blank", "noopener")));
   list.querySelectorAll("[data-copy]").forEach((button) => button.addEventListener("click", async () => {
     await navigator.clipboard.writeText(button.dataset.copy);
     showNotice("Listen URL copied.", "ok");
@@ -220,6 +218,11 @@ function showNotice(message, kind = "error") { notice.textContent = message; not
 async function api(url, init) { const response = await fetch(url, init); const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`); return body; }
 function escapeHtml(value) { const div = document.createElement("div"); div.textContent = value; return div.innerHTML; }
 function escapeAttr(value) { return escapeHtml(value).replaceAll('"', "&quot;"); }
+function microphoneIcon() { return '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></svg>'; }
+function headphonesIcon() { return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18v-6a8 8 0 0 1 16 0v6"/><path d="M4 14h3v6H5a1 1 0 0 1-1-1v-5ZM20 14h-3v6h2a1 1 0 0 0 1-1v-5Z"/></svg>'; }
+function copyIcon() { return '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg>'; }
+function pencilIcon() { return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5 4 4L7 21H3v-4L15 5Z"/><path d="m13 7 4 4"/></svg>'; }
+function trashIcon() { return '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 11v6M14 11v6"/></svg>'; }
 
 load();
 setInterval(() => { if (!dialog.open) void load(); }, 5_000);

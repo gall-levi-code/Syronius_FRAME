@@ -1,4 +1,7 @@
 const state = { streams: [], config: null, pendingDeleteStreamId: null };
+const OPEN_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h6v6M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>';
+const COPY_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg>';
+const CHECK_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>';
 const list = document.querySelector("#stream-list");
 const notice = document.querySelector("#notice");
 const receiverStatus = document.querySelector("#receiver-status");
@@ -234,8 +237,8 @@ function openLinks(id) {
     ["BBox Receiver statistics", statsUrl(stream.id, "bbox_receiver")],
   ];
   document.querySelector("#links-list").innerHTML = links.map(([label, url]) => `
-    <div class="link-row"><label>${label}<input readonly value="${escapeAttr(url)}"></label>
-    <button data-copy="${escapeAttr(url)}">Copy</button></div>`).join("");
+    <div class="link-row"><label>${escapeHtml(label)}<input readonly value="${escapeAttr(url)}"></label>
+    <button class="icon-button link-action" type="button" data-copy="${escapeAttr(url)}" aria-label="Copy ${escapeAttr(label)}" aria-live="polite" title="Copy ${escapeAttr(label)}">${COPY_ICON}</button></div>`).join("");
   document.querySelectorAll("[data-copy]").forEach((button) => button.addEventListener("click", async () => copyWithConfirmation(button)));
   linksDialog.showModal();
 }
@@ -275,12 +278,11 @@ function openStatsOutputs(id) {
         <input readonly value="${escapeAttr(url)}">
       </label>
       <div class="output-actions">
-        <button data-open="${escapeAttr(url)}" class="secondary">Open</button>
-        <button data-copy="${escapeAttr(url)}">Copy</button>
+        <a class="icon-button link-action" href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${escapeAttr(output.label)} in a new tab" title="Open ${escapeAttr(output.label)} in a new tab">${OPEN_ICON}</a>
+        <button class="icon-button link-action" type="button" data-copy="${escapeAttr(url)}" aria-label="Copy ${escapeAttr(output.label)}" aria-live="polite" title="Copy ${escapeAttr(output.label)}">${COPY_ICON}</button>
       </div>
     </div>`;
   }).join("");
-  document.querySelectorAll("[data-open]").forEach((button) => button.addEventListener("click", () => window.open(button.dataset.open, "_blank", "noopener")));
   document.querySelectorAll("[data-copy]").forEach((button) => button.addEventListener("click", async () => copyWithConfirmation(button)));
   statsOutputDialog.showModal();
 }
@@ -304,8 +306,16 @@ function showNotice(message, kind = "error") {
 function clearNotice() { notice.className = "notice hidden"; }
 async function copyWithConfirmation(button) {
   await navigator.clipboard.writeText(button.dataset.copy);
-  button.textContent = "Copied";
-  setTimeout(() => { button.textContent = "Copy"; }, 1200);
+  const label = button.dataset.copyLabel ||= button.getAttribute("aria-label");
+  const title = button.dataset.copyTitle ||= button.title;
+  button.innerHTML = CHECK_ICON;
+  button.setAttribute("aria-label", label.replace(/^Copy/, "Copied"));
+  button.title = title.replace(/^Copy/, "Copied");
+  setTimeout(() => {
+    button.innerHTML = COPY_ICON;
+    button.setAttribute("aria-label", label);
+    button.title = title;
+  }, 1200);
 }
 function formatBitrate(value) { return value >= 1000 ? `${(value / 1000).toFixed(2)} Mbps` : `${value} kbps`; }
 function formatMilliseconds(value) { return Number.isFinite(value) ? `${Number(value).toFixed(1)} ms` : "--"; }

@@ -737,6 +737,60 @@ button:active {
   transform: translateY(1px);
 }
 
+.link-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.link-action-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--frame-label);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.link-action {
+  display: inline-grid;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
+  margin: 0;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--frame-accent-border);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--frame-accent-strong);
+  cursor: pointer;
+}
+
+.link-action:hover,
+.link-action:focus-visible {
+  border-color: var(--frame-accent-border);
+  background: var(--frame-accent-soft);
+  color: var(--frame-accent-strong);
+}
+
+.link-action:focus-visible {
+  outline: 2px solid var(--frame-accent);
+  outline-offset: 2px;
+}
+
+.link-action svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
 .button-row {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -1462,6 +1516,18 @@ input[type="color"] {
 .control-page.theme-day button {
   background: #172033;
   color: #ffffff;
+}
+
+.control-page.theme-day .link-action {
+  border-color: var(--frame-accent-border);
+  background: transparent;
+  color: var(--frame-accent-strong);
+}
+
+.control-page.theme-day .link-action:hover,
+.control-page.theme-day .link-action:focus-visible {
+  background: var(--frame-accent-soft);
+  color: var(--frame-accent-strong);
 }
 
 .control-page.theme-day .bridge-action-panel {

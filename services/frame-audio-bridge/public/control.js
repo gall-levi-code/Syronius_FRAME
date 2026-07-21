@@ -16,6 +16,7 @@
     test: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 2v6l-5 9a3 3 0 0 0 2.6 4h8.8A3 3 0 0 0 19 17l-5-9V2"/><path d="M8 2h8"/><path d="M7.5 15h9"/></svg>`,
     testOff: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m2 2 20 20"/><path d="M10 2v4"/><path d="M14 2v6l5 9a3 3 0 0 1-.4 3.4"/><path d="M8 2h8"/><path d="M6.7 14 5 17a3 3 0 0 0 2.6 4h8.8"/></svg>`,
     reset: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6"/></svg>`,
+    copy: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg>`,
     delay: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2"/><path d="M9 2h6"/></svg>`,
     delayOff: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m2 2 20 20"/><path d="M9 2h6"/><path d="M7.7 7.7A8 8 0 0 0 18.3 18.3"/><path d="M19.7 14.6A8 8 0 0 0 9.4 5.3"/><path d="M12 9v3"/></svg>`,
     glow: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2v4"/><path d="M12 18v4"/><path d="m4.9 4.9 2.8 2.8"/><path d="m16.3 16.3 2.8 2.8"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="m4.9 19.1 2.8-2.8"/><path d="m16.3 7.7 2.8-2.8"/><circle cx="12" cy="12" r="3"/></svg>`,
@@ -358,6 +359,8 @@
   }
 
   function setupStaticIcons() {
+    elements.copyAudio.innerHTML = icons.copy;
+    elements.copyOverlay.innerHTML = icons.copy;
     elements.resetDelay.innerHTML = icons.reset;
     elements.resetFade.innerHTML = icons.reset;
     elements.resetAllVolumes.innerHTML = icons.reset;
