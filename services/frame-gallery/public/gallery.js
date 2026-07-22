@@ -59,6 +59,8 @@ const icons = {
   sun: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/></svg>`,
   map: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18-6 3V6l6-3 6 3 6-3v15l-6 3-6-3Z"/><path d="M9 3v15"/><path d="M15 6v15"/><circle cx="12" cy="10" r="2"/></svg>`,
   share: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 13v7h14v-7"/></svg>`,
+  copy: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg>`,
+  check: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>`,
 };
 
 const ZOOM_MIN = 25;
@@ -101,6 +103,8 @@ elements.allGalleries.href = route.root;
 elements.lightboxImage.draggable = false;
 elements.lightboxExplore.innerHTML = `${icons.map}<span>View on map</span>`;
 elements.lightboxShare.innerHTML = `${icons.share}<span>Share</span>`;
+setCopyButton(elements.copyGalleryUrl, "Gallery view");
+setCopyButton(elements.copyExploreUrl, "Explore view");
 
 elements.themeToggle.addEventListener("click", toggleTheme);
 elements.photosView.addEventListener("click", () => setGalleryView("photos", { history: "push" }));
@@ -480,27 +484,33 @@ function renderShareQr(url, label) {
 
 async function copyShareUrl(input, button, label) {
   const url = input.value;
-  button.textContent = "Copying";
+  button.setAttribute("aria-label", `Copying ${label.toLowerCase()} link`);
+  button.title = `Copying ${label.toLowerCase()} link`;
   elements.shareStatus.textContent = `Copying ${label.toLowerCase()} link...`;
   elements.shareStatus.removeAttribute("data-error");
   try {
     await copyText(input);
     if (!elements.shareDialog.open || input.value !== url) return;
-    button.textContent = "Copied";
+    setCopyButton(button, label, true);
     elements.shareStatus.textContent = `${label} link copied.`;
     elements.shareStatus.removeAttribute("data-error");
     button.focus();
-    setTimeout(() => {
-      if (button.textContent === "Copied") button.textContent = "Copy";
-    }, 1200);
+    setTimeout(() => setCopyButton(button, label), 1200);
   } catch {
     if (!elements.shareDialog.open || input.value !== url) return;
     input.focus();
     input.select();
-    button.textContent = "Copy";
+    setCopyButton(button, label);
     elements.shareStatus.textContent = "The browser did not confirm the copy. The link is selected so you can copy it manually.";
     elements.shareStatus.dataset.error = "true";
   }
+}
+
+function setCopyButton(button, label, copied = false) {
+  const action = copied ? `${label} link copied` : `Copy ${label.toLowerCase()} link`;
+  button.innerHTML = copied ? icons.check : icons.copy;
+  button.setAttribute("aria-label", action);
+  button.title = action;
 }
 
 async function copyText(input) {
@@ -517,8 +527,8 @@ async function copyText(input) {
 }
 
 function resetShareDialog() {
-  elements.copyGalleryUrl.textContent = "Copy";
-  elements.copyExploreUrl.textContent = "Copy";
+  setCopyButton(elements.copyGalleryUrl, "Gallery view");
+  setCopyButton(elements.copyExploreUrl, "Explore view");
   elements.shareStatus.textContent = "";
   elements.shareStatus.removeAttribute("data-error");
 }

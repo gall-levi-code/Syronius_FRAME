@@ -61,13 +61,13 @@ main { width: min(1500px, 100%); margin: 0 auto; padding: 18px clamp(12px, 3vw, 
 .gallery-heading p { margin: 0; color: var(--accent); font-weight: 800; }
 .gallery-heading h1 { margin: 3px 0 2px; overflow-wrap: anywhere; font-size: clamp(25px, 4vw, 38px); }
 .heading-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; flex: none; }
-.secondary-button, .icon-toggle, .lightbox-control {
+.secondary-button, .icon-button, .icon-toggle, .lightbox-control {
   border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--control-text);
   cursor: pointer; text-decoration: none;
 }
 .secondary-button { padding: 9px 14px; }
-.close-button { display: inline-grid; width: 38px; min-width: 38px; height: 38px; place-items: center; padding: 0; }
-.close-button svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.icon-button, .close-button { display: inline-grid; width: 38px; min-width: 38px; height: 38px; place-items: center; padding: 0; }
+.icon-button svg, .close-button svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .icon-toggle {
   display: inline-flex; width: auto; min-width: 42px; min-height: 38px; align-items: center; justify-content: center;
   gap: 7px; padding: 8px 10px;
@@ -77,7 +77,7 @@ main { width: min(1500px, 100%); margin: 0 auto; padding: 18px clamp(12px, 3vw, 
 }
 .theme-toggle { width: 38px; min-width: 38px; min-height: 34px; padding: 7px; border-color: var(--accent); background: var(--toggle-night-bg, #dff4ff); color: var(--toggle-night-text, #087fc0); }
 :root[data-theme="day"] .theme-toggle, :root[data-theme-mode="day"] .theme-toggle, .theme-toggle[aria-pressed="true"] { border-color: var(--accent); background: var(--toggle-day-bg, #fff6d5); color: var(--toggle-day-text, #8a5e00); }
-.secondary-button:hover, .icon-toggle:hover, .lightbox-control:hover { border-color: var(--accent); }
+.secondary-button:hover, .icon-button:hover, .icon-toggle:hover, .lightbox-control:hover { border-color: var(--accent); }
 .view-switch { display: inline-flex; overflow: hidden; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
 .view-switch button { min-height: 38px; padding: 8px 13px; border: 0; background: transparent; color: var(--muted); cursor: pointer; }
 .view-switch button + button { border-left: 1px solid var(--border); }
@@ -191,7 +191,7 @@ body.is-exploring { height: 100dvh; min-height: 0; overflow: hidden; }
   width: 100%; min-width: 0; min-height: 42px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px;
   background: var(--surface-strong); color: var(--control-text);
 }
-.share-link-controls button { min-width: 74px; }
+.share-link-controls .icon-button { min-width: 38px; }
 .share-status { min-height: 1.25em; margin: 0; color: var(--text); font-size: 13px; }
 .share-status[data-error="true"] { font-weight: 700; }
 
