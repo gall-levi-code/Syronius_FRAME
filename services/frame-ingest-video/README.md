@@ -56,6 +56,16 @@ docker compose up --build -d
 
 Most users should use the full FRAME stack instead of standalone mode.
 
+### Receiver build
+
+FRAME builds the receiver from pinned OpenIRL source revisions rather than inheriting the published
+receiver image. The build uses the OpenIRL receiver 1.2.0 architecture, its current standalone SRTLA
+receiver and SRT Live Server, and Haivision SRT 1.5.6 with the OpenIRL SRTLA reordering, NAK, and
+per-link statistics patches applied.
+
+The Docker build fails if the resulting library is not SRT 1.5.6 or does not expose the OpenIRL
+SRTLA socket option and statistics API.
+
 ## How To Operate
 
 Open Stream Management:

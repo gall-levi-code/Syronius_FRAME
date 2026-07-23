@@ -1,0 +1,405 @@
+diff --git a/srtcore/api.cpp b/srtcore/api.cpp
+index 7b570957..d6884a3a 100644
+--- a/srtcore/api.cpp
++++ b/srtcore/api.cpp
+@@ -4476,6 +4476,29 @@ int srt::CUDT::bstats(SRTSOCKET u, CBytePerfMon* perf, bool clear, bool instanta
+     }
+ }
+ 
++int srt::CUDT::srtla_stats(SRTSOCKET u, SRT_SRTLA_STATS* stats)
++{
++    if (!stats)
++        return APIError(MJ_NOTSUP, MN_INVAL, 0);
++
++    try
++    {
++        CUDT& udt = uglobal().locateSocket(u, CUDTUnited::ERH_THROW)->core();
++        ScopedLock lock(udt.m_SrtlaStatsLock);
++        *stats = udt.m_SrtlaStats;
++        return 0;
++    }
++    catch (const CUDTException& e)
++    {
++        return APIError(e);
++    }
++    catch (const std::exception& ee)
++    {
++        LOGC(aclog.Fatal, log << "srtla_stats: UNEXPECTED EXCEPTION: " << typeid(ee).name() << ": " << ee.what());
++        return APIError(MJ_UNKNOWN, MN_NONE, 0);
++    }
++}
++
+ #if ENABLE_BONDING
+ int srt::CUDT::groupsockbstats(SRTSOCKET u, CBytePerfMon* perf, bool clear)
+ {
+diff --git a/srtcore/common.h b/srtcore/common.h
+index 5a53c05e..d26d2456 100644
+--- a/srtcore/common.h
++++ b/srtcore/common.h
+@@ -221,6 +221,7 @@ enum UDTMessageType
+     UMSG_PEERERROR = 8, //< Signal from the Peer side. Add info: Error code.
+     // ... add extra code types here
+     UMSG_END_OF_TYPES,
++    UMSG_SRTLA_STATS = 0x1300, //< SRTLA per-connection statistics (custom type via srtla_rec)
+     UMSG_EXT = 0x7FFF //< For the use of user-defined control packets.
+ };
+ 
+diff --git a/srtcore/core.cpp b/srtcore/core.cpp
+index ece511b3..45c4618b 100644
+--- a/srtcore/core.cpp
++++ b/srtcore/core.cpp
+@@ -212,6 +212,8 @@ struct SrtOptionAction
+         flags[SRTO_CRYPTOMODE]         = SRTO_R_PRE;
+ #endif
+ 
++        flags[SRTO_SRTLAPATCHES]       = SRTO_R_PRE;
++
+         // For "private" options (not derived from the listener
+         // socket by an accepted socket) provide below private_default
+         // to which these options will be reset after blindly
+@@ -438,6 +440,8 @@ void srt::CUDT::construct()
+     m_zSndMaxPacketSize = 0;
+ #endif
+ 
++    memset(&m_SrtlaStats, 0, sizeof(m_SrtlaStats));
++
+     // Initialize mutex and condition variables.
+     initSynch();
+ 
+@@ -990,6 +994,11 @@ void srt::CUDT::getOpt(SRT_SOCKOPT optName, void *optval, int &optlen)
+         break;
+ #endif
+ 
++    case SRTO_SRTLAPATCHES:
++        optlen          = sizeof(bool);
++        *(bool *)optval = m_config.srtlaPatches;
++        break;
++
+     default:
+         throw CUDTException(MJ_NOTSUP, MN_NONE, 0);
+     }
+@@ -9512,11 +9521,83 @@ void srt::CUDT::processCtrl(const CPacket &ctrlpkt)
+         processCtrlUserDefined(ctrlpkt);
+         break;
+ 
++    case UMSG_SRTLA_STATS:
++        if (m_config.srtlaPatches)
++            processSrtlaStats(ctrlpkt);
++        break;
++
+     default:
+         break;
+     }
+ }
+ 
++void srt::CUDT::processSrtlaStats(const CPacket& ctrlpkt)
++{
++    // Payload has already been converted to host byte order by toHostByteOrder()/NtoHLA.
++    // Stats-Header: 4 words (16 bytes)
++    //   Word 0: [version:8][num_peers:8][reserved:16]
++    //   Word 1: group_total_bitrate (kbps, payload only)
++    //   Word 2: timestamp_high
++    //   Word 3: timestamp_low
++    // Per-Peer: 7 words (conn_id, bitrate, jitter, bytes_hi, bytes_lo, uptime, throughput)
++
++    const uint32_t* payload = reinterpret_cast<const uint32_t*>(ctrlpkt.data());
++    const size_t payload_len = ctrlpkt.size();
++
++    // Minimum: stats header = 4 words = 16 bytes
++    if (payload_len < 16)
++    {
++        HLOGC(inlog.Debug, log << CONID() << "SRTLA stats: packet too short (" << payload_len << " bytes)");
++        return;
++    }
++
++    const uint32_t word0 = payload[0];
++    const uint8_t version = (word0 >> 24) & 0xFF;
++    const uint8_t num_peers = (word0 >> 16) & 0xFF;
++
++    if (version != 1)
++    {
++        HLOGC(inlog.Debug, log << CONID() << "SRTLA stats: unknown version " << int(version));
++        return;
++    }
++
++    if (num_peers > SRT_SRTLA_MAX_PEERS)
++    {
++        HLOGC(inlog.Debug, log << CONID() << "SRTLA stats: too many peers (" << int(num_peers) << ")");
++        return;
++    }
++
++    // Check payload size: header (16) + num_peers * 7 words * 4 bytes
++    const size_t expected = 16 + static_cast<size_t>(num_peers) * 28;
++    if (payload_len < expected)
++    {
++        HLOGC(inlog.Debug, log << CONID() << "SRTLA stats: payload too short for " << int(num_peers) << " peers");
++        return;
++    }
++
++    SRT_SRTLA_STATS stats;
++    memset(&stats, 0, sizeof(stats));
++    stats.valid = 1;
++    stats.version = version;
++    stats.numPeers = num_peers;
++    stats.totalBitrate = payload[1];
++    stats.timestamp = (static_cast<uint64_t>(payload[2]) << 32) | payload[3];
++
++    for (uint8_t i = 0; i < num_peers; i++)
++    {
++        const uint32_t* peer = payload + 4 + i * 7;
++        stats.peers[i].connectionId   = peer[0];
++        stats.peers[i].bitrate  = peer[1];
++        stats.peers[i].jitter   = peer[2];
++        stats.peers[i].bytesReceived  = (static_cast<uint64_t>(peer[3]) << 32) | peer[4];
++        stats.peers[i].uptime   = peer[5];
++        stats.peers[i].throughput = peer[6];
++    }
++
++    ScopedLock lock(m_SrtlaStatsLock);
++    m_SrtlaStats = stats;
++}
++
+ void srt::CUDT::updateSrtRcvSettings()
+ {
+     // CHANGED: we need to apply the tsbpd delay only for socket TSBPD.
+@@ -10971,7 +11052,9 @@ int srt::CUDT::processData(CUnit* in_unit)
+     // If the peer doesn't understand REXMIT flag, send rexmit request
+     // always immediately.
+     int initial_loss_ttl = 0;
+-    if (m_bPeerRexmitFlag)
++    if (m_config.srtlaPatches && m_bPeerRexmitFlag)
++        initial_loss_ttl = m_config.iMaxReorderTolerance;
++    else if (!m_config.srtlaPatches && m_bPeerRexmitFlag)
+         initial_loss_ttl = m_iReorderTolerance;
+ 
+     // Track packet loss in statistics early, because a packet filter (e.g. FEC) might recover it later on,
+@@ -11262,7 +11345,7 @@ int srt::CUDT::processData(CUnit* in_unit)
+     if (m_bPeerRexmitFlag && was_sent_in_order)
+     {
+         ++m_iConsecOrderedDelivery;
+-        if (m_iConsecOrderedDelivery >= 50)
++        if (!m_config.srtlaPatches && m_iConsecOrderedDelivery >= 50)
+         {
+             m_iConsecOrderedDelivery = 0;
+             if (m_iReorderTolerance > 0)
+@@ -11425,7 +11508,7 @@ void srt::CUDT::unlose(const CPacket &packet)
+             HLOGC(qrlog.Debug, log << "... arrived at TTL " << had_ttl << " case " << m_iConsecEarlyDelivery);
+ 
+             // After 10 consecutive
+-            if (m_iConsecEarlyDelivery >= 10)
++            if (!m_config.srtlaPatches && m_iConsecEarlyDelivery >= 10)
+             {
+                 m_iConsecEarlyDelivery = 0;
+                 if (m_iReorderTolerance > 0)
+@@ -12009,8 +12092,72 @@ int srt::CUDT::checkNAKTimer(const steady_clock::time_point& currtime)
+         if (currtime <= m_tsNextNAKTime.load())
+             return BECAUSE_NO_REASON; // wait for next NAK time
+ 
+-        sendCtrl(UMSG_LOSSREPORT);
+-        debug_decision = BECAUSE_NAKREPORT;
++        if (m_config.srtlaPatches)
++        {
++            vector<int32_t> lossdata;
++            {
++                ScopedLock lk(m_RcvLossLock);
++                const int cap = m_iMaxSRTPayloadSize / 4;
++                int32_t* arr = new int32_t[cap];
++                int arrlen = 0;
++                m_pRcvLossList->getLossArray(arr, arrlen, cap);
++                const steady_clock::duration max_age = milliseconds_from(250);
++                for (int n = 0; n < arrlen; )
++                {
++                    int32_t lo, hi;
++                    if (arr[n] & LOSSDATA_SEQNO_RANGE_FIRST)
++                    {
++                        lo = arr[n] & ~LOSSDATA_SEQNO_RANGE_FIRST;
++                        hi = arr[n + 1];
++                        n += 2;
++                    }
++                    else
++                    {
++                        lo = hi = arr[n];
++                        n += 1;
++                    }
++                    int32_t runStart = SRT_SEQNO_NONE;
++                    for (int32_t s = lo; ; s = CSeqNo::incseq(s))
++                    {
++                        bool fresh = false;
++                        for (size_t k = 0; k < m_FreshLoss.size(); ++k)
++                        {
++                            if (CSeqNo::seqcmp(s, m_FreshLoss[k].seq[0]) >= 0 && CSeqNo::seqcmp(s, m_FreshLoss[k].seq[1]) <= 0)
++                            {
++                                if (currtime - m_FreshLoss[k].timestamp < max_age)
++                                    fresh = true;
++                                break;
++                            }
++                        }
++                        if (!fresh)
++                        {
++                            if (runStart == SRT_SEQNO_NONE)
++                                runStart = s;
++                        }
++                        else if (runStart != SRT_SEQNO_NONE)
++                        {
++                            addLossRecord(lossdata, runStart, CSeqNo::decseq(s));
++                            runStart = SRT_SEQNO_NONE;
++                        }
++                        if (s == hi)
++                            break;
++                    }
++                    if (runStart != SRT_SEQNO_NONE)
++                        addLossRecord(lossdata, runStart, hi);
++                }
++                delete[] arr;
++            }
++            if (!lossdata.empty())
++            {
++                sendCtrl(UMSG_LOSSREPORT, NULL, &lossdata[0], (int)lossdata.size());
++                debug_decision = BECAUSE_NAKREPORT;
++            }
++        }
++        else
++        {
++            sendCtrl(UMSG_LOSSREPORT);
++            debug_decision = BECAUSE_NAKREPORT;
++        }
+     }
+ 
+     m_tsNextNAKTime.store(currtime + m_tdNAKInterval);
+diff --git a/srtcore/core.h b/srtcore/core.h
+index 31cedbd4..292f1ed6 100644
+--- a/srtcore/core.h
++++ b/srtcore/core.h
+@@ -372,6 +372,7 @@ public: //API
+     static int epoll_release(const int eid);
+     static CUDTException& getlasterror();
+     static int bstats(SRTSOCKET u, CBytePerfMon* perf, bool clear = true, bool instantaneous = false);
++    static int srtla_stats(SRTSOCKET u, SRT_SRTLA_STATS* stats);
+ #if ENABLE_BONDING
+     static int groupsockbstats(SRTSOCKET u, CBytePerfMon* perf, bool clear = true);
+ #endif
+@@ -1197,6 +1198,8 @@ private: // synchronization: mutexes and conditions
+     sync::Mutex m_SendLock;                      // used to synchronize "send" call
+     sync::Mutex m_RcvLossLock;                   // Protects the receiver loss list (access: CRcvQueue::worker, CUDT::tsbpd)
+     mutable sync::Mutex m_StatsLock;             // used to synchronize access to trace statistics
++    SRT_SRTLA_STATS m_SrtlaStats;
++    mutable sync::Mutex m_SrtlaStatsLock;
+ 
+     void initSynch();
+     void destroySynch();
+@@ -1233,7 +1236,8 @@ private: // Generation and processing of packets
+     void sendLossReport(const std::vector< std::pair<int32_t, int32_t> >& losslist);
+ 
+     void processCtrl(const CPacket& ctrlpkt);
+-    
++    void processSrtlaStats(const CPacket& ctrlpkt);
++
+     /// @brief Process incoming control ACK packet.
+     /// @param ctrlpkt incoming ACK packet
+     /// @param currtime current clock time
+diff --git a/srtcore/socketconfig.cpp b/srtcore/socketconfig.cpp
+index e3ad5cde..b1e1c585 100644
+--- a/srtcore/socketconfig.cpp
++++ b/srtcore/socketconfig.cpp
+@@ -889,6 +889,15 @@ struct CSrtConfigSetter<SRTO_RETRANSMITALGO>
+     }
+ };
+ 
++template<>
++struct CSrtConfigSetter<SRTO_SRTLAPATCHES>
++{
++    static void set(CSrtConfig& co, const void* optval, int optlen)
++    {
++        co.srtlaPatches = cast_optval<bool>(optval, optlen);
++    }
++};
++
+ #ifdef ENABLE_AEAD_API_PREVIEW
+ template<>
+ struct CSrtConfigSetter<SRTO_CRYPTOMODE>
+@@ -985,6 +994,7 @@ int dispatchSet(SRT_SOCKOPT optName, CSrtConfig& co, const void* optval, int opt
+ #ifdef ENABLE_MAXREXMITBW
+         DISPATCH(SRTO_MAXREXMITBW);
+ #endif
++        DISPATCH(SRTO_SRTLAPATCHES)
+ 
+ #undef DISPATCH
+     default:
+diff --git a/srtcore/socketconfig.h b/srtcore/socketconfig.h
+index f44e3c24..8fa22aa8 100644
+--- a/srtcore/socketconfig.h
++++ b/srtcore/socketconfig.h
+@@ -273,6 +273,8 @@ struct CSrtConfig: CSrtMuxerConfig
+     unsigned int uKmRefreshRatePkt;
+     unsigned int uKmPreAnnouncePkt;
+ 
++    bool srtlaPatches;
++
+     uint32_t uSrtVersion;
+     uint32_t uMinimumPeerSrtVersion;
+ 
+@@ -323,6 +325,7 @@ struct CSrtConfig: CSrtMuxerConfig
+         , iMaxReorderTolerance(0) // Sensible optimal value is 10, 0 preserves old behavior
+         , uKmRefreshRatePkt(0)
+         , uKmPreAnnouncePkt(0)
++        , srtlaPatches(false)
+         , uSrtVersion(SRT_DEF_VERSION)
+         , uMinimumPeerSrtVersion(SRT_VERSION_MAJ1)
+ 
+diff --git a/srtcore/srt.h b/srtcore/srt.h
+index 36054e7d..8317a7b2 100644
+--- a/srtcore/srt.h
++++ b/srtcore/srt.h
+@@ -240,6 +240,8 @@ typedef enum SRT_SOCKOPT {
+    SRTO_MAXREXMITBW = 63,    // Maximum bandwidth limit for retransmision (Bytes/s)
+ #endif
+ 
++   SRTO_SRTLAPATCHES = 120, // Enable SRTLA patches
++
+    SRTO_E_SIZE // Always last element, not a valid option.
+ } SRT_SOCKOPT;
+ 
+@@ -996,6 +998,29 @@ SRT_API int srt_config_add(SRT_SOCKOPT_CONFIG* config, SRT_SOCKOPT option, const
+ SRT_API SRT_SOCKGROUPCONFIG srt_prepare_endpoint(const struct sockaddr* src /*nullable*/, const struct sockaddr* adr, int namelen);
+ SRT_API       int srt_connect_group(SRTSOCKET group, SRT_SOCKGROUPCONFIG name[], int arraysize);
+ 
++// SRTLA per-connection statistics
++#define SRT_SRTLA_MAX_PEERS 16
++
++typedef struct SRT_SRTLA_PEER_STATS_ {
++    uint32_t connectionId;      // Anonymous FNV-1a hash of IP:port
++    uint32_t bitrate;           // Usable payload bitrate in kbps (unique data, no headers)
++    uint32_t jitter;            // Smoothed jitter in microseconds (RFC 3550)
++    uint64_t bytesReceived;
++    uint32_t uptime;            // Connection uptime in seconds
++    uint32_t throughput;        // Total network throughput in kbps (including retransmissions)
++} SRT_SRTLA_PEER_STATS;
++
++typedef struct SRT_SRTLA_STATS_ {
++    int      valid;             // 1 if stats received, 0 otherwise
++    uint8_t  version;
++    uint8_t  numPeers;
++    uint32_t totalBitrate;      // Total usable payload bitrate in kbps
++    uint64_t timestamp;         // Monotonic ms from srtla_rec
++    SRT_SRTLA_PEER_STATS peers[SRT_SRTLA_MAX_PEERS];
++} SRT_SRTLA_STATS;
++
++SRT_API int srt_srtla_stats(SRTSOCKET u, SRT_SRTLA_STATS* stats);
++
+ #ifdef __cplusplus
+ }
+ #endif
+diff --git a/srtcore/srt_c_api.cpp b/srtcore/srt_c_api.cpp
+index cf82467c..136b4366 100644
+--- a/srtcore/srt_c_api.cpp
++++ b/srtcore/srt_c_api.cpp
+@@ -270,6 +270,8 @@ void srt_clearlasterror()
+ int srt_bstats(SRTSOCKET u, SRT_TRACEBSTATS * perf, int clear) { return CUDT::bstats(u, perf, 0!=  clear); }
+ int srt_bistats(SRTSOCKET u, SRT_TRACEBSTATS * perf, int clear, int instantaneous) { return CUDT::bstats(u, perf, 0!=  clear, 0!= instantaneous); }
+ 
++int srt_srtla_stats(SRTSOCKET u, SRT_SRTLA_STATS* stats) { return CUDT::srtla_stats(u, stats); }
++
+ SRT_SOCKSTATUS srt_getsockstate(SRTSOCKET u) { return SRT_SOCKSTATUS((int)CUDT::getsockstate(u)); }
+ 
+ // event mechanism
+
