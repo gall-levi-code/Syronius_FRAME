@@ -580,7 +580,7 @@ function buildEnvironment(existing, options, mode, capabilities) {
     PHOTO_UPLOAD_MAX_FILES: photoUploadMaxFiles,
     PHOTO_UPLOAD_MAX_SESSIONS: photoUploadMaxSessions,
     PIPELINE_POLL_MS: setting(existing, "PIPELINE_POLL_MS", "1000"),
-    PIPELINE_CONCURRENCY: setting(existing, "PIPELINE_CONCURRENCY", "10"),
+    PIPELINE_CONCURRENCY: setting(existing, "PIPELINE_CONCURRENCY", "2"),
     PHOTO_MAX_INPUT_MB: setting(existing, "PHOTO_MAX_INPUT_MB", "50"),
     PHOTO_MAX_MEGAPIXELS: setting(existing, "PHOTO_MAX_MEGAPIXELS", "80"),
     PHOTO_CONVERSION_ATTEMPTS: setting(existing, "PHOTO_CONVERSION_ATTEMPTS", "3"),

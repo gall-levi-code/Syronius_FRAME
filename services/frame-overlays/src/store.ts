@@ -70,7 +70,7 @@ export class OverlayStore {
       await this.atomicWrite(migrated, false);
     } else if (isOverlayDocumentV2(raw)) {
       const synchronized = synchronizeV2Document(raw, this.stockDocument);
-      const changed = clampConnectivityPolls(synchronized, this.now()) || JSON.stringify(synchronized) !== JSON.stringify(raw);
+      const changed = clampPersistedRanges(synchronized, this.now()) || JSON.stringify(synchronized) !== JSON.stringify(raw);
       if (changed) {
         synchronized.revision = raw.revision + 1;
         // ponytail: current templates define the supported design surface; obsolete saved keys are pruned at startup.
@@ -270,12 +270,15 @@ function pickKnown(value: Record<string, unknown>, example: Record<string, unkno
   return Object.fromEntries(Object.keys(example).flatMap((key) => key in value ? [[key, value[key]]] : []));
 }
 
-function clampConnectivityPolls(document: OverlayDocumentV2, now: Date): boolean {
+function clampPersistedRanges(document: OverlayDocumentV2, now: Date): boolean {
   const timestamp = now.toISOString();
   let changed = false;
   for (const preset of document.presets) {
-    if (preset.type !== "connectivity" || Number(preset.config.poll_ms) >= 200) continue;
-    preset.config.poll_ms = 200;
+    const clampPoll = preset.type === "connectivity" && Number(preset.config.poll_ms) < 200;
+    const clampCompletionRadius = preset.type === "upload_progress" && Number(preset.theme?.completion_radius_px) > 48;
+    if (!clampPoll && !clampCompletionRadius) continue;
+    if (clampPoll) preset.config.poll_ms = 200;
+    if (clampCompletionRadius) (preset.theme ??= {}).completion_radius_px = 48;
     preset.revision += 1;
     preset.updated_at = timestamp;
     changed = true;

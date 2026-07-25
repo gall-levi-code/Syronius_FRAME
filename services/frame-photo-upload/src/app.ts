@@ -1,12 +1,12 @@
 import Busboy from "busboy";
-import { randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import express, { type Express } from "express";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { type BasicAuthConfig, requireBasicAuth } from "./auth.js";
 import { streamCompletedUpload } from "./handoff.js";
-import { UploadProgressTracker } from "./progress.js";
+import { type PhotoSourceAdapter, UploadProgressTracker } from "./progress.js";
 
 export interface UploadConfig {
   dataRoot: string;
@@ -22,6 +22,8 @@ export interface UploadConfig {
 interface CompletedUpload {
   stagedName: string;
   transferId: string;
+  journeyId: string;
+  created: boolean;
 }
 
 export async function createApp(config: UploadConfig): Promise<Express> {
@@ -50,22 +52,34 @@ export async function createApp(config: UploadConfig): Promise<Express> {
   app.post("/api/internal/photo-upload/stage", requireServiceToken(config.serviceToken), express.raw({ type: "*/*", limit: config.maxInputBytes }), async (request, response, next) => {
     const filename = safeHeader(request.header("x-frame-filename")) || "belabox-photo.jpg";
     const transferId = validTransferId(request.header("x-frame-transfer-id")) || randomUUID();
+    const suppliedJourneyId = request.header("x-frame-journey-id");
+    const journeyId = suppliedJourneyId ? validJourneyId(suppliedJourneyId) : journeyIdForTransfer(transferId);
+    const suppliedAdapter = request.header("x-frame-ingest-adapter");
+    const adapter = suppliedAdapter ? validAdapter(suppliedAdapter) : "belabox_chunked";
     const bytesTotal = validFileSize(request.header("x-frame-file-size"), config.maxInputBytes);
     try {
+      if (!journeyId) {
+        response.status(400).json({ error: "x-frame-journey-id must be 8-96 letters, numbers, dashes, or underscores and cannot contain '__'." });
+        return;
+      }
+      if (!adapter) {
+        response.status(400).json({ error: "x-frame-ingest-adapter must be a lowercase adapter name." });
+        return;
+      }
       if (!Buffer.isBuffer(request.body) || request.body.length === 0) {
         response.status(400).json({ error: "Completed file body is required." });
         return;
       }
-      progress.begin(transferId, filename, bytesTotal);
-      const stagedName = await streamCompletedUpload(
+      progress.begin(transferId, journeyId, filename, bytesTotal, adapter);
+      const { stagedName } = await streamCompletedUpload(
         Readable.from(request.body),
         filename,
-        inbox,
         staging,
+        { journeyId, transferId, adapter },
         (bytes) => progress.addBytes(transferId, bytes),
       );
       progress.queued(transferId);
-      response.status(202).json({ accepted: true, staged_name: stagedName, transfer_id: transferId });
+      response.status(202).json({ accepted: true, staged_name: stagedName, transfer_id: transferId, journey_id: journeyId });
     } catch (error) {
       progress.failed(transferId, errorMessage(error));
       next(error);
@@ -126,10 +140,11 @@ export async function createApp(config: UploadConfig): Promise<Express> {
         return;
       }
       const transferId = transferIdForFile(requestTransferId, uploads.length);
+      const journeyId = journeyIdForTransfer(transferId);
       startedTransfers.add(transferId);
       activeFiles.add(file);
       file.once("close", () => activeFiles.delete(file));
-      progress.begin(transferId, info.filename || "photo", uploads.length === 0 ? bytesTotal : null);
+      progress.begin(transferId, journeyId, info.filename || "photo", uploads.length === 0 ? bytesTotal : null);
       file.on("limit", () => {
         limited = true;
         progress.failed(transferId, "File exceeded the configured upload limit.");
@@ -137,10 +152,10 @@ export async function createApp(config: UploadConfig): Promise<Express> {
       const upload = streamCompletedUpload(
         file,
         info.filename || "photo",
-        inbox,
         staging,
+        { journeyId, transferId, adapter: "web_upload" },
         (bytes) => progress.addBytes(transferId, bytes),
-      ).then((stagedName) => ({ stagedName, transferId }));
+      ).then(({ stagedName, created }) => ({ stagedName, transferId, journeyId, created }));
       // An aborted request may never emit Busboy's finish event. Attach a
       // rejection observer immediately so pipeline cleanup cannot become an
       // unhandled rejection; the finish path still awaits the same promise.
@@ -157,7 +172,7 @@ export async function createApp(config: UploadConfig): Promise<Express> {
         }
         completed = await Promise.all(uploads);
         if (limited || tooManyFiles) {
-          await Promise.all(completed.map(({ stagedName }) => rm(path.join(staging, stagedName), { force: true })));
+          await Promise.all(completed.filter(({ created }) => created).map(({ journeyId }) => rm(path.join(staging, `${journeyId}.frame-photo`), { recursive: true, force: true })));
         }
         if (tooManyFiles) {
           failTransfers(startedTransfers, progress, `Select no more than ${config.maxFiles} photo(s) at once.`);
@@ -172,12 +187,15 @@ export async function createApp(config: UploadConfig): Promise<Express> {
         for (const { transferId } of completed) progress.queued(transferId);
         const stagedNames = completed.map(({ stagedName }) => stagedName);
         const transferIds = completed.map(({ transferId }) => transferId);
+        const journeyIds = completed.map(({ journeyId }) => journeyId);
         response.status(202).json({
           accepted: true,
           staged_name: stagedNames[0],
           staged_names: stagedNames,
           transfer_id: transferIds[0],
           transfer_ids: transferIds,
+          journey_id: journeyIds[0],
+          journey_ids: journeyIds,
           count: stagedNames.length,
         });
       } catch (error) {
@@ -231,6 +249,20 @@ function failTransfers(transfers: Iterable<string>, progress: UploadProgressTrac
 
 function validTransferId(value: string | undefined): string | null {
   return value && /^[A-Za-z0-9_-]{8,96}$/.test(value) ? value : null;
+}
+
+function validJourneyId(value: string | undefined): string | null {
+  const parsed = validTransferId(value);
+  return parsed && !parsed.includes("__") ? parsed : null;
+}
+
+function journeyIdForTransfer(transferId: string): string {
+  return validJourneyId(transferId)
+    ?? `legacy-${createHash("sha256").update(transferId).digest("hex").slice(0, 32)}`;
+}
+
+function validAdapter(value: string | undefined): PhotoSourceAdapter | null {
+  return value === "web_upload" || value === "ftp" || value === "belabox_chunked" || value === "belabox_agent" ? value : null;
 }
 
 function validFileSize(value: string | undefined, maximum: number): number | null {

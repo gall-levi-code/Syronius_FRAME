@@ -23,7 +23,7 @@ removed.
 
 ### Keep Separate For Later
 
-- FTP/BELABOX upload-progress adapters and photo-pipeline queued/processing/published correlation.
+- [x] Correlate FTP, Belabox, web-upload, and photo-pipeline observations through canonical photo journeys.
 - Latest-photo overlay and Photo Stage integration.
 - General-purpose freeform overlay editor.
 
@@ -91,7 +91,7 @@ removed.
 - Add `/stage/*` Photo Stage routes while preserving `/today/*` compatibility aliases.
 - Build the Discord delivery outbox after Photo Stage stabilizes.
 - Add archive retention controls and disk-pressure policy.
-- Add reliable HEIC decoding when the pinned production image runtime supports it.
+- [x] Add reliable HEIC/HEIF decoding independent of the production Sharp runtime.
 - Add camera and long-running FTP soak tests.
 - [x] Freeze V1 processing, recovery, sidecar, and quarantine contracts.
 - [x] Build the read-only FRAME photo gallery and thumbnail cache.
@@ -171,7 +171,8 @@ removed.
   staged/completed events; true percent remains unavailable unless the sender reports total size.
 - [x] Phase 4B: add `/api/internal/photo-ftp/progress` and enable the Overlay Wizard `ftp` adapter once
   `frame-photo-ftp` exposes progress directly.
-- [x] Add a short-lived `Transfer complete` bubble to the upload overlay without waiting for FRAME image processing.
+- [x] Complete upload-overlay journeys only when the pipeline publishes the photo and creates its
+  `.ready` sidecar; animate publications into a resettable three-second completion bubble.
 - [x] Fold managed remote photo-agent deployment into the existing `frame-belabox-manager` capability
   instead of creating a second user-facing capability.
 - [x] Build a FRAME-side staged setup wizard that accepts the Belabox LAN IP, tests the fixed `user`

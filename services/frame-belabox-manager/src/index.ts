@@ -8,6 +8,7 @@ import {
   mkdtempSync,
   mkdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -125,6 +126,7 @@ interface FtpConnectorRecord {
 
 interface ChunkManifest {
   transfer_id: string;
+  journey_id: string;
   device_id: string;
   filename: string;
   size_bytes: number;
@@ -133,6 +135,13 @@ interface ChunkManifest {
   file_sha256: string;
   chunks: Array<{ index: number; size_bytes: number; sha256: string }>;
   created_at: string;
+}
+
+interface ChunkCompletionReceipt {
+  transfer_id: string;
+  journey_id: string;
+  staged_name: string;
+  completed_at: string;
 }
 
 interface CommandAuditEntry {
@@ -310,6 +319,7 @@ const remoteBelauiHttpWaiters = new Map<string, {
   timeout: NodeJS.Timeout;
 }>();
 const remoteBelauiStreams = new Map<string, { socket: net.Socket; closed: boolean }>();
+const completingChunkTransfers = new Map<string, Promise<{ staged_name: string }>>();
 const relayCatalogSent = new Map<string, string>();
 const relayCatalogSending = new Set<string>();
 let currentRelayCatalog: RelayCatalog | null = null;
@@ -362,6 +372,7 @@ app.post("/belabox-chunks/api/transfers", (request, response, next) => {
     response.status(201).json({
       accepted: true,
       transfer_id: manifest.transfer_id,
+      journey_id: manifest.journey_id,
       upload_url: `/belabox-chunks/api/transfers/${encodeURIComponent(manifest.transfer_id)}/chunks/{index}`,
     });
   } catch (error) {
@@ -374,7 +385,7 @@ app.put("/belabox-chunks/api/transfers/:transferId/chunks/:index", express.raw({
     const manifest = loadChunkManifest(request.params.transferId);
     authorizeChunkUpload(request, manifest.device_id);
     saveChunk(request.params.transferId, request.params.index, request.body, manifest);
-    response.json({ accepted: true, transfer_id: manifest.transfer_id, index: Number(request.params.index) });
+    response.json({ accepted: true, transfer_id: manifest.transfer_id, journey_id: manifest.journey_id, index: Number(request.params.index) });
   } catch (error) {
     next(error);
   }
@@ -385,7 +396,7 @@ app.post("/belabox-chunks/api/transfers/:transferId/complete", async (request, r
     const manifest = loadChunkManifest(request.params.transferId);
     authorizeChunkUpload(request, manifest.device_id);
     const staged = await completeChunkTransfer(manifest);
-    response.status(202).json({ accepted: true, transfer_id: manifest.transfer_id, staged_name: staged.staged_name });
+    response.status(202).json({ accepted: true, transfer_id: manifest.transfer_id, journey_id: manifest.journey_id, staged_name: staged.staged_name });
   } catch (error) {
     next(error);
   }
@@ -1952,9 +1963,13 @@ function ftpProgressTransfers(): JsonRecord[] {
     const sent = numberValue(ftp.sent_bytes);
     const elapsed = numberValue(ftp.elapsed);
     const adapter = stringValue(ftp.transport) === "chunked_https" ? "belabox_chunked" : "belabox_agent";
+    const transferId = stringValue(ftp.transfer_id);
+    const journeyId = safeOptionalJourneyId(stringValue(ftp.journey_id))
+      || (adapter === "belabox_chunked" && transferId ? fallbackJourneyId(transferId) : null);
     if (filename || phase === "failed") {
       transfers.push({
-        transfer_id: stringValue(ftp.transfer_id) || `${device.device_id}:${filename || "ftp"}:${startedAt}`,
+        transfer_id: transferId || `${device.device_id}:${filename || "ftp"}:${startedAt}`,
+        journey_id: journeyId,
         adapter,
         phase,
         filename,
@@ -1971,13 +1986,25 @@ function ftpProgressTransfers(): JsonRecord[] {
     }
     const result = objectValue(ftp.last_result) || {};
     const completedAt = stringValue(result.at);
-    if (stringValue(result.status) === "completed" && completedAt && Number.isFinite(Date.parse(completedAt))) {
+    const completedFile = stringValue(result.file);
+    const completedTransferId = stringValue(result.transfer_id);
+    const completedJourneyId = safeOptionalJourneyId(stringValue(result.journey_id))
+      || (adapter === "belabox_chunked" && completedTransferId ? fallbackJourneyId(completedTransferId) : null);
+    const duplicatesCurrent = phase === "published" && completedJourneyId && completedJourneyId === journeyId;
+    if (
+      !duplicatesCurrent
+      && completedJourneyId
+      && stringValue(result.status) === "completed"
+      && completedAt
+      && Number.isFinite(Date.parse(completedAt))
+    ) {
       const timestamp = new Date(Date.parse(completedAt)).toISOString();
       transfers.push({
-        transfer_id: `${device.device_id}:completed:${timestamp}`,
+        transfer_id: completedTransferId || `${device.device_id}:completed:${timestamp}`,
+        journey_id: completedJourneyId,
         adapter,
         phase: "published",
-        filename: stringValue(result.file) || null,
+        filename: completedFile || null,
         bytes_received: 0,
         bytes_total: null,
         speed_bps: null,
@@ -2003,8 +2030,10 @@ function parseChunkManifest(body: unknown): ChunkManifest {
   const data = body && typeof body === "object" ? body as JsonRecord : {};
   const deviceId = sanitizeDeviceId(stringValue(data.device_id) || "");
   const transferId = safeTransferId(stringValue(data.transfer_id) || randomUUID());
+  const suppliedJourneyId = stringValue(data.journey_id);
+  const journeyId = suppliedJourneyId ? safeJourneyId(suppliedJourneyId) : fallbackJourneyId(transferId);
   const sizeBytes = safePositiveInt(data.size_bytes, "size_bytes", 1, config.chunkUpload.maxFileBytes);
-  const chunkSizeBytes = safePositiveInt(data.chunk_size_bytes, "chunk_size_bytes", 256 * 1024, 64 * 1024 * 1024);
+  const chunkSizeBytes = safePositiveInt(data.chunk_size_bytes, "chunk_size_bytes", 256 * 1024, config.chunkUpload.chunkSizeBytes);
   const chunkCount = safePositiveInt(data.chunk_count, "chunk_count", 1, 10000);
   const chunks = Array.isArray(data.chunks) ? data.chunks.map((chunk, index) => {
     const item = chunk && typeof chunk === "object" ? chunk as JsonRecord : {};
@@ -2019,6 +2048,7 @@ function parseChunkManifest(body: unknown): ChunkManifest {
   if (chunks.reduce((total, chunk) => total + chunk.size_bytes, 0) !== sizeBytes) throw new RequestError(400, "Chunk sizes do not add up to file size.");
   return {
     transfer_id: transferId,
+    journey_id: journeyId,
     device_id: deviceId,
     filename: safePhotoFilename(stringValue(data.filename) || "belabox-photo.jpg"),
     size_bytes: sizeBytes,
@@ -2040,61 +2070,151 @@ function authorizeChunkUpload(request: express.Request, deviceId: string): void 
 
 function saveChunkManifest(manifest: ChunkManifest): void {
   const directory = chunkTransferDir(manifest.transfer_id);
+  const file = path.join(directory, "manifest.json");
+  if (existsSync(file)) {
+    const existing = JSON.parse(readFileSync(file, "utf8")) as ChunkManifest;
+    if (chunkManifestFingerprint(existing) !== chunkManifestFingerprint(manifest)) {
+      throw new RequestError(409, "transfer_id is already assigned to a different chunk manifest.");
+    }
+    return;
+  }
   mkdirSync(path.join(directory, "chunks"), { recursive: true });
-  writeFileSync(path.join(directory, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
+  writeJsonAtomic(file, manifest);
 }
 
 function loadChunkManifest(transferId: string): ChunkManifest {
   const safeId = safeTransferId(transferId);
   const file = path.join(chunkTransferDir(safeId), "manifest.json");
   if (!existsSync(file)) throw new RequestError(404, "Chunk transfer was not found.");
-  return JSON.parse(readFileSync(file, "utf8")) as ChunkManifest;
+  const manifest = JSON.parse(readFileSync(file, "utf8")) as ChunkManifest;
+  return { ...manifest, journey_id: manifest.journey_id || fallbackJourneyId(manifest.transfer_id) };
 }
 
 function saveChunk(transferId: string, indexValue: string, body: unknown, manifest: ChunkManifest): void {
+  if (loadChunkReceipt(transferId)) {
+    cleanupCompletedChunkPayload(transferId);
+    return;
+  }
   const index = safePositiveInt(indexValue, "chunk index", 0, manifest.chunk_count - 1);
   const expected = manifest.chunks.find((chunk) => chunk.index === index);
   if (!expected) throw new RequestError(404, "Chunk index is not in the manifest.");
   if (!Buffer.isBuffer(body)) throw new RequestError(400, "Chunk body is required.");
   if (body.length !== expected.size_bytes) throw new RequestError(400, "Chunk size does not match manifest.");
   if (sha256(body) !== expected.sha256) throw new RequestError(400, "Chunk hash does not match manifest.");
-  writeFileSync(path.join(chunkTransferDir(transferId), "chunks", `${index}.part`), body, { mode: 0o600 });
+  const target = path.join(chunkTransferDir(transferId), "chunks", `${index}.part`);
+  if (existsSync(target)) {
+    const existing = readFileSync(target);
+    if (existing.length === expected.size_bytes && sha256(existing) === expected.sha256) return;
+    throw new RequestError(409, "Chunk index is already stored with different content.");
+  }
+  const temporary = `${target}.${randomUUID()}.tmp`;
+  try {
+    writeFileSync(temporary, body, { mode: 0o600 });
+    renameSync(temporary, target);
+  } catch (error) {
+    if (existsSync(target)) {
+      const existing = readFileSync(target);
+      if (existing.length === expected.size_bytes && sha256(existing) === expected.sha256) return;
+    }
+    throw error;
+  } finally {
+    rmSync(temporary, { force: true });
+  }
 }
 
-async function completeChunkTransfer(manifest: ChunkManifest): Promise<{ staged_name: string }> {
+function completeChunkTransfer(manifest: ChunkManifest): Promise<{ staged_name: string }> {
+  const active = completingChunkTransfers.get(manifest.transfer_id);
+  if (active) return active;
+  const pending = completeChunkTransferOnce(manifest).finally(() => completingChunkTransfers.delete(manifest.transfer_id));
+  completingChunkTransfers.set(manifest.transfer_id, pending);
+  return pending;
+}
+
+async function completeChunkTransferOnce(manifest: ChunkManifest): Promise<{ staged_name: string }> {
+  const existing = loadChunkReceipt(manifest.transfer_id);
+  if (existing) {
+    cleanupCompletedChunkPayload(manifest.transfer_id);
+    return { staged_name: existing.staged_name };
+  }
   if (!config.photoUpload.serviceToken) throw new RequestError(503, "PORTAL_SERVICE_TOKEN is required to stage chunked photos.");
   const directory = chunkTransferDir(manifest.transfer_id);
   const assembled = path.join(directory, "assembled.tmp");
-  const hash = createHash("sha256");
-  let total = 0;
-  writeFileSync(assembled, "");
-  for (const chunk of manifest.chunks) {
-    const chunkFile = path.join(directory, "chunks", `${chunk.index}.part`);
-    if (!existsSync(chunkFile)) throw new RequestError(409, `Chunk ${chunk.index} is missing.`);
-    const body = readFileSync(chunkFile);
-    if (body.length !== chunk.size_bytes || sha256(body) !== chunk.sha256) throw new RequestError(409, `Chunk ${chunk.index} failed verification.`);
-    total += body.length;
-    hash.update(body);
-    appendFileSync(assembled, body);
+  try {
+    const hash = createHash("sha256");
+    let total = 0;
+    writeFileSync(assembled, "");
+    for (const chunk of manifest.chunks) {
+      const chunkFile = path.join(directory, "chunks", `${chunk.index}.part`);
+      if (!existsSync(chunkFile)) throw new RequestError(409, `Chunk ${chunk.index} is missing.`);
+      const body = readFileSync(chunkFile);
+      if (body.length !== chunk.size_bytes || sha256(body) !== chunk.sha256) throw new RequestError(409, `Chunk ${chunk.index} failed verification.`);
+      total += body.length;
+      hash.update(body);
+      appendFileSync(assembled, body);
+    }
+    if (total !== manifest.size_bytes || hash.digest("hex") !== manifest.file_sha256) {
+      throw new RequestError(409, "Assembled file failed verification.");
+    }
+    const response = await fetch(`${config.photoUpload.apiUrl.replace(/\/+$/, "")}/api/internal/photo-upload/stage`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${config.photoUpload.serviceToken}`,
+        "content-type": "application/octet-stream",
+        "x-frame-filename": manifest.filename,
+        "x-frame-transfer-id": manifest.transfer_id,
+        "x-frame-journey-id": manifest.journey_id,
+        "x-frame-ingest-adapter": "belabox_chunked",
+        "x-frame-file-size": String(manifest.size_bytes),
+      },
+      body: readFileSync(assembled),
+    });
+    const payload = await response.json().catch(() => ({})) as JsonRecord;
+    if (!response.ok) throw new RequestError(502, stringValue(payload.error) || "Photo Upload rejected the assembled file.");
+    const receipt: ChunkCompletionReceipt = {
+      transfer_id: manifest.transfer_id,
+      journey_id: manifest.journey_id,
+      staged_name: stringValue(payload.staged_name) || manifest.filename,
+      completed_at: new Date().toISOString(),
+    };
+    writeJsonAtomic(path.join(directory, "completed.json"), receipt);
+    cleanupCompletedChunkPayload(manifest.transfer_id);
+    return { staged_name: receipt.staged_name };
+  } finally {
+    rmSync(assembled, { force: true });
   }
-  if (total !== manifest.size_bytes || hash.digest("hex") !== manifest.file_sha256) {
-    throw new RequestError(409, "Assembled file failed verification.");
-  }
-  const response = await fetch(`${config.photoUpload.apiUrl.replace(/\/+$/, "")}/api/internal/photo-upload/stage`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${config.photoUpload.serviceToken}`,
-      "content-type": "application/octet-stream",
-      "x-frame-filename": manifest.filename,
-      "x-frame-transfer-id": manifest.transfer_id,
-      "x-frame-file-size": String(manifest.size_bytes),
-    },
-    body: readFileSync(assembled),
-  });
-  const payload = await response.json().catch(() => ({})) as JsonRecord;
-  if (!response.ok) throw new RequestError(502, stringValue(payload.error) || "Photo Upload rejected the assembled file.");
-  rmSync(directory, { recursive: true, force: true });
-  return { staged_name: stringValue(payload.staged_name) || manifest.filename };
+}
+
+function cleanupCompletedChunkPayload(transferId: string): void {
+  const directory = chunkTransferDir(transferId);
+  rmSync(path.join(directory, "chunks"), { recursive: true, force: true });
+  rmSync(path.join(directory, "assembled.tmp"), { force: true });
+}
+
+function loadChunkReceipt(transferId: string): ChunkCompletionReceipt | null {
+  const file = path.join(chunkTransferDir(transferId), "completed.json");
+  return existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) as ChunkCompletionReceipt : null;
+}
+
+function chunkManifestFingerprint(manifest: ChunkManifest): string {
+  return sha256(Buffer.from(JSON.stringify({
+    transfer_id: manifest.transfer_id,
+    journey_id: manifest.journey_id || fallbackJourneyId(manifest.transfer_id),
+    device_id: manifest.device_id,
+    filename: manifest.filename,
+    size_bytes: manifest.size_bytes,
+    chunk_size_bytes: manifest.chunk_size_bytes,
+    chunk_count: manifest.chunk_count,
+    file_sha256: manifest.file_sha256,
+    chunks: manifest.chunks
+      .map((chunk) => ({ index: chunk.index, size_bytes: chunk.size_bytes, sha256: chunk.sha256 }))
+      .sort((left, right) => left.index - right.index),
+  })));
+}
+
+function writeJsonAtomic(file: string, value: unknown): void {
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
+  renameSync(temporary, file);
 }
 
 function chunkTransferDir(transferId: string): string {
@@ -2124,6 +2244,22 @@ function safeNumber(value: unknown, label: string, minimum: number, maximum: num
 function safeTransferId(value: string): string {
   if (!/^[A-Za-z0-9_-]{8,96}$/.test(value)) throw new RequestError(400, "transfer_id must be 8-96 letters, numbers, dashes, or underscores.");
   return value;
+}
+
+function safeJourneyId(value: string): string {
+  const parsed = safeTransferId(value);
+  if (parsed.includes("__")) throw new RequestError(400, "journey_id cannot contain the reserved '__' delimiter.");
+  return parsed;
+}
+
+function fallbackJourneyId(transferId: string): string {
+  return /^[A-Za-z0-9_-]{8,96}$/.test(transferId) && !transferId.includes("__")
+    ? transferId
+    : `legacy-${sha256(Buffer.from(transferId)).slice(0, 32)}`;
+}
+
+function safeOptionalJourneyId(value: string | null | undefined): string | null {
+  return value && /^[A-Za-z0-9_-]{8,96}$/.test(value) && !value.includes("__") ? value : null;
 }
 
 function safeSha256(value: string): string {
@@ -2950,7 +3086,7 @@ function validateCommandArgs(command: CommandName, args: JsonRecord): void {
     throw new RequestError(400, "photo_transfer_mode_set mode must be direct_ftp or chunked_https.");
   }
   if (command === "photo_transport_config_set" && args.chunk_size_bytes !== undefined) {
-    safePositiveInt(args.chunk_size_bytes, "chunk_size_bytes", 256 * 1024, 64 * 1024 * 1024);
+    safePositiveInt(args.chunk_size_bytes, "chunk_size_bytes", 256 * 1024, config.chunkUpload.chunkSizeBytes);
   }
   if (command === "photo_transport_config_set" && args.chunk_parallel_uploads !== undefined) {
     safePositiveInt(args.chunk_parallel_uploads, "chunk_parallel_uploads", 1, 4);

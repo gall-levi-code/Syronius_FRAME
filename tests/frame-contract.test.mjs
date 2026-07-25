@@ -43,6 +43,7 @@ test("installer Compose template stays synchronized with the service contracts",
   ]);
   const photoUpload = composeServiceBlock(compose, "frame-photo-upload");
   const photoFtp = composeServiceBlock(compose, "frame-photo-ftp");
+  const photoPipeline = composeServiceBlock(compose, "frame-pipeline-photos");
   const belaboxBroker = composeServiceBlock(compose, "frame-belabox-broker");
   const belabox = composeServiceBlock(compose, "frame-belabox-manager");
   const today = composeServiceBlock(compose, "frame-today");
@@ -56,6 +57,8 @@ test("installer Compose template stays synchronized with the service contracts",
   assert.ok(photoFtp.includes("PHOTO_FTP_PASSIVE_MAX: ${PHOTO_FTP_PASSIVE_MAX:-30019}"));
   assert.ok(photoFtp.includes("PORTAL_SERVICE_TOKEN: ${PORTAL_SERVICE_TOKEN}"));
   assert.ok(photoFtp.includes("${PHOTO_FTP_PASSIVE_MIN:-30000}-${PHOTO_FTP_PASSIVE_MAX:-30019}:${PHOTO_FTP_PASSIVE_MIN:-30000}-${PHOTO_FTP_PASSIVE_MAX:-30019}"));
+  assert.ok(photoPipeline.includes("PIPELINE_CONCURRENCY: ${PIPELINE_CONCURRENCY:-2}"));
+  assert.ok(photoPipeline.includes("PORTAL_SERVICE_TOKEN: ${PORTAL_SERVICE_TOKEN}"));
   assert.ok(belaboxBroker.includes("image: eclipse-mosquitto@sha256:"));
   assert.ok(belaboxBroker.includes("BELABOX_MQTT_PASSWORD: ${BELABOX_MQTT_PASSWORD:-}"));
   assert.ok(belaboxBroker.includes("Path(`/mqtt`) || PathPrefix(`/mqtt/`)"));
@@ -78,6 +81,7 @@ test("installer Compose template stays synchronized with the service contracts",
   assert.ok(overlays.includes("PORTAL_SERVICE_TOKEN: ${PORTAL_SERVICE_TOKEN}"));
   assert.ok(overlays.includes("PHOTO_UPLOAD_API_URL: http://frame-photo-upload:3736"));
   assert.ok(overlays.includes("PHOTO_FTP_API_URL: http://frame-photo-ftp:3737"));
+  assert.ok(overlays.includes("PHOTO_PIPELINE_URL: http://frame-pipeline-photos:3735"));
   assert.ok(today.includes("PUBLIC_BASE_URL: ${EDGE_PUBLIC_BASE_URL:-http://localhost}"));
   assert.ok(streams.includes("STREAMS_PUBLIC_BASE_URL: ${STREAMS_PUBLIC_BASE_URL:-http://localhost}"));
   assert.ok(streams.includes("Path(`/stats`) || PathPrefix(`/stats/`)"));
@@ -209,13 +213,14 @@ test("Stream Management deletes streams through a themed unbind dialog", async (
 });
 
 test("Overlay Wizard presents OBS sources as the only editable objects", async () => {
-  const [frontend, html, styles, renderer, uploadRenderer, rendererStyles] = await Promise.all([
+  const [frontend, html, styles, renderer, uploadRenderer, rendererStyles, uploadStyles] = await Promise.all([
     readFile("services/frame-overlays/public/app.js", "utf8"),
     readFile("services/frame-overlays/public/index.html", "utf8"),
     readFile("services/frame-overlays/public/styles.css", "utf8"),
     readFile("services/frame-overlays/public/renderer.js", "utf8"),
     readFile("services/frame-overlays/public/upload-renderer.js", "utf8"),
     readFile("services/frame-overlays/public/renderer.css", "utf8"),
+    readFile("services/frame-overlays/public/upload-renderer.css", "utf8"),
   ]);
   assert.ok(html.includes("FRAME Overlay Wizard"));
   assert.ok(html.includes("FrameTheme"), "Overlay Wizard should inherit the shared FRAME theme");
@@ -243,7 +248,18 @@ test("Overlay Wizard presents OBS sources as the only editable objects", async (
   assert.ok(frontend.includes("Welcome to the Overlay Wizard! Let's get started!"));
   assert.ok(frontend.includes("Create OBS Overlay Source"));
   assert.ok(frontend.includes("New +"));
-  assert.ok(html.includes("Use fake telemetry data"));
+  assert.ok(frontend.includes("frame-overlays-upload-advanced-view"), "Upload customization level should stay local to the Overlay Wizard");
+  assert.ok(frontend.includes("data-upload-editor"), "Upload sources should expose a scoped customization workspace");
+  assert.ok(frontend.includes('data-upload-view-mode="simple"') && frontend.includes('data-upload-view-mode="advanced"'), "Upload customization should offer Simple and Advanced modes");
+  assert.ok(frontend.includes('role="tab" class="upload-category-tab'), "Upload customization categories should use keyboard-accessible tabs");
+  assert.ok(frontend.includes("data-upload-settings-panel"), "Upload customization categories should own matching tab panels");
+  assert.ok(frontend.includes("data-reset-upload-section"), "Every upload customization category should expose a section reset");
+  assert.ok(frontend.includes('event.key === "ArrowLeft"') && frontend.includes('event.key === "Home"'), "Upload category tabs should support arrow and boundary keys");
+  assert.ok(frontend.indexOf("sourceDetailsMarkup(source, preset)") < frontend.indexOf("uploadDesignMarkup(state.designDraft)"), "Upload adapters should stay outside customization disclosure");
+  assert.ok(frontend.includes('state.sourceDraft?.id === savedSourceId') && frontend.includes('state.designDraft?.id === savedPresetId'), "Autosave responses must not overwrite another selected source");
+  assert.ok(frontend.includes('!state.pendingSave.has("source")') && frontend.includes('!state.pendingSave.has("design")'), "Autosave responses must not overwrite newer editor input");
+  assert.ok(frontend.includes('structuredClone(state.sourceDraft)') && frontend.includes('structuredClone(state.designDraft)'), "A mixed autosave must preserve both drafts before awaiting either request");
+  assert.ok(html.includes("Use fake data"));
   assert.ok(frontend.includes("Reset to base template"));
   assert.ok(frontend.includes("Blocks per row"), "Layout controls should expose telemetry wrapping as blocks per row");
   assert.ok(!frontend.includes("Overlay width"), "Connectivity overlay width should be automatic from block width and blocks per row");
@@ -266,6 +282,10 @@ test("Overlay Wizard presents OBS sources as the only editable objects", async (
   assert.ok(!frontend.includes("Touch-safe order"), "Telemetry ordering should not be split into a second touch-only control set");
   assert.ok(!frontend.includes("<h3>Sampling</h3>"), "Old sampling heading should not return");
   assert.ok(frontend.includes("elementPreview=1"), "Overlay Wizard previews should use element-sized renderer mode");
+  assert.ok(html.includes('data-preview-view="canvas"') && html.includes('data-preview-view="detail"'), "Upload previews should offer truthful Canvas and readable Detail framing");
+  assert.ok(html.includes('id="preview-scenario"'), "Upload previews should expose lifecycle scenes");
+  assert.ok(frontend.includes("previewFrameDimensions(effectivePreviewView()"), "Preview sizing should distinguish full canvas from measured detail");
+  assert.ok(frontend.includes('state.previewView: "canvas"') || frontend.includes('previewView: "canvas"'), "Upload preview should default to the OBS canvas");
   assert.ok(frontend.includes("frame-preview-size"), "Overlay Wizard should resize the preview from renderer measurements");
   assert.ok(html.includes("preview-scale-shell"), "Overlay Wizard should scale the measured preview element, not the full OBS canvas");
   assert.ok(styles.includes(".layout-editor"), "Layout controls should split anchors and sliders into desktop columns");
@@ -289,6 +309,7 @@ test("Overlay Wizard presents OBS sources as the only editable objects", async (
   assert.ok(renderer.includes("widget.style.width = `${layoutWidth || telemetryGridPixelWidth"), "Connectivity renderer width must follow the telemetry grid");
   assert.ok(rendererStyles.includes("max-width: none"), "Renderer widget must not clamp wide telemetry rows to the viewport max width");
   assert.ok(uploadRenderer.includes("elementPreviewMode"), "Upload renderer must support element-sized preview mode");
+  assert.ok(uploadStyles.includes("body.element-preview") && uploadStyles.includes("place-items: start"), "Upload detail previews must align transformed bounds from a stable origin");
   assert.ok(rendererStyles.includes("body.element-preview"), "Renderer stylesheet must detach preview mode from the full OBS canvas");
   assert.ok(!html.includes("Overlay Studio"), "Overlay setup should no longer present itself as studio");
 });
@@ -333,10 +354,32 @@ test("photo pipeline is internal and activated by every photo capability", () =>
 });
 
 test("photo pipeline reports per-file outcomes for transfer UX", async () => {
-  const source = await readFile("services/frame-pipeline-photos/src/pipeline.ts", "utf8");
+  const [source, pipelineServer, overlayServer] = await Promise.all([
+    readFile("services/frame-pipeline-photos/src/pipeline.ts", "utf8"),
+    readFile("services/frame-pipeline-photos/src/index.ts", "utf8"),
+    readFile("services/frame-overlays/src/index.ts", "utf8"),
+  ]);
   assert.ok(source.includes("last_publish_file"));
   assert.ok(source.includes("last_quarantine_file"));
   assert.ok(source.includes("last_quarantine_at"));
+  assert.ok(pipelineServer.includes('request.header("x-frame-service-token")'));
+  assert.ok(overlayServer.includes('headers.set("X-Frame-Service-Token", config.ingestApiToken)'));
+});
+
+test("canonical photo journey schema protects identity and content integrity", async () => {
+  const [schema, sidecar, error] = await Promise.all([
+    readFile("docs/schemas/photo-journey.schema.json", "utf8").then(JSON.parse),
+    readFile("docs/schemas/photo-sidecar.schema.json", "utf8").then(JSON.parse),
+    readFile("docs/schemas/photo-error.schema.json", "utf8").then(JSON.parse),
+  ]);
+  assert.ok(schema.required.includes("content_sha256"));
+  assert.equal(new RegExp(schema.properties.content_sha256.pattern).test("a".repeat(64)), true);
+  assert.equal(new RegExp(schema.properties.journey_id.pattern).test("journey__ambiguous"), false);
+  assert.ok(schema.properties.ingest.properties.adapter.enum.includes("legacy_staging"));
+  for (const historicalSchema of [sidecar, error]) {
+    assert.ok(historicalSchema.properties.journey_id);
+    assert.equal(historicalSchema.required.includes("journey_id"), false);
+  }
 });
 
 test("Portal hides pipeline settings unless photo pipeline capabilities are enabled", async () => {
@@ -463,7 +506,7 @@ test("Belabox pairing UI hides MQTT implementation details", async () => {
   assert.ok(frontend.includes('id="photo-resize-enabled"'), "Dimension resizing should use an explicit control");
   assert.ok(frontend.includes('id="photo-size-limit-enabled"'), "Output size limiting should use an explicit control");
   assert.ok(frontend.includes('"Maximum output", 1, 25, 0.5'), "Prepared JPEG size should use a practical 25 MiB range");
-  assert.ok(frontend.includes('"Chunk size", 262144, 8388608'), "Chunk sliders should stop at 8 MiB");
+  assert.ok(frontend.includes('"Chunk size", 262144, chunkSizeMax'), "Chunk sliders should respect the receiver limit and 8 MiB UI cap");
   assert.ok(frontend.includes('id="photo-upload-uncapped"'), "Upload caps should use an explicit uncapped control");
   assert.ok(frontend.includes("Apply changes to"), "Pending settings should expose the large device-specific apply action");
   assert.ok(frontend.includes("updateFormPendingState"), "Editable settings should expose acknowledged and pending states");
@@ -504,6 +547,9 @@ test("Belabox pairing UI hides MQTT implementation details", async () => {
   assert.ok(frontend.includes("egressLaneCards"), "Connections should expose lane-level Upload, Ready, and Down states");
   assert.ok(frontend.includes("photoTelemetryReady ? streamSafetyLabel"), "Unknown photo telemetry should not be presented as Direct FTP");
   assert.ok(agent.includes("last_result: transferResult(status.last_result)"), "Belabox telemetry should carry the last authoritative transfer result");
+  assert.ok(backend.includes('adapter === "belabox_chunked" && transferId ? fallbackJourneyId(transferId) : null'), "Chunk progress should recover the manifest journey ID from its exact transfer ID");
+  assert.ok(!backend.includes("duplicatesByFilename"), "Journey reduction must not correlate photos by filename");
+  assert.ok(backend.includes("completedJourneyId"), "Completed observations must require canonical journey identity");
   assert.ok(photoAgent.includes('last_result = {"status": "completed"'), "Photo Agent should retain the completed filename for result feedback");
   assert.ok(photoAgent.includes("next_scale_percent"), "Photo Agent should adapt dimensions when quality alone cannot meet the size target");
   assert.ok(!photoAgent.includes("MAX_OUTPUT_DEFAULT_LONG_EDGE"), "A size limit should not silently force a 2400 px edge");
@@ -542,9 +588,11 @@ test("Belabox pairing UI hides MQTT implementation details", async () => {
   assert.ok(backend.includes("/belabox/api/diagnostics/speed-test"));
   assert.ok(backend.includes("network_speed_test"));
   assert.ok(backend.includes('app.get("/belabox-chunks/api/diagnostics/speed-test"'), "FRAME diagnostics should provide authenticated downloads");
+  assert.ok(backend.includes('phase === "published" && completedJourneyId && completedJourneyId === journeyId'), "Completed photo telemetry must deduplicate by canonical journey identity");
   assert.ok(backend.includes("streamDiagnosticBytes"), "FRAME diagnostic downloads should stream without buffering the full response");
   assert.ok(backend.includes('mode: "interface_speed_test"'), "Manager diagnostics should request the per-interface agent test");
   assert.ok(backend.includes("interface_name: input.interfaceName"), "Manager diagnostics should preserve the selected interface");
+  assert.equal((backend.match(/safePositiveInt\([^\n]+config\.chunkUpload\.chunkSizeBytes\)/g) || []).length, 2, "Chunk manifests and commands must respect the receiver body limit");
   assert.ok(backend.includes("isProvisionedDevice(parsedTopic.deviceId)"));
   assert.ok(backend.includes("proxy/http/request"));
   assert.ok(backend.includes("agent-wss-only"));

@@ -4,6 +4,7 @@ import hashlib
 import http.client
 import ipaddress
 import math
+import re
 import threading
 import json
 import os
@@ -16,6 +17,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from pathlib import Path
@@ -49,7 +51,9 @@ STABLE_SECONDS = max(1, int(os.environ.get("FRAME_FTP_STABLE_SECONDS", "3")))
 IDLE_SECONDS = max(1, int(os.environ.get("FRAME_FTP_IDLE_SECONDS", "1")))
 RETRY_SECONDS = max(1, int(os.environ.get("FRAME_FTP_RETRY_SECONDS", "10")))
 PROGRESS_BLOCK_BYTES = max(65536, int(os.environ.get("FRAME_CHUNK_PROGRESS_BYTES", str(256 * 1024))))
-EXTENSIONS = {".jpg", ".jpeg", ".png"}
+EXTENSIONS = {".jpg", ".jpeg", ".png", ".heic", ".heif"}
+JOURNEY_PREFIX = "FRAMEJ1_"
+JOURNEY_PATTERN = re.compile(r"^FRAMEJ1_([A-Za-z0-9_-]{8,96}?)__(.+)$")
 PROCESSING_DEFAULTS = {
     "enabled": False,
     "long_edge_px": 0,
@@ -218,6 +222,8 @@ def write_status(**status):
         "state": "idle",
         "status_text": "Idle",
         "file": None,
+        "spool_file": None,
+        "journey_id": None,
         "size_bytes": 0,
         "sent_bytes": 0,
         "percent": 0,
@@ -293,18 +299,21 @@ def stage_uploads():
     for path in list_images(UPLOAD_DIR):
         if not is_stable(path):
             continue
+        path, journey_id, original_name = ensure_journey_path(path)
         target = unique_spool_path(READY_DIR, path.name)
         shutil.move(str(path), str(target))
         info = target.stat()
-        staged.append((target, info))
+        staged.append((target, info, journey_id, original_name))
     if ready_was_empty and staged:
-        target, info = staged[0]
+        target, info, journey_id, original_name = staged[0]
         write_status(
             state="queued",
             status_text=f"Queued {len(staged)} photo{'s' if len(staged) != 1 else ''}",
-            file=target.name,
+            file=original_name,
+            spool_file=target.name,
             size_bytes=info.st_size,
             transfer_id=transfer_id_for(target, info),
+            journey_id=journey_id,
             queue_count=queue_count(),
         )
 
@@ -328,6 +337,42 @@ def unique_spool_path(directory, name):
         if not candidate.exists():
             return candidate
         counter += 1
+
+
+def journey_parts(name):
+    match = JOURNEY_PATTERN.match(Path(name).name)
+    return (match.group(1), match.group(2)) if match else (None, Path(name).name)
+
+
+def journey_filename(journey_id, original_name):
+    safe_name = Path(original_name).name
+    existing_id, original_name = journey_parts(safe_name)
+    if existing_id == journey_id:
+        return safe_name
+    prefix = f"{JOURNEY_PREFIX}{journey_id}__"
+    parsed = Path(original_name).name
+    suffix = Path(parsed).suffix
+    stem = Path(parsed).stem[:max(1, 240 - len(prefix) - len(suffix))]
+    return f"{prefix}{stem}{suffix}"
+
+
+def ensure_journey_path(path):
+    journey_id, original_name = journey_parts(path.name)
+    if journey_id:
+        return path, journey_id, original_name
+    journey_id = uuid.uuid4().hex
+    target = unique_spool_path(path.parent, journey_filename(journey_id, path.name))
+    os.replace(path, target)
+    return target, journey_id, path.name
+
+
+def original_name_for(name):
+    return journey_parts(name)[1]
+
+
+def ftp_remote_names(journey_id, original_name):
+    final = journey_filename(journey_id, original_name)
+    return f"{final}.uploading", final
 
 
 def transfer_id_for(path, info=None):
@@ -383,16 +428,31 @@ def fill_processed_queue():
         return
     settings = processing_settings()
     for path in ready[:slots]:
+        path, journey_id, original_name = ensure_journey_path(path)
         try:
             info = path.stat()
         except FileNotFoundError:
             continue
         text = "Pre-processing image" if settings["enabled"] else "Preparing upload"
-        set_preprocess_state("processing", path.name, text, size_bytes=info.st_size)
+        set_preprocess_state(
+            "processing",
+            original_name,
+            text,
+            spool_file=path.name,
+            size_bytes=info.st_size,
+            journey_id=journey_id,
+        )
         target, warning = prepare_preprocessed_upload(path, settings)
         if warning:
             last_error = warning
-        set_preprocess_state("queued", target.name, "Upload-ready", warning=warning)
+        set_preprocess_state(
+            "queued",
+            original_name_for(target.name),
+            "Upload-ready",
+            spool_file=target.name,
+            warning=warning,
+            journey_id=journey_id,
+        )
 
 
 def preprocess_loop():
@@ -564,8 +624,10 @@ def imagemagick_command(processor, source, target, settings, quality, scale_perc
 
 def upload_direct_ftp(path, prepared=False):
     global last_completed_at, last_error, last_result
+    path, journey_id, _ = ensure_journey_path(path)
     upload_path = path
     upload_name = path.name
+    display_name = original_name_for(upload_name)
     cleanup_path = None
     total = upload_path.stat().st_size
     transfer_id = transfer_id_for(path)
@@ -580,7 +642,8 @@ def upload_direct_ftp(path, prepared=False):
         write_status(
             state=state,
             status_text=text,
-            file=upload_name,
+            file=display_name,
+            spool_file=path.name,
             size_bytes=total,
             sent_bytes=sent,
             percent=percent,
@@ -588,6 +651,7 @@ def upload_direct_ftp(path, prepared=False):
             rate_bps=rate,
             started_at=started_at,
             transfer_id=transfer_id,
+            journey_id=journey_id,
             **extra,
         )
 
@@ -603,6 +667,7 @@ def upload_direct_ftp(path, prepared=False):
             if settings["enabled"]:
                 mark("processing", "Processing image")
             upload_path, upload_name, cleanup_path, processing_warning = prepare_upload(path, settings)
+            display_name = original_name_for(upload_name)
             if processing_warning:
                 last_error = processing_warning
                 mark("processing", "Processing skipped; uploading original", last_error=last_error)
@@ -614,17 +679,39 @@ def upload_direct_ftp(path, prepared=False):
             ftp.set_pasv(True)
             if REMOTE_DIR and REMOTE_DIR != "/":
                 ftp.cwd(REMOTE_DIR)
-            with upload_path.open("rb") as handle:
-                ftp.storbinary(f"STOR {upload_name}", handle, blocksize=65536, callback=progress)
+            uploading_name, remote_name = ftp_remote_names(journey_id, display_name)
+            existing_size = ftp_remote_size(ftp, remote_name)
+            if existing_size is not None and existing_size != total:
+                raise RuntimeError(f"Remote journey {journey_id} already exists with a different size")
+            if existing_size is None:
+                with upload_path.open("rb") as handle:
+                    ftp.storbinary(f"STOR {uploading_name}", handle, blocksize=65536, callback=progress)
+                try:
+                    ftp.rename(uploading_name, remote_name)
+                except ftplib.all_errors:
+                    if ftp_remote_size(ftp, remote_name) != total:
+                        raise
+                    try:
+                        ftp.delete(uploading_name)
+                    except ftplib.all_errors:
+                        pass
+            sent = total
         sent = total
         last_completed_at = iso_now()
         last_error = None
-        last_result = {"status": "completed", "file": upload_name, "at": last_completed_at}
+        last_result = {"status": "completed", "file": display_name, "at": last_completed_at, "transfer_id": transfer_id, "journey_id": journey_id}
         mark("complete", "Complete", done=True, last_completed_at=last_completed_at)
         path.unlink(missing_ok=True)
     except Exception as error:
         last_error = str(error)[:160]
-        last_result = {"status": "failed", "file": upload_name, "at": iso_now(), "error": last_error}
+        last_result = {
+            "status": "failed",
+            "file": display_name,
+            "at": iso_now(),
+            "error": last_error,
+            "transfer_id": transfer_id,
+            "journey_id": journey_id,
+        }
         mark("failed", "Retrying", last_error=last_error)
         time.sleep(RETRY_SECONDS)
     finally:
@@ -634,10 +721,19 @@ def upload_direct_ftp(path, prepared=False):
 
 def upload_chunked(path, prepared=False):
     global last_completed_at, last_error, last_result
+    path, journey_id, _ = ensure_journey_path(path)
+    display_name = original_name_for(path.name)
     upload_url = chunk_upload_url()
     if not upload_url or not CHUNK_UPLOAD_TOKEN:
         last_error = "Chunk upload URL/token is not configured"
-        write_status(state="failed", status_text="Chunk upload not configured", file=path.name, last_error=last_error)
+        write_status(
+            state="failed",
+            status_text="Chunk upload not configured",
+            file=display_name,
+            spool_file=path.name,
+            journey_id=journey_id,
+            last_error=last_error,
+        )
         time.sleep(RETRY_SECONDS)
         return
 
@@ -662,7 +758,8 @@ def upload_chunked(path, prepared=False):
         write_status(
             state=state,
             status_text=text,
-            file=upload_name,
+            file=display_name,
+            spool_file=path.name,
             size_bytes=total,
             sent_bytes=sent,
             percent=percent,
@@ -670,6 +767,7 @@ def upload_chunked(path, prepared=False):
             rate_bps=rate,
             started_at=started_at,
             transfer_id=transfer_id,
+            journey_id=journey_id,
             transfer_mode="chunked_https",
             transport="chunked_https",
             chunk_size_bytes=chunk_size,
@@ -692,6 +790,7 @@ def upload_chunked(path, prepared=False):
             if settings["enabled"]:
                 mark("processing", "Processing image")
             upload_path, upload_name, cleanup_path, processing_warning = prepare_upload(path, settings)
+            display_name = original_name_for(upload_name)
             if processing_warning:
                 last_error = processing_warning
                 mark("processing", "Processing skipped; uploading original", last_error=last_error)
@@ -709,7 +808,7 @@ def upload_chunked(path, prepared=False):
             egress_lane_count=len(lanes),
             egress_lanes=lane_status(lanes),
         )
-        manifest = build_manifest(upload_path, transfer_id, chunk_size, upload_name)
+        manifest = build_manifest(upload_path, transfer_id, chunk_size, display_name, journey_id)
         request_json_with_lanes(upload_url, "POST", manifest, lanes)
         sent_by_chunk = {}
         progress_lock = threading.Lock()
@@ -748,12 +847,19 @@ def upload_chunked(path, prepared=False):
         sent = total
         last_completed_at = iso_now()
         last_error = None
-        last_result = {"status": "completed", "file": upload_name, "at": last_completed_at}
+        last_result = {"status": "completed", "file": display_name, "at": last_completed_at, "transfer_id": transfer_id, "journey_id": journey_id}
         mark("complete", "Complete", done=True, last_completed_at=last_completed_at)
         path.unlink(missing_ok=True)
     except Exception as error:
         last_error = str(error)[:160]
-        last_result = {"status": "failed", "file": upload_name, "at": iso_now(), "error": last_error}
+        last_result = {
+            "status": "failed",
+            "file": display_name,
+            "at": iso_now(),
+            "error": last_error,
+            "transfer_id": transfer_id,
+            "journey_id": journey_id,
+        }
         mark("failed", "Retrying", last_error=last_error)
         time.sleep(RETRY_SECONDS)
     finally:
@@ -761,7 +867,7 @@ def upload_chunked(path, prepared=False):
             cleanup_path.unlink(missing_ok=True)
 
 
-def build_manifest(path, transfer_id, chunk_size, filename=None):
+def build_manifest(path, transfer_id, chunk_size, filename=None, journey_id=None):
     chunks = []
     file_hash = hashlib.sha256()
     index = 0
@@ -779,6 +885,7 @@ def build_manifest(path, transfer_id, chunk_size, filename=None):
             index += 1
     return {
         "transfer_id": transfer_id,
+        "journey_id": journey_id or transfer_id,
         "device_id": os.environ.get("BELABOX_DEVICE_ID", ""),
         "filename": filename or path.name,
         "size_bytes": path.stat().st_size,
@@ -787,6 +894,14 @@ def build_manifest(path, transfer_id, chunk_size, filename=None):
         "file_sha256": file_hash.hexdigest(),
         "chunks": chunks,
     }
+
+
+def ftp_remote_size(ftp, filename):
+    try:
+        size = ftp.size(filename)
+        return int(size) if size is not None else None
+    except ftplib.error_perm:
+        return None
 
 
 def chunk_offset(chunk, chunk_size):
@@ -1063,6 +1178,15 @@ def self_test():
     assert processing_settings({"image_processing": {"enabled": True, "max_output_mb": "2"}})["long_edge_px"] == 0
     assert upload_name_for(Path("photo.png"), {"enabled": True}) == "photo.jpg"
     assert upload_name_for(Path("photo.jpeg"), {"enabled": True}) == "photo.jpeg"
+    assert {".heic", ".heif"}.issubset(EXTENSIONS)
+    test_journey = "a" * 32
+    enveloped_png = journey_filename(test_journey, "Camera Photo.png")
+    assert journey_parts(enveloped_png) == (test_journey, "Camera Photo.png")
+    assert original_name_for(upload_name_for(Path(enveloped_png), {"enabled": True})) == "Camera Photo.jpg"
+    assert journey_filename(test_journey, enveloped_png) == enveloped_png
+    uploading_name, remote_name = ftp_remote_names(test_journey, "photo.jpg")
+    assert uploading_name == f"{remote_name}.uploading"
+    assert journey_parts(remote_name) == (test_journey, "photo.jpg")
     assert prepare_upload(Path("photo.jpg"), {"enabled": False}) == (Path("photo.jpg"), "photo.jpg", None, None)
     assert list(quality_steps(47)) == [47, 42, 40]
     command = imagemagick_command("convert", Path("photo.jpg"), Path("out.jpg"), {"long_edge_px": 1600}, 85)
@@ -1095,11 +1219,17 @@ def self_test():
         old_time = time.time() - STABLE_SECONDS - 1
         os.utime(sample, (old_time, old_time))
         assert is_stable(sample)
+        sample, journey_id, original_name = ensure_journey_path(sample)
+        assert original_name == "photo.jpg"
+        assert ensure_journey_path(sample)[1] == journey_id
         target, warning = prepare_preprocessed_upload(sample, {"enabled": False})
         assert warning is None
         assert target.parent == PROCESSED_DIR
-        assert target.name == "photo.jpg"
+        assert journey_parts(target.name) == (journey_id, "photo.jpg")
         assert target.exists()
+        manifest = build_manifest(target, transfer_id_for(target), 1024, original_name_for(target.name), journey_id)
+        assert manifest["journey_id"] == journey_id
+        assert manifest["filename"] == "photo.jpg"
         assert queue_count() == 1
     UPLOAD_DIR, READY_DIR, PROCESSED_DIR, INFLIGHT_DIR = original_dirs
     with tempfile.TemporaryDirectory() as directory:

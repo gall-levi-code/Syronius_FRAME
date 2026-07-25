@@ -39,7 +39,7 @@
       })();
     </script>
     <script src="/assets/frame-theme.js?v=global-theme-v1"></script>
-    <link rel="stylesheet" href="/overlays/assets/styles.css?v=portal-theme-v2-close-icon-v2">
+    <link rel="stylesheet" href="/overlays/assets/styles.css?v=portal-theme-v2-upload-editor-v2">
   </head>
   <body>
     <header class="topbar">
@@ -65,8 +65,25 @@
       <section id="main-content" class="wizard-content"></section>
       <section id="preview-dock" class="preview-dock hidden" aria-label="Renderer preview">
         <div class="preview-head">
-          <div><strong>Renderer preview</strong><span id="preview-caption">Sample output</span></div>
-          <label class="fake-toggle"><input id="fake-preview-toggle" type="checkbox" checked>Use fake telemetry data</label>
+          <div class="preview-title-row">
+            <div><strong>Renderer preview</strong><span id="preview-caption">Sample output</span></div>
+            <label class="fake-toggle"><input id="fake-preview-toggle" type="checkbox" checked>Use fake data</label>
+          </div>
+          <div id="upload-preview-tools" class="preview-tools" hidden>
+            <div class="view-mode-toggle preview-view-toggle" role="group" aria-label="Preview framing">
+              <button type="button" class="active" data-preview-view="canvas" aria-pressed="true">Canvas</button>
+              <button type="button" data-preview-view="detail" aria-pressed="false">Detail</button>
+            </div>
+            <label class="preview-scenario-field" for="preview-scenario"><span>Scene</span><select id="preview-scenario">
+              <option value="queue">Queue</option>
+              <option value="uploading">Uploading</option>
+              <option value="staged">Staged</option>
+              <option value="processing">Processing</option>
+              <option value="failed">Failed</option>
+              <option value="completed">Completed</option>
+              <option value="idle">Idle</option>
+            </select></label>
+          </div>
         </div>
         <div class="preview-frame-shell">
           <div id="preview-scale-shell" class="preview-scale-shell">
@@ -88,6 +105,6 @@
       </div>
     </dialog>
 
-    <script type="module" src="/overlays/assets/app.js?v=portal-theme-v2"></script>
+    <script type="module" src="/overlays/assets/app.js?v=upload-editor-v5"></script>
   </body>
 </html>

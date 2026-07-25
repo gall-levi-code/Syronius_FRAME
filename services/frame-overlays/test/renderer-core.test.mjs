@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { QUALITY, QualityStabilizer, ServiceReloadWatchdog, canvasPixelSize, compactTelemetryBlockWidth, formatTelemetryDuration, layoutGrowth, normalizedTelemetryBlockWidth, normalizedTelemetryColumns, previewElementSize, qualityStatusText, resolvedTelemetryColumnCount, shouldResetRuntimeState, telemetryAvailability, telemetryGridPixelWidth, telemetryIsStale } from "../public/renderer-core.js";
-import { clampBitrateLevels, clampNumericValue, clampRttLevels, samplingWindowLabel } from "../public/wizard-core.js";
-import { deriveUploadView, newlyCompletedTransfers, uploadSummary } from "../public/upload-renderer-core.js";
+import { QUALITY, QualityStabilizer, ServiceReloadWatchdog, canvasPixelSize, compactTelemetryBlockWidth, formatTelemetryDuration, layoutGrowth, normalizedTelemetryBlockWidth, normalizedTelemetryColumns, previewElementSize, previewVisualBounds, qualityStatusText, resolvedTelemetryColumnCount, shouldResetRuntimeState, telemetryAvailability, telemetryGridPixelWidth, telemetryIsStale } from "../public/renderer-core.js";
+import { clampBitrateLevels, clampNumericValue, clampRttLevels, previewFrameDimensions, samplingWindowLabel } from "../public/wizard-core.js";
+import { completionDockPosition, deriveJourneyQueue, horizontalJourneyLimit, journeyEtaMs, journeyPercent, journeyStatusText, journeysFromSnapshot, journeysWithActiveGrace, previewJourneySnapshots, stabilizeJourneyOrder, unseenCompletedJourneys } from "../public/upload-renderer-core.js";
 
 test("quality requires a streak before showing BAD and avoids initial BAD flicker", () => {
   const quality = new QualityStabilizer();
@@ -97,6 +98,54 @@ test("layout growth defaults inward from anchors and preview size separates view
     content_width: 200,
     content_height: 120,
   });
+  assert.deepEqual(previewVisualBounds([
+    { getBoundingClientRect:() => ({ left:20, top:30, right:320, bottom:150, width:300, height:120 }) },
+    { getBoundingClientRect:() => ({ left:300, top:10, right:430, bottom:70, width:130, height:60 }) },
+  ], 28), {
+    width: 438,
+    height: 168,
+    content_width: 410,
+    content_height: 140,
+  });
+});
+
+test("upload preview supports truthful canvas framing and deterministic lifecycle scenes", () => {
+  assert.deepEqual(previewFrameDimensions("canvas", { width:20, height:20 }), {
+    width:1920,
+    height:1080,
+    contentWidth:1920,
+    contentHeight:1080,
+  });
+  assert.deepEqual(previewFrameDimensions("detail", { width:300.2, height:180.1, contentWidth:280.4, contentHeight:160.8 }), {
+    width:301,
+    height:181,
+    contentWidth:281,
+    contentHeight:161,
+  });
+  assert.deepEqual(previewFrameDimensions("detail"), {
+    width:520,
+    height:240,
+    contentWidth:520,
+    contentHeight:240,
+  });
+
+  const now = Date.parse("2026-07-24T12:00:00Z");
+  for (const [scenario, phases] of Object.entries({
+    uploading:["uploading"],
+    staged:["staged"],
+    processing:["processing"],
+    failed:["uploading", "failed"],
+    completed:["processing", "published"],
+  })) {
+    const snapshots = previewJourneySnapshots(scenario, now);
+    assert.deepEqual(snapshots.map(({ journeys }) => journeys[0].phase), phases);
+    assert.ok(snapshots.every(({ journeys }) => journeys[0].journey_id === "preview-focus"));
+  }
+  const failed = previewJourneySnapshots("failed", now).at(-1).journeys[0];
+  assert.equal(failed.error, "Transfer interrupted");
+  const completed = previewJourneySnapshots("completed", now).at(-1).journeys[0];
+  assert.equal(completed.bytes_received, completed.bytes_total);
+  assert.ok(completed.transfer_completed_at);
 });
 
 test("telemetry uptime shows minutes and seconds before hours", () => {
@@ -128,52 +177,162 @@ test("unavailable feed telemetry is omitted while supported values remain visibl
   });
 });
 
-test("upload renderer focuses the most complete active file and does not invent mixed-adapter percentages", () => {
-  const transfers=[
-    {transfer_id:"web:a",adapter:"web_upload",phase:"receiving",bytes_received:400,bytes_total:1000,speed_bps:100,started_at:"2026-06-21T12:00:00Z",updated_at:"2026-06-21T12:00:02Z"},
-    {transfer_id:"ftp:b",adapter:"ftp",phase:"receiving",bytes_received:200,bytes_total:null,speed_bps:50,started_at:"2026-06-21T12:00:01Z",updated_at:"2026-06-21T12:00:02Z"},
-    {transfer_id:"web:d",adapter:"web_upload",phase:"receiving",bytes_received:900,bytes_total:1000,speed_bps:75,started_at:"2026-06-21T12:00:02Z",updated_at:"2026-06-21T12:00:02Z"},
-    {transfer_id:"web:c",adapter:"web_upload",phase:"queued",bytes_received:100,bytes_total:100,speed_bps:null,started_at:"2026-06-21T11:59:00Z",updated_at:"2026-06-21T12:00:02Z"},
-  ];
-  const view=deriveUploadView(transfers,5000,Date.parse("2026-06-21T12:00:03Z"));
-  assert.equal(view.focus.transfer_id,"web:d");
-  assert.equal(view.current_percent,90);
-  assert.equal(view.percent,null);
-  assert.equal(view.speed_bps,225);
-  assert.equal(view.overall_complete,0);
-  assert.equal(view.overall_total,4);
-  assert.equal(Math.round(view.overall_percent),0);
-  assert.deepEqual(view.adapters, ["web_upload", "ftp"]);
-  assert.equal(uploadSummary(view),"3 uploading - 1 waiting");
+test("journey queue ranks lifecycle first, then upload ETA and fallback percentage", () => {
+  const journey=(journey_id,phase,extra={})=>({
+    journey_id,phase,started_at:"2026-06-21T12:00:00Z",updated_at:"2026-06-21T12:00:02Z",...extra,
+  });
+  const queue=deriveJourneyQueue([
+    journey("unknown-40","uploading",{bytes_received:400,bytes_total:1000,speed_bps:null}),
+    journey("slow-eta","uploading",{bytes_received:0,bytes_total:1000,speed_bps:50}),
+    journey("published","published"),
+    journey("staged","staged"),
+    journey("fast-eta","uploading",{bytes_received:900,bytes_total:1000,speed_bps:10}),
+    journey("unknown-90-new","uploading",{bytes_received:900,bytes_total:1000,speed_bps:null,started_at:"2026-06-21T12:00:01Z"}),
+    journey("unknown-90-old","uploading",{bytes_received:900,bytes_total:1000,speed_bps:null,started_at:"2026-06-21T11:59:59Z"}),
+    journey("processing","processing"),
+    journey("failed","failed",{updated_at:"2026-06-21T12:00:03Z"}),
+  ],10);
+  assert.deepEqual(queue.active.map((item)=>item.journey_id),[
+    "processing","staged","fast-eta","slow-eta","unknown-90-old","unknown-90-new","unknown-40",
+  ]);
+  assert.equal(queue.active_total,7);
+  assert.equal(queue.hidden_active,0);
 });
 
-test("upload renderer treats waiting and preparing as active states, not completed uploads", () => {
-  const transfers=[
-    {transfer_id:"queued",adapter:"belabox_agent",phase:"queued",bytes_received:0,bytes_total:1000,speed_bps:null,started_at:"2026-06-21T12:00:00Z",updated_at:"2026-06-21T12:00:01Z"},
-    {transfer_id:"preparing",adapter:"belabox_agent",phase:"processing",bytes_received:0,bytes_total:2000,speed_bps:0,started_at:"2026-06-21T12:00:01Z",updated_at:"2026-06-21T12:00:01Z"},
-  ];
-  const view=deriveUploadView(transfers,1000,Date.parse("2026-06-21T12:00:01.500Z"));
-  assert.equal(view.focus.transfer_id,"preparing");
-  assert.equal(view.current_percent,null);
-  assert.equal(view.overall_complete,0);
-  assert.equal(view.overall_total,2);
-  assert.equal(view.overall_percent,0);
+test("journey queue defaults to five visible active journeys", () => {
+  const journeys=Array.from({length:7},(_,index)=>({
+    journey_id:`photo-${index}`,phase:"uploading",started_at:`2026-06-21T12:00:0${index}Z`,
+  }));
+  const queue=deriveJourneyQueue(journeys);
+  assert.equal(queue.active.length,5);
+  assert.equal(queue.active_total,7);
+  assert.equal(queue.hidden_active,2);
 });
 
-test("upload renderer only flashes published files briefly", () => {
-  const transfer={transfer_id:"done",adapter:"belabox_agent",phase:"published",bytes_received:1000,bytes_total:1000,speed_bps:null,started_at:"2026-06-21T12:00:00Z",updated_at:"2026-06-21T12:00:01Z"};
-  assert.equal(deriveUploadView([transfer],1000,Date.parse("2026-06-21T12:00:01.500Z")).focus.transfer_id,"done");
-  assert.equal(deriveUploadView([transfer],1000,Date.parse("2026-06-21T12:00:02.500Z")).focus,null);
+test("horizontal journey queues cap visible cards to the safe viewport width", () => {
+  assert.equal(horizontalJourneyLimit(5,1920,520,7,20),3);
+  assert.equal(horizontalJourneyLimit(5,600,520,7,20),1);
 });
 
-test("upload renderer reports a completed transfer once when it becomes published", () => {
-  const active={transfer_id:"photo",adapter:"belabox_agent",phase:"processing"};
-  const complete={...active,phase:"published",filename:"TCL_3806.JPG"};
-  assert.deepEqual(newlyCompletedTransfers([active],[complete]),[complete]);
-  assert.deepEqual(newlyCompletedTransfers([complete],[complete]),[]);
+test("journey progress exposes upload percentage and ETA without inventing unknown values", () => {
+  const uploading={phase:"uploading",bytes_received:750,bytes_total:1000,speed_bps:50};
+  assert.equal(journeyPercent(uploading),75);
+  assert.equal(journeyEtaMs(uploading),5000);
+  assert.equal(journeyEtaMs({...uploading,speed_bps:0}),null);
+  assert.equal(journeyPercent({phase:"uploading",bytes_received:10,bytes_total:null}),null);
+  assert.equal(journeyPercent({phase:"processing"}),100);
 });
 
-test("upload renderer keeps queued files visible while waiting to start", () => {
-  const transfer={transfer_id:"queued",adapter:"belabox_agent",phase:"queued",bytes_received:0,bytes_total:1000,speed_bps:null,started_at:"2026-06-21T12:00:00Z",updated_at:"2026-06-21T12:00:01Z"};
-  assert.equal(deriveUploadView([transfer],1000,Date.parse("2026-06-21T12:00:32Z")).focus.transfer_id,"queued");
+test("journey status copy is canonical and never exposes transport-local wording", () => {
+  assert.equal(
+    journeyStatusText({phase:"staged",status_text:"Transfer complete via FTP"}),
+    "Upload received; waiting for processing",
+  );
+  assert.equal(journeyStatusText({phase:"processing",status_text:"Pipeline receipt 42"}),"Preparing photo for publication");
+  assert.equal(journeyStatusText({phase:"failed",error:"Decode failed"}),"Decode failed");
+});
+
+test("same-membership queue reorder must remain desired for 1000ms before committing", () => {
+  const a={journey_id:"a"};
+  const b={journey_id:"b"};
+  let result=stabilizeJourneyOrder([a,b],undefined,0);
+  assert.deepEqual(result.journeys,[a,b]);
+  result=stabilizeJourneyOrder([b,a],result.state,100);
+  assert.deepEqual(result.journeys,[a,b]);
+  result=stabilizeJourneyOrder([b,a],result.state,1099);
+  assert.deepEqual(result.journeys,[a,b]);
+  result=stabilizeJourneyOrder([b,a],result.state,1100);
+  assert.deepEqual(result.journeys,[b,a]);
+});
+
+test("queue membership changes apply immediately during order stabilization", () => {
+  const a={journey_id:"a"};
+  const b={journey_id:"b"};
+  const c={journey_id:"c"};
+  const initial=stabilizeJourneyOrder([a,b],undefined,0);
+  const pending=stabilizeJourneyOrder([b,a],initial.state,100);
+  const changed=stabilizeJourneyOrder([c,b,a],pending.state,200);
+  assert.deepEqual(changed.journeys,[c,b,a]);
+  assert.deepEqual(changed.state.order,["c","b","a"]);
+});
+
+test("active journey grace bridges brief omissions and yields to terminal truth", () => {
+  const processing={journey_id:"photo-a",phase:"processing"};
+  const memory=new Map([["photo-a",{journey:processing,last_seen:100}]]);
+  assert.deepEqual(journeysWithActiveGrace([],memory,1299,1200),[processing]);
+  assert.deepEqual(journeysWithActiveGrace([{...processing,phase:"published"}],memory,1300,1200),[
+    {...processing,phase:"published"},
+  ]);
+  memory.set("photo-a",{journey:processing,last_seen:100});
+  assert.deepEqual(journeysWithActiveGrace([],memory,1300,1200),[]);
+  assert.equal(memory.has("photo-a"),false);
+});
+
+test("completion dock attaches, flips, and overlaps without leaving the safe viewport", () => {
+  const anchor={left:20,top:20,right:540,bottom:120};
+  const bubble={width:180,height:50};
+  const base={anchor,obstacle:anchor,bubble,gap:8,margin:20,alignment:"start"};
+  assert.deepEqual(completionDockPosition({...base,viewport:{width:1920,height:1080},direction:"right"}),{
+    direction:"right",left:548,top:20,overlap:false,
+  });
+  assert.deepEqual(completionDockPosition({...base,viewport:{width:700,height:400},direction:"right"}),{
+    direction:"down",left:20,top:128,overlap:false,
+  });
+  const overlap=completionDockPosition({
+    ...base,
+    viewport:{width:700,height:400},
+    direction:"right",
+    allowOverlap:true,
+  });
+  assert.deepEqual(overlap,{direction:"right",left:360,top:20,overlap:true});
+});
+
+test("completion requires published phase and fires once per canonical journey", () => {
+  const active={journey_id:"photo",transfer_id:"upload:photo",phase:"processing",transfer_completed_at:"2026-06-21T12:00:02Z"};
+  const staged={...active,phase:"staged"};
+  const published={...active,transfer_id:"pipeline:photo",phase:"published",updated_at:"2026-06-21T12:00:03Z"};
+  const seen=new Map();
+  const now=Date.parse("2026-06-21T12:00:04Z");
+  assert.deepEqual(unseenCompletedJourneys([active],[staged],seen,now,3000),[]);
+  assert.deepEqual(unseenCompletedJourneys([active],[published,published],seen,now,3000),[published]);
+  assert.deepEqual(unseenCompletedJourneys([published],[published],seen,now,3000),[]);
+});
+
+test("completion memory seeds recovery state and suppresses reappearing journeys", () => {
+  const completed=(id)=>({
+    journey_id:id,phase:"published",updated_at:"2026-06-21T12:00:03Z",transfer_completed_at:"2026-06-21T12:00:03Z",
+  });
+  const seen=new Map();
+  const now=Date.parse("2026-06-21T12:00:04Z");
+  assert.deepEqual(unseenCompletedJourneys(undefined,[completed("a")],seen,now,3000),[]);
+  assert.deepEqual(unseenCompletedJourneys([], [completed("a")], seen, now + 100, 3000), []);
+  assert.equal(seen.has("a"),true);
+});
+
+test("completion recovery never flashes an old receipt as a new photo", () => {
+  const completed={journey_id:"old",phase:"published",updated_at:"2026-06-21T12:00:03Z",transfer_completed_at:"2026-06-21T12:00:03Z"};
+  const now=Date.parse("2026-06-21T12:00:10Z");
+  assert.deepEqual(unseenCompletedJourneys([], [completed], new Map(), now, 3000), []);
+});
+
+test("completed cards hold, then release their queue slot when flight begins", async () => {
+  const source=await readFile("public/upload-renderer.js","utf8");
+  const flight=source.slice(source.indexOf("function animateJourneyFlight"),source.indexOf("function hideCompletionBubble"));
+  assert.ok(source.includes("const COMPLETION_HOLD_MS = 300;"));
+  assert.ok(source.includes("COMPLETION_HOLD_MS + index * 45"));
+  assert.ok(source.includes("visibleCompletions.set"));
+  assert.ok(flight.includes("const flight = source.cloneNode(true);"));
+  assert.ok(flight.indexOf("visibleCompletions.delete(id);") < flight.indexOf("flight.animate"));
+  assert.ok(flight.indexOf("render();") < flight.indexOf("flight.animate"));
+  assert.ok(flight.includes("flightDock.remove();"));
+  assert.ok(source.includes("if (journeyMotionAnimations.has(animation)) animation.cancel();"));
+  assert.ok(source.includes("journeyMotionAnimations.add(animation);"));
+  assert.ok(source.includes("const maxWidth = elementPreviewMode"));
+  assert.ok(source.includes('uploadStack.style.transformOrigin = "top left";'));
+});
+
+test("renderer accepts only canonical journey snapshots", () => {
+  const journey={journey_id:"photo-a",phase:"uploading",filename:"same.jpg"};
+  assert.deepEqual(journeysFromSnapshot({journeys:[journey]}),[journey]);
+  assert.deepEqual(journeysFromSnapshot({transfers:[{transfer_id:"legacy"}]}),[]);
 });

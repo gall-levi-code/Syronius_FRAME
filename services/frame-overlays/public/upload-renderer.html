@@ -4,43 +4,29 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>FRAME Overlay</title>
-    <link rel="stylesheet" href="/overlays/assets/renderer.css?v=live-stack-v1">
-    <link rel="stylesheet" href="/overlays/assets/upload-renderer.css?v=live-stack-v1">
+    <link rel="stylesheet" href="/overlays/assets/renderer.css?v=upload-editor-v2">
+    <link rel="stylesheet" href="/overlays/assets/upload-renderer.css?v=upload-editor-v5">
   </head>
   <body>
     <div class="overlay-root">
       <div id="upload-stack" class="upload-stack">
+        <section id="journey-region" class="journey-region" aria-label="Photo upload journeys">
+          <div id="journey-list" class="journey-list" role="list" aria-live="polite"></div>
+          <div id="queue-overflow" class="queue-overflow" hidden></div>
+          <div id="idle-bubble" class="journey-bubble idle-bubble" hidden>
+            <strong id="idle-label">WAITING FOR UPLOAD</strong>
+            <span id="idle-source">FRAME Uploads</span>
+          </div>
+        </section>
+      </div>
+      <div id="completion-dock" class="completion-dock">
         <div id="completion-bubble" class="completion-bubble" role="status" aria-live="polite" hidden>
           <span class="completion-icon" aria-hidden="true">&#10003;</span>
-          <span><strong id="completion-title">Transfer complete</strong><small id="completion-file"></small></span>
+          <span><strong id="completion-title">Completed</strong><small id="completion-file"></small></span>
         </div>
-        <section id="widget" class="widget upload-widget hidden">
-          <header class="upload-head">
-            <div class="signal-dot"></div>
-            <div><strong id="upload-status">WAITING</strong><span id="source-name">FRAME Uploads</span></div>
-            <span id="adapter-label" class="adapter-label">WEB</span>
-          </header>
-          <div class="upload-focus"><strong id="focus-name">Waiting for an upload</strong><span id="upload-summary"></span></div>
-          <div class="upload-progress-list">
-            <div class="upload-progress-row">
-              <div class="upload-progress-label"><span id="current-progress-name">Current file</span><strong id="current-progress-value">--</strong></div>
-              <div id="current-progress-track" class="upload-progress upload-progress-current"><div id="current-progress-fill"></div></div>
-            </div>
-            <div class="upload-progress-row">
-              <div class="upload-progress-label"><span>Overall</span><strong id="overall-progress-value">0/0</strong></div>
-              <div id="overall-progress-track" class="upload-progress upload-progress-overall"><div id="overall-progress-fill"></div></div>
-            </div>
-          </div>
-          <div class="upload-details">
-            <span id="sent-detail"><small>Sent</small><strong id="sent-value">0 B</strong></span>
-            <span id="speed-detail"><small>Speed</small><strong id="speed-value">--</strong></span>
-            <span id="elapsed-detail"><small>Elapsed</small><strong id="elapsed-value">--</strong></span>
-          </div>
-          <div id="upload-error" class="upload-error" hidden></div>
-        </section>
       </div>
     </div>
     <script>window.FRAME_OVERLAY = /*__FRAME_OVERLAY_CONFIG__*/null;</script>
-    <script type="module" src="/overlays/assets/upload-renderer.js?v=live-stack-v1"></script>
+    <script type="module" src="/overlays/assets/upload-renderer.js?v=upload-editor-v5"></script>
   </body>
 </html>

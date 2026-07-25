@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { createReadStream } from "node:fs";
 import {
   access,
   copyFile,
@@ -12,6 +13,7 @@ import {
 import path from "node:path";
 import exifReader from "exif-reader";
 import { fileTypeFromFile } from "file-type";
+import decodeHeic from "heic-decode";
 import sharp, { type Metadata } from "sharp";
 import type { PipelineConfig, PipelineProcessingSettings } from "./config.js";
 import { atomicWrite, atomicWriteJson, hostJoin, sanitizeBase } from "./fsUtils.js";
@@ -64,11 +66,48 @@ interface Claim {
   originalName: string;
   directory: string;
   source: string;
+  journey: VerifiedPhotoJourney;
+  integrityError?: string;
 }
 
 interface Publication {
   dateFolder: string;
   base: string;
+  journeyId: string;
+}
+
+interface JourneyIngest {
+  adapter: string;
+  transfer_id: string;
+  bytes_received: number;
+}
+
+interface PhotoJourney {
+  schema_version: 1;
+  journey_id: string;
+  content_sha256?: string;
+  original_name: string;
+  received_at: string;
+  ingest: JourneyIngest;
+}
+
+interface VerifiedPhotoJourney extends PhotoJourney {
+  content_sha256: string;
+}
+
+export interface JourneyProgress extends PhotoJourney {
+  state: "received" | "processing" | "published" | "failed";
+  updated_at: string;
+  job_id: string;
+  date_folder?: string;
+  base?: string;
+  error?: string;
+}
+
+interface RawImage {
+  data: Buffer;
+  width: number;
+  height: number;
 }
 
 export type PhotoManagementAction =
@@ -113,6 +152,8 @@ export class PhotoPipeline {
   private processing = new Set<string>();
   private scanning = false;
   private publishLock: Promise<void> = Promise.resolve();
+  private heicLock: Promise<void> = Promise.resolve();
+  private recentJourneyReceipts = new Map<string, JourneyProgress>();
   private settings: PipelineProcessingSettings;
 
   constructor(readonly config: PipelineConfig) {
@@ -133,7 +174,7 @@ export class PhotoPipeline {
       last_quarantine_at: null,
       last_quarantine_file: null,
       last_error: null,
-      heic_supported: Boolean(sharp.format.heif?.input?.buffer),
+      heic_supported: true,
     };
     this.settings = normalizeSettings(config.defaultSettings, config.defaultSettings);
   }
@@ -142,6 +183,8 @@ export class PhotoPipeline {
     for (const directory of Object.values(this.directories)) {
       await mkdir(directory, { recursive: true });
     }
+    await mkdir(this.journeyReceiptDirectory(), { recursive: true });
+    await this.loadJourneyReceipts();
     await this.loadSettings();
     await this.ensureCurrentGallery();
     await this.reconcileLatest();
@@ -168,6 +211,9 @@ export class PhotoPipeline {
       await this.ensureCurrentGallery();
       await this.claimStagedFiles();
       const claims = await this.readClaims();
+      for (const claim of claims) {
+        if (!claim.integrityError) await this.recordJourneyReceived(claim);
+      }
       this.status.queue_depth = claims.length;
       const available = claims.filter((claim) => !this.processing.has(claim.jobId));
       await runPool(available, this.config.concurrency, async (claim) => {
@@ -254,6 +300,32 @@ export class PhotoPipeline {
     });
   }
 
+  async journeyProgress(limit = 100): Promise<JourneyProgress[]> {
+    return [...this.recentJourneyReceipts.values()]
+      .sort((left, right) => right.updated_at.localeCompare(left.updated_at))
+      .slice(0, Math.max(0, Math.min(100, Math.floor(limit))));
+  }
+
+  private async loadJourneyReceipts(): Promise<void> {
+    for (const entry of await readdir(this.journeyReceiptDirectory())) {
+      if (!entry.endsWith(".json")) continue;
+      try {
+        const receipt = await readJsonOrNull<JourneyProgress>(path.join(this.journeyReceiptDirectory(), entry));
+        if (receipt?.journey_id && receipt.updated_at) this.rememberJourneyReceipt(receipt);
+      } catch (error) {
+        console.warn(`[photo-pipeline] ignored invalid journey receipt ${entry}: ${errorMessage(error)}`);
+      }
+    }
+  }
+
+  private rememberJourneyReceipt(receipt: JourneyProgress): void {
+    this.recentJourneyReceipts.set(receipt.journey_id, receipt);
+    if (this.recentJourneyReceipts.size <= 100) return;
+    const oldest = [...this.recentJourneyReceipts.values()]
+      .sort((left, right) => left.updated_at.localeCompare(right.updated_at))[0];
+    if (oldest) this.recentJourneyReceipts.delete(oldest.journey_id);
+  }
+
   private async loadSettings(): Promise<void> {
     this.settings = normalizeSettings(
       await readJsonOrNull(path.join(this.directories.state, SETTINGS_FILE)),
@@ -264,13 +336,45 @@ export class PhotoPipeline {
   private async claimStagedFiles(): Promise<void> {
     const entries = await readdir(this.directories.staging, { withFileTypes: true });
     for (const entry of entries) {
-      if (!entry.isFile() || entry.name.startsWith(".") || entry.name.endsWith(".uploading")) continue;
+      if (entry.name.startsWith(".") || entry.name.endsWith(".uploading")) continue;
       const jobId = randomUUID();
-      const encodedName = Buffer.from(entry.name, "utf8").toString("base64url");
-      const directory = path.join(this.directories.processing, `${jobId}--${encodedName}`);
+      if (entry.isDirectory()) {
+        if (!entry.name.endsWith(".frame-photo")) continue;
+        const staged = path.join(this.directories.staging, entry.name);
+        let journey: PhotoJourney | null = null;
+        try {
+          journey = await requireJourney(path.join(staged, "journey.json"));
+          if (entry.name !== `${journey.journey_id}.frame-photo`) {
+            throw new Error(`Staged journey directory ${entry.name} does not match journey ${journey.journey_id}.`);
+          }
+          await rename(staged, path.join(this.directories.processing, jobId));
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
+          await this.quarantineUnreadableClaim(
+            staged,
+            path.join(staged, "source"),
+            journey?.original_name ?? `${entry.name.slice(0, -12)}.bin`,
+            jobId,
+            errorMessage(error),
+            journey?.journey_id,
+          );
+        }
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      const staged = path.join(this.directories.staging, entry.name);
+      const directory = path.join(this.directories.processing, jobId);
       await mkdir(directory);
       try {
-        await rename(path.join(this.directories.staging, entry.name), path.join(directory, "source"));
+        const info = await stat(staged);
+        await atomicWriteJson(path.join(directory, "journey.json"), {
+          schema_version: 1,
+          journey_id: randomUUID(),
+          original_name: entry.name,
+          received_at: info.mtime.toISOString(),
+          ingest: { adapter: "legacy_staging", transfer_id: jobId, bytes_received: info.size },
+        });
+        await rename(staged, path.join(directory, "source"));
       } catch (error) {
         await rm(directory, { recursive: true, force: true });
         if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
@@ -284,24 +388,187 @@ export class PhotoPipeline {
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const separator = entry.name.indexOf("--");
-      if (separator < 1) continue;
+      const jobId = separator > 0 ? entry.name.slice(0, separator) : entry.name;
+      const legacyOriginalName = separator > 0
+        ? Buffer.from(entry.name.slice(separator + 2), "base64url").toString("utf8")
+        : "";
+      const directory = path.join(this.directories.processing, entry.name);
+      const source = path.join(directory, "source");
       try {
-        const originalName = Buffer.from(entry.name.slice(separator + 2), "base64url").toString("utf8");
-        const directory = path.join(this.directories.processing, entry.name);
-        await access(path.join(directory, "source"));
-        claims.push({ jobId: entry.name.slice(0, separator), originalName, directory, source: path.join(directory, "source") });
+        if (!(await exists(source))) {
+          await rm(directory, { recursive: true, force: true });
+          console.warn(`[photo-pipeline] removed orphan claim ${entry.name} without a source file`);
+          continue;
+        }
+        const { journey, integrityError } = await this.readOrCreateJourney(directory, source, legacyOriginalName, jobId);
+        claims.push({ jobId, originalName: journey.original_name, directory, source, journey, integrityError });
       } catch (error) {
-        console.warn(`[photo-pipeline] ignored invalid claim ${entry.name}: ${errorMessage(error)}`);
+        console.warn(`[photo-pipeline] quarantined invalid claim ${entry.name}: ${errorMessage(error)}`);
+        await this.quarantineUnreadableClaim(
+          directory,
+          source,
+          legacyOriginalName || `${entry.name}.bin`,
+          jobId,
+          errorMessage(error),
+        );
       }
     }
     return claims;
   }
 
+  private async readOrCreateJourney(directory: string, source: string, originalName: string, jobId: string): Promise<{
+    journey: VerifiedPhotoJourney;
+    integrityError?: string;
+  }> {
+    const file = path.join(directory, "journey.json");
+    const sourceInfo = await stat(source);
+    const contentSha256 = await sha256File(source);
+    const existing = await readJsonOrNull<unknown>(file);
+    if (existing !== null) {
+      const parsed = parseJourney(existing);
+      const journey = { ...parsed, content_sha256: contentSha256 };
+      if (!parsed.content_sha256) await atomicWriteJson(file, journey);
+      return {
+        journey,
+        ...(parsed.ingest.bytes_received !== sourceInfo.size
+          ? { integrityError: `Declared byte count does not match the staged source for journey ${parsed.journey_id}.` }
+          : parsed.content_sha256 && parsed.content_sha256 !== contentSha256
+            ? { integrityError: `Declared content_sha256 does not match the staged source for journey ${parsed.journey_id}.` }
+            : {}),
+      };
+    }
+    if (!originalName) throw new Error("Processing claim is missing journey metadata.");
+    const journey: VerifiedPhotoJourney = {
+      schema_version: 1,
+      journey_id: randomUUID(),
+      content_sha256: contentSha256,
+      original_name: originalName,
+      received_at: sourceInfo.mtime.toISOString(),
+      ingest: { adapter: "legacy_staging", transfer_id: jobId, bytes_received: sourceInfo.size },
+    };
+    await atomicWriteJson(file, journey);
+    return { journey };
+  }
+
+  private journeyReceiptDirectory(): string {
+    return path.join(this.directories.state, "photo-journeys");
+  }
+
+  private journeyReceiptPath(journeyId: string): string {
+    return path.join(this.journeyReceiptDirectory(), `${journeyId}.json`);
+  }
+
+  private async readJourneyReceipt(journeyId: string): Promise<JourneyProgress | null> {
+    const cached = this.recentJourneyReceipts.get(journeyId);
+    if (cached) return cached;
+    const receipt = await readJsonOrNull<JourneyProgress>(this.journeyReceiptPath(journeyId));
+    if (receipt) this.rememberJourneyReceipt(receipt);
+    return receipt;
+  }
+
+  private async writeJourneyReceipt(receipt: JourneyProgress): Promise<void> {
+    await atomicWriteJson(this.journeyReceiptPath(receipt.journey_id), receipt);
+    this.rememberJourneyReceipt(receipt);
+  }
+
+  private receiptForClaim(claim: Claim, state: JourneyProgress["state"], updatedAt = new Date().toISOString()): JourneyProgress {
+    return {
+      ...claim.journey,
+      state,
+      updated_at: updatedAt,
+      job_id: claim.jobId,
+    };
+  }
+
+  private async recordJourneyReceived(claim: Claim): Promise<void> {
+    await this.withPublishLock(async () => {
+      const existing = await this.readJourneyReceipt(claim.journey.journey_id);
+      if (existing) {
+        if (!validContentSha256(existing.content_sha256) && existing.job_id === claim.jobId) {
+          await this.writeJourneyReceipt({
+            ...existing,
+            content_sha256: claim.journey.content_sha256,
+          });
+        }
+        return;
+      }
+      await this.writeJourneyReceipt(this.receiptForClaim(claim, "received"));
+    });
+  }
+
+  private async beginJourney(claim: Claim): Promise<"wait" | "duplicate" | "conflict" | null> {
+    return this.withPublishLock(async () => {
+      const existing = await this.readJourneyReceipt(claim.journey.journey_id);
+      if (existing && existing.content_sha256 !== claim.journey.content_sha256) return "conflict";
+      if (existing?.state === "published") return "duplicate";
+      if (existing && existing.job_id !== claim.jobId && await this.processingClaimExists(existing.job_id)) return "wait";
+      await this.writeJourneyReceipt(this.receiptForClaim(claim, "processing"));
+      return null;
+    });
+  }
+
+  private async processingClaimExists(jobId: string): Promise<boolean> {
+    for (const entry of await readdir(this.directories.processing, { withFileTypes: true })) {
+      if (!entry.isDirectory() || (entry.name !== jobId && !entry.name.startsWith(`${jobId}--`))) continue;
+      const directory = path.join(this.directories.processing, entry.name);
+      if (await exists(path.join(directory, "source"))) return true;
+      await rm(directory, { recursive: true, force: true });
+      console.warn(`[photo-pipeline] removed orphan claim ${entry.name} without a source file`);
+    }
+    return false;
+  }
+
+  private async markJourneyPublished(claim: Claim, publication: Publication, updatedAt: string): Promise<void> {
+    await this.writeJourneyReceipt({
+      ...this.receiptForClaim(claim, "published", updatedAt),
+      date_folder: publication.dateFolder,
+      base: publication.base,
+    });
+  }
+
+  private async markJourneyFailed(claim: Claim, error: string): Promise<void> {
+    await this.withPublishLock(async () => {
+      await this.writeJourneyReceipt({
+        ...this.receiptForClaim(claim, "failed"),
+        error,
+      });
+    });
+  }
+
   private async processClaim(claim: Claim): Promise<void> {
     let detectedMime = "application/octet-stream";
     let attempts = 0;
+    let releaseHeic: (() => void) | null = null;
     try {
+      if (claim.integrityError) {
+        const preserveReceipt = Boolean(await this.readJourneyReceipt(claim.journey.journey_id));
+        await this.quarantine(
+          claim,
+          failureReason("PPL-06", "FILE_ACCESS_ERROR", claim.integrityError),
+          !preserveReceipt,
+        );
+        this.status.quarantined += 1;
+        this.status.last_quarantine_at = new Date().toISOString();
+        this.status.last_quarantine_file = claim.originalName;
+        this.status.last_error = claim.integrityError;
+        return;
+      }
       if (await this.recoverPublishedClaim(claim)) return;
+      const journeyDisposition = await this.beginJourney(claim);
+      if (journeyDisposition === "wait") return;
+      if (journeyDisposition === "duplicate") {
+        await rm(claim.directory, { recursive: true, force: true });
+        return;
+      }
+      if (journeyDisposition === "conflict") {
+        const detail = `Journey ${claim.journey.journey_id} was reused with different photo content.`;
+        await this.quarantine(claim, failureReason("PPL-06", "FILE_ACCESS_ERROR", detail), false);
+        this.status.quarantined += 1;
+        this.status.last_quarantine_at = new Date().toISOString();
+        this.status.last_quarantine_file = claim.originalName;
+        this.status.last_error = detail;
+        return;
+      }
       const sourceStat = await stat(claim.source);
       if (sourceStat.size > this.config.maxInputBytes) {
         throw failure("PPL-02", "CONVERT_FAILED", `Input exceeds ${this.config.maxInputBytes} bytes.`);
@@ -317,13 +584,35 @@ export class PhotoPipeline {
       if ((!detected || !detected.mime.startsWith("image/")) && !allowedRasterExtension) {
         throw failure("PPL-01", "NOT_IMAGE", "Detected file type is not an image.", detectedMime);
       }
-      if ((detected?.ext === "heic" || detected?.ext === "heif" || sourceExtension === ".heic" || sourceExtension === ".heif") && !this.status.heic_supported) {
-        throw failure("PPL-02", "CONVERT_FAILED", "HEIC decoding is unavailable in this runtime.", detectedMime);
-      }
+      const isHeic = detected?.ext === "heic" || detected?.ext === "heif" || sourceExtension === ".heic" || sourceExtension === ".heif";
 
       let sourceMetadata: Metadata;
+      let imageSource: string | RawImage = claim.source;
       try {
-        sourceMetadata = await sharp(claim.source, { failOn: "error" }).metadata();
+        if (isHeic) {
+          releaseHeic = await this.acquireHeicLock();
+          const images = await decodeHeic.all({ buffer: await readFile(claim.source) });
+          try {
+            const primary = images[0];
+            if (!primary) throw new Error("HEIC contains no images.");
+            if (primary.width * primary.height > this.config.maxPixels) {
+              throw new Error(`Decoded image exceeds ${this.config.maxPixels} pixels.`);
+            }
+            const decoded = await primary.decode();
+            imageSource = {
+              data: Buffer.from(decoded.data.buffer, decoded.data.byteOffset, decoded.data.byteLength),
+              width: decoded.width,
+              height: decoded.height,
+            };
+          } finally {
+            images.dispose();
+          }
+          sourceMetadata = await sharp(imageSource.data, {
+            raw: { width: imageSource.width, height: imageSource.height, channels: 4 },
+          }).metadata();
+        } else {
+          sourceMetadata = await sharp(claim.source, { failOn: "error" }).metadata();
+        }
       } catch (error) {
         throw failure("PPL-04", "DECODE_FAILED", `Image could not be decoded: ${errorMessage(error)}`, detectedMime);
       }
@@ -345,7 +634,7 @@ export class PhotoPipeline {
         try {
           const temporaryJpg = path.join(claim.directory, "normalized.jpg.tmp");
           await rm(temporaryJpg, { force: true });
-          const result = await writeNormalizedJpg(claim.source, temporaryJpg, this.settings, sourceMetadata, sourceStat.size);
+          const result = await writeNormalizedJpg(imageSource, temporaryJpg, this.settings, sourceMetadata, sourceStat.size);
           outputQuality = result.quality;
           outputSizeBytes = result.sizeBytes;
           await rename(temporaryJpg, files.jpg);
@@ -366,6 +655,7 @@ export class PhotoPipeline {
       const exif = readExif(sourceMetadata.exif);
       const sidecar = {
         schema_version: 1,
+        journey_id: claim.journey.journey_id,
         base,
         original_name: claim.originalName,
         detected_mime: detectedMime,
@@ -394,6 +684,7 @@ export class PhotoPipeline {
       );
       await this.withPublishLock(async () => {
         await this.recalculateLatest(processedAt);
+        await this.markJourneyPublished(claim, publication, processedAt);
       });
       await this.finishClaim(claim, dateFolder);
       this.status.published += 1;
@@ -416,6 +707,8 @@ export class PhotoPipeline {
       this.status.last_quarantine_file = claim.originalName;
       this.status.last_error = reason.detail;
       console.error(`[photo-pipeline] quarantined ${claim.originalName}: ${reason.code} ${reason.detail}`);
+    } finally {
+      releaseHeic?.();
     }
   }
 
@@ -435,6 +728,7 @@ export class PhotoPipeline {
       const publication = {
         dateFolder,
         base: await allocateBase(targetDirectory, requestedBase, await this.reservedBases(dateFolder)),
+        journeyId: claim.journey.journey_id,
       };
       await atomicWriteJson(path.join(claim.directory, "publication.json"), publication);
       return publication;
@@ -457,6 +751,7 @@ export class PhotoPipeline {
     if (!(await exists(ready))) return false;
     await this.withPublishLock(async () => {
       await this.recalculateLatest(new Date().toISOString());
+      await this.markJourneyPublished(claim, publication, new Date().toISOString());
       await this.finishClaim(claim, publication.dateFolder);
     });
     this.status.published += 1;
@@ -471,7 +766,7 @@ export class PhotoPipeline {
     try {
       const value = JSON.parse(await readFile(path.join(claim.directory, "publication.json"), "utf8")) as Partial<Publication>;
       return typeof value.dateFolder === "string" && typeof value.base === "string"
-        ? { dateFolder: value.dateFolder, base: value.base }
+        ? { dateFolder: value.dateFolder, base: value.base, journeyId: typeof value.journeyId === "string" ? value.journeyId : claim.journey.journey_id }
         : null;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
@@ -488,7 +783,7 @@ export class PhotoPipeline {
     await rm(claim.directory, { recursive: true, force: true });
   }
 
-  private async quarantine(claim: Claim, reason: QuarantineReason): Promise<void> {
+  private async quarantine(claim: Claim, reason: QuarantineReason, writeReceipt = true): Promise<void> {
     await mkdir(this.directories.quarantine, { recursive: true });
     const suffix = `${sanitizeBase(path.parse(claim.originalName).name)}_${claim.jobId.slice(0, 8)}`;
     const originalTarget = await availablePath(this.directories.quarantine, `${suffix}${path.extname(claim.originalName)}`);
@@ -498,6 +793,7 @@ export class PhotoPipeline {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
     await atomicWriteJson(path.join(this.directories.quarantine, `${suffix}.error.json`), {
+      journey_id: claim.journey.journey_id,
       reason_code: reason.code,
       reason: reason.reason,
       detail: reason.detail,
@@ -507,7 +803,42 @@ export class PhotoPipeline {
       timestamp: new Date().toISOString(),
       log_ref: `frame-pipeline-photos:${new Date().toISOString()}:${claim.jobId.slice(0, 8)}`,
     });
+    if (writeReceipt) await this.markJourneyFailed(claim, reason.detail);
     await rm(claim.directory, { recursive: true, force: true });
+  }
+
+  private async quarantineUnreadableClaim(
+    directory: string,
+    source: string,
+    originalName: string,
+    jobId: string,
+    detail: string,
+    journeyId?: string,
+  ): Promise<void> {
+    await mkdir(this.directories.quarantine, { recursive: true });
+    const suffix = `${sanitizeBase(path.parse(originalName).name)}_${jobId.slice(0, 8)}`;
+    const originalTarget = await availablePath(this.directories.quarantine, `${suffix}${path.extname(sanitizeFilename(originalName)) || ".bin"}`);
+    try {
+      await rename(source, originalTarget);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    await atomicWriteJson(path.join(this.directories.quarantine, `${suffix}.error.json`), {
+      ...(journeyId ? { journey_id: journeyId } : {}),
+      reason_code: "PPL-06",
+      reason: "FILE_ACCESS_ERROR",
+      detail,
+      original_name: originalName,
+      detected_mime: "application/octet-stream",
+      attempts: 0,
+      timestamp: new Date().toISOString(),
+      log_ref: `frame-pipeline-photos:${new Date().toISOString()}:${jobId.slice(0, 8)}`,
+    });
+    await rm(directory, { recursive: true, force: true });
+    this.status.quarantined += 1;
+    this.status.last_quarantine_at = new Date().toISOString();
+    this.status.last_quarantine_file = originalName;
+    this.status.last_error = detail;
   }
 
   private async writeLatest(dateFolder: string, base: string | null, updatedAt: string, latestPhotoAt?: string | null): Promise<{
@@ -693,6 +1024,14 @@ export class PhotoPipeline {
       release();
     }
   }
+
+  private async acquireHeicLock(): Promise<() => void> {
+    const previous = this.heicLock;
+    let release: () => void = () => undefined;
+    this.heicLock = new Promise<void>((resolve) => { release = resolve; });
+    await previous;
+    return release;
+  }
 }
 
 class PipelineFailure extends Error {
@@ -852,13 +1191,13 @@ function boundedNumber(value: unknown, fallback: number, minimum: number, maximu
 }
 
 async function writeNormalizedJpg(
-  source: string,
+  source: string | RawImage,
   target: string,
   settings: PipelineProcessingSettings,
   sourceMetadata?: Metadata,
   sourceSizeBytes?: number,
 ): Promise<{ quality: number; sizeBytes: number }> {
-  if (sourceMetadata && sourceSizeBytes !== undefined && canReuseJpg(sourceMetadata, sourceSizeBytes, settings)) {
+  if (typeof source === "string" && sourceMetadata && sourceSizeBytes !== undefined && canReuseJpg(sourceMetadata, sourceSizeBytes, settings)) {
     await rm(target, { force: true });
     await copyFile(source, target);
     return { quality: settings.jpeg_quality, sizeBytes: sourceSizeBytes };
@@ -866,7 +1205,9 @@ async function writeNormalizedJpg(
   const maxBytes = settings.max_output_mb > 0 ? Math.floor(settings.max_output_mb * 1024 * 1024) : 0;
   for (let quality = settings.jpeg_quality; quality >= 40; quality = Math.max(quality - 5, quality === 40 ? -1 : 40)) {
     await rm(target, { force: true });
-    let image = sharp(source, { failOn: "error" })
+    let image = (typeof source === "string"
+      ? sharp(source, { failOn: "error" })
+      : sharp(source.data, { raw: { width: source.width, height: source.height, channels: 4 } }))
       .rotate()
       .flatten({ background: "#ffffff" });
     if (settings.long_edge_px > 0) {
@@ -947,6 +1288,66 @@ async function readJsonOrNull<T>(file: string): Promise<T | null> {
   }
 }
 
+async function requireJourney(file: string): Promise<PhotoJourney> {
+  const value = await readJsonOrNull<unknown>(file);
+  if (value === null) throw new Error(`Staged photo envelope is missing ${path.basename(file)}.`);
+  return parseJourney(value);
+}
+
+function parseJourney(value: unknown): PhotoJourney {
+  if (!isRecord(value) || value.schema_version !== 1 || !validJourneyId(value.journey_id)) {
+    throw new Error("Staged photo journey metadata is invalid.");
+  }
+  if (value.content_sha256 !== undefined && !validContentSha256(value.content_sha256)) {
+    throw new Error("Staged photo content_sha256 is invalid.");
+  }
+  if (typeof value.original_name !== "string" || !value.original_name.trim() || value.original_name.length > 255) {
+    throw new Error("Staged photo original_name is invalid.");
+  }
+  if (typeof value.received_at !== "string" || !Number.isFinite(Date.parse(value.received_at))) {
+    throw new Error("Staged photo received_at is invalid.");
+  }
+  if (!isRecord(value.ingest)
+    || typeof value.ingest.adapter !== "string"
+    || !/^[a-z][a-z0-9_]{0,31}$/.test(value.ingest.adapter)
+    || typeof value.ingest.transfer_id !== "string"
+    || !/^[A-Za-z0-9:_-]{1,120}$/.test(value.ingest.transfer_id)
+    || !Number.isSafeInteger(value.ingest.bytes_received)
+    || Number(value.ingest.bytes_received) < 0) {
+    throw new Error("Staged photo ingest metadata is invalid.");
+  }
+  return {
+    schema_version: 1,
+    journey_id: value.journey_id,
+    ...(value.content_sha256 ? { content_sha256: value.content_sha256 } : {}),
+    original_name: value.original_name,
+    received_at: value.received_at,
+    ingest: {
+      adapter: value.ingest.adapter,
+      transfer_id: value.ingest.transfer_id,
+      bytes_received: Number(value.ingest.bytes_received),
+    },
+  };
+}
+
+function validJourneyId(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{8,96}$/.test(value) && !value.includes("__");
+}
+
+function validContentSha256(value: unknown): value is string {
+  return typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
+}
+
+async function sha256File(file: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const hash = createHash("sha256");
+    const input = createReadStream(file);
+    input.on("error", reject);
+    input.on("data", (chunk) => hash.update(chunk));
+    input.on("end", () => resolve(hash.digest("hex")));
+  });
+}
+
 async function safeReadEntries(directory: string): Promise<string[]> {
   try {
     return await readdir(directory);
@@ -995,7 +1396,7 @@ async function availablePath(directory: string, filename: string): Promise<strin
 
 function sanitizeFilename(filename: string): string {
   const parsed = path.parse(filename);
-  return `${sanitizeBase(parsed.name)}${parsed.ext.toLowerCase().replace(/[^.a-z0-9]/g, "")}`;
+  return `${sanitizeBase(parsed.name)}${parsed.ext.toLowerCase().replace(/[^.a-z0-9]/g, "").slice(0, 16)}`;
 }
 
 function readExif(buffer: Buffer | undefined): Record<string, unknown> {

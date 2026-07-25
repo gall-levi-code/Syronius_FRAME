@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Syronius FRAME staged photo journey",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "journey_id", "original_name", "content_sha256", "received_at", "ingest"],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "journey_id": {
+      "type": "string",
+      "pattern": "^(?!.*__)[A-Za-z0-9_-]{8,96}$"
+    },
+    "original_name": { "type": "string", "minLength": 1, "maxLength": 255 },
+    "content_sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "received_at": { "type": "string", "format": "date-time" },
+    "ingest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adapter", "transfer_id", "bytes_received"],
+      "properties": {
+        "adapter": {
+          "type": "string",
+          "enum": ["web_upload", "ftp", "belabox_chunked", "belabox_agent", "legacy_staging"]
+        },
+        "transfer_id": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "bytes_received": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}
