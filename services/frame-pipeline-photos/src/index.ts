@@ -21,6 +21,19 @@ app.get("/api/internal/photo-pipeline/status", (_request, response) => {
   response.json({ service: "frame-pipeline-photos", ...pipeline.status });
 });
 
+app.get("/api/internal/photo-pipeline/progress", requireServiceToken, async (_request, response, next) => {
+  try {
+    response.setHeader("Cache-Control", "no-store");
+    response.json({
+      schema_version: "1.0",
+      observed_at: new Date().toISOString(),
+      journeys: await pipeline.journeyProgress(),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.get("/api/internal/photo-pipeline/trash", requireServiceToken, async (_request, response, next) => {
   try {
     response.setHeader("Cache-Control", "no-store");

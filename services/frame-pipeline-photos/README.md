@@ -113,8 +113,7 @@ the published files.
 
 FRAME accepts files that are recognized as images and can be converted into JPG.
 
-Common accepted examples include JPG, PNG, TIFF, BMP, WebP, HEIC, and HEIF when the runtime can
-decode them.
+Common accepted examples include JPG, PNG, TIFF, BMP, WebP, HEIC, and HEIF.
 
 FRAME rejects:
 
@@ -122,7 +121,6 @@ FRAME rejects:
 - Files over the configured upload size limit.
 - Images over the configured megapixel limit.
 - Camera RAW files.
-- HEIC/HEIF files when the current runtime cannot decode them.
 - Files that fail image decoding or conversion.
 
 Missing EXIF or camera metadata does not reject a photo. FRAME publishes the image and records a
@@ -134,23 +132,29 @@ Browser uploads and camera FTP uploads both feed the same pipeline.
 
 | Folder | What Happens There |
 | --- | --- |
-| `/data/inbox` | First landing area for incoming browser or FTP uploads. |
-| `/data/staging` | Completed files waiting for Photo Pipeline. |
+| `/data/inbox` | Partial camera FTP files; Photo Pipeline never reads this folder. |
+| `/data/staging` | Atomic completed-photo envelopes containing `source` and `journey.json`. |
 | `/data/processing` | Temporary working area while FRAME checks and converts a photo. |
 | `/data/galleries/YYYY-MM-DD` | Published photos and sidecars. This is what Gallery and Photo Stage read. |
 | `/data/state/latest.json` | Current latest-photo state for Photo Stage and other tools. |
+| `/data/state/photo-journeys` | Durable receipt for each photo journey, used for progress and retry safety. |
 | `/data/archive/YYYY-MM-DD` | Original uploaded files after successful publish, when archiving is enabled. |
 | `/data/quarantine` | Rejected files and their error reports. |
 
-Browser uploads are written as temporary `.uploading` files first, then moved into staging after the
+Browser uploads build a hidden temporary envelope and atomically rename it into staging after the
 upload completes.
 
 Camera FTP uploads sit in `/data/inbox` until their size and modified time stop changing. After
-that, FRAME moves them into staging.
+that, FRAME wraps them in the same atomic staging envelope.
 
 Photo Pipeline claims staged files by moving them into `/data/processing`. If processing succeeds,
 FRAME publishes the generated files into `/data/galleries/YYYY-MM-DD`. If processing fails, FRAME
 moves the original into `/data/quarantine` and writes an `.error.json` file explaining why.
+
+Every envelope has an immutable `journey_id`. Web upload, FTP, Belabox telemetry, pipeline progress,
+published metadata, and quarantine reports preserve that ID so retries and multiple observers still
+represent one photo. FRAME verifies the envelope's SHA-256 content digest before processing and
+quarantines any attempt to reuse a journey ID for different bytes.
 
 ## Quarantine And `.error.json`
 
@@ -171,6 +175,7 @@ The error report includes:
 | Field | What It Means |
 | --- | --- |
 | `reason_code` | Short FRAME error code. |
+| `journey_id` | Canonical ID shared by every stage and observer for this photo. |
 | `reason` | Simple failure category. |
 | `detail` | Human-readable explanation. |
 | `original_name` | The filename FRAME received. |
@@ -184,17 +189,17 @@ Current failure codes:
 | Code | Reason | What It Usually Means |
 | --- | --- | --- |
 | `PPL-01` | `NOT_IMAGE` | FRAME could not detect the file as an image. |
-| `PPL-02` | `CONVERT_FAILED` | The file was too large, HEIC/HEIF decoding was unavailable, or conversion to JPG failed. |
+| `PPL-02` | `CONVERT_FAILED` | The file was too large or conversion to JPG failed. |
 | `PPL-03` | `RAW_UNSUPPORTED` | The file is a camera RAW format. RAW files are not supported in V1. |
 | `PPL-04` | `DECODE_FAILED` | FRAME detected an image, but could not decode it, read its dimensions, or the image exceeded the megapixel limit. |
+| `PPL-06` | `FILE_ACCESS_ERROR` | Envelope metadata, source size/digest, or journey identity conflicts with the staged photo. |
 | `PPL-07` | `PIPELINE_INTERNAL_ERROR` | Something unexpected failed while processing the file. Check service logs with the `log_ref`. |
 
-Reserved/spec codes not currently emitted by this implementation:
+Reserved spec code not currently emitted by this implementation:
 
 | Code | Meaning |
 | --- | --- |
 | `PPL-05` | EXIF extraction failed. Today, missing or unreadable EXIF is treated as a warning, not a rejection. |
-| `PPL-06` | File access error. Today, unexpected file access failures are reported as `PPL-07`. |
 
 ## Relies Upon
 

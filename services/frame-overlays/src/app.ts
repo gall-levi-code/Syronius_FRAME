@@ -36,6 +36,7 @@ export interface CreateFrameOverlaysOptions {
   streamsFetch: (route: string, init?: RequestInit) => Promise<Response>;
   photoUploadFetch?: (route: string, init?: RequestInit) => Promise<Response>;
   photoFtpFetch?: (route: string, init?: RequestInit) => Promise<Response>;
+  photoPipelineFetch?: (route: string, init?: RequestInit) => Promise<Response>;
   belaboxManagerFetch?: (route: string, init?: RequestInit) => Promise<Response>;
   telemetryHub?: TelemetryHub;
   uploadProgressHub?: UploadProgressHub;
@@ -66,6 +67,12 @@ export async function createFrameOverlaysApp(options: CreateFrameOverlaysOptions
     return response.json();
   });
   const uploadProgressHub = options.uploadProgressHub ?? new UploadProgressHub(async (adapter) => {
+    if (adapter === "pipeline") {
+      if (!options.photoPipelineFetch) throw new Error("Photo pipeline telemetry is unavailable.");
+      const response = await options.photoPipelineFetch("/api/internal/photo-pipeline/progress");
+      if (!response.ok) throw new RequestError(response.status, `Photo Pipeline returned ${response.status}`);
+      return pipelineProgressTransfers(await response.json());
+    }
     if (adapter === "belabox_agent") {
       if (!options.belaboxManagerFetch) throw new Error("Belabox upload telemetry is unavailable.");
       const response = await options.belaboxManagerFetch("/belabox/api/ftp-progress");
@@ -83,7 +90,7 @@ export async function createFrameOverlaysApp(options: CreateFrameOverlaysOptions
     const response = await options.photoUploadFetch("/api/internal/photo-upload/progress");
     if (!response.ok) throw new RequestError(response.status, `Photo Upload returned ${response.status}`);
     return response.json();
-  });
+  }, undefined, options.photoPipelineFetch ? ["pipeline"] : []);
   const app = express();
 
   app.disable("x-powered-by");
@@ -746,6 +753,38 @@ function pollingIdentity(preset: UserPreset): string {
 
 function ingestAdapterValue(value: unknown): IngestAdapterId | null {
   return value === "web_upload" || value === "ftp" || value === "belabox_agent" ? value : null;
+}
+
+function pipelineProgressTransfers(value: unknown): { transfers: Record<string, unknown>[] } {
+  const journeys = value && typeof value === "object" && Array.isArray((value as { journeys?: unknown }).journeys)
+    ? (value as { journeys: unknown[] }).journeys
+    : [];
+  return { transfers: journeys.flatMap((candidate) => {
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) return [];
+    const journey = candidate as Record<string, unknown>;
+    const ingest = journey.ingest && typeof journey.ingest === "object" && !Array.isArray(journey.ingest)
+      ? journey.ingest as Record<string, unknown>
+      : {};
+    const state = journey.state;
+    const phase = state === "received" ? "staged" : state === "processing" || state === "published" || state === "failed" ? state : null;
+    if (!phase) return [];
+    return [{
+      transfer_id: journey.job_id,
+      journey_id: journey.journey_id,
+      phase,
+      filename: journey.original_name,
+      bytes_received: ingest.bytes_received,
+      bytes_total: ingest.bytes_received,
+      speed_bps: null,
+      elapsed_ms: null,
+      started_at: journey.received_at,
+      updated_at: journey.updated_at,
+      ...(state === "published" ? { transfer_completed_at: journey.updated_at } : {}),
+      source_adapter: ingest.adapter,
+      status_text: state === "received" ? "Received by FRAME" : state === "processing" ? "Processing photo" : state === "published" ? "Photo published" : "Photo processing failed",
+      ...(journey.error ? { error: journey.error } : {}),
+    }];
+  }) };
 }
 
 function publicManagementSource(source: OverlaySource, publicBaseUrl: string): OverlaySource & { public_url: string } {

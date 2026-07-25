@@ -6,25 +6,67 @@ import {
   clampBitrateLevels,
   clampNumericValue,
   clampRttLevels,
+  previewFrameDimensions,
   samplingWindowLabel,
-} from "./wizard-core.js";
-import { layoutGrowth } from "./renderer-core.js";
+} from "./wizard-core.js?v=upload-editor-v2";
+import { layoutGrowth } from "./renderer-core.js?v=upload-editor-v2";
 
 const defaultOrder = ["header", "bitrate", "rtt", "latency", "buffer", "server", "dropped", "uptime", "meter", "chart", "recovery"];
 const connectivityLayoutRangeFields = [["layout.pad", "Padding", 0, 200, 1], ["layout.scale", "Scale", .5, 3, .05], ["layout.width_px", "Layout width", 0, 1200, 10], ["layout.height_px", "Min height", 0, 1000, 10]];
-const uploadLayoutRangeFields = [["layout.pad", "Padding", 0, 200, 1], ["layout.scale", "Scale", .5, 3, .05], ["config.width_px", "Card width", 280, 1200, 10]];
 const blockSizeRangeFields = [["config.telemetry_block_width_px", "Block width", 80, 600, 1], ["config.telemetry_block_height_px", "Block height", 40, 400, 1]];
 const samplingRangeFields = [["config.poll_ms", "Poll interval (ms)", 200, 2000, 100], ["config.history_len", "Poll history count", 2, 120, 1]];
 const panelColorFields = [["panel_bg_color", "Background"], ["panel_border_color", "Border"], ["panel_glow_color", "Shadow"]];
 const blockColorFields = [["block_bg_color", "Background"], ["block_border_color", "Border"]];
 const plotColorFields = [["plot_primary", "Bitrate"], ["plot_secondary", "RTT"]];
-const panelRangeFields = [["theme.panel_bg_alpha", "Background opacity", 0, 1, .01], ["theme.panel_padding_px", "Widget padding", 0, 60, 1], ["theme.border_radius_px", "Corner radius", 0, 50, 1], ["theme.backdrop_blur_px", "Backdrop blur", 0, 50, 1], ["theme.panel_border_width_px", "Border width", 0, 8, 1], ["theme.glow_blur_px", "Shadow blur", 0, 80, 1], ["theme.glow_spread_px", "Shadow spread", -20, 80, 1], ["theme.glow_offset_x_px", "Shadow X", -80, 80, 1], ["theme.glow_offset_y_px", "Shadow Y", -80, 80, 1]];
+const panelRangeFields = [["theme.panel_bg_alpha", "Background opacity", 0, 1, .01], ["theme.panel_padding_px", "Padding", 0, 60, 1], ["theme.border_radius_px", "Corner radius", 0, 50, 1], ["theme.backdrop_blur_px", "Backdrop blur", 0, 50, 1], ["theme.panel_border_width_px", "Border width", 0, 8, 1], ["theme.glow_blur_px", "Shadow blur", 0, 80, 1], ["theme.glow_spread_px", "Shadow spread", -20, 80, 1], ["theme.glow_offset_x_px", "Shadow X", -80, 80, 1], ["theme.glow_offset_y_px", "Shadow Y", -80, 80, 1]];
 const blockRangeFields = [["theme.block_bg_alpha", "Background opacity", 0, 1, .01], ["theme.block_gap_px", "Block gap", 0, 40, 1], ["theme.block_padding_px", "Inner padding", 0, 40, 1], ["theme.block_border_width_px", "Border width", 0, 8, 1]];
 const textRangeFields = [["theme.font_size_base_px", "Size", 10, 32, 1], ["theme.font_weight", "Weight", 100, 900, 100]];
 const subheaderRangeFields = [["theme.subheader_font_size_px", "Size", 8, 24, 1], ["theme.subheader_font_weight", "Weight", 100, 900, 100]];
 const plotRangeFields = [["config.bitrate_meter_height_px", "Meter thickness", 4, 40, 1], ["config.bitrate_meter_radius_px", "Meter radius", 0, 30, 1], ["config.chart_bitrate_line_width_px", "Bitrate thickness", .5, 12, .5], ["config.chart_rtt_line_width_px", "RTT thickness", .5, 12, .5], ["config.chart_warn_line_width_px", "Warn thickness", .5, 12, .5]];
 const themeStateFields = [["good", "Good", "good_color", "theme.bg_opacity_good"], ["warn", "Warn", "warn_color", "theme.bg_opacity_warn"], ["bad", "Bad", "bad_color", "theme.bg_opacity_bad"]];
-const uploadRangeFields = [["config.active_poll_ms", "Upload refresh rate (ms)", 200, 2000, 100], ["config.idle_poll_ms", "Idle check rate", 200, 10000, 100], ["config.complete_hide_ms", "Complete flash (ms)", 0, 500, 50]];
+const uploadLifecycleColorFields = [["uploading_color", "Uploading"], ["staged_color", "Staged"], ["processing_color", "Processing"], ["completed_color", "Completed"], ["failed_color", "Failed"]];
+const uploadPlacementRangeFields = [["layout.scale", "Scale", .5, 3, .05], ["config.width_px", "Card width", 280, 1200, 10]];
+const uploadAdvancedPlacementRangeFields = [["layout.pad", "Canvas padding", 0, 200, 1]];
+const uploadJourneyRangeFields = [["config.max_visible_journeys", "Visible cards", 1, 5, 1], ["theme.journey_gap_px", "Card spacing", 0, 40, 1]];
+const uploadAdvancedJourneyRangeFields = [["config.queue_opacity_step", "Opacity falloff", 0, 1, .01]];
+const uploadCompletionRangeFields = [["config.completion_window_seconds", "Visible for (seconds)", 1, 30, 1]];
+const uploadTimingRangeFields = [["config.active_poll_ms", "Active check interval (ms)", 200, 2000, 100], ["config.idle_poll_ms", "Idle check interval (ms)", 200, 10000, 100]];
+const completionColorFields = [["completion_bg_color", "Background"], ["completion_border_color", "Border"], ["completion_text_color", "Title"], ["completion_muted_color", "Filename"], ["completion_glow_color", "Shadow"]];
+const completionSurfaceRangeFields = [["theme.completion_bg_alpha", "Background opacity", 0, 1, .01], ["theme.completion_padding_x_px", "Horizontal padding", 0, 40, 1], ["theme.completion_padding_y_px", "Vertical padding", 0, 30, 1], ["theme.completion_radius_px", "Corner radius", 0, 48, 1], ["theme.completion_backdrop_blur_px", "Backdrop blur", 0, 50, 1], ["theme.completion_border_width_px", "Border width", 0, 8, 1], ["theme.completion_glow_blur_px", "Shadow blur", 0, 80, 1], ["theme.completion_glow_spread_px", "Shadow spread", -20, 80, 1], ["theme.completion_glow_offset_x_px", "Shadow X", -80, 80, 1], ["theme.completion_glow_offset_y_px", "Shadow Y", -80, 80, 1]];
+const completionTextRangeFields = [["theme.completion_font_size_px", "Size", 10, 32, 1], ["theme.completion_font_weight", "Weight", 100, 900, 100]];
+const statusTextPositionOptions = [["under_filename", "Below filename"], ["below_progress", "Below progress bar"], ["hidden", "Hidden"]];
+const previewScenarioLabels = { queue:"Queue", uploading:"Uploading", staged:"Staged", processing:"Processing", failed:"Failed", completed:"Completed", idle:"Idle" };
+const uploadSettingsCategories = [
+  ["placement", "Placement", "Anchor, growth and sizing", false],
+  ["appearance", "Appearance", "Lifecycle colors and surfaces", false],
+  ["typography", "Text & status", "Fonts and status placement", false],
+  ["journeys", "Journey queue", "Visible cards and details", false],
+  ["completion", "Completion", "Receipt placement and styling", false],
+  ["timing", "Advanced timing", "Refresh behavior", true],
+];
+const uploadSectionResetPaths = {
+  placement: ["layout.dock", "layout.growth_x", "layout.growth_y", "layout.pad", "layout.scale", "config.width_px"],
+  appearance: [
+    ...uploadLifecycleColorFields.map(([field]) => `theme.${field}`),
+    ...panelColorFields.map(([field]) => `theme.${field}`),
+    ...blockColorFields.map(([field]) => `theme.${field}`),
+    ...panelRangeFields.map(([path]) => path),
+    ...blockRangeFields.map(([path]) => path),
+  ],
+  typography: ["theme.font_family", "theme.text_color", "theme.font_size_base_px", "theme.font_weight", "theme.subheader_font_family", "theme.muted_color", "theme.subheader_font_size_px", "theme.subheader_font_weight", "config.status_text_position"],
+  journeys: ["config.show_sent", "config.show_speed", "config.show_elapsed", "config.max_visible_journeys", "config.queue_opacity_step", "config.idle_behavior", "config.idle_label"],
+  completion: [
+    "config.completion_window_seconds",
+    "config.completion_direction",
+    "config.completion_alignment",
+    "config.completion_overlap",
+    ...completionColorFields.map(([field]) => `theme.${field}`),
+    ...completionSurfaceRangeFields.map(([path]) => path),
+    "theme.completion_font_family",
+    ...completionTextRangeFields.map(([path]) => path),
+  ],
+  timing: uploadTimingRangeFields.map(([path]) => path),
+};
 const fontFamilyOptions = [
   ["Inter, system-ui, sans-serif", "Inter / System"],
   ["system-ui, sans-serif", "System UI"],
@@ -41,13 +83,15 @@ const lineStyleOptions = [["solid", "Solid"], ["dashed", "Dashed"], ["dotted", "
 const uploadAdapterOptions = [
   ["web_upload", "Web upload", false],
   ["ftp", "FTP ingest", false],
-  ["belabox_agent", "Belabox FTP connector", false],
+  ["belabox_agent", "Belabox transfer connector", false],
 ];
+const allUploadAdapters = uploadAdapterOptions.map(([id]) => id);
 const dockLabels = { tl:"Top left",t:"Top",tr:"Top right",l:"Left",c:"Center",r:"Right",bl:"Bottom left",b:"Bottom",br:"Bottom right" };
 const growthDirectionLabels = [["up", "Up", "&uarr;"], ["left", "Left", "&larr;"], ["auto", "Auto", "&bull;"], ["right", "Right", "&rarr;"], ["down", "Down", "&darr;"]];
 const customTelemetryBlocks = new Set(["header", "bitrate", "rtt", "buffer", "server", "dropped", "uptime", "meter", "chart"]);
 const blockDensityOptions = [["compact", "Compact", 56], ["normal", "Normal", 72], ["spacious", "Spacious", 104]];
 const fakePreviewStorageKey = "frame-overlays-fake-preview";
+const uploadAdvancedViewStorageKey = "frame-overlays-upload-advanced-view";
 const THEME_MODE_KEY = "frame-theme";
 const LEGACY_PORTAL_THEME_KEY = "frame-portal-theme";
 const THEME_PROFILE_ID_KEY = "frame-theme-profile-id";
@@ -94,6 +138,10 @@ const state = {
   sourceDraft: null,
   designDraft: null,
   fakePreview: readStoredFakePreview(),
+  uploadAdvancedView: readStoredUploadAdvancedView(),
+  uploadSettingsCategory: "placement",
+  previewView: "canvas",
+  previewScenario: "queue",
   previewFrameSize: null,
   create: null,
   pendingSave: new Set(),
@@ -111,6 +159,8 @@ const previewScaleShell = document.querySelector("#preview-scale-shell");
 const preview = document.querySelector("#preview-frame");
 const previewCaption = document.querySelector("#preview-caption");
 const fakePreviewToggle = document.querySelector("#fake-preview-toggle");
+const uploadPreviewTools = document.querySelector("#upload-preview-tools");
+const previewScenario = document.querySelector("#preview-scenario");
 const notice = document.querySelector("#notice");
 const saveStatus = document.querySelector("#save-status");
 const receiverStatus = document.querySelector("#receiver-status");
@@ -129,6 +179,14 @@ fakePreviewToggle.addEventListener("change", () => {
   writeStoredFakePreview(state.fakePreview);
   renderPreview();
 });
+document.querySelectorAll("[data-preview-view]").forEach((button) => button.addEventListener("click", () => {
+  state.previewView = button.dataset.previewView;
+  renderPreview();
+}));
+previewScenario.addEventListener("change", () => {
+  state.previewScenario = previewScenario.value;
+  renderPreview();
+});
 fakePreviewToggle.checked = state.fakePreview;
 preview.addEventListener("load", sendPreview);
 window.addEventListener("resize", applyPreviewScale);
@@ -141,10 +199,15 @@ window.addEventListener("storage", (event) => {
     state.fakePreview = readStoredFakePreview();
     fakePreviewToggle.checked = state.fakePreview;
     renderPreview();
+    return;
+  }
+  if (event.key === uploadAdvancedViewStorageKey) {
+    state.uploadAdvancedView = readStoredUploadAdvancedView();
+    syncUploadEditorMode();
   }
 });
 window.addEventListener("message", (event) => {
-  if (!isTrustedPreviewOrigin(event.origin) || event.data?.type !== "frame-preview-size") return;
+  if (!isTrustedPreviewOrigin(event.origin) || event.data?.type !== "frame-preview-size" || effectivePreviewView() !== "detail") return;
   const width = Number(event.data.width);
   const height = Number(event.data.height);
   const contentWidth = Number(event.data.content_width);
@@ -215,6 +278,20 @@ function writeStoredFakePreview(value) {
   } catch {}
 }
 
+function readStoredUploadAdvancedView() {
+  try {
+    return localStorage.getItem(uploadAdvancedViewStorageKey) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function writeStoredUploadAdvancedView(value) {
+  try {
+    localStorage.setItem(uploadAdvancedViewStorageKey, value ? "true" : "false");
+  } catch {}
+}
+
 async function load(preserveSelection = false) {
   try {
     let streamsAvailable = true;
@@ -276,7 +353,7 @@ function renderWelcome() {
 
 function startCreate() {
   state.mode = "create";
-  state.create = { step: 1, dataSource: null, name: "", slug: "", slugManual: false };
+  state.create = { step: 1, dataSource: { type:"upload_progress", label:"All uploads", data_source:{ kind:"upload_progress", adapters:[...allUploadAdapters] } }, name: "", slug: "", slugManual: false };
   state.sourceDraft = null;
   state.designDraft = null;
   setSaveStatus("saved", "");
@@ -313,9 +390,10 @@ function renderCreateDataSource() {
           <h2>Upload Progress</h2>
           <p>Show browser or ingest transfer progress inside OBS.</p>
           <div class="choice-list">
+            ${sourceChoice({ key:"upload:all", title:"All uploads", detail:"One journey queue for every upload method", active:selectedKey === "upload:all" })}
             ${sourceChoice({ key:"upload:web_upload", title:"Web upload", detail:"Browser and mobile upload telemetry", active:selectedKey === "upload:web_upload" })}
             ${sourceChoice({ key:"upload:ftp", title:"FTP ingest", detail:"Live file-growth and staged-camera-upload telemetry", active:selectedKey === "upload:ftp" })}
-            ${sourceChoice({ key:"upload:belabox_agent", title:"Belabox FTP connector", detail:"Live progress from Belabox MQTT telemetry", active:selectedKey === "upload:belabox_agent" })}
+            ${sourceChoice({ key:"upload:belabox_agent", title:"Belabox transfer connector", detail:"Live Belabox transfer progress from MQTT telemetry", active:selectedKey === "upload:belabox_agent" })}
           </div>
         </section>
       </div>
@@ -338,12 +416,14 @@ function selectCreateDataSource(choice) {
     const streamId = choice.slice("stream:".length);
     const stream = state.streams.find((item) => item.player === streamId);
     state.create.dataSource = { type:"connectivity", label:stream?.description || streamId, data_source:{ kind:"stream", stream_profile_id:streamId } };
+  } else if (choice === "upload:all") {
+    state.create.dataSource = { type:"upload_progress", label:"All uploads", data_source:{ kind:"upload_progress", adapters:[...allUploadAdapters] } };
   } else if (choice === "upload:web_upload") {
     state.create.dataSource = { type:"upload_progress", label:"Web upload", data_source:{ kind:"upload_progress", adapters:["web_upload"] } };
   } else if (choice === "upload:ftp") {
     state.create.dataSource = { type:"upload_progress", label:"FTP ingest", data_source:{ kind:"upload_progress", adapters:["ftp"] } };
   } else if (choice === "upload:belabox_agent") {
-    state.create.dataSource = { type:"upload_progress", label:"Belabox FTP connector", data_source:{ kind:"upload_progress", adapters:["belabox_agent"] } };
+    state.create.dataSource = { type:"upload_progress", label:"Belabox transfer connector", data_source:{ kind:"upload_progress", adapters:["belabox_agent"] } };
   }
   renderCreateDataSource();
 }
@@ -462,13 +542,14 @@ function renderSelectedSource() {
   const unbound = source.data_source.kind === "stream" && !source.data_source.stream_profile_id;
   const url = sourceUrl(source);
   mainContent.innerHTML = `
-    <section class="source-panel">
+    <section class="source-panel" ${type === "upload_progress" ? `data-upload-editor data-advanced-view="${state.uploadAdvancedView}"` : ""}>
       <div class="source-head">
         <div>
           <div class="source-title-row"><h1>${escapeHtml(source.display_name)}</h1>${unbound ? '<span class="badge warn">Unbound</span>' : ""}<span class="badge">${escapeHtml(typeLabel(type))}</span></div>
           <p>Editing this source updates the OBS browser URL automatically.</p>
         </div>
         <div class="source-actions">
+          ${type === "upload_progress" ? uploadEditorModeMarkup() : ""}
           <button id="reset-source" class="icon-reset" type="button" aria-label="Reset to base template" title="Reset to base template">${icons.reset}</button>
           <button id="delete-source" class="icon-reset danger" type="button" aria-label="Delete source" title="Delete source">${icons.trash}</button>
         </div>
@@ -555,20 +636,117 @@ function connectivityDesignMarkup(draft) {
 }
 
 function uploadDesignMarkup(draft) {
+  const template = templateForDraft(draft);
+  const completion = completionControlOptions(draft.layout);
+  state.uploadSettingsCategory = availableUploadSettingsCategory(state.uploadSettingsCategory);
+  const panels = {
+    placement: `
+      <div class="layout-editor">
+        <div class="layout-control-row">
+          <div class="layout-control-group"><span class="layout-control-label">Anchor</span><div class="dock-grid" aria-label="Overlay anchor">${Object.entries(dockLabels).map(([id,label]) => `<button class="secondary ${draft.layout.dock === id ? "active" : ""}" data-dock="${id}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}" type="button">${anchorIcon(id)}<span class="sr-only">${escapeHtml(label)}</span></button>`).join("")}</div></div>
+          <div class="layout-control-group"><span class="layout-control-label">Growth direction</span>${growthDpadMarkup(draft.layout, layoutGrowth(draft.layout))}</div>
+        </div>
+        <div class="range-list">
+          ${uploadPlacementRangeFields.map((field) => rangeControl(field, draft, template)).join("")}
+          <div class="advanced-only advanced-fields">${uploadAdvancedPlacementRangeFields.map((field) => rangeControl(field, draft, template)).join("")}</div>
+        </div>
+      </div>`,
+    appearance: `
+      <div class="editor-group-grid">
+        ${editorGroup("Lifecycle colors", `<div class="theme-neutral-grid">${uploadLifecycleColorFields.map(([field,label]) => colorControl(field, label, draft, template)).join("")}</div>`)}
+        ${editorGroup("Journey card", `
+          <div class="theme-neutral-grid">
+            ${colorControl("panel_bg_color", "Background", draft, template)}
+            <div class="advanced-only advanced-fields">${panelColorFields.filter(([field]) => field !== "panel_bg_color").map(([field,label]) => colorControl(field, label, draft, template)).join("")}</div>
+          </div>
+          <div class="range-list">
+            ${rangeControl(panelRangeFields.find(([path]) => path === "theme.panel_bg_alpha"), draft, template)}
+            <div class="advanced-only advanced-fields">${panelRangeFields.filter(([path]) => path !== "theme.panel_bg_alpha").map((field) => rangeControl(field, draft, template)).join("")}</div>
+          </div>`)}
+        <div class="advanced-only">${editorGroup("Detail tiles", `<div class="theme-neutral-grid">${blockColorFields.map(([field,label]) => colorControl(field, label, draft, template)).join("")}</div><div class="range-list">${blockRangeFields.map((field) => rangeControl(field, draft, template)).join("")}</div>`)}</div>
+      </div>`,
+    typography: `
+      <div class="editor-group-grid">
+        ${editorGroup("Primary", `${fontSelectControl("theme.font_family", "Font family", draft, template)}${colorControl("text_color", "Color", draft, template)}<div class="range-list advanced-only">${textRangeFields.map((field) => rangeControl(field, draft, template)).join("")}</div>`)}
+        ${editorGroup("Status", `${selectControl("config.status_text_position", "Position", statusTextPositionOptions, draft.config.status_text_position ?? template.config.status_text_position ?? "under_filename")}<p class="field-help">Status copy remains hidden on compact queue cards.</p>`)}
+        <div class="advanced-only">${editorGroup("Secondary", `${fontSelectControl("theme.subheader_font_family", "Font family", draft, template, "Inter, system-ui, sans-serif")}${colorControl("muted_color", "Color", draft, template)}<div class="range-list">${subheaderRangeFields.map((field) => rangeControl(field, draft, template)).join("")}</div>`)}</div>
+      </div>`,
+    journeys: `
+      <div class="toggle-grid"><label><input type="checkbox" data-upload-toggle="show_sent" ${draft.config.show_sent !== false ? "checked" : ""}>Show bytes sent</label><label><input type="checkbox" data-upload-toggle="show_speed" ${draft.config.show_speed !== false ? "checked" : ""}>Show upload speed</label><label><input type="checkbox" data-upload-toggle="show_elapsed" ${draft.config.show_elapsed !== false ? "checked" : ""}>Show elapsed time</label><label><input type="checkbox" data-upload-idle ${draft.config.idle_behavior === "show_idle" ? "checked" : ""}>Show while idle</label></div>
+      <div class="range-list upload-section-ranges">
+        ${uploadJourneyRangeFields.map((field) => rangeControl(field, draft, template)).join("")}
+        <div class="advanced-only advanced-fields">${uploadAdvancedJourneyRangeFields.map((field) => rangeControl(field, draft, template)).join("")}</div>
+      </div>
+      <div class="form-grid advanced-only"><label>Idle label<input data-path="config.idle_label" maxlength="80" value="${escapeAttr(draft.config.idle_label || "WAITING FOR UPLOAD")}"></label></div>
+      <div class="capability-note"><strong>Adaptive progress</strong><span>Known totals show determinate progress. When a total is unavailable, the lifecycle rail remains indeterminate and unavailable values stay hidden.</span></div>`,
+    completion: `
+      <div class="form-grid">${selectControl("config.completion_direction", "Side", completion.directions, draft.config.completion_direction ?? template.config.completion_direction ?? "auto")}${selectControl("config.completion_alignment", "Alignment", completion.alignments, draft.config.completion_alignment ?? template.config.completion_alignment ?? "start")}</div>
+      <div class="range-list upload-section-ranges">${uploadCompletionRangeFields.map((field) => rangeControl(field, draft, template)).join("")}</div>
+      <div class="toggle-grid advanced-only"><label><input type="checkbox" data-upload-toggle="completion_overlap" ${draft.config.completion_overlap ? "checked" : ""}>Allow overlap</label></div>
+      <div class="editor-group-grid advanced-only completion-theme-editor">
+        ${editorGroup("Bubble", `<div class="theme-neutral-grid">${completionColorFields.map(([field,label]) => colorControl(field, label, draft, template)).join("")}</div><div class="range-list">${completionSurfaceRangeFields.map((field) => rangeControl(field, draft, template)).join("")}</div>`)}
+        ${editorGroup("Text", `${fontSelectControl("theme.completion_font_family", "Font family", draft, template)}<div class="range-list">${completionTextRangeFields.map((field) => rangeControl(field, draft, template)).join("")}</div>`)}
+      </div>`,
+    timing: `<div class="capability-note"><strong>Performance controls</strong><span>These values tune how often the overlay checks for active and idle transfer updates. The default 200 ms active cadence matches the motion system.</span></div><div class="range-list upload-section-ranges">${uploadTimingRangeFields.map((field) => rangeControl(field, draft, template)).join("")}</div>`,
+  };
   return `
-    ${layoutSectionMarkup(draft, false)}
-    ${blockThemeSectionMarkup(draft, false)}
-    ${stateColoringSectionMarkup(draft)}
-    <details class="settings-section" open><summary>Telemetry</summary><div class="settings-body"><div class="toggle-grid"><label><input type="checkbox" data-upload-toggle="show_sent" ${draft.config.show_sent !== false ? "checked" : ""}>Show sent bytes</label><label><input type="checkbox" data-upload-toggle="show_speed" ${draft.config.show_speed !== false ? "checked" : ""}>Show aggregate speed</label><label><input type="checkbox" data-upload-toggle="show_elapsed" ${draft.config.show_elapsed !== false ? "checked" : ""}>Show elapsed time</label></div><div class="capability-note"><strong>Adaptive by ingest method</strong><span>Known totals use a determinate aggregate bar. FTP or agent transfers without totals automatically use an indeterminate bar and hide unavailable values.</span></div></div></details>
-    <details class="settings-section" open><summary>Behavior</summary><div class="settings-body"><div class="toggle-grid behavior-toggles"><label><input type="checkbox" data-upload-idle ${draft.config.idle_behavior === "show_idle" ? "checked" : ""}>Show while idle</label></div><div class="range-list">${uploadRangeFields.map((field) => rangeControl(field, draft, templateForDraft(draft))).join("")}</div><div class="form-grid"><label class="wide">Idle label<input data-path="config.idle_label" maxlength="80" value="${escapeAttr(draft.config.idle_label || "WAITING FOR UPLOAD")}"></label></div></div></details>
-  `;
+    <section class="upload-customization" aria-labelledby="upload-customization-title">
+      <div class="upload-customization-intro">
+        <div><h2 id="upload-customization-title">Customize upload overlay</h2><p>Choose a category, then tune the live preview without changing the OBS URL.</p></div>
+      </div>
+      <div class="upload-editor-layout">
+        <div class="upload-category-tabs" role="tablist" aria-label="Upload overlay settings">
+          ${uploadSettingsCategories.map(([id,label,description,advancedOnly]) => `<button type="button" role="tab" class="upload-category-tab ${advancedOnly ? "advanced-only" : ""} ${state.uploadSettingsCategory === id ? "active" : ""}" id="upload-settings-tab-${id}" data-upload-settings-category="${id}" aria-controls="upload-settings-panel-${id}" aria-selected="${state.uploadSettingsCategory === id}" tabindex="${state.uploadSettingsCategory === id ? "0" : "-1"}"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(description)}</span></button>`).join("")}
+        </div>
+        <div class="upload-settings-panels">
+          ${uploadSettingsCategories.map(([id,label,description,advancedOnly]) => uploadSettingsPanel(id, label, description, panels[id], advancedOnly)).join("")}
+        </div>
+      </div>
+    </section>`;
+}
+
+function uploadEditorModeMarkup() {
+  return `<div class="view-mode-toggle upload-view-mode" role="group" aria-label="Customization level">
+    <button type="button" class="${state.uploadAdvancedView ? "" : "active"}" data-upload-view-mode="simple" aria-pressed="${!state.uploadAdvancedView}">Simple</button>
+    <button type="button" class="${state.uploadAdvancedView ? "active" : ""}" data-upload-view-mode="advanced" aria-pressed="${state.uploadAdvancedView}">Advanced</button>
+  </div>`;
+}
+
+function uploadSettingsPanel(id, label, description, body, advancedOnly) {
+  return `<section class="upload-category-pane ${advancedOnly ? "advanced-only" : ""}" id="upload-settings-panel-${id}" data-upload-settings-panel="${id}" role="tabpanel" aria-labelledby="upload-settings-tab-${id}" ${state.uploadSettingsCategory === id ? "" : "hidden"}>
+    <div class="upload-section-head"><div><h2>${escapeHtml(label)}</h2><p>${escapeHtml(description)}</p></div><button type="button" class="secondary section-reset" data-reset-upload-section="${id}" aria-label="Reset ${escapeAttr(label)} settings">${icons.reset}<span>Reset section</span></button></div>
+    <div class="upload-section-body">${body}</div>
+  </section>`;
+}
+
+function editorGroup(title, body) {
+  return `<section class="editor-group"><h3>${escapeHtml(title)}</h3>${body}</section>`;
+}
+
+function availableUploadSettingsCategory(category) {
+  return uploadSettingsCategories.some(([id,,,advancedOnly]) => id === category && (state.uploadAdvancedView || !advancedOnly))
+    ? category
+    : "placement";
+}
+
+function completionControlOptions(layout) {
+  const growth = layoutGrowth(layout);
+  const horizontal = growth.y === "center" && growth.x !== "center";
+  return horizontal
+    ? {
+        directions: [["auto", "Auto"], ["up", "Top"], ["down", "Bottom"]],
+        alignments: [["start", "Left"], ["end", "Right"]],
+      }
+    : {
+        directions: [["auto", "Auto"], ["left", "Left"], ["right", "Right"]],
+        alignments: [["start", "Top"], ["end", "Bottom"]],
+      };
 }
 
 function layoutSectionMarkup(draft, includeTelemetryColumns) {
   const template = templateForDraft(draft);
-  const fields = draft.type === "upload_progress" ? uploadLayoutRangeFields : connectivityLayoutRangeFields;
   const growth = layoutGrowth(draft.layout);
-  return `<details class="settings-section" open><summary>Layout</summary><div class="settings-body"><div class="layout-editor"><div class="layout-control-row"><div class="layout-control-group"><span class="layout-control-label">Anchor</span><div class="dock-grid" aria-label="Overlay anchor">${Object.entries(dockLabels).map(([id,label]) => `<button class="secondary ${draft.layout.dock === id ? "active" : ""}" data-dock="${id}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}" type="button">${anchorIcon(id)}<span class="sr-only">${escapeHtml(label)}</span></button>`).join("")}</div></div><div class="layout-control-group"><span class="layout-control-label">Growth direction</span>${growthDpadMarkup(draft.layout, growth)}</div></div><div class="range-list">${fields.map((field) => rangeControl(field, draft, template)).join("")}${includeTelemetryColumns ? telemetryColumnsMarkup(draft) : ""}</div></div></div></details>`;
+  return `<details class="settings-section" open><summary>Layout</summary><div class="settings-body"><div class="layout-editor"><div class="layout-control-row"><div class="layout-control-group"><span class="layout-control-label">Anchor</span><div class="dock-grid" aria-label="Overlay anchor">${Object.entries(dockLabels).map(([id,label]) => `<button class="secondary ${draft.layout.dock === id ? "active" : ""}" data-dock="${id}" title="${escapeAttr(label)}" aria-label="${escapeAttr(label)}" type="button">${anchorIcon(id)}<span class="sr-only">${escapeHtml(label)}</span></button>`).join("")}</div></div><div class="layout-control-group"><span class="layout-control-label">Growth direction</span>${growthDpadMarkup(draft.layout, growth)}</div></div><div class="range-list">${connectivityLayoutRangeFields.map((field) => rangeControl(field, draft, template)).join("")}${includeTelemetryColumns ? telemetryColumnsMarkup(draft) : ""}</div></div></div></details>`;
 }
 
 function growthDpadMarkup(layout, growth) {
@@ -578,10 +756,10 @@ function growthDpadMarkup(layout, growth) {
 
 function activeGrowthDirection(layout, growth) {
   if (!layout.growth_x && !layout.growth_y) return "auto";
-  if (growth.x === "center" && growth.y === "up") return "up";
-  if (growth.x === "center" && growth.y === "down") return "down";
-  if (growth.x === "left" && growth.y === "center") return "left";
-  if (growth.x === "right" && growth.y === "center") return "right";
+  if (growth.y === "up") return "up";
+  if (growth.y === "down") return "down";
+  if (growth.x === "left") return "left";
+  if (growth.x === "right") return "right";
   if (growth.x === "center" && growth.y === "center") return "auto";
   return "";
 }
@@ -621,7 +799,12 @@ function plotThemeMarkup(draft, template) {
 }
 
 function selectControl(path, label, options, value) {
-  return `<label>${escapeHtml(label)}<select data-select="${escapeAttr(path)}">${options.map(([id, name]) => `<option value="${escapeAttr(id)}" ${id === value ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}</select></label>`;
+  return `<label>${escapeHtml(label)}<select data-select="${escapeAttr(path)}">${selectOptions(options, value)}</select></label>`;
+}
+
+function selectOptions(options, value) {
+  return options.map(([id, name]) =>
+    `<option value="${escapeAttr(id)}" ${id === value ? "selected" : ""}>${escapeHtml(name)}</option>`).join("");
 }
 
 function colorInputValue(value, fallback = "#ffffff") {
@@ -641,6 +824,9 @@ function blockDensityMarkup(draft) {
 
 function stateColoringSectionMarkup(draft) {
   const template = templateForDraft(draft);
+  if (draft.type === "upload_progress") {
+    return `<details class="settings-section" open><summary>State coloring</summary><div class="settings-body"><div class="theme-neutral-grid">${uploadLifecycleColorFields.map(([field, label]) => colorControl(field, label, draft, template)).join("")}</div></div></details>`;
+  }
   return `<details class="settings-section" open><summary>State coloring</summary><div class="settings-body"><div class="state-theme-grid">${themeStateFields.map((field) => stateThemeRowMarkup(field, draft, template)).join("")}</div></div></details>`;
 }
 
@@ -671,8 +857,8 @@ function bindDesignControls(type) {
     state.designDraft.layout.dock = button.dataset.dock;
     delete state.designDraft.layout.growth_x;
     delete state.designDraft.layout.growth_y;
-    designChanged(0);
     syncLayoutButtons();
+    designChanged(0);
   }));
   mainContent.querySelectorAll("[data-growth-direction]").forEach((button) => button.addEventListener("click", () => {
     const direction = button.dataset.growthDirection;
@@ -685,8 +871,8 @@ function bindDesignControls(type) {
     delete state.designDraft.layout.growth_x;
     delete state.designDraft.layout.growth_y;
     if (map[direction]) Object.assign(state.designDraft.layout, map[direction]);
-    designChanged(0);
     syncLayoutButtons();
+    designChanged(0);
   }));
   mainContent.querySelectorAll("[data-range],[data-number]").forEach((input) => {
     input.addEventListener("input", () => updateRangeInput(input, false));
@@ -740,14 +926,27 @@ function bindDesignControls(type) {
     bindRttLevelControls(template);
     renderOrder();
   } else {
+    mainContent.querySelectorAll("[data-upload-view-mode]").forEach((button) => button.addEventListener("click", () => {
+      setUploadAdvancedView(button.dataset.uploadViewMode === "advanced");
+    }));
+    mainContent.querySelectorAll("[data-upload-settings-category]").forEach((button) => {
+      button.addEventListener("click", () => setUploadSettingsCategory(button.dataset.uploadSettingsCategory));
+      button.addEventListener("keydown", handleUploadSettingsKeydown);
+    });
+    mainContent.querySelectorAll("[data-reset-upload-section]").forEach((button) => button.addEventListener("click", () => {
+      resetUploadSection(button.dataset.resetUploadSection);
+    }));
     mainContent.querySelectorAll("[data-upload-toggle]").forEach((input) => input.addEventListener("change", () => {
       state.designDraft.config[input.dataset.uploadToggle] = input.checked;
       designChanged(0);
     }));
     mainContent.querySelector("[data-upload-idle]")?.addEventListener("change", (event) => {
       state.designDraft.config.idle_behavior = event.target.checked ? "show_idle" : "hide";
+      syncIdleLabelControl();
       designChanged(0);
     });
+    syncUploadEditorMode();
+    syncIdleLabelControl();
   }
 }
 
@@ -773,6 +972,114 @@ function syncLayoutButtons() {
   mainContent.querySelectorAll("[data-dock]").forEach((button) => button.classList.toggle("active", state.designDraft.layout.dock === button.dataset.dock));
   const active = activeGrowthDirection(state.designDraft.layout, growth);
   mainContent.querySelectorAll("[data-growth-direction]").forEach((button) => button.classList.toggle("active", active === button.dataset.growthDirection));
+  if (state.designDraft.type !== "upload_progress") return;
+  const completion = completionControlOptions(state.designDraft.layout);
+  const direction = mainContent.querySelector('[data-select="config.completion_direction"]');
+  const alignment = mainContent.querySelector('[data-select="config.completion_alignment"]');
+  if (direction) {
+    if (!completion.directions.some(([value]) => value === state.designDraft.config.completion_direction)) {
+      state.designDraft.config.completion_direction = "auto";
+    }
+    direction.innerHTML = selectOptions(completion.directions, state.designDraft.config.completion_direction);
+  }
+  if (alignment) alignment.innerHTML = selectOptions(completion.alignments, state.designDraft.config.completion_alignment ?? "start");
+}
+
+function setUploadAdvancedView(enabled) {
+  state.uploadAdvancedView = enabled === true;
+  writeStoredUploadAdvancedView(state.uploadAdvancedView);
+  syncUploadEditorMode();
+}
+
+function syncUploadEditorMode() {
+  const editor = mainContent.querySelector("[data-upload-editor]");
+  if (!editor) return;
+  editor.dataset.advancedView = String(state.uploadAdvancedView);
+  editor.querySelectorAll("[data-upload-view-mode]").forEach((button) => {
+    const active = button.dataset.uploadViewMode === (state.uploadAdvancedView ? "advanced" : "simple");
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  setUploadSettingsCategory(availableUploadSettingsCategory(state.uploadSettingsCategory));
+}
+
+function setUploadSettingsCategory(category, focus = false) {
+  const next = availableUploadSettingsCategory(category);
+  state.uploadSettingsCategory = next;
+  mainContent.querySelectorAll("[data-upload-settings-category]").forEach((button) => {
+    const active = button.dataset.uploadSettingsCategory === next;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-selected", String(active));
+    button.tabIndex = active ? 0 : -1;
+    if (active && focus) button.focus();
+  });
+  mainContent.querySelectorAll("[data-upload-settings-panel]").forEach((panel) => {
+    panel.hidden = panel.dataset.uploadSettingsPanel !== next;
+  });
+}
+
+function handleUploadSettingsKeydown(event) {
+  if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+  const buttons = [...mainContent.querySelectorAll("[data-upload-settings-category]")]
+    .filter((button) => state.uploadAdvancedView || !button.classList.contains("advanced-only"));
+  const current = buttons.indexOf(event.currentTarget);
+  if (current < 0) return;
+  event.preventDefault();
+  const next = event.key === "Home"
+    ? 0
+    : event.key === "End"
+      ? buttons.length - 1
+      : (current + (event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 1) + buttons.length) % buttons.length;
+  setUploadSettingsCategory(buttons[next].dataset.uploadSettingsCategory, true);
+}
+
+function resetUploadSection(section) {
+  const paths = uploadSectionResetPaths[section];
+  if (!paths) return;
+  const template = templateForDraft(state.designDraft);
+  for (const path of paths) {
+    const value = getPath(template, path);
+    if (value === undefined) deletePath(state.designDraft, path);
+    else setPath(state.designDraft, path, structuredClone(value));
+  }
+  syncUploadDesignInputs();
+  designChanged(0);
+  const label = uploadSettingsCategories.find(([id]) => id === section)?.[1] || "Section";
+  showNotice(`${label} settings reset.`);
+}
+
+function syncUploadDesignInputs() {
+  syncLayoutButtons();
+  mainContent.querySelectorAll("[data-range],[data-number]").forEach((input) => {
+    const path = input.dataset.range || input.dataset.number;
+    const value = getPath(state.designDraft, path);
+    if (value !== undefined) input.value = value;
+  });
+  mainContent.querySelectorAll("[data-path]").forEach((input) => {
+    const value = getPath(state.designDraft, input.dataset.path);
+    if (value !== undefined) input.value = value;
+  });
+  mainContent.querySelectorAll("[data-select]").forEach((input) => {
+    const value = getPath(state.designDraft, input.dataset.select);
+    if (value !== undefined) input.value = value;
+  });
+  mainContent.querySelectorAll("[data-color]").forEach((input) => {
+    input.value = colorInputValue(state.designDraft.theme[input.dataset.color]);
+  });
+  mainContent.querySelectorAll("[data-upload-toggle]").forEach((input) => {
+    const defaultOn = ["show_sent", "show_speed", "show_elapsed"].includes(input.dataset.uploadToggle);
+    input.checked = defaultOn
+      ? state.designDraft.config[input.dataset.uploadToggle] !== false
+      : state.designDraft.config[input.dataset.uploadToggle] === true;
+  });
+  const idle = mainContent.querySelector("[data-upload-idle]");
+  if (idle) idle.checked = state.designDraft.config.idle_behavior === "show_idle";
+  syncIdleLabelControl();
+}
+
+function syncIdleLabelControl() {
+  const idleLabel = mainContent.querySelector('[data-path="config.idle_label"]');
+  if (idleLabel) idleLabel.disabled = state.designDraft?.config.idle_behavior !== "show_idle";
 }
 
 function designChanged(delay) {
@@ -794,9 +1101,11 @@ async function flushAutosave() {
   clearTimeout(state.saveTimer);
   const kinds = new Set(state.pendingSave);
   state.pendingSave.clear();
+  const sourceDraft = kinds.has("source") && state.sourceDraft ? structuredClone(state.sourceDraft) : null;
+  const designDraft = kinds.has("design") && state.designDraft ? structuredClone(state.designDraft) : null;
   try {
-    if (kinds.has("source")) await saveSourceDraft();
-    if (kinds.has("design")) await saveDesignDraft();
+    if (sourceDraft) await saveSourceDraft(sourceDraft);
+    if (designDraft) await saveDesignDraft(designDraft);
     setSaveStatus("saved", "Saved");
   } catch (error) {
     setSaveStatus("error", "Save failed");
@@ -807,22 +1116,28 @@ async function flushAutosave() {
   }
 }
 
-async function saveSourceDraft() {
-  const result = await api(`/overlays/api/sources/${encodeURIComponent(state.sourceDraft.id)}`, { method:"PUT", headers:{ "If-Match":String(state.catalog.revision) }, body:JSON.stringify(state.sourceDraft) });
+async function saveSourceDraft(draft) {
+  const savedSourceId = draft.id;
+  const result = await api(`/overlays/api/sources/${encodeURIComponent(savedSourceId)}`, { method:"PUT", headers:{ "If-Match":String(state.catalog.revision) }, body:JSON.stringify(draft) });
   state.catalog.revision = result.revision;
   const index = state.catalog.sources.findIndex((source) => source.id === result.source.id);
   if (index >= 0) state.catalog.sources[index] = result.source;
-  state.sourceDraft = structuredClone(result.source);
+  if (state.sourceDraft?.id === savedSourceId && !state.pendingSave.has("source")) {
+    state.sourceDraft = structuredClone(result.source);
+  }
   renderTabs();
   renderPreview();
 }
 
-async function saveDesignDraft() {
-  const result = await api(`/overlays/api/presets/${encodeURIComponent(state.designDraft.id)}`, { method:"PUT", headers:{ "If-Match":String(state.catalog.revision) }, body:JSON.stringify({ preset:state.designDraft }) });
+async function saveDesignDraft(draft) {
+  const savedPresetId = draft.id;
+  const result = await api(`/overlays/api/presets/${encodeURIComponent(savedPresetId)}`, { method:"PUT", headers:{ "If-Match":String(state.catalog.revision) }, body:JSON.stringify({ preset:draft }) });
   state.catalog.revision = result.revision;
   const index = state.catalog.presets.findIndex((preset) => preset.id === result.preset.id);
   if (index >= 0) state.catalog.presets[index] = result.preset;
-  state.designDraft = structuredClone(result.preset);
+  if (state.designDraft?.id === savedPresetId && !state.pendingSave.has("design")) {
+    state.designDraft = structuredClone(result.preset);
+  }
   renderPreview();
 }
 
@@ -841,10 +1156,16 @@ function renderPreview() {
   }
   setPreviewVisible(true);
   fakePreviewToggle.checked = state.fakePreview;
-  updatePreviewCaption();
+  syncPreviewControls();
+  previewDock.dataset.previewView = effectivePreviewView();
   state.previewFrameSize = null;
+  updatePreviewCaption();
   applyPreviewScale();
-  const nextSrc = state.fakePreview ? previewPresetUrl(state.designDraft.id) : previewSourceUrl(source);
+  const detail = effectivePreviewView() === "detail";
+  const scenario = state.designDraft.type === "upload_progress" && state.fakePreview ? state.previewScenario : "";
+  const nextSrc = state.fakePreview
+    ? previewPresetUrl(state.designDraft.id, detail, scenario)
+    : previewSourceUrl(source, detail);
   if (preview.getAttribute("src") !== nextSrc) preview.src = nextSrc;
   else sendPreview();
 }
@@ -862,13 +1183,19 @@ function sendPreview() {
 function updatePreviewCaption() {
   const type = state.designDraft?.type;
   const sourceText = state.fakePreview ? (type === "upload_progress" ? "Sample upload data" : "Sample telemetry data") : "Live source URL";
+  if (effectivePreviewView() === "canvas") {
+    const scenario = state.fakePreview ? ` - ${previewScenarioLabels[state.previewScenario] || "Queue"}` : "";
+    previewCaption.textContent = `${sourceText}${scenario} - 1920 x 1080 canvas`;
+    return;
+  }
   const size = state.previewFrameSize;
   const sizeText = size ? ` - ${size.contentWidth} x ${size.contentHeight}` : "";
-  previewCaption.textContent = `${sourceText}${sizeText}`;
+  const scenario = type === "upload_progress" && state.fakePreview ? ` - ${previewScenarioLabels[state.previewScenario] || "Queue"}` : "";
+  previewCaption.textContent = `${sourceText}${scenario}${sizeText}`;
 }
 
 function applyPreviewScale() {
-  const size = state.previewFrameSize || { width: 520, height: 240 };
+  const size = previewFrameDimensions(effectivePreviewView(), state.previewFrameSize);
   const shellRect = previewFrameShell.getBoundingClientRect();
   const availableWidth = Math.max(220, shellRect.width - 24);
   const desktopPreviewColumn = window.matchMedia("(min-width: 901px)").matches;
@@ -882,6 +1209,22 @@ function applyPreviewScale() {
   previewScaleShell.style.width = `${scaledWidth}px`;
   previewScaleShell.style.height = `${scaledHeight}px`;
   previewScaleShell.style.setProperty("--preview-scale", String(scale));
+}
+
+function effectivePreviewView() {
+  return state.designDraft?.type === "upload_progress" ? state.previewView : "detail";
+}
+
+function syncPreviewControls() {
+  const upload = state.designDraft?.type === "upload_progress";
+  uploadPreviewTools.hidden = !upload;
+  previewScenario.disabled = !state.fakePreview;
+  previewScenario.value = state.previewScenario;
+  document.querySelectorAll("[data-preview-view]").forEach((button) => {
+    const active = button.dataset.previewView === effectivePreviewView();
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
 }
 
 function setPreviewVisible(visible) {
@@ -907,7 +1250,7 @@ async function resetSourceDesign() {
     window_title: base.window_title,
     description: base.description,
   };
-  await saveDesignDraft();
+  await saveDesignDraft(structuredClone(state.designDraft));
   showNotice("Visual settings reset.");
   renderSelectedSource();
 }
@@ -975,7 +1318,8 @@ function typeLabel(type) {
 function createSourceKey(dataSource) {
   if (!dataSource) return "";
   if (dataSource.data_source.kind === "stream") return `stream:${dataSource.data_source.stream_profile_id}`;
-  return `upload:${dataSource.data_source.adapters?.[0] || "web_upload"}`;
+  const adapters = dataSource.data_source.adapters || [];
+  return allUploadAdapters.every((adapter) => adapters.includes(adapter)) ? "upload:all" : `upload:${adapters[0] || "web_upload"}`;
 }
 
 function sameIdentity(a, b) {
@@ -1000,12 +1344,15 @@ function publicBaseUrl() {
   }
 }
 
-function previewPresetUrl(presetId) {
-  return `/overlays/api/preview/${encodeURIComponent(presetId)}?preview=1&elementPreview=1`;
+function previewPresetUrl(presetId, detail = true, scenario = "") {
+  const query = new URLSearchParams({ preview:"1" });
+  if (detail) query.set("elementPreview", "1");
+  if (scenario) query.set("scenario", scenario);
+  return `/overlays/api/preview/${encodeURIComponent(presetId)}?${query}`;
 }
 
-function previewSourceUrl(source) {
-  return `/overlays/view/${encodeURIComponent(source.slug)}/${encodeURIComponent(source.source_key)}?elementPreview=1`;
+function previewSourceUrl(source, detail = true) {
+  return `/overlays/view/${encodeURIComponent(source.slug)}/${encodeURIComponent(source.source_key)}${detail ? "?elementPreview=1" : ""}`;
 }
 
 function previewTargetOrigin() {
@@ -1337,6 +1684,13 @@ function setPath(object, path, value) {
   const last = keys.pop();
   const target = keys.reduce((current, key) => current[key] ??= {}, object);
   target[last] = value;
+}
+
+function deletePath(object, path) {
+  const keys = path.split(".");
+  const last = keys.pop();
+  const target = keys.reduce((current, key) => current?.[key], object);
+  if (target) delete target[last];
 }
 
 function humanize(value) {

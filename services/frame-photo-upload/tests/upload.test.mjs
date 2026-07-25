@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { mkdtemp, readFile, readdir } from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { Readable } from "node:stream";
 import test from "node:test";
 import { createApp } from "../dist/app.js";
+import { streamCompletedUpload } from "../dist/handoff.js";
 import { UploadProgressTracker } from "../dist/progress.js";
 
 test("streams one completed upload into staging", async () => {
@@ -35,7 +38,9 @@ test("streams one completed upload into staging", async () => {
     body: data,
   });
   assert.equal(response.status, 202);
-  assert.equal((await response.json()).transfer_id, "transfer-test-1");
+  const accepted = await response.json();
+  assert.equal(accepted.transfer_id, "transfer-test-1");
+  assert.equal(accepted.journey_id, "transfer-test-1");
   assert.equal((await fetch(`http://127.0.0.1:${address.port}/api/internal/photo-upload/progress`)).status, 401);
   const progress = await fetch(`http://127.0.0.1:${address.port}/api/internal/photo-upload/progress`, {
     headers: { authorization: "Bearer test-service-token" },
@@ -43,10 +48,29 @@ test("streams one completed upload into staging", async () => {
   const snapshot = await progress.json();
   assert.equal(snapshot.transfers[0].phase, "queued");
   assert.equal(snapshot.transfers[0].transfer_id, "transfer-test-1");
+  assert.equal(snapshot.transfers[0].journey_id, "transfer-test-1");
+  assert.equal(snapshot.transfers[0].source_adapter, "web_upload");
   assert.deepEqual(await readdir(path.join(root, "inbox")), []);
-  assert.deepEqual(await readdir(path.join(root, "staging")), ["Phone_Photo.jpg"]);
-  assert.equal(await readFile(path.join(root, "staging", "Phone_Photo.jpg"), "utf8"), "not validated by input");
+  const envelope = path.join(root, "staging", "transfer-test-1.frame-photo");
+  assert.deepEqual(await readdir(path.join(root, "staging")), ["transfer-test-1.frame-photo"]);
+  assert.equal(await readFile(path.join(envelope, "source"), "utf8"), "not validated by input");
+  const journey = JSON.parse(await readFile(path.join(envelope, "journey.json"), "utf8"));
+  assert.equal(journey.journey_id, "transfer-test-1");
+  assert.equal(journey.content_sha256, createHash("sha256").update("not validated by input").digest("hex"));
   server.close();
+});
+
+test("rejects different same-size content for an existing journey", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-upload-conflict-"));
+  const staging = path.join(root, "staging");
+  const journey = { journeyId: "journey-conflict", transferId: "transfer-first", adapter: "web_upload" };
+  await streamCompletedUpload(Readable.from("first"), "photo.jpg", staging, journey);
+  await assert.rejects(
+    streamCompletedUpload(Readable.from("other"), "photo.jpg", staging, { ...journey, transferId: "transfer-second" }),
+    /different upload content or metadata/,
+  );
+  assert.equal(await readFile(path.join(staging, "journey-conflict.frame-photo", "source"), "utf8"), "first");
+  assert.deepEqual(await readdir(staging), ["journey-conflict.frame-photo"]);
 });
 
 test("stages a completed internal upload with the service token", async () => {
@@ -75,15 +99,49 @@ test("stages a completed internal upload with the service token", async () => {
       authorization: "Bearer test-service-token",
       "content-type": "application/octet-stream",
       "x-frame-transfer-id": "internal-transfer",
+      "x-frame-journey-id": "journey-internal",
+      "x-frame-ingest-adapter": "belabox_chunked",
       "x-frame-file-size": "13",
       "x-frame-filename": "Belabox Test.JPG",
     },
     body: "internal file",
   });
   assert.equal(response.status, 202);
-  assert.equal((await response.json()).transfer_id, "internal-transfer");
-  assert.deepEqual(await readdir(path.join(root, "staging")), ["Belabox_Test.jpg"]);
-  assert.equal(await readFile(path.join(root, "staging", "Belabox_Test.jpg"), "utf8"), "internal file");
+  const accepted = await response.json();
+  assert.equal(accepted.transfer_id, "internal-transfer");
+  assert.equal(accepted.journey_id, "journey-internal");
+  const progress = await fetch(`http://127.0.0.1:${address.port}/api/internal/photo-upload/progress`, {
+    headers: { authorization: "Bearer test-service-token" },
+  }).then((result) => result.json());
+  assert.equal(progress.transfers[0].source_adapter, "belabox_chunked");
+  const envelope = path.join(root, "staging", "journey-internal.frame-photo");
+  assert.deepEqual(await readdir(path.join(root, "staging")), ["journey-internal.frame-photo"]);
+  assert.equal(await readFile(path.join(envelope, "source"), "utf8"), "internal file");
+  assert.equal(JSON.parse(await readFile(path.join(envelope, "journey.json"), "utf8")).ingest.adapter, "belabox_chunked");
+
+  const invalid = await fetch(`http://127.0.0.1:${address.port}/api/internal/photo-upload/stage`, {
+    method: "POST",
+    headers: { authorization: "Bearer test-service-token", "content-type": "application/octet-stream", "x-frame-journey-id": "bad id" },
+    body: "invalid",
+  });
+  assert.equal(invalid.status, 400);
+  const reservedDelimiter = await fetch(`http://127.0.0.1:${address.port}/api/internal/photo-upload/stage`, {
+    method: "POST",
+    headers: { authorization: "Bearer test-service-token", "content-type": "application/octet-stream", "x-frame-journey-id": "journey__ambiguous" },
+    body: "invalid",
+  });
+  assert.equal(reservedDelimiter.status, 400);
+  const invalidAdapter = await fetch(`http://127.0.0.1:${address.port}/api/internal/photo-upload/stage`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer test-service-token",
+      "content-type": "application/octet-stream",
+      "x-frame-journey-id": "journey-valid",
+      "x-frame-ingest-adapter": "Bad Adapter",
+    },
+    body: "invalid",
+  });
+  assert.equal(invalidAdapter.status, 400);
   server.close();
 });
 
@@ -127,15 +185,16 @@ test("reports limits and accepts multiple files in one upload request", async ()
   assert.equal(body.count, 2);
   assert.equal(body.staged_name, "First_Photo.jpg");
   assert.equal(body.transfer_ids.length, 2);
-  assert.deepEqual((await readdir(path.join(root, "staging"))).sort(), ["First_Photo.jpg", "Second_Photo.jpg"]);
+  assert.deepEqual(body.journey_ids, body.transfer_ids);
+  assert.equal((await readdir(path.join(root, "staging"))).every((entry) => entry.endsWith(".frame-photo")), true);
   server.close();
 });
 
 test("tracks concurrent files independently and expires terminal transfers", () => {
   let now = new Date("2026-06-21T12:00:00Z");
   const tracker = new UploadProgressTracker(() => now, 1000);
-  tracker.begin("transfer-a", "a.jpg", 1000);
-  tracker.begin("transfer-b", "b.jpg", null);
+  tracker.begin("transfer-a", "journey-a", "a.jpg", 1000);
+  tracker.begin("transfer-b", "journey-b", "b.jpg", null);
   tracker.addBytes("transfer-a", 400);
   tracker.addBytes("transfer-b", 250);
   now = new Date("2026-06-21T12:00:01Z");

@@ -171,6 +171,21 @@ export function previewElementSize(element, padding = 28) {
   };
 }
 
+export function previewVisualBounds(elements, padding = 28) {
+  const rects = [...elements]
+    .map((element) => element?.getBoundingClientRect?.())
+    .filter((rect) => rect && rect.width > 0 && rect.height > 0);
+  if (!rects.length) return { width:0, height:0, content_width:0, content_height:0 };
+  const contentWidth = Math.max(...rects.map((rect) => rect.right)) - Math.min(...rects.map((rect) => rect.left));
+  const contentHeight = Math.max(...rects.map((rect) => rect.bottom)) - Math.min(...rects.map((rect) => rect.top));
+  return {
+    width: Math.ceil(contentWidth + padding),
+    height: Math.ceil(contentHeight + padding),
+    content_width: Math.ceil(contentWidth),
+    content_height: Math.ceil(contentHeight),
+  };
+}
+
 export function formatTelemetryDuration(seconds) {
   const total = Math.max(0, Math.floor(Number(seconds) || 0));
   const h = Math.floor(total / 3600);

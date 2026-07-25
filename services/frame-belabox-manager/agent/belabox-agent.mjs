@@ -17,7 +17,7 @@ import {
   verify as verifyBytes,
 } from "node:crypto";
 
-const VERSION = "0.8.2";
+const VERSION = "0.8.3";
 const REMOTE_BELAUI_HTTP_TIMEOUT_MS = 8000;
 const REMOTE_BELAUI_MAX_HTTP_BODY_BYTES = 2 * 1024 * 1024;
 const REMOTE_BELAUI_STREAM_CHUNK_BYTES = 48 * 1024;
@@ -1262,6 +1262,8 @@ function readFtpUploadStatus() {
       state: text(status.state, 32) || "unknown",
       status_text: text(status.status_text, 120) || "",
       file: text(status.file || status.filename, 180) || null,
+      spool_file: text(status.spool_file, 240) || null,
+      journey_id: safeJourneyId(status.journey_id),
       size_bytes: number(status.size_bytes),
       sent_bytes: number(status.sent_bytes),
       percent: number(status.percent),
@@ -1321,7 +1323,12 @@ function pathDir(file) {
 }
 
 function archivePhotoQueue(base = path.resolve(os.homedir(), ".frame-belabox-agent/photo-spool"), ftp = readFtpUploadStatus() || {}) {
-  const active = new Set([ftp.file, ftp.preprocess && ftp.preprocess.file].filter(Boolean));
+  const active = new Set([
+    ftp.spool_file,
+    ftp.file,
+    ftp.preprocess && ftp.preprocess.spool_file,
+    ftp.preprocess && ftp.preprocess.file,
+  ].filter(Boolean));
   const archive = path.join(base, "reset-archive", new Date().toISOString().replace(/[^0-9]/g, ""));
   let moved = 0;
   let preserved = 0;
@@ -1392,11 +1399,13 @@ function preprocessStatus(value) {
   return {
     state: text(value.state, 32) || "unknown",
     file: text(value.file, 180) || null,
+    spool_file: text(value.spool_file, 240) || null,
     status_text: text(value.status_text, 120) || "",
     ahead: number(value.ahead),
     size_bytes: number(value.size_bytes),
     warning: text(value.warning, 160) || null,
     error: text(value.error, 160) || null,
+    journey_id: safeJourneyId(value.journey_id),
     updated_at: iso(value.updated_at),
   };
 }
@@ -1410,7 +1419,14 @@ function transferResult(value) {
     file: text(value.file, 180) || null,
     at: iso(value.at),
     error: text(value.error, 160) || null,
+    transfer_id: text(value.transfer_id, 120) || null,
+    journey_id: safeJourneyId(value.journey_id),
   };
+}
+
+function safeJourneyId(value) {
+  const parsed = text(value, 96);
+  return parsed && /^[A-Za-z0-9_-]{8,96}$/.test(parsed) && !parsed.includes("__") ? parsed : null;
 }
 
 function publishJson(topic, payload, retain = false) {
@@ -1508,7 +1524,9 @@ function selfTest() {
   assertEqual(photoTransferIsActive({ file: null, queue_count: 0, state: "idle" }), false, "idle upload");
   assertEqual(photoTelemetryNeedsPublish({ file: null, queue_count: 0, state: "idle" }, true), true, "publish terminal idle");
   assertEqual(photoTelemetryNeedsPublish({ file: null, queue_count: 0, state: "idle" }, false), false, "skip repeated idle");
-  assertEqual(transferResult({ status: "completed", file: "photo.jpg", at: new Date().toISOString() }).file, "photo.jpg", "transfer result");
+  const transfer = transferResult({ status: "completed", file: "photo.jpg", at: new Date().toISOString(), journey_id: "journey-test-1" });
+  assertEqual(transfer.file, "photo.jpg", "transfer result");
+  assertEqual(transfer.journey_id, "journey-test-1", "transfer journey");
   assertEqual(transferResult({ status: "pending" }), null, "invalid transfer result");
   validateArgs("network_speed_test", { mode: "interface_speed_test", target: "internet", interface_name: "eth0", bytes: 65536, parallel: 2 });
   validateArgs("network_speed_test", { mode: "http_upload", target: "frame", interface_name: "all", bytes: 65536, parallel: 1 });
@@ -1549,9 +1567,14 @@ function selfTest() {
     for (const directory of ["incoming", "ready", "processed"]) fs.mkdirSync(path.join(queueRoot, directory));
     fs.writeFileSync(path.join(queueRoot, "ready", "pending.jpg"), "pending");
     fs.writeFileSync(path.join(queueRoot, "processed", "active.jpg"), "active");
-    const reset = archivePhotoQueue(queueRoot, { file: "active.jpg", state: "uploading" });
+    fs.writeFileSync(path.join(queueRoot, "ready", "FRAMEJ1_journey-test-1__preprocessing.jpg"), "processing");
+    const reset = archivePhotoQueue(queueRoot, {
+      file: "active.jpg",
+      state: "uploading",
+      preprocess: { file: "preprocessing.jpg", spool_file: "FRAMEJ1_journey-test-1__preprocessing.jpg" },
+    });
     assertEqual(reset.moved, 1, "queue reset moved");
-    assertEqual(reset.preserved, 1, "queue reset preserved active");
+    assertEqual(reset.preserved, 2, "queue reset preserved active and preprocessing");
   } finally {
     fs.rmSync(queueRoot, { recursive: true, force: true });
   }

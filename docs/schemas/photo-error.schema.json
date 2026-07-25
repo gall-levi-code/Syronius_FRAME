@@ -14,6 +14,11 @@
     "log_ref"
   ],
   "properties": {
+    "journey_id": {
+      "type": "string",
+      "pattern": "^(?!.*__)[A-Za-z0-9_-]{8,96}$",
+      "description": "Present on new identifiable quarantines; optional for historical records and malformed inputs whose journey identity cannot be trusted."
+    },
     "reason_code": {
       "type": "string",
       "enum": ["PPL-01", "PPL-02", "PPL-03", "PPL-04", "PPL-05", "PPL-06", "PPL-07"]

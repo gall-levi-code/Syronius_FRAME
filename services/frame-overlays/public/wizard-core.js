@@ -48,6 +48,23 @@ export function clampNumericValue(value, min, max, step) {
   return Number(snapped.toFixed(decimals));
 }
 
+export function previewFrameDimensions(mode, measured) {
+  if (mode === "canvas") return { width:1920, height:1080, contentWidth:1920, contentHeight:1080 };
+  const width = positiveDimension(measured?.width, 520);
+  const height = positiveDimension(measured?.height, 240);
+  return {
+    width,
+    height,
+    contentWidth: positiveDimension(measured?.contentWidth, width),
+    contentHeight: positiveDimension(measured?.contentHeight, height),
+  };
+}
+
+function positiveDimension(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? Math.ceil(number) : fallback;
+}
+
 function snap(value, step, min, max) {
   return clamp(Math.round((Number(value) || 0) / step) * step, min, max);
 }

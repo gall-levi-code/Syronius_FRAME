@@ -22,14 +22,25 @@ export interface OverlayTheme {
   good_color?: string;
   warn_color?: string;
   bad_color?: string;
+  uploading_color?: string;
+  staged_color?: string;
+  processing_color?: string;
+  completed_color?: string;
+  failed_color?: string;
   plot_primary?: string;
   plot_secondary?: string;
   panel_bg_color?: string;
   panel_border_color?: string;
   panel_glow_color?: string;
+  completion_bg_color?: string;
+  completion_border_color?: string;
+  completion_text_color?: string;
+  completion_muted_color?: string;
+  completion_glow_color?: string;
   block_bg_color?: string;
   block_border_color?: string;
   panel_bg_alpha?: number;
+  completion_bg_alpha?: number;
   block_bg_alpha?: number;
   bg_opacity_good?: number;
   bg_opacity_warn?: number;
@@ -39,8 +50,18 @@ export interface OverlayTheme {
   panel_padding_px?: number;
   block_padding_px?: number;
   block_gap_px?: number;
+  journey_gap_px?: number;
   panel_border_width_px?: number;
+  completion_border_width_px?: number;
   block_border_width_px?: number;
+  completion_radius_px?: number;
+  completion_backdrop_blur_px?: number;
+  completion_padding_x_px?: number;
+  completion_padding_y_px?: number;
+  completion_glow_blur_px?: number;
+  completion_glow_spread_px?: number;
+  completion_glow_offset_x_px?: number;
+  completion_glow_offset_y_px?: number;
   glow_blur_px?: number;
   glow_spread_px?: number;
   glow_offset_x_px?: number;
@@ -51,6 +72,9 @@ export interface OverlayTheme {
   subheader_font_family?: string;
   subheader_font_size_px?: number;
   subheader_font_weight?: number;
+  completion_font_family?: string;
+  completion_font_size_px?: number;
+  completion_font_weight?: number;
 }
 
 export interface ConnectivityConfig {
@@ -104,12 +128,16 @@ export interface ConnectivityConfig {
 export interface UploadProgressConfig {
   active_poll_ms?: number;
   idle_poll_ms?: number;
-  complete_poll_ms?: number;
-  complete_hide_ms?: number;
-  fetch_timeout_ms?: number;
+  completion_window_seconds?: number;
+  max_visible_journeys?: number;
+  queue_opacity_step?: number;
+  completion_direction?: "auto" | "left" | "right" | "up" | "down";
+  completion_alignment?: "start" | "end";
+  completion_overlap?: boolean;
   show_speed?: boolean;
   show_elapsed?: boolean;
   show_sent?: boolean;
+  status_text_position?: "under_filename" | "below_progress" | "hidden";
   width_px?: number;
   idle_behavior?: "show_idle" | "hide";
   idle_label?: string;

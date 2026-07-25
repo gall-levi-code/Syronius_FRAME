@@ -1,8 +1,11 @@
 export type WebUploadPhase = "receiving" | "queued" | "failed";
+export type PhotoSourceAdapter = "web_upload" | "ftp" | "belabox_chunked" | "belabox_agent";
 
 export interface WebUploadTransfer {
   transfer_id: string;
+  journey_id: string;
   adapter: "web_upload";
+  source_adapter: PhotoSourceAdapter;
   phase: WebUploadPhase;
   filename: string;
   bytes_received: number;
@@ -34,11 +37,19 @@ export class UploadProgressTracker {
     private readonly terminalRetentionMs = 15_000,
   ) {}
 
-  begin(transferId: string, filename: string, bytesTotal: number | null): void {
+  begin(
+    transferId: string,
+    journeyId: string,
+    filename: string,
+    bytesTotal: number | null,
+    sourceAdapter: PhotoSourceAdapter = "web_upload",
+  ): void {
     const timestamp = this.now().toISOString();
     this.transfers.set(transferId, {
       transfer_id: transferId,
+      journey_id: journeyId,
       adapter: "web_upload",
+      source_adapter: sourceAdapter,
       phase: "receiving",
       filename,
       bytes_received: 0,

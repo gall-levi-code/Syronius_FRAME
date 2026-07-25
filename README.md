@@ -278,7 +278,6 @@ The public-facing backlog for the alpha release line:
 
 - Build the Discord delivery outbox.
 - Add archive retention controls and disk-pressure policy.
-- Add reliable HEIC decoding when the production image runtime supports it.
 - Add camera and long-running FTP soak tests.
 
 The fuller engineering backlog remains in [`docs/TODO.md`](docs/TODO.md).

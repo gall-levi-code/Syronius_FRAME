@@ -227,6 +227,7 @@ function wizardFtpStep() {
 
 function wizardTransferStep() {
   const chunkSize = Number(state.status.chunk_upload?.chunk_size_bytes || 4194304);
+  const chunkSizeMax = Math.min(8388608, Math.max(262144, chunkSize));
   const parallel = Number(state.status.chunk_upload?.chunk_parallel_uploads || 1);
   const uploadKbps = Number(state.status.chunk_upload?.chunk_upload_kbps || 0);
   const uploadUncapped = wizardDraftChecked("photo-upload-uncapped", uploadKbps <= 0);
@@ -238,7 +239,7 @@ function wizardTransferStep() {
         ${Object.entries(TRANSFER_PRESETS).map(([key, preset]) => `<button class="preset-button" type="button" data-wizard-preset="${escapeAttr(key)}"><strong>${escapeHtml(preset.label)}</strong><span>${escapeHtml(presetSummary(preset))}</span></button>`).join("")}
       </div>
       <div class="form-grid slider-grid">
-        ${sliderControl("photo-chunk-size", "chunk_size_bytes", "Chunk size", 262144, 8388608, 262144, chunkSize, formatChunkSize)}
+        ${sliderControl("photo-chunk-size", "chunk_size_bytes", "Chunk size", 262144, chunkSizeMax, 262144, chunkSize, formatChunkSize)}
         ${sliderControl("photo-chunk-parallel", "chunk_parallel_uploads", "Parallel uploads", 1, 4, 1, parallel, (value) => `${value} connection${Number(value) === 1 ? "" : "s"}`)}
         <label class="check-row wide"><input id="photo-upload-uncapped" name="upload_uncapped" type="checkbox" ${uploadUncapped ? "checked" : ""}>Uncapped upload</label>
         ${sliderControl("photo-chunk-kbps", "chunk_upload_kbps", "Upload cap", 64, 50000, 64, uploadKbps > 0 ? uploadKbps : 2000, formatUploadCap, uploadUncapped, "Uncapped")}
@@ -296,6 +297,7 @@ function renderDevicePanel(deviceId) {
   const sizeLimitEnabled = processing.max_output_mb > 0;
   const preprocess = ftp.preprocess || {};
   const chunkSize = Number(ftp.chunk_size_bytes ?? state.status.chunk_upload?.chunk_size_bytes ?? 4194304);
+  const chunkSizeMax = Math.min(8388608, Math.max(262144, Number(state.status.chunk_upload?.chunk_size_bytes || 4194304)));
   const chunkParallel = Number(ftp.chunk_parallel_uploads ?? state.status.chunk_upload?.chunk_parallel_uploads ?? 1);
   const chunkUploadKbps = Number(ftp.chunk_upload_kbps ?? state.status.chunk_upload?.chunk_upload_kbps ?? 0);
   const uploadUncapped = chunkUploadKbps <= 0;
@@ -477,7 +479,7 @@ function renderDevicePanel(deviceId) {
           ["Egress binding", ftp.egress_binding || "Waiting"],
         ])}</dl>
         <form id="chunk-form" class="form-grid slider-grid" data-form-baseline="${escapeAttr(transferBaseline)}">
-          ${sliderControl("photo-chunk-size", "chunk_size_bytes", "Chunk size", 262144, 8388608, 262144, chunkSize, formatChunkSize)}
+          ${sliderControl("photo-chunk-size", "chunk_size_bytes", "Chunk size", 262144, chunkSizeMax, 262144, chunkSize, formatChunkSize)}
           ${sliderControl("photo-chunk-parallel", "chunk_parallel_uploads", "Parallel uploads", 1, 4, 1, chunkParallel, (value) => `${value} connection${Number(value) === 1 ? "" : "s"}`)}
           <label class="check-row wide"><input id="photo-upload-uncapped" name="upload_uncapped" type="checkbox" ${uploadUncapped ? "checked" : ""}>Uncapped upload</label>
           ${sliderControl("photo-chunk-kbps", "chunk_upload_kbps", "Upload cap", 64, 50000, 64, chunkUploadKbps > 0 ? chunkUploadKbps : 2000, formatUploadCap, uploadUncapped, "Uncapped")}

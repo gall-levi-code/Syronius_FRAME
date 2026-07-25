@@ -21,6 +21,7 @@ const config = {
   streamsApiUrl: stripTrailingSlash(process.env.STREAMS_API_URL?.trim() || "http://frame-streams:3732"),
   photoUploadApiUrl: stripTrailingSlash(process.env.PHOTO_UPLOAD_API_URL?.trim() || "http://frame-photo-upload:3736"),
   photoFtpApiUrl: stripTrailingSlash(process.env.PHOTO_FTP_API_URL?.trim() || "http://frame-photo-ftp:3737"),
+  photoPipelineApiUrl: stripTrailingSlash(process.env.PHOTO_PIPELINE_URL?.trim() || "http://frame-pipeline-photos:3735"),
   belaboxManagerApiUrl: stripTrailingSlash(process.env.BELABOX_MANAGER_API_URL?.trim() || "http://frame-belabox-manager:3741"),
   slsApiKey: required("SLS_API_KEY"),
   ingestApiToken: required("PORTAL_SERVICE_TOKEN"),
@@ -88,6 +89,19 @@ const photoFtpFetch = async (route: string, init: RequestInit = {}): Promise<Res
   }
 };
 
+const photoPipelineFetch = async (route: string, init: RequestInit = {}): Promise<Response> => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), config.requestTimeoutMs);
+  const headers = new Headers(init.headers);
+  headers.set("Accept", "application/json");
+  headers.set("X-Frame-Service-Token", config.ingestApiToken);
+  try {
+    return await fetch(`${config.photoPipelineApiUrl}${route}`, { ...init, headers, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+};
+
 const belaboxManagerFetch = async (route: string, init: RequestInit = {}): Promise<Response> => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.requestTimeoutMs);
@@ -100,7 +114,7 @@ const belaboxManagerFetch = async (route: string, init: RequestInit = {}): Promi
   }
 };
 
-const runtime = await createFrameOverlaysApp({ config, store, publicDir, streamsFetch, photoUploadFetch, photoFtpFetch, belaboxManagerFetch });
+const runtime = await createFrameOverlaysApp({ config, store, publicDir, streamsFetch, photoUploadFetch, photoFtpFetch, photoPipelineFetch, belaboxManagerFetch });
 const server = runtime.app.listen(config.port, () => {
   console.log(`[overlays] FRAME Overlays v2 listening on port ${config.port}`);
 });

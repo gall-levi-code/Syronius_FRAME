@@ -97,7 +97,7 @@ test("obsolete V2 design keys are pruned during startup sync", async (t) => {
   assert.equal("chart_line_width_px" in synced.presets[0].config, false);
 });
 
-test("startup clamps persisted connectivity polling to the safe floor", async (t) => {
+test("startup clamps persisted values to supported ranges", async (t) => {
   const root = await mkdtemp(path.join(os.tmpdir(), "frame-overlay-poll-upgrade-"));
   t.after(() => rm(root, { recursive: true, force: true }));
   const statePath = path.join(root, "overlay-presets.json");
@@ -117,9 +117,24 @@ test("startup clamps persisted connectivity polling to the safe floor", async (t
     theme:{},
     config:{poll_ms:20},
   });
+  const uploadTemplate = structuredClone(document.templates.find((template) => template.type === "upload_progress"));
+  const oversizedCompletionRadius = {
+    ...uploadTemplate,
+    id:"oversized-completion-radius",
+    template_id:uploadTemplate.id,
+    revision:1,
+    created_at:"2026-06-20T12:00:00.000Z",
+    updated_at:"2026-06-20T12:00:00.000Z",
+    name:"Oversized completion radius",
+    theme:{...uploadTemplate.theme,completion_radius_px:999},
+  };
+  delete oversizedCompletionRadius.builtin;
+  delete oversizedCompletionRadius.readonly;
+  document.presets.push(oversizedCompletionRadius);
   await writeFile(statePath, JSON.stringify(document));
   const store = new OverlayStore(options);
   const upgraded = await store.init();
   assert.equal(upgraded.presets.find((preset) => preset.id === "too-fast").config.poll_ms, 200);
+  assert.equal(upgraded.presets.find((preset) => preset.id === "oversized-completion-radius").theme.completion_radius_px, 48);
   assert.equal(upgraded.revision, 8);
 });

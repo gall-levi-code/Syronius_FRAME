@@ -106,9 +106,10 @@ Choose one transfer mode at a time:
 | Direct FTP | Forward prepared photos to a reachable FRAME FTP server. Router forwarding may be required. |
 | Chunked HTTPS | Send prepared photos through the FRAME Hybrid route without exposing FTP publicly. |
 
-Photo preparation can resize the long edge, adjust JPEG quality, and limit output size while
-preserving EXIF and ICC metadata when supported. Chunked HTTPS supports an upload cap and binds
-workers to healthy egress interfaces.
+The agent queues JPEG, PNG, HEIC, and HEIF photos. Photo preparation can resize the long edge,
+adjust JPEG quality, and limit output size while preserving EXIF and ICC metadata when supported;
+FRAME's photo pipeline performs the final JPG normalization. Chunked HTTPS supports an upload cap
+and binds workers to healthy egress interfaces.
 
 Use **Apply changes** after editing device settings. Pending settings remain local to the manager
 until they are applied to the Belabox.

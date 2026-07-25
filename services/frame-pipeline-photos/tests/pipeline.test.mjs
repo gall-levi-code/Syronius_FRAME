@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { watch } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -48,9 +48,34 @@ test("publishes a valid staged image with ready last and latest state", async ()
   assert.equal(path.basename(manifest[1], ".txt"), latest.latest_base);
   await readFile(manifest[0]);
   await readFile(manifest[1]);
+  const sidecar = JSON.parse(await readFile(path.join(root, "galleries", latest.date_folder, `${latest.latest_base}.json`), "utf8"));
+  const sidecarSchema = JSON.parse(await readFile(path.resolve("../../docs/schemas/photo-sidecar.schema.json"), "utf8"));
+  assert.deepEqual(Object.keys(sidecar).filter((field) => !(field in sidecarSchema.properties)), []);
+  assert.deepEqual(sidecarSchema.required.filter((field) => !(field in sidecar)), []);
+  assert.match(sidecar.journey_id, /^[A-Za-z0-9_-]{8,96}$/);
+  const receipt = JSON.parse(await readFile(path.join(root, "state", "photo-journeys", `${sidecar.journey_id}.json`), "utf8"));
+  assert.equal(receipt.state, "published");
+  assert.match(receipt.content_sha256, /^[a-f0-9]{64}$/);
 
   await pipeline.processOnce();
   assert.equal((await readdir(path.join(root, "galleries", latest.date_folder))).filter((name) => name.endsWith(".ready")).length, 1);
+});
+
+test("publishes one real HEIC or HEIF fixture through the bundled decoder", async (context) => {
+  const fixture = process.env.FRAME_HEIC_FIXTURE;
+  if (!fixture) return context.skip("set FRAME_HEIC_FIXTURE to an actual HEIC or HEIF file");
+  const extension = path.extname(fixture).toLowerCase();
+  assert.match(extension, /^\.hei[cf]$/, "FRAME_HEIC_FIXTURE must have a .heic or .heif extension");
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-pipeline-"));
+  const pipeline = new PhotoPipeline(config(root));
+  await pipeline.init();
+  await writeFile(path.join(root, "staging", `Phone Photo${extension}`), await readFile(fixture));
+
+  await pipeline.processOnce();
+
+  const latest = JSON.parse(await readFile(path.join(root, "state", "latest.json"), "utf8"));
+  const output = path.join(root, "galleries", latest.date_folder, `${latest.latest_base}.jpg`);
+  assert.equal((await sharp(output).metadata()).format, "jpeg");
 });
 
 test("extracts camera EXIF into the reusable camera information sidecar", async () => {
@@ -97,6 +122,8 @@ test("quarantines non-images without updating latest state", async () => {
   assert.ok(errorName);
   const descriptor = JSON.parse(await readFile(path.join(root, "quarantine", errorName), "utf8"));
   assert.equal(descriptor.reason_code, "PPL-01");
+  assert.match(descriptor.journey_id, /^[A-Za-z0-9_-]{8,96}$/);
+  assert.equal(JSON.parse(await readFile(path.join(root, "state", "photo-journeys", `${descriptor.journey_id}.json`), "utf8")).state, "failed");
   await assert.rejects(readFile(path.join(root, "state", "latest.json")));
 });
 
@@ -106,21 +133,209 @@ test("recovers a ready publication without publishing the claimed source twice",
   await pipeline.init();
   const originalName = "Recovered Photo.png";
   const claim = path.join(root, "processing", `job-recovery--${Buffer.from(originalName).toString("base64url")}`);
+  const journeyId = "journey-recovery";
   const dateFolder = currentDateFolder();
   const base = "Recovered_Photo_2026-06-13_01_02_03";
   const gallery = path.join(root, "galleries", dateFolder);
   await Promise.all([mkdir(claim, { recursive: true }), mkdir(gallery, { recursive: true })]);
   await sharp({ create: { width: 100, height: 50, channels: 3, background: "#2cb4fb" } }).png().toFile(path.join(claim, "source"));
-  await writeFile(path.join(claim, "publication.json"), JSON.stringify({ dateFolder, base }));
+  const source = await readFile(path.join(claim, "source"));
+  const metadata = journey(journeyId, originalName, source);
+  await writeFile(path.join(claim, "journey.json"), JSON.stringify(metadata));
+  await writeFile(path.join(claim, "publication.json"), JSON.stringify({ dateFolder, base, journeyId }));
   for (const extension of ["jpg", "json", "txt", "orientation", "ready"]) {
     await writeFile(path.join(gallery, `${base}.${extension}`), extension);
   }
+  await writeFile(path.join(root, "state", "photo-journeys", `${journeyId}.json`), JSON.stringify({
+    ...metadata,
+    state: "published",
+    updated_at: new Date().toISOString(),
+    job_id: "job-recovery",
+    date_folder: dateFolder,
+    base,
+  }));
 
   await pipeline.processOnce();
 
   assert.deepEqual((await readdir(gallery)).filter((name) => name.endsWith(".ready")), [`${base}.ready`]);
   assert.equal(JSON.parse(await readFile(path.join(root, "state", "latest.json"), "utf8")).latest_base, base);
   assert.equal((await readdir(path.join(root, "archive", dateFolder))).length, 1);
+  assert.equal(JSON.parse(await readFile(path.join(root, "state", "photo-journeys", `${journeyId}.json`), "utf8")).state, "published");
+});
+
+test("publishes one photo for duplicate journey envelopes", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-pipeline-"));
+  const pipeline = new PhotoPipeline(config(root));
+  await pipeline.init();
+  const journeyId = "journey-duplicate";
+  const source = await testJpeg("#2cb4fb");
+  await stageEnvelope(root, journeyId, "Duplicate Photo.jpg", source);
+  await pipeline.processOnce();
+  const receiptPath = path.join(root, "state", "photo-journeys", `${journeyId}.json`);
+  const publishedReceipt = await readFile(receiptPath, "utf8");
+  await stageEnvelope(root, journeyId, "Duplicate Photo.jpg", source);
+  await pipeline.processOnce();
+  const latest = JSON.parse(await readFile(path.join(root, "state", "latest.json"), "utf8"));
+  assert.equal((await readdir(path.join(root, "galleries", latest.date_folder))).filter((name) => name.endsWith(".ready")).length, 1);
+  assert.equal(JSON.parse(await readFile(path.join(root, "galleries", latest.date_folder, `${latest.latest_base}.json`), "utf8")).journey_id, journeyId);
+  assert.equal(await readFile(receiptPath, "utf8"), publishedReceipt);
+  const receipt = (await pipeline.journeyProgress()).find((item) => item.journey_id === journeyId);
+  assert.equal(receipt.state, "published");
+  assert.equal(receipt.content_sha256, sha256(source));
+  assert.equal((await readdir(path.join(root, "archive", latest.date_folder))).length, 1);
+  assert.deepEqual(await readdir(path.join(root, "quarantine")), []);
+});
+
+test("retries a failed journey with the same ID and content", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-pipeline-"));
+  const journeyId = "journey-failed-retry";
+  const source = await testJpeg("#2cb4fb");
+  const constrained = config(root);
+  constrained.maxInputBytes = source.length - 1;
+  const firstAttempt = new PhotoPipeline(constrained);
+  await firstAttempt.init();
+  await stageEnvelope(root, journeyId, "Retry Photo.jpg", source);
+  await firstAttempt.processOnce();
+
+  const receiptPath = path.join(root, "state", "photo-journeys", `${journeyId}.json`);
+  const failedReceipt = JSON.parse(await readFile(receiptPath, "utf8"));
+  assert.equal(failedReceipt.state, "failed");
+  const quarantine = await readdir(path.join(root, "quarantine"));
+  const errorName = quarantine.find((name) => name.endsWith(".error.json"));
+  assert.ok(errorName);
+  const failureAudit = JSON.parse(await readFile(path.join(root, "quarantine", errorName), "utf8"));
+  assert.equal(failureAudit.journey_id, journeyId);
+  assert.equal(failureAudit.reason_code, "PPL-02");
+
+  const retry = new PhotoPipeline(config(root));
+  await retry.init();
+  await stageEnvelope(root, journeyId, "Retry Photo.jpg", source);
+  await retry.processOnce();
+
+  const publishedReceipt = JSON.parse(await readFile(receiptPath, "utf8"));
+  assert.equal(publishedReceipt.state, "published");
+  assert.notEqual(publishedReceipt.job_id, failedReceipt.job_id);
+  assert.equal(publishedReceipt.content_sha256, sha256(source));
+  const latest = JSON.parse(await readFile(path.join(root, "state", "latest.json"), "utf8"));
+  assert.equal((await readdir(path.join(root, "galleries", latest.date_folder))).filter((name) => name.endsWith(".ready")).length, 1);
+  assert.equal(JSON.parse(await readFile(path.join(root, "quarantine", errorName), "utf8")).journey_id, journeyId);
+});
+
+test("quarantines a reused journey with different content without changing its terminal receipt", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-pipeline-"));
+  const pipeline = new PhotoPipeline(config(root));
+  await pipeline.init();
+  const journeyId = "journey-conflict";
+  await stageEnvelope(root, journeyId, "Original.jpg", await testJpeg("#2cb4fb"));
+  await pipeline.processOnce();
+  const receiptPath = path.join(root, "state", "photo-journeys", `${journeyId}.json`);
+  const canonicalReceipt = await readFile(receiptPath, "utf8");
+
+  await stageEnvelope(root, journeyId, "Conflict.jpg", await testJpeg("#ff4d67"));
+  await pipeline.processOnce();
+
+  assert.equal(await readFile(receiptPath, "utf8"), canonicalReceipt);
+  const latest = JSON.parse(await readFile(path.join(root, "state", "latest.json"), "utf8"));
+  assert.equal((await readdir(path.join(root, "galleries", latest.date_folder))).filter((name) => name.endsWith(".ready")).length, 1);
+  assert.equal((await readdir(path.join(root, "archive", latest.date_folder))).length, 1);
+  const quarantine = await readdir(path.join(root, "quarantine"));
+  assert.equal(quarantine.filter((name) => name.endsWith(".error.json")).length, 1);
+  assert.equal(quarantine.filter((name) => !name.endsWith(".error.json")).length, 1);
+  assert.match(JSON.parse(await readFile(path.join(root, "quarantine", quarantine.find((name) => name.endsWith(".error.json"))), "utf8")).detail, /reused with different photo content/);
+});
+
+test("backfills a missing digest and rejects a mismatched declared digest", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-pipeline-"));
+  const pipeline = new PhotoPipeline(config(root));
+  await pipeline.init();
+  const legacySource = await testJpeg("#2cb4fb");
+  await stageEnvelope(root, "journey-migration", "Migration.jpg", legacySource, { omitDigest: true });
+  await pipeline.processOnce();
+  const migrated = JSON.parse(await readFile(path.join(root, "state", "photo-journeys", "journey-migration.json"), "utf8"));
+  assert.equal(migrated.content_sha256, sha256(legacySource));
+
+  const invalidSource = await testJpeg("#ff4d67");
+  await stageEnvelope(root, "journey-bad-digest", "Bad Digest.jpg", invalidSource, { contentSha256: "0".repeat(64) });
+  await pipeline.processOnce();
+  const failed = JSON.parse(await readFile(path.join(root, "state", "photo-journeys", "journey-bad-digest.json"), "utf8"));
+  assert.equal(failed.state, "failed");
+  assert.equal(failed.content_sha256, sha256(invalidSource));
+});
+
+test("uses bounded processing paths for long original names", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-pipeline-"));
+  const pipeline = new PhotoPipeline(config(root));
+  await pipeline.init();
+  const originalName = `${"L".repeat(176)}.jpg`;
+  await stageEnvelope(root, "journey-long-name", originalName, await testJpeg("#2cb4fb"));
+
+  await pipeline.processOnce();
+
+  const latest = JSON.parse(await readFile(path.join(root, "state", "latest.json"), "utf8"));
+  const sidecar = JSON.parse(await readFile(path.join(root, "galleries", latest.date_folder, `${latest.latest_base}.json`), "utf8"));
+  assert.equal(sidecar.original_name, originalName);
+  assert.deepEqual(await readdir(path.join(root, "processing")), []);
+});
+
+test("removes a missing-source orphan so a replacement claim can take over", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-pipeline-"));
+  const pipeline = new PhotoPipeline(config(root));
+  await pipeline.init();
+  const journeyId = "journey-orphan";
+  const originalName = "Recovered Orphan.jpg";
+  const source = await testJpeg("#2cb4fb");
+  const digest = sha256(source);
+  const orphan = path.join(root, "processing", `job-orphan--${Buffer.from(originalName).toString("base64url")}`);
+  await mkdir(orphan, { recursive: true });
+  await writeFile(path.join(orphan, "journey.json"), JSON.stringify(journey(journeyId, originalName, source, digest)));
+  await writeFile(path.join(root, "state", "photo-journeys", `${journeyId}.json`), JSON.stringify({
+    ...journey(journeyId, originalName, source, digest), state: "processing", updated_at: new Date().toISOString(), job_id: "job-orphan",
+  }));
+  await stageEnvelope(root, journeyId, originalName, source);
+
+  await pipeline.processOnce();
+
+  assert.equal((await pipeline.journeyProgress()).find((item) => item.journey_id === journeyId).state, "published");
+  assert.deepEqual(await readdir(path.join(root, "processing")), []);
+});
+
+test("quarantines a malformed envelope without blocking the next photo", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-pipeline-"));
+  const pipeline = new PhotoPipeline(config(root));
+  await pipeline.init();
+  const malformedId = "journey__ambiguous";
+  const malformedSource = await testJpeg("#ff4d67");
+  const malformed = path.join(root, "staging", `${malformedId}.frame-photo`);
+  await mkdir(malformed, { recursive: true });
+  await writeFile(path.join(malformed, "source"), malformedSource);
+  await writeFile(path.join(malformed, "journey.json"), JSON.stringify(journey(malformedId, "Malformed.jpg", malformedSource)));
+  await stageEnvelope(root, "journey-valid-next", "Valid.jpg", await testJpeg("#2cb4fb"));
+
+  await pipeline.processOnce();
+
+  const latest = JSON.parse(await readFile(path.join(root, "state", "latest.json"), "utf8"));
+  assert.equal((await readdir(path.join(root, "galleries", latest.date_folder))).filter((name) => name.endsWith(".ready")).length, 1);
+  const quarantine = await readdir(path.join(root, "quarantine"));
+  assert.equal(quarantine.filter((name) => name.endsWith(".error.json")).length, 1);
+  assert.equal(quarantine.filter((name) => !name.endsWith(".error.json")).length, 1);
+  const descriptor = JSON.parse(await readFile(path.join(root, "quarantine", quarantine.find((name) => name.endsWith(".error.json"))), "utf8"));
+  assert.equal(descriptor.journey_id, undefined);
+  assert.deepEqual(await readdir(path.join(root, "staging")), []);
+});
+
+test("journey progress polling uses the bounded in-memory receipt view", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-pipeline-"));
+  const pipeline = new PhotoPipeline(config(root));
+  await pipeline.init();
+  await stageEnvelope(root, "journey-progress-cache", "Cached.jpg", await testJpeg("#2cb4fb"));
+  await pipeline.processOnce();
+  await writeFile(path.join(root, "state", "photo-journeys", "unrelated-history.json"), "not-json");
+
+  for (let index = 0; index < 2; index += 1) {
+    const progress = await pipeline.journeyProgress(1000);
+    assert.equal(progress.length, 1);
+    assert.equal(progress[0].journey_id, "journey-progress-cache");
+  }
 });
 
 test("concurrent claims reserve distinct publication bases", async () => {
@@ -340,6 +555,38 @@ function config(dataRoot) {
       max_output_mb: 0,
     },
   };
+}
+
+async function stageEnvelope(root, journeyId, originalName, source, options = {}) {
+  const envelope = path.join(root, "staging", `${journeyId}.frame-photo`);
+  await mkdir(envelope, { recursive: true });
+  const contents = source ?? await testJpeg("#2cb4fb");
+  await writeFile(path.join(envelope, "source"), contents);
+  await writeFile(path.join(envelope, "journey.json"), JSON.stringify(journey(
+    journeyId,
+    originalName,
+    contents,
+    options.omitDigest ? undefined : options.contentSha256 ?? sha256(contents),
+  )));
+}
+
+function journey(journeyId, originalName, source, contentSha256 = sha256(source)) {
+  return {
+    schema_version: 1,
+    journey_id: journeyId,
+    ...(contentSha256 ? { content_sha256: contentSha256 } : {}),
+    original_name: originalName,
+    received_at: new Date().toISOString(),
+    ingest: { adapter: "web_upload", transfer_id: journeyId, bytes_received: source.length },
+  };
+}
+
+async function testJpeg(background) {
+  return sharp({ create: { width: 100, height: 50, channels: 3, background } }).jpeg().toBuffer();
+}
+
+function sha256(contents) {
+  return createHash("sha256").update(contents).digest("hex");
 }
 
 function currentDateFolder() {

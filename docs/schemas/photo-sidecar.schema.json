@@ -19,6 +19,11 @@
   ],
   "properties": {
     "schema_version": { "const": 1 },
+    "journey_id": {
+      "type": "string",
+      "pattern": "^(?!.*__)[A-Za-z0-9_-]{8,96}$",
+      "description": "Present on all new publications; optional only for historical V1 sidecars created before canonical photo journeys."
+    },
     "base": { "type": "string", "minLength": 1 },
     "original_name": { "type": "string", "minLength": 1 },
     "detected_mime": { "type": "string", "minLength": 1 },
@@ -26,6 +31,10 @@
     "width": { "type": "integer", "minimum": 1 },
     "height": { "type": "integer", "minimum": 1 },
     "orientation": { "type": "integer", "enum": [0, 1] },
+    "output_size_bytes": { "type": "integer", "minimum": 0 },
+    "jpeg_quality": { "type": "integer", "minimum": 40, "maximum": 100 },
+    "long_edge_px": { "type": "integer", "minimum": 0, "maximum": 12000 },
+    "max_output_mb": { "type": "number", "minimum": 0, "maximum": 500 },
     "processed_at": { "type": "string", "format": "date-time" },
     "date_folder": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
     "exif": { "type": "object" },
