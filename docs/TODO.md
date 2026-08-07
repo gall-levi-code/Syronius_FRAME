@@ -74,15 +74,15 @@ removed.
   stream, active upload, unhealthy service, low disk, or incompatible migration.
 - Keep Belabox agent updates separate from FRAME stack updates.
 - Add a bootstrap-only Belabox agent updater: the current installed agent cannot learn update
-  behavior over MQTT until an updater-capable agent has been installed once.
+  behavior over the control connection until an updater-capable agent has been installed once.
 - Host signed/versioned Belabox agent update manifests and bundles from FRAME over HTTPS, with
-  short-lived package URLs suitable for MQTT/WSS delivery.
+  short-lived package URLs suitable for WSS delivery.
 - Implement signed `agent_update` commands carrying artifact name, version, manifest/package URL,
   SHA256 checksum, size, expiry, and optional rollback target.
 - Have the Belabox agent download updates over HTTPS, verify command signature and checksums, stage
   files, run agent/connector self-tests, atomically swap the scripts, restart, and report the new
   heartbeat/version.
-- Report update progress over MQTT with phases such as downloading, verified, installing,
+- Report update progress over the control connection with phases such as downloading, verified, installing,
   restarting, failed, and rolled back.
 - Defer silent automatic updates until rollback, idle detection, and stream/upload safety are proven.
 
@@ -118,7 +118,7 @@ removed.
 - Keep remote photo overlay widgets in their own schema/preset namespace so they do not overwrite FRAME's stock connectivity presets.
 - Refactor the overlay wizard so stock defaults are immutable, OBS URL slugs can be chosen before first save, and saving a renamed preset creates a new preset instead of rewriting `default-connectivity`.
 - Belabox Manager UX completion goal: make first-time setup, daily monitoring, photo transfer, and
-  maintenance understandable without requiring knowledge of MQTT, WSS, SSH jobs, or egress internals.
+  maintenance understandable without requiring knowledge of transport protocols, SSH jobs, or egress internals.
   - [ ] Phase UX-6 - Production verification: test desktop/mobile layouts, keyboard and focus behavior,
     long labels, heartbeat polling during edits, offline/online recovery, failed SSH jobs, active uploads,
     and real-device install/repair/uninstall flows.
@@ -188,8 +188,8 @@ removed.
 - [x] Show agent connection health, queue depth, current/last transfer, failures, and installed version
   in the Belabox Manager device workspace.
 - Belabox Manager UX simplification pass:
-  - [x] Rename `MQTT Controls` to `Photo Transfer`.
-  - [x] Hide protocol terms like MQTT, WSS, chunk relay, and egress binding behind Advanced.
+  - [x] Rename the protocol-oriented controls to `Photo Transfer`.
+  - [x] Hide protocol terms like WSS, chunk relay, and egress binding behind Advanced.
   - [x] Add an `Encoder Status` strip for online state, remote UI, Photo Agent, and stream health.
   - [x] Make `Open Encoder Remote` the primary online action.
   - [x] Replace raw state strings with user-facing states such as `Ready`, `Uploading`, `Processing`, `Waiting for encoder`, and `Needs setup`.
@@ -204,7 +204,7 @@ removed.
   - [x] Rename `Install / Repair Photo Agent` to `Repair Agent`.
   - [x] Add live upload stats: current file, rate, queue depth, and ETA.
   - [x] Warn when uploads are uncapped while streaming.
-  - [x] Add a diagnostics drawer for raw MQTT, route, and chunk details.
+  - [x] Add a diagnostics drawer for raw control-connection, route, and chunk details.
   - [x] Add a remote access URL row with copy/open buttons.
 - [x] Add throttled chunked HTTPS with bounded parallel connections and optional healthy-interface
   source binding for bonded or multi-WAN photo transfers.

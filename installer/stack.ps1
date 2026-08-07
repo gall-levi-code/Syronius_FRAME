@@ -22,7 +22,7 @@ $Capabilities = @(
   [pscustomobject]@{ Key = "frame-overlays"; Name = "Overlay Wizard"; Description = "Create OBS relay-stat overlays. Automatically enables Video Relay." },
   [pscustomobject]@{ Key = "frame-audio-relay"; Name = "Audio Monitor"; Description = "Capture and distribute monitored audio feeds." },
   [pscustomobject]@{ Key = "frame-discord-audio-bridge"; Name = "Discord Audio Bridge"; Description = "Bridge Discord voice audio and speaking overlays into OBS." },
-  [pscustomobject]@{ Key = "frame-belabox-manager"; Name = "Belabox Manager"; Description = "Monitor Belabox agents over MQTT/WSS with SSH reserved for maintenance." },
+  [pscustomobject]@{ Key = "frame-belabox-manager"; Name = "Belabox Manager"; Description = "Monitor Belabox agents over one authenticated outbound WSS connection, with SSH reserved for maintenance." },
   [pscustomobject]@{ Key = "frame-photo-ftp"; Name = "Photo FTP Ingest"; Description = "Accept completed camera uploads through FTP." },
   [pscustomobject]@{ Key = "frame-photo-webupload"; Name = "Browser Photo Upload"; Description = "Upload photos from a protected browser page." },
   [pscustomobject]@{ Key = "frame-photo-gallery"; Name = "Photo Gallery"; Description = "Publish multi-day photo galleries. Requires a photo input." },
@@ -37,9 +37,8 @@ $AdvancedSettings = @(
   "PHOTO_FTP_VERBOSE_LOG", "PHOTO_FTP_STABLE_MS", "PHOTO_FTP_SCAN_MS", "PHOTO_UPLOAD_MAX_FILES", "PHOTO_UPLOAD_MAX_SESSIONS",
   "BELABOX_HOST", "BELABOX_USER", "BELABOX_PORT", "BELABOX_SSH_KEY_PATH", "BELABOX_AGENT_REMOTE_PATH",
   "BELABOX_SSH_ENABLED", "BELABOX_AGENT_COMMANDS_ENABLED", "BELABOX_AGENT_INSTALL_ENABLED",
-  "BELABOX_MQTT_HOST", "BELABOX_MQTT_INTERNAL_URL", "BELABOX_MQTT_WS_PATH", "BELABOX_MQTT_USERNAME",
-  "BELABOX_MQTT_CLIENT_ID_PREFIX", "BELABOX_MQTT_RECONNECT_MS", "BELABOX_DEVICE_ID",
-  "BELABOX_MQTT_KEEPALIVE", "BELABOX_HEARTBEAT_INTERVAL_MS", "BELABOX_TELEMETRY_INTERVAL_MS",
+  "BELABOX_CONTROL_RECONNECT_MS", "BELABOX_CONTROL_HEARTBEAT_MS",
+  "BELABOX_TELEMETRY_INTERVAL_MS",
   "BELABOX_FTP_TARGET_HOST", "BELABOX_FTP_TARGET_PORT", "BELABOX_FTP_TARGET_USERNAME", "BELABOX_FTP_TARGET_DIR",
   "BELABOX_CAMERA_FTP_USERNAME", "BELABOX_CAMERA_FTP_PORT",
   "BELABOX_CHUNK_UPLOAD_URL", "BELABOX_CHUNK_SIZE_BYTES", "BELABOX_CHUNK_PARALLEL_UPLOADS", "BELABOX_CHUNK_UPLOAD_KBPS",
@@ -336,9 +335,16 @@ function Invoke-Install {
 
 function Invoke-StartStack {
   Write-Host ""
+  Write-Host "Reconciling configuration..." -ForegroundColor Cyan
+  Invoke-Runtime @("install")
+  Invoke-Compose @("config", "--quiet")
   Write-Host "Validating startup requirements..." -ForegroundColor Cyan
   Invoke-Runtime @("validate", "--for-start")
   Invoke-Compose @("up", "-d", "--build", "--remove-orphans", "--wait", "--wait-timeout", "120")
+  $currentEnv = Get-EnvMap
+  if ($currentEnv.FRAME_MODE -eq "HYBRID") {
+    Invoke-Compose @("up", "-d", "--force-recreate", "--no-deps", "--wait", "--wait-timeout", "60", "frame-public-gateway")
+  }
   Write-Host "FRAME stack reconciliation completed." -ForegroundColor Green
 }
 
@@ -445,12 +451,33 @@ function Select-Capabilities {
   }
 
   $arguments = @()
+  $needsBelaboxHybrid = $selected["frame-belabox-manager"] -and (-not $config -or $config.mode -ne "HYBRID")
   foreach ($capability in $Capabilities) {
     if ($selected[$capability.Key]) {
       $arguments += @("--enable", $capability.Key)
     } else {
       $arguments += @("--disable", $capability.Key)
     }
+  }
+  if ($needsBelaboxHybrid) {
+    $currentEnv = Get-EnvMap
+    Write-Host "Belabox Manager requires Hybrid mode. FRAME will stage Hybrid access now." -ForegroundColor Yellow
+    while ($true) {
+      $hostname = Read-Default "Cloudflare public hostname (or 0 to cancel)" $currentEnv.CLOUDFLARE_PUBLIC_HOSTNAME
+      if ($hostname -eq "0") { return }
+      if ([string]::IsNullOrWhiteSpace($hostname)) {
+        Write-Host "A public hostname is required." -ForegroundColor Yellow
+        continue
+      }
+      try {
+        Invoke-Runtime (@("install", "--mode", "HYBRID", "--public-hostname", $hostname) + $arguments)
+        break
+      } catch {
+        Write-Host "Hybrid setup was not applied. Enter a valid public hostname or 0 to cancel." -ForegroundColor Red
+      }
+    }
+    Invoke-Compose @("config", "--quiet")
+    return
   }
   Invoke-Install $arguments
 }
@@ -747,8 +774,7 @@ switch ($Command) {
     Write-Host "FRAME contracts, scripts, and Docker Compose configuration are valid."
   }
   "start" {
-    Invoke-Runtime @("validate", "--for-start")
-    Invoke-Compose @("up", "-d", "--build", "--remove-orphans", "--wait", "--wait-timeout", "120")
+    Invoke-StartStack
   }
   "stop" {
     Invoke-Compose @("down")

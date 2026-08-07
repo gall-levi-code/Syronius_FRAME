@@ -23,7 +23,7 @@ FRAME-originated photo transfers. The phases below are dependency order, not an 
 
 - Do not bypass or clone the paid BELABOX relay service.
 - Do not install Codex on the Belabox.
-- Do not expose a generic remote shell over MQTT.
+- Do not expose a generic remote shell over the device control connection.
 - Prefer bridging and configuring the installed belaUI/belacoder stack over forking it.
 - If we modify or redistribute belaUI/belacoder GPL code, handle the license explicitly.
 
@@ -58,8 +58,8 @@ FRAME-originated photo transfers. The phases below are dependency order, not an 
   rises, then recovers gradually when RTT is low and stable.
 - On hard SRT connection failure, `belacoder` exits. belaUI restarts it. On restart, `belacoder`
   starts at the configured max bitrate again, which can overshoot if the network is still fragile.
-- FRAME already has a signed MQTT command path, device heartbeat, telemetry cache, command audit,
-  chunked photo upload path, and SRTLA stream management service.
+- FRAME has a signed command path, device heartbeat, telemetry cache, command audit, chunked photo
+  upload path, and SRTLA stream management service.
 
 ## Target Architecture
 
@@ -67,7 +67,7 @@ FRAME-originated photo transfers. The phases below are dependency order, not an 
 FRAME browser
   <-> FRAME manager live state channel
   <-> FRAME manager command API
-  <-> MQTT over WSS broker
+  <-> authenticated FRAME WSS control endpoint
   <-> Belabox agent
   <-> local belaUI websocket / local config files / local process controls
   <-> belacoder + srtla_send
@@ -75,16 +75,16 @@ FRAME browser
 
 ### Device Control Plane
 
-- Keep MQTT over WSS between the Belabox agent and FRAME.
+- Use one authenticated outbound WSS connection between each Belabox agent and FRAME.
 - Add a browser-facing live state channel from FRAME manager to the UI. SSE is enough for state;
   WebSocket is acceptable if we want one bidirectional browser channel.
 - Commands remain signed, allowlisted, audited, and correlated by command ID.
-- Long operations report phases: `queued`, `sent`, `received`, `applying`, `applied`, `failed`,
-  and optional `rollback`.
+- Commands fail immediately while a device is offline; there is no offline queue. Long operations
+  report phases such as `sent`, `received`, `applying`, `applied`, and `failed`.
 
 ### Belabox Agent Roles
 
-- Publish heartbeat, status snapshots, stream state, relay probe results, and photo-transfer state.
+- Send heartbeat, status snapshots, stream state, relay probe results, and photo-transfer state.
 - Execute only explicit allowlisted commands.
 - Bridge selected commands into local belaUI when exact behavior is safest.
 - Write direct config files only where belaUI already treats those files as authoritative.
@@ -108,7 +108,7 @@ Root install options:
 
 - Root agent service: install a systemd unit as root and run the agent as root. Simplest runtime
   model, broadest trust boundary.
-- User agent plus root helper: keep the main MQTT agent unprivileged and expose a local helper for
+- User agent plus root helper: keep the main control agent unprivileged and expose a local helper for
   a tiny allowlist of root actions.
 - User agent plus sudoers allowlist: possible, but likely harder to keep correct as Wi-Fi, modem,
   systemd, and network-shaping operations grow.
@@ -435,7 +435,8 @@ Deliverable: shippable full-stack behavior.
 
 ## Recommended Decisions
 
-- Use MQTT over WSS for device control, and add a manager-to-browser live state channel.
+- Use one per-device outbound WSS connection for presence, telemetry, commands, remote HTTP/media,
+  and approved proxied WebSockets, plus a manager-to-browser live state channel.
 - Use local belaUI websocket as the main privileged bridge instead of making the whole agent root.
 - Let the agent own a local belaUI token if that is compatible with stock belaUI's auth storage.
 - Build FRAME-native relay probes first, but keep the relay profile schema compatible with stock

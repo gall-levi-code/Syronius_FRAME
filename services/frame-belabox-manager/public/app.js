@@ -13,7 +13,7 @@ const COMMAND_POLL_INTERVAL_MS = 500;
 const OPEN_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h6v6M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>';
 const COPY_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg>';
 const WIZARD_STEPS = ["Welcome", "Photo Agent", "Stream Safe Transfer", "Install"];
-const WORKSPACE_TABS = ["overview", "photos", "connections", "diagnostics", "system"];
+const WORKSPACE_TABS = ["overview", "photos", "mixer", "connections", "diagnostics", "system"];
 const TRANSFER_PRESETS = {
   protect: { label: "Protect Stream", chunk_size_bytes: 1048576, chunk_parallel_uploads: 1, chunk_upload_kbps: 768 },
   balanced: { label: "Balanced", chunk_size_bytes: 1048576, chunk_parallel_uploads: 2, chunk_upload_kbps: 2000 },
@@ -81,6 +81,7 @@ function initialize() {
   elements.devicePanel.addEventListener("change", handlePanelChange);
   elements.devicePanel.addEventListener("focusin", holdCurrentPanelRender);
   elements.devicePanel.addEventListener("pointerdown", holdCurrentPanelRender);
+  elements.devicePanel.addEventListener("keydown", handleWorkspaceTabKeydown);
   elements.devicePanel.addEventListener("click", handlePanelClick);
   elements.devicePanel.addEventListener("submit", handlePanelSubmit);
   elements.devicePanel.addEventListener("toggle", rememberDetailsState, true);
@@ -254,7 +255,7 @@ function wizardInstallStep() {
   return `<section class="wizard-step">
       <div class="install-summary">
         <h3>Install Belabox Agent</h3>
-        <p>FRAME will test SSH again, create device MQTT credentials, install or repair the Belabox agent, then run the selected photo setup steps. Repair reuses the same path and refreshes the agent without removing your saved device unless you uninstall it.</p>
+        <p>FRAME will test SSH again, create device control credentials, install or repair the Belabox agent, then run the selected photo setup steps. Repair reuses the same path and refreshes the agent without removing your saved device unless you uninstall it.</p>
         <p class="hint">Uninstall is available from the device Advanced panel after install. It disables FRAME services on the Belabox and archives the local agent folder unless purge is explicitly requested.</p>
         <dl>${rows(summary.rows)}</dl>
         ${summary.warnings.length ? `<div class="warning-list">${summary.warnings.map((warning) => `<p>${escapeHtml(warning)}</p>`).join("")}</div>` : ""}
@@ -289,6 +290,7 @@ function renderDevicePanel(deviceId) {
   const relayHealth = live?.relay_health || {};
   const framePipeline = state.status.photo_pipeline || {};
   const remoteBelaui = telemetry.remote_belaui || state.status.remote_belaui || {};
+  const videoMixer = telemetry.video_mixer;
   const cameraFtp = ftp.camera_ftp || {};
   const connector = ftpConnector(deviceId);
   const savedSsh = savedSshCredential(deviceId);
@@ -315,8 +317,26 @@ function renderDevicePanel(deviceId) {
     transfer_mode: chunkRelayEnabled ? "chunked_https" : "direct_ftp",
   });
   const remoteUrl = remoteAccessUrl(deviceId);
+  const mixerUrl = mixerAccessUrl(deviceId);
+  const mixerInstalled = videoMixer?.installed === true;
+  const mixerReachable = Boolean(live?.online && videoMixer?.state === "reachable");
+  const mixerStatus = !live?.online
+    ? "Unavailable"
+    : mixerReachable
+      ? "Running"
+      : videoMixer?.state === "unchecked" ? "Checking" : "Stopped";
+  const mixerStatusTone = mixerReachable ? "online" : "warn";
+  const workspaceTabs = [
+    ["overview", "Overview"],
+    ["photos", "Photo Transfer"],
+    ...(mixerInstalled ? [["mixer", "Video Mixer"]] : []),
+    ["connections", "Connections"],
+    ["diagnostics", "Diagnostics"],
+    ["system", "System"],
+  ];
   const slowdown = slowdownSummary(live, connector, ftp, preprocess, egress, chunkUploadKbps);
   const setupButtonLabel = connector ? "Repair Agent" : "Install Photo Agent";
+  const agentInstallReady = hybridReady();
   const displayName = provisioned?.display_name || deviceId;
   const bundledAgentVersion = state.status.agent?.bundled_version || "";
   // ponytail: installed agents come from this manager; compare semver when rollback support is added.
@@ -327,7 +347,11 @@ function renderDevicePanel(deviceId) {
   const transferState = transferResult?.state === "published"
     ? "Published"
     : transferResult?.state === "failed" ? "Needs attention" : friendlyTransferState(ftp, connector);
-  const activeWorkspaceTab = WORKSPACE_TABS.includes(state.workspaceTab) ? state.workspaceTab : "overview";
+  const activeWorkspaceTab = workspaceTabs.some(([id]) => id === state.workspaceTab) ? state.workspaceTab : "overview";
+  if (activeWorkspaceTab !== state.workspaceTab) {
+    state.workspaceTab = activeWorkspaceTab;
+    try { localStorage.setItem(LAST_WORKSPACE_TAB_KEY, state.workspaceTab); } catch {}
+  }
   const diagnosticFinished = ["complete", "partial", "failed"].includes(diagnostics.state);
   const uploadPercent = ftp.file ? Math.max(0, Math.min(100, Math.round(Number(ftp.percent || 0)))) : 0;
   const uploadQueue = Number(ftp.queue_count || 0);
@@ -350,13 +374,7 @@ function renderDevicePanel(deviceId) {
     </div>
 
     <nav class="workspace-tabs" role="tablist" aria-label="Belabox tools">
-      ${[
-        ["overview", "Overview"],
-        ["photos", "Photo Transfer"],
-        ["connections", "Connections"],
-        ["diagnostics", "Diagnostics"],
-        ["system", "System"],
-      ].map(([id, label]) => `<button type="button" role="tab" id="workspace-tab-${id}" aria-controls="workspace-pane-${id}" aria-selected="${activeWorkspaceTab === id}" tabindex="${activeWorkspaceTab === id ? "0" : "-1"}" class="workspace-tab ${activeWorkspaceTab === id ? "active" : ""}" data-workspace-tab="${id}">${label}</button>`).join("")}
+      ${workspaceTabs.map(([id, label]) => `<button type="button" role="tab" id="workspace-tab-${id}" aria-controls="workspace-pane-${id}" aria-selected="${activeWorkspaceTab === id}" tabindex="${activeWorkspaceTab === id ? "0" : "-1"}" class="workspace-tab ${activeWorkspaceTab === id ? "active" : ""}" data-workspace-tab="${id}">${label}</button>`).join("")}
     </nav>
 
     <div id="workspace-pane-overview" class="workspace-pane" role="tabpanel" aria-labelledby="workspace-tab-overview" data-workspace-pane="overview" ${activeWorkspaceTab === "overview" ? "" : "hidden"}>
@@ -512,17 +530,45 @@ function renderDevicePanel(deviceId) {
           <label>Camera FTP username<input id="camera-ftp-user" name="camera_username" value="${escapeAttr(connector?.camera_username || state.status.ftp_connector?.camera_username || "framecam")}"></label>
           <label>Camera FTP password<input id="camera-ftp-password" name="camera_password" type="password" autocomplete="new-password" placeholder="${connector ? "Keep current if blank" : "Generate if blank"}"></label>
           <div class="actions wide">
-            <button id="setup-ftp-connector" type="submit">${setupButtonLabel}</button>
+            <button id="setup-ftp-connector" type="submit" ${agentInstallReady ? "" : "disabled"} title="${agentInstallReady ? "" : "Requires FRAME Hybrid mode and public WSS access"}">${setupButtonLabel}</button>
             ${connector ? `<button id="show-ftp-password" type="button">Show Camera FTP Password</button>` : ""}
           </div>
         </form>
-        <pre id="ftp-output">${escapeHtml(state.ftpOutputs[deviceId] || (connector ? "Agent credentials are stored internally. Repair uses saved SSH or prompts through SSH Maintenance." : "Install uses saved SSH if available. Otherwise open SSH Maintenance first."))}</pre>
+        <pre id="ftp-output">${escapeHtml(state.ftpOutputs[deviceId] || (!agentInstallReady ? "Switch FRAME to Hybrid mode with public WSS access before installing or repairing the Photo Agent." : connector ? "Agent credentials are stored internally. Repair uses saved SSH or prompts through SSH Maintenance." : "Install uses saved SSH if available. Otherwise open SSH Maintenance first."))}</pre>
       </details>
 
       <p class="hint">${live?.online ? "Online controls use signed commands. No SSH login required." : "Agent must be online before photo settings can be sent."}</p>
       </div>
     </section>
     </div>
+
+    ${mixerInstalled ? `<div id="workspace-pane-mixer" class="workspace-pane" role="tabpanel" aria-labelledby="workspace-tab-mixer" data-workspace-pane="mixer" ${activeWorkspaceTab === "mixer" ? "" : "hidden"}>
+    <section class="workspace-section mixer-workspace" aria-labelledby="video-mixer-title">
+      <div class="workspace-heading">
+        <div><p class="eyebrow">Installed service</p><h3 id="video-mixer-title">Video Mixer</h3></div>
+        <span class="pill ${mixerStatusTone}">${escapeHtml(mixerStatus)}</span>
+      </div>
+      <div class="agent-card">
+        <div>
+          <p class="eyebrow">IRL+ Mixer</p>
+          <strong class="${mixerReachable ? "good-text" : ""}">${escapeHtml(mixerStatus)}</strong>
+        </div>
+        <dl>${rows([
+          ["Service", mixerReachable ? "Available" : live?.online ? "Installed, not running" : "Device offline"],
+          ["Last checked", videoMixer.checked_at ? formatAge(videoMixer.checked_at) : "Waiting"],
+        ])}</dl>
+        <span class="actions">
+          <a class="icon-button link-action" href="${escapeAttr(mixerUrl)}" target="_blank" rel="noopener noreferrer" aria-label="Open ${escapeAttr(displayName)} video mixer in a new tab" title="Open ${escapeAttr(displayName)} video mixer in a new tab">${OPEN_ICON}</a>
+          <button class="icon-button link-action" type="button" data-copy-text="${escapeAttr(mixerUrl)}" aria-label="Copy ${escapeAttr(displayName)} video mixer URL" title="Copy ${escapeAttr(displayName)} video mixer URL">${COPY_ICON}</button>
+        </span>
+      </div>
+      <p class="hint">${mixerReachable ? "Open the mixer through FRAME from this device or a remote browser." : "The access link remains available and will reconnect when the mixer service is running."}</p>
+      <div class="remote-row advanced-only">
+        <span>Public access</span>
+        <code>${escapeHtml(mixerUrl)}</code>
+      </div>
+    </section>
+    </div>` : ""}
 
     <div id="workspace-pane-connections" class="workspace-pane" role="tabpanel" aria-labelledby="workspace-tab-connections" data-workspace-pane="connections" ${activeWorkspaceTab === "connections" ? "" : "hidden"}>
     <section class="workspace-section connections-workspace" aria-labelledby="connections-title">
@@ -625,11 +671,11 @@ function renderDevicePanel(deviceId) {
         <label class="check-row wide"><input id="install-diagnostics" name="install_diagnostics" type="checkbox">Install optional network diagnostics tools</label>
         <label class="check-row wide"><input id="enable-ssh-on-boot" name="enable_ssh_on_boot" type="checkbox">Enable SSH on boot</label>
         <div class="actions wide">
-          <button id="pair-device" type="submit">Repair / Update Agent</button>
+          <button id="pair-device" type="submit" ${agentInstallReady ? "" : "disabled"} title="${agentInstallReady ? "" : "Requires FRAME Hybrid mode and public WSS access"}">Repair / Update Agent</button>
           ${savedSsh ? `<button id="forget-ssh" type="button">Forget Saved SSH</button>` : ""}
         </div>
       </form>
-      <pre id="pair-output">${savedSsh ? "Saved SSH can be reused for installer jobs. Enter a password or key to rotate it." : "Enter SSH credentials when an installer or repair job needs local access."}</pre>
+      <pre id="pair-output">${agentInstallReady ? (savedSsh ? "Saved SSH can be reused for installer jobs. Enter a password or key to rotate it." : "Enter SSH credentials when an installer or repair job needs local access.") : "Switch FRAME to Hybrid mode with public WSS access before repairing the Belabox agent."}</pre>
     </details>
     <div class="advanced-only system-advanced">
     <details class="nested-details" data-section="device-identity">
@@ -899,6 +945,12 @@ function showWizardError(message) {
 async function pairDevice(form, includeModules) {
   const button = form.querySelector("#pair-device");
   const output = form.querySelector("#pair-output") || elements.devicePanel.querySelector("#pair-output");
+  if (!hybridReady()) {
+    const message = "Belabox agent install and repair require FRAME Hybrid mode with public WSS access.";
+    if (output) output.textContent = message;
+    showNotice(message, "error");
+    return;
+  }
   const resetButton = setButtonBusy(button, includeModules ? "Pairing..." : "Repairing...");
   beginCriticalAction(includeModules ? "Installing Belabox Agent" : "Repairing Belabox Agent", "Creating SSH job...");
   try {
@@ -913,7 +965,7 @@ async function pairDevice(form, includeModules) {
     const job = await fetchJson("/belabox/api/pair/jobs", postJson(payload));
     const result = await pollPairJob(job.job_id, output);
     updateInstallProgress(60);
-    if (output) output.textContent = `${result.device_id}: ${result.agent_status}; ${result.mqtt_status}`;
+    if (output) output.textContent = `${result.device_id}: ${result.agent_status}; ${result.control_status}`;
     if (includeModules && formChecked(form, "setup-ftp-enabled")) {
       await setupFtpConnector(form, result.device_id, output);
       state.panelLocked = true;
@@ -930,8 +982,8 @@ async function pairDevice(form, includeModules) {
     resetWizard();
     state.panelHoldKey = "";
     updateInstallProgress(100);
-    finishCriticalAction(result.mqtt_status === "heartbeat_seen" ? "Belabox paired and online." : "Belabox paired. Waiting for heartbeat.", "success");
-    showNotice(result.mqtt_status === "heartbeat_seen" ? "Belabox paired and online." : "Belabox paired. Waiting for heartbeat.", "success");
+    finishCriticalAction(result.control_status === "connected" ? "Belabox paired and online." : "Belabox paired. Waiting for its connection.", "success");
+    showNotice(result.control_status === "connected" ? "Belabox paired and online." : "Belabox paired. Waiting for its connection.", "success");
     await refresh();
   } catch (error) {
     failCriticalAction(`Pairing failed: ${error.message}`);
@@ -945,6 +997,12 @@ async function pairDevice(form, includeModules) {
 
 async function setupFtpConnector(form, deviceId = state.selectedDeviceId, output = form.querySelector("#ftp-output") || elements.devicePanel.querySelector("#ftp-output")) {
   const button = form.querySelector("#setup-ftp-connector");
+  if (!hybridReady()) {
+    const message = "Photo Agent install and repair require FRAME Hybrid mode with public WSS access.";
+    if (output) output.textContent = message;
+    showNotice(message, "error");
+    return;
+  }
   const sshScope = form.querySelector("#pair-host") ? form : elements.devicePanel;
   const sshPayload = pairPayload(sshScope, deviceId);
   const resetButton = setButtonBusy(button, "Installing...");
@@ -1250,7 +1308,7 @@ async function copyToClipboard(button) {
   const text = button.dataset.copyText || "";
   try {
     await navigator.clipboard.writeText(text);
-    showNotice("Remote URL copied.", "success");
+    showNotice("URL copied.", "success");
   } catch {
     showNotice(text, "success");
   }
@@ -1449,7 +1507,7 @@ function discardFormChanges(form) {
 function rememberFormInput(event) {
   const input = event.target;
   if (!input.matches?.("input, textarea, select")) return;
-  holdCurrentPanelRender();
+  holdCurrentPanelRender(event);
   state.formDraft[draftKey(input)] = input.type === "checkbox" ? input.checked : input.value;
   if (input.closest("#device-wizard") && ["pair-host", "pair-port", "pair-user", "pair-password", "pair-display-name"].includes(input.id)) {
     state.wizardSshCheckKey = "";
@@ -1476,7 +1534,6 @@ function restoreFormDraft() {
 function rememberDetailsState(event) {
   const details = event.target;
   if (!details.matches?.("details[data-section]")) return;
-  holdCurrentPanelRender();
   state.detailsOpen[detailKey(details)] = details.open;
 }
 
@@ -1508,7 +1565,8 @@ function panelHasEditableFocus() {
   return Boolean(active && elements.devicePanel.contains(active) && active.matches?.("input, textarea, select"));
 }
 
-function holdCurrentPanelRender() {
+function holdCurrentPanelRender(event) {
+  if (!event.target.closest?.("input, textarea, select, [contenteditable='true']")) return;
   state.panelHoldKey = elements.devicePanel.dataset.panelKey || state.selectedDeviceId;
 }
 
@@ -1838,6 +1896,22 @@ function selectWorkspaceTab(tabName) {
   state.panelHoldKey = "";
 }
 
+function handleWorkspaceTabKeydown(event) {
+  const currentTab = event.target.closest?.("[data-workspace-tab]");
+  if (!currentTab || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  const tabs = [...elements.devicePanel.querySelectorAll("[data-workspace-tab]")];
+  const currentIndex = tabs.indexOf(currentTab);
+  if (currentIndex < 0) return;
+  const nextIndex = event.key === "Home"
+    ? 0
+    : event.key === "End"
+      ? tabs.length - 1
+      : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+  event.preventDefault();
+  selectWorkspaceTab(tabs[nextIndex].dataset.workspaceTab);
+  tabs[nextIndex].focus();
+}
+
 function setAdvancedView(enabled) {
   state.advancedView = enabled === true;
   elements.devicePanel.dataset.advancedView = String(state.advancedView);
@@ -1911,13 +1985,8 @@ function sshCheckKey(form) {
 }
 
 function hybridReady() {
-  if (state.status?.frame?.mode === "HYBRID") return true;
-  try {
-    const url = new URL(state.status?.mqtt?.public_host || window.location.origin);
-    return url.protocol === "https:" && !isLocalHost(url.hostname);
-  } catch {
-    return false;
-  }
+  return state.status?.frame?.mode === "HYBRID"
+    && state.status?.control?.agent_install_ready === true;
 }
 
 function resetWizard() {
@@ -1953,6 +2022,15 @@ function formatChunkSize(value) {
 
 function remoteAccessUrl(deviceId) {
   const path = `/belabox/remote?key=${encodeURIComponent(deviceId)}`;
+  return publicAccessUrl(path);
+}
+
+function mixerAccessUrl(deviceId) {
+  const path = `/belabox/mixer?key=${encodeURIComponent(deviceId)}`;
+  return publicAccessUrl(path);
+}
+
+function publicAccessUrl(path) {
   try {
     return new URL(path, publicFrameOrigin()).href;
   } catch {
@@ -1961,9 +2039,11 @@ function remoteAccessUrl(deviceId) {
 }
 
 function publicFrameOrigin() {
-  const configured = state.status?.mqtt?.public_host || "";
+  const configured = state.status?.control?.public_url || "";
   try {
     const url = new URL(configured || window.location.origin);
+    if (url.protocol === "wss:") url.protocol = "https:";
+    else if (url.protocol === "ws:") url.protocol = "http:";
     if (!isLocalHost(url.hostname)) url.protocol = "https:";
     return url.origin;
   } catch {

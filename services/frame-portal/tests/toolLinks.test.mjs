@@ -27,7 +27,14 @@ test("collects only sanitized generated links and keeps them on the public dashb
     ] }],
     ["belabox.test/belabox/api/status", {
       remote_belaui: { enabled: true },
-      provisioning: { devices: [{ device_id: "encoder-1", display_name: "Encoder One", mqtt_password: "not-exposed" }] },
+      provisioning: { devices: [
+        { device_id: "encoder-1", display_name: "Encoder One", control_secret: "not-exposed" },
+        { device_id: "encoder-2", display_name: "Encoder Two" },
+      ] },
+      devices: [
+        { device_id: "encoder-1", online: false, telemetry: { video_mixer: { installed: true, target: "video_mixer", state: "unreachable" } } },
+        { device_id: "encoder-2", online: true, telemetry: { video_mixer: { installed: true, state: "unreachable" } } },
+      ],
     }],
   ]);
   const seenAuthorization = new Map();
@@ -70,9 +77,10 @@ test("collects only sanitized generated links and keeps them on the public dashb
       audio_listen: "/audio/listen",
       belabox_manager: "/belabox",
       belabox_remote: "/belabox/remote",
+      belabox_mixer: "/belabox/mixer",
       status: "/status",
     },
-    public_route_prefixes: ["/stats", "/overlays/view", "/audio/listen", "/belabox/remote"],
+    public_route_prefixes: ["/stats", "/overlays/view", "/audio/listen", "/belabox/remote", "/belabox/mixer"],
   };
 
   const groups = await collectToolLinkGroups(config, stack, request);
@@ -85,13 +93,28 @@ test("collects only sanitized generated links and keeps them on the public dashb
   ]);
   assert.equal(groups.overlays.length, 1);
   assert.equal(groups.audio[0].links[0].url, "/audio/listen/stage-audio");
-  assert.equal(groups.belabox[0].links[0].url, "/belabox/remote?key=encoder-1");
+  assert.deepEqual(groups.belabox[0].links, [
+    { label: "Encoder remote", url: "/belabox/remote?key=encoder-1", openable: true },
+    { label: "Video Mixer", url: "/belabox/mixer?key=encoder-1", openable: true },
+  ]);
+  assert.deepEqual(groups.belabox[1].links, [
+    { label: "Encoder remote", url: "/belabox/remote?key=encoder-2", openable: true },
+  ]);
   assert.ok(seenAuthorization.get("streams.test/slsui/api/config")?.startsWith("Basic "));
   assert.equal(seenAuthorization.get("streams.test/internal/streams"), "Bearer service-key");
   assert.ok(seenAuthorization.get("overlays.test/overlays/api/catalog")?.startsWith("Basic "));
   const serialized = JSON.stringify(groups);
   assert.ok(!serialized.includes("not-exposed"));
   assert.ok(!serialized.includes("lan-only"));
+
+  const belaboxStatus = payloads.get("belabox.test/belabox/api/status");
+  payloads.set("belabox.test/belabox/api/status", { ...belaboxStatus, remote_belaui: { enabled: false } });
+  const mixerOnlyGroups = await collectToolLinkGroups(config, stack, request);
+  assert.deepEqual(mixerOnlyGroups.belabox, [{
+    label: "Encoder One",
+    links: [{ label: "Video Mixer", url: "/belabox/mixer?key=encoder-1", openable: true }],
+  }]);
+  payloads.set("belabox.test/belabox/api/status", belaboxStatus);
 
   const services = ["frame-streams", "frame-overlays", "frame-audio", "frame-belabox-manager", "frame-portal"]
     .map((name) => ({ name, status: "running", health: "healthy", uptime_seconds: 1 }));
@@ -103,6 +126,7 @@ test("collects only sanitized generated links and keeps them on the public dashb
   const publicTools = buildPortalTools({ config: stack, source: "file" }, services, "public", groupsWithLanOnly);
   assert.equal(publicTools.find((tool) => tool.id === "streams").route, "");
   assert.deepEqual(publicTools.find((tool) => tool.id === "streams").link_groups, groups.streams);
+  assert.deepEqual(publicTools.find((tool) => tool.id === "belabox").link_groups, groups.belabox);
   assert.deepEqual(publicTools.find((tool) => tool.id === "audio-bridge").link_groups, []);
   const lanTools = buildPortalTools({ config: stack, source: "file" }, services, "lan", groupsWithLanOnly);
   assert.equal(lanTools.find((tool) => tool.id === "streams").link_groups.at(-1).label, "Should stay on LAN");

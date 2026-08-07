@@ -130,17 +130,37 @@ async function belaboxLinks(
   const result = await getJson(config.belaboxApiUrl, "/belabox/api/status", config.requestTimeoutMs, request);
   const remote = object(result.remote_belaui);
   const provisioning = object(result.provisioning);
-  if (remote?.enabled !== true || !provisioning) return [];
+  if (!provisioning) return [];
+  const encoderRemoteEnabled = remote.enabled === true;
   const root = validRoute(routes.belabox_remote, "/belabox/remote");
+  const mixerRoot = validRoute(routes.belabox_mixer, "/belabox/mixer");
+  const liveDevices = new Map<string, JsonObject>();
+  for (const value of array(result.devices)) {
+    const device = object(value);
+    const id = typeof device.device_id === "string" && /^[a-z0-9][a-z0-9_-]{1,63}$/.test(device.device_id)
+      ? device.device_id
+      : "";
+    if (id) liveDevices.set(id, device);
+  }
   return array(provisioning.devices).flatMap((value) => {
     const device = object(value);
     const id = typeof device.device_id === "string" && /^[a-z0-9][a-z0-9_-]{1,63}$/.test(device.device_id)
       ? device.device_id
       : "";
     if (!id) return [];
+    const live = object(liveDevices.get(id));
+    const mixer = object(object(live.telemetry).video_mixer);
+    const links: PortalLink[] = [];
+    if (encoderRemoteEnabled) {
+      links.push({ label: "Encoder remote", url: `${root}?key=${encodeURIComponent(id)}`, openable: true });
+    }
+    if (mixer.installed === true && mixer.target === "video_mixer") {
+      links.push({ label: "Video Mixer", url: `${mixerRoot}?key=${encodeURIComponent(id)}`, openable: true });
+    }
+    if (!links.length) return [];
     return [{
       label: cleanLabel(device.display_name, id),
-      links: [{ label: "Encoder remote", url: `${root}?key=${encodeURIComponent(id)}`, openable: true }],
+      links,
     }];
   });
 }

@@ -16,6 +16,7 @@ import {
   computeComposeProfiles,
   computeEffectivePublicPrefixes,
   enforceDependencies,
+  upgradeStackConfig,
 } from "./frame-contract.mjs";
 
 const WORKSPACE = "/workspace";
@@ -54,16 +55,8 @@ const IMPORTABLE_ENV_KEYS = new Set([
   "BELABOX_SSH_ENABLED",
   "BELABOX_AGENT_COMMANDS_ENABLED",
   "BELABOX_AGENT_INSTALL_ENABLED",
-  "BELABOX_MQTT_HOST",
-  "BELABOX_MQTT_INTERNAL_URL",
-  "BELABOX_MQTT_WS_PATH",
-  "BELABOX_MQTT_USERNAME",
-  "BELABOX_MQTT_PASSWORD",
-  "BELABOX_MQTT_CLIENT_ID_PREFIX",
-  "BELABOX_MQTT_RECONNECT_MS",
-  "BELABOX_DEVICE_ID",
-  "BELABOX_MQTT_KEEPALIVE",
-  "BELABOX_HEARTBEAT_INTERVAL_MS",
+  "BELABOX_CONTROL_RECONNECT_MS",
+  "BELABOX_CONTROL_HEARTBEAT_MS",
   "BELABOX_TELEMETRY_INTERVAL_MS",
   "BELABOX_CHUNK_UPLOAD_URL",
   "BELABOX_CHUNK_SIZE_BYTES",
@@ -111,15 +104,8 @@ const CUSTOMIZABLE_ENV_KEYS = new Set([
   "BELABOX_SSH_ENABLED",
   "BELABOX_AGENT_COMMANDS_ENABLED",
   "BELABOX_AGENT_INSTALL_ENABLED",
-  "BELABOX_MQTT_HOST",
-  "BELABOX_MQTT_INTERNAL_URL",
-  "BELABOX_MQTT_WS_PATH",
-  "BELABOX_MQTT_USERNAME",
-  "BELABOX_MQTT_CLIENT_ID_PREFIX",
-  "BELABOX_MQTT_RECONNECT_MS",
-  "BELABOX_DEVICE_ID",
-  "BELABOX_MQTT_KEEPALIVE",
-  "BELABOX_HEARTBEAT_INTERVAL_MS",
+  "BELABOX_CONTROL_RECONNECT_MS",
+  "BELABOX_CONTROL_HEARTBEAT_MS",
   "BELABOX_TELEMETRY_INTERVAL_MS",
   "BELABOX_CHUNK_UPLOAD_URL",
   "BELABOX_CHUNK_SIZE_BYTES",
@@ -216,6 +202,7 @@ async function install(options) {
     capabilities[name] = false;
   }
   assertDeployableCapabilities(capabilities);
+  assertBelaboxManagerDeployment(mode, capabilities);
 
   const dependencyWarnings = enforceDependencies(capabilities);
   const env = buildEnvironment({ ...existingEnv, ...importedEnv, ...settingOverrides }, options, mode, capabilities);
@@ -518,12 +505,21 @@ function buildEnvironment(existing, options, mode, capabilities) {
   const srtPlayerPort = normalizePort(setting(existing, "SRT_PLAYER_PORT", "4000"), "SRT player port");
   const srtSenderPort = normalizePort(setting(existing, "SRT_SENDER_PORT", "4001"), "SRT sender port");
   const belaboxPort = normalizePort(setting(existing, "BELABOX_PORT", "22"), "Belabox SSH port");
-  const belaboxMqttWsPath = normalizeMqttPath(setting(existing, "BELABOX_MQTT_WS_PATH", "/mqtt"));
-  const belaboxMqttClientIdPrefix = normalizeMqttName(setting(existing, "BELABOX_MQTT_CLIENT_ID_PREFIX", "frame-belabox"), "BELABOX_MQTT_CLIENT_ID_PREFIX");
-  const belaboxDeviceId = normalizeMqttName(setting(existing, "BELABOX_DEVICE_ID", "belabox-1"), "BELABOX_DEVICE_ID");
-  const belaboxMqttReconnectMs = normalizeInteger(setting(existing, "BELABOX_MQTT_RECONNECT_MS", "5000"), "Belabox MQTT reconnect interval", 1000, 60000);
-  const belaboxMqttKeepalive = normalizeInteger(setting(existing, "BELABOX_MQTT_KEEPALIVE", "30"), "Belabox MQTT keepalive", 5, 300);
-  const belaboxHeartbeatMs = normalizeInteger(setting(existing, "BELABOX_HEARTBEAT_INTERVAL_MS", "2000"), "Belabox heartbeat interval", 2000, 300000);
+  const belaboxControlPublicUrl = capabilities["frame-belabox-manager"]
+    ? normalizeControlUrl(controlWebSocketUrl(edgePublicBaseUrl))
+    : "";
+  const belaboxControlReconnectMs = normalizeInteger(
+    setting(existing, "BELABOX_CONTROL_RECONNECT_MS", "5000"),
+    "Belabox control reconnect interval",
+    1000,
+    60000,
+  );
+  const belaboxControlHeartbeatMs = normalizeInteger(
+    setting(existing, "BELABOX_CONTROL_HEARTBEAT_MS", setting(existing, "BELABOX_HEARTBEAT_INTERVAL_MS", "10000")),
+    "Belabox control heartbeat interval",
+    2000,
+    300000,
+  );
   const belaboxTelemetryMs = normalizeInteger(setting(existing, "BELABOX_TELEMETRY_INTERVAL_MS", "30000"), "Belabox telemetry interval", 10000, 600000);
   assertPortSet([
     ["FRAME Edge", edgePort, true],
@@ -599,16 +595,9 @@ function buildEnvironment(existing, options, mode, capabilities) {
     BELABOX_SSH_ENABLED: setting(existing, "BELABOX_SSH_ENABLED", "false"),
     BELABOX_AGENT_COMMANDS_ENABLED: setting(existing, "BELABOX_AGENT_COMMANDS_ENABLED", "false"),
     BELABOX_AGENT_INSTALL_ENABLED: setting(existing, "BELABOX_AGENT_INSTALL_ENABLED", "false"),
-    BELABOX_MQTT_HOST: setting(existing, "BELABOX_MQTT_HOST", edgePublicBaseUrl),
-    BELABOX_MQTT_INTERNAL_URL: setting(existing, "BELABOX_MQTT_INTERNAL_URL", "mqtt://frame-belabox-broker:1883"),
-    BELABOX_MQTT_WS_PATH: belaboxMqttWsPath,
-    BELABOX_MQTT_USERNAME: setting(existing, "BELABOX_MQTT_USERNAME", "frame-belabox"),
-    BELABOX_MQTT_PASSWORD: preserveSecret(existing.BELABOX_MQTT_PASSWORD, 32),
-    BELABOX_MQTT_CLIENT_ID_PREFIX: belaboxMqttClientIdPrefix,
-    BELABOX_MQTT_RECONNECT_MS: belaboxMqttReconnectMs,
-    BELABOX_DEVICE_ID: belaboxDeviceId,
-    BELABOX_MQTT_KEEPALIVE: belaboxMqttKeepalive,
-    BELABOX_HEARTBEAT_INTERVAL_MS: belaboxHeartbeatMs,
+    BELABOX_CONTROL_PUBLIC_URL: belaboxControlPublicUrl,
+    BELABOX_CONTROL_RECONNECT_MS: belaboxControlReconnectMs,
+    BELABOX_CONTROL_HEARTBEAT_MS: belaboxControlHeartbeatMs,
     BELABOX_TELEMETRY_INTERVAL_MS: belaboxTelemetryMs,
     BELABOX_CHUNK_UPLOAD_URL: setting(existing, "BELABOX_CHUNK_UPLOAD_URL", ""),
     BELABOX_CHUNK_SIZE_BYTES: setting(existing, "BELABOX_CHUNK_SIZE_BYTES", "4194304"),
@@ -654,6 +643,7 @@ function buildEnvironment(existing, options, mode, capabilities) {
 }
 
 function validateEnvironment(env, config, forStart) {
+  assertBelaboxManagerDeployment(config.mode, config.capabilities);
   const dataRoot = normalizeDataRoot(defaultIfBlank(env.FRAME_DATA_ROOT, "./data"));
   resolveDataRoot(dataRoot);
   const edgePort = normalizePort(defaultIfBlank(env.EDGE_HTTP_PORT, "80"), "FRAME Edge port");
@@ -684,12 +674,8 @@ function validateEnvironment(env, config, forStart) {
   assertBooleanSetting(env.BELABOX_SSH_ENABLED, "BELABOX_SSH_ENABLED");
   assertBooleanSetting(env.BELABOX_AGENT_COMMANDS_ENABLED, "BELABOX_AGENT_COMMANDS_ENABLED");
   assertBooleanSetting(env.BELABOX_AGENT_INSTALL_ENABLED, "BELABOX_AGENT_INSTALL_ENABLED");
-  normalizeMqttPath(defaultIfBlank(env.BELABOX_MQTT_WS_PATH, "/mqtt"));
-  normalizeMqttName(defaultIfBlank(env.BELABOX_MQTT_CLIENT_ID_PREFIX, "frame-belabox"), "BELABOX_MQTT_CLIENT_ID_PREFIX");
-  normalizeMqttName(defaultIfBlank(env.BELABOX_DEVICE_ID, "belabox-1"), "BELABOX_DEVICE_ID");
-  normalizeInteger(setting(env, "BELABOX_MQTT_RECONNECT_MS", "5000"), "Belabox MQTT reconnect interval", 1000, 60000);
-  normalizeInteger(setting(env, "BELABOX_MQTT_KEEPALIVE", "30"), "Belabox MQTT keepalive", 5, 300);
-  normalizeInteger(setting(env, "BELABOX_HEARTBEAT_INTERVAL_MS", "2000"), "Belabox heartbeat interval", 2000, 300000);
+  normalizeInteger(setting(env, "BELABOX_CONTROL_RECONNECT_MS", "5000"), "Belabox control reconnect interval", 1000, 60000);
+  normalizeInteger(setting(env, "BELABOX_CONTROL_HEARTBEAT_MS", "10000"), "Belabox control heartbeat interval", 2000, 300000);
   normalizeInteger(setting(env, "BELABOX_TELEMETRY_INTERVAL_MS", "30000"), "Belabox telemetry interval", 10000, 600000);
   normalizeInteger(setting(env, "BELABOX_CHUNK_SIZE_BYTES", "4194304"), "Belabox chunk size", 262144, 67108864);
   normalizeInteger(setting(env, "BELABOX_CHUNK_PARALLEL_UPLOADS", "1"), "Belabox chunk parallel uploads", 1, 4);
@@ -753,14 +739,9 @@ function validateEnvironment(env, config, forStart) {
   }
   if (config.capabilities["frame-belabox-manager"]) {
     validateRemotePath(defaultIfBlank(env.BELABOX_AGENT_REMOTE_PATH, "/tmp/frame-belabox-agent.sh"));
-    if (!isHttpUrl(env.BELABOX_MQTT_HOST)) {
-      throw new Error("BELABOX_MQTT_HOST must be a valid http:// or https:// URL.");
-    }
-    if (!isMqttUrl(env.BELABOX_MQTT_INTERNAL_URL)) {
-      throw new Error("BELABOX_MQTT_INTERNAL_URL must be a valid mqtt:// or ws:// URL.");
-    }
-    if (!String(env.BELABOX_MQTT_USERNAME ?? "").trim() || String(env.BELABOX_MQTT_PASSWORD ?? "").length < 32) {
-      throw new Error("BELABOX_MQTT_USERNAME and BELABOX_MQTT_PASSWORD are required. Re-run stack install.");
+    const expectedControlUrl = normalizeControlUrl(controlWebSocketUrl(env.EDGE_PUBLIC_BASE_URL));
+    if (env.BELABOX_CONTROL_PUBLIC_URL !== expectedControlUrl) {
+      throw new Error("BELABOX_CONTROL_PUBLIC_URL must be derived from EDGE_PUBLIC_BASE_URL. Re-run stack install.");
     }
   }
   if (config.mode === "HYBRID") {
@@ -836,20 +817,7 @@ function validateConfig(config) {
 }
 
 function upgradeExistingConfig(config) {
-  return {
-    ...config,
-    capabilities: {
-      ...Object.fromEntries(CAPABILITIES.map((name) => [name, false])),
-      ...(config?.capabilities ?? {}),
-    },
-    routes: {
-      ...ROUTES,
-      ...(config?.routes ?? {}),
-    },
-    public_route_prefixes: Array.isArray(config?.public_route_prefixes)
-      ? [...new Set([...config.public_route_prefixes, ...PUBLIC_PREFIXES])]
-      : [...PUBLIC_PREFIXES],
-  };
+  return upgradeStackConfig(config);
 }
 
 function generatePublicRoutes(prefixes) {
@@ -1102,22 +1070,6 @@ function validateRemotePath(value) {
   }
 }
 
-function normalizeMqttPath(value) {
-  const pathValue = String(value ?? "").trim();
-  if (!/^\/[A-Za-z0-9/_-]{1,80}$/.test(pathValue)) {
-    throw new Error("BELABOX_MQTT_WS_PATH must be a URL path without spaces.");
-  }
-  return pathValue;
-}
-
-function normalizeMqttName(value, label) {
-  const text = String(value ?? "").trim();
-  if (!/^[A-Za-z0-9_-]{1,64}$/.test(text)) {
-    throw new Error(`${label} must use only letters, numbers, underscores, and dashes.`);
-  }
-  return text;
-}
-
 function isPlaceholder(value) {
   return PLACEHOLDERS.has(String(value ?? "").trim());
 }
@@ -1131,12 +1083,43 @@ function isHttpUrl(value) {
   }
 }
 
-function isMqttUrl(value) {
+function controlWebSocketUrl(baseUrl) {
+  const parsed = new URL(baseUrl);
+  parsed.protocol = parsed.protocol === "https:" ? "wss:" : "ws:";
+  parsed.pathname = "/belabox/control";
+  parsed.search = "";
+  parsed.hash = "";
+  return parsed.toString();
+}
+
+function normalizeControlUrl(value) {
   try {
     const parsed = new URL(value);
-    return ["mqtt:", "mqtts:", "ws:", "wss:"].includes(parsed.protocol);
+    const hostname = parsed.hostname.toLowerCase();
+    if (
+      parsed.protocol !== "wss:" ||
+      parsed.pathname !== "/belabox/control" ||
+      parsed.search ||
+      parsed.hash ||
+      parsed.username ||
+      parsed.password ||
+      hostname === "localhost" ||
+      hostname.endsWith(".localhost") ||
+      hostname.endsWith(".local") ||
+      /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname)
+    ) {
+      throw new Error();
+    }
+    normalizeHostname(hostname, true);
+    return parsed.toString();
   } catch {
-    return false;
+    throw new Error("BELABOX_CONTROL_PUBLIC_URL must be a public wss:// URL ending in /belabox/control.");
+  }
+}
+
+function assertBelaboxManagerDeployment(mode, capabilities) {
+  if (capabilities["frame-belabox-manager"] && mode !== "HYBRID") {
+    throw new Error("Belabox Manager requires HYBRID mode and a public wss:// control endpoint.");
   }
 }
 
@@ -1345,16 +1328,9 @@ function serializeEnv(env) {
         "BELABOX_SSH_ENABLED",
         "BELABOX_AGENT_COMMANDS_ENABLED",
         "BELABOX_AGENT_INSTALL_ENABLED",
-        "BELABOX_MQTT_HOST",
-        "BELABOX_MQTT_INTERNAL_URL",
-        "BELABOX_MQTT_WS_PATH",
-        "BELABOX_MQTT_USERNAME",
-        "BELABOX_MQTT_PASSWORD",
-        "BELABOX_MQTT_CLIENT_ID_PREFIX",
-        "BELABOX_MQTT_RECONNECT_MS",
-        "BELABOX_DEVICE_ID",
-        "BELABOX_MQTT_KEEPALIVE",
-        "BELABOX_HEARTBEAT_INTERVAL_MS",
+        "BELABOX_CONTROL_PUBLIC_URL",
+        "BELABOX_CONTROL_RECONNECT_MS",
+        "BELABOX_CONTROL_HEARTBEAT_MS",
         "BELABOX_TELEMETRY_INTERVAL_MS",
         "BELABOX_CHUNK_UPLOAD_URL",
         "BELABOX_CHUNK_SIZE_BYTES",

@@ -1,8 +1,8 @@
 # FRAME Belabox Manager
 
 FRAME Belabox Manager installs and operates a lightweight FRAME agent on a Belabox. It provides
-remote access to belaUI, stream relay selection, photo transfer controls, network diagnostics, and
-device maintenance without replacing the Belabox software.
+remote access to belaUI and the optional IRL+ Mixer, stream relay selection, photo transfer controls,
+network diagnostics, and device maintenance without replacing the Belabox software.
 
 ## Who This Is For
 
@@ -12,6 +12,7 @@ FRAME.
 Use it if you want to:
 
 - Reach belaUI when the Belabox is away from your local network.
+- Reach the IRL+ Mixer remotely when it is installed on the Belabox.
 - See FRAME stream profiles in the remote belaUI relay list.
 - Install, repair, update, or remove the FRAME Belabox agent.
 - Send camera photos through direct FTP or stream-safe chunked HTTPS.
@@ -26,6 +27,7 @@ The Belabox does not need a stable LAN address or an inbound management port aft
 Common uses:
 
 - Open the stock belaUI experience through a FRAME-authenticated remote URL.
+- Open the IRL+ Mixer through the same authenticated outbound-agent connection.
 - Select a FRAME SRTLA destination and Stream Management publisher account from belaUI.
 - Watch native-style relay availability and RTT feedback.
 - Receive camera FTP uploads on the Belabox and forward prepared photos to FRAME.
@@ -56,6 +58,12 @@ Recommended setup:
 http://localhost/belabox
 ```
 
+Belabox agent install and repair are Hybrid-only. FRAME Setup selects Hybrid automatically when
+Belabox Manager is selected, and both installers refuse a LAN configuration or a non-public
+`wss://.../belabox/control` endpoint. The endpoint is always derived from FRAME's public base URL,
+so changing the public hostname updates subsequent agent installs instead of preserving a stale
+override. The local manager page remains available only on the FRAME LAN.
+
 To add a Belabox:
 
 1. Choose **Add device**.
@@ -65,10 +73,12 @@ To add a Belabox:
 5. Configure the optional Belabox FTP Photo Agent.
 6. Choose direct FTP or stream-safe chunked HTTPS transfer.
 7. Review the settings and install the agent.
-8. Keep the wizard open until the SSH, service, and MQTT heartbeat checks finish.
+8. Keep the wizard open until the SSH, service, and control-connection heartbeat checks finish.
 
 The initial installation requires working local SSH access. After installation, normal remote
-operation uses outbound MQTT over secure WebSockets and does not depend on the saved LAN route.
+operation uses one authenticated outbound secure WebSocket and does not depend on the saved LAN
+route. That connection carries presence, telemetry, commands, remote HTTP traffic, media streams,
+and approved proxied WebSockets.
 
 ## How To Operate
 
@@ -96,6 +106,30 @@ not yet a measurement of the UDP SRTLA path or a full BCRPT MTU probe.
 
 Direct LAN access to belaUI remains unchanged and continues to show the relay list supplied by
 BELABOX Cloud.
+
+### Video Mixer
+
+When IRL+ Mixer is installed on the Belabox, FRAME adds a **Video Mixer** tab for that device. The
+tab and its access actions remain available while the service is stopped or the device is offline.
+Open:
+
+```text
+https://your-frame-host/belabox/mixer?key=your-device-id
+```
+
+FRAME maps this authenticated route to the fixed agent target `http://127.0.0.1:9080`. The browser
+cannot supply a host or port, and port `9080` is not opened publicly. The page reports **Mixer
+unavailable** while the local service is stopped. Its encoder WebSocket bridge uses the already
+configured loopback belaUI target and ignores the browser's `port` query.
+
+The remote Mixer is an authenticated, trusted FRAME extension: its interface runs under the FRAME
+origin so its existing relative APIs and login flow continue to work. Only install Mixer builds you
+trust as FRAME application code. Binary and media bodies stream with bounded buffering and
+backpressure, so FRAME does not impose a total file-size ceiling. HTML, CSS, JavaScript, and JSON
+responses that require path rewriting are buffered to ensure replacements cannot break across
+chunks and are limited to 4 MiB; that safety limit does not apply to uploads, binary responses, or
+media streams. Inactive HTTP and proxy streams still close after 30 seconds; activity resets that
+timer, while upgraded WebSockets remain long-lived.
 
 ### Photo Transfer
 
@@ -129,8 +163,7 @@ when possible.
 
 - **Repair Agent** reinstalls the current FRAME agent and boot service while keeping the device.
 - **Uninstall Agent** removes FRAME-owned Belabox services and archives the local agent folder.
-- **Remove Device From FRAME** removes FRAME-side credentials, MQTT ACLs, retained status, and
-  dashboard state.
+- **Remove Device From FRAME** removes the FRAME-side control secret and dashboard state.
 
 Critical SSH actions show a blocking progress dialog and detailed step log. A saved SSH password is
 used only when the user selected the option to save it.
@@ -141,8 +174,8 @@ Belabox Manager relies on:
 
 - FRAME Portal and FRAME Auth
 - FRAME Edge
-- The bundled FRAME Belabox MQTT broker
 - FRAME Tunnel or another Hybrid public route
+- A public `wss://.../belabox/control` endpoint; LAN-only agent pairing is not supported
 - A Belabox with SSH access during installation and maintenance
 - Outbound HTTPS/WSS access from the Belabox after installation
 
@@ -152,22 +185,26 @@ Optional connections:
 | --- | --- |
 | FRAME relay accounts in remote belaUI | FRAME Stream Management and Video Ingest |
 | Public remote belaUI | FRAME Tunnel and the configured public hostname |
+| Remote Video Mixer | IRL+ Mixer listening on `127.0.0.1:9080` on the Belabox |
 | Chunked photo transfer | FRAME Photo Upload and Photo Pipeline |
 | Direct FTP forwarding | FRAME Photo FTP or another reachable FTP server |
 | Photo upload overlays | FRAME Overlays |
 
 ## Notes For Operators
 
-The `/belabox` management page should stay local or login-protected. Only the authenticated
-`/belabox/remote` route is intended for Hybrid access.
+The Hybrid allowlist exposes the FRAME-login-protected `/belabox/remote` and `/belabox/mixer`
+tools, plus the device-authenticated `/belabox/control` and tokenized `/belabox-chunks` transport
+routes. The `/belabox` management page, `/belabox/api`, and `/belabox/assets` remain private.
 
-Each device receives unique MQTT credentials and can only access its own topic namespace. FRAME
-signs remote commands with Ed25519, and the agent validates the device ID, signature, expiry,
-nonce, command allowlist, and arguments before acting.
+Each device receives separate control and upload credentials. FRAME authenticates the control
+connection with a fresh nonce/HMAC challenge, signs remote commands with Ed25519, and the agent
+validates the device ID, signature, expiry, nonce, command allowlist, and arguments before acting.
+A disconnect marks the device offline immediately; commands are not queued, and the agent sends a
+full state snapshot after reconnecting.
 
 The main agent runs as the Belabox SSH user. Root access is limited to explicit installation and
-maintenance operations that require sudo. Normal heartbeats, diagnostics, remote belaUI proxying,
-relay probes, and photo controls do not run the agent as root.
+maintenance operations that require sudo. Normal heartbeats, diagnostics, remote UI proxying, relay
+probes, and photo controls do not run the agent as root.
 
 Relay RTT probes run every five seconds and publish a compact health message. Their interval, TCP
 host, port, and timeout can be adjusted with `BELABOX_RELAY_PROBE_INTERVAL_MS`,

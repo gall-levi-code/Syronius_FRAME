@@ -3,6 +3,7 @@
 /data/
 /cf_token.txt
 /graphify-out/
+/.codex-remote-attachments/
 /apps/*/node_modules/
 /apps/*/dist/
 /apps/*/src-tauri/target/

@@ -23,6 +23,7 @@ jobs:
         service:
           - frame-audio
           - frame-audio-bridge
+          - frame-belabox-manager
           - frame-overlays
           - frame-portal
           - frame-streams
@@ -43,6 +44,4 @@ jobs:
           cache-dependency-path: services/${{ matrix.service }}/package-lock.json
       - run: npm ci
       - run: npm run typecheck
-      - run: npm run build
-      - if: contains(fromJSON('["frame-audio","frame-audio-bridge","frame-pipeline-photos","frame-photo-upload","frame-photo-ftp","frame-gallery","frame-today"]'), matrix.service)
-        run: npm test
+      - run: npm test
