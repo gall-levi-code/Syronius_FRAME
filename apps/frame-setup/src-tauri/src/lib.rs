@@ -60,7 +60,6 @@ const DATA_DIRECTORIES: &[&str] = &[
     "portal-theme",
     "audio-bridge",
     "audio-monitor",
-    "belabox-broker",
     "belabox-manager",
     "video-relay",
     "overlays",
@@ -93,14 +92,18 @@ const PUBLIC_PREFIXES: &[(&str, Option<&str>)] = &[
     ("/audio/assets", Some("frame-audio-relay")),
     ("/audio/public", Some("frame-audio-relay")),
     ("/bridge", Some("frame-discord-audio-bridge")),
-    ("/mqtt", Some("frame-belabox-manager")),
+    ("/belabox/remote", Some("frame-belabox-manager")),
+    ("/belabox/mixer", Some("frame-belabox-manager")),
+    ("/belabox/control", Some("frame-belabox-manager")),
+    ("/belabox-chunks", Some("frame-belabox-manager")),
 ];
 const FORBIDDEN_PUBLIC_PREFIXES: &[&str] = &[
     "/audio/admin",
     "/audio/capture",
     "/overlays/setup",
     "/overlays/api",
-    "/belabox",
+    "/belabox/api",
+    "/belabox/assets",
     "/slsui",
 ];
 
@@ -205,6 +208,13 @@ fn run_preflight(request: InstallPlan) -> PreflightResult {
     let mut checks = host_checks();
     checks.extend(storage_checks(&request));
     checks.extend(port_checks(&request));
+    if let Err(detail) = validate_install_plan(&request) {
+        checks.push(ReadinessCheck {
+            label: "Belabox Manager deployment".to_string(),
+            status: CheckStatus::Bad,
+            detail,
+        });
+    }
     checks.push(ReadinessCheck {
         label: "FRAME web handoff".to_string(),
         status: CheckStatus::Warn,
@@ -312,7 +322,7 @@ fn apply_install_plan(app: AppHandle, plan: InstallPlan) -> Result<ApplyResult, 
         .copied()
         .unwrap_or(false)
     {
-        push_install_log(&app, &mut logs, "Belabox Manager was enabled. MQTT credentials were generated; SSH settings are optional for maintenance checks.");
+        push_install_log(&app, &mut logs, "Belabox Manager was enabled. Device control uses an authenticated outbound WebSocket; SSH settings are optional for maintenance checks.");
     }
     if capabilities
         .get("frame-photo-ftp")
@@ -326,7 +336,7 @@ fn apply_install_plan(app: AppHandle, plan: InstallPlan) -> Result<ApplyResult, 
     }
 
     run_compose_config(&app, &stack_workspace, &mut logs)?;
-    run_compose_up(&app, &stack_workspace, &mut logs)?;
+    run_compose_up(&app, &stack_workspace, &mut logs, mode == "HYBRID")?;
     wait_for_web_setup(&app, &mut logs, plan.ports.edge)?;
 
     Ok(ApplyResult {
@@ -465,6 +475,7 @@ fn wait_for_web_setup(app: &AppHandle, logs: &mut Vec<String>, port: u16) -> Res
 }
 
 fn save_install_plan_inner(plan: &InstallPlan) -> Result<SaveResult, String> {
+    validate_install_plan(plan)?;
     let root = storage_root(plan)?;
     if root.as_os_str().is_empty() {
         return Err("Choose a FRAME storage root before saving the plan.".to_string());
@@ -984,6 +995,21 @@ fn normalize_mode(value: &str) -> Result<String, String> {
     }
 }
 
+fn validate_install_plan(plan: &InstallPlan) -> Result<(), String> {
+    let mode = normalize_mode(&plan.deployment_mode)?;
+    if mode != "HYBRID"
+        && plan
+            .selected_services
+            .iter()
+            .any(|service| service == "frame-belabox-manager")
+    {
+        return Err(
+            "Belabox Manager requires Hybrid mode and a public WSS control endpoint.".to_string(),
+        );
+    }
+    Ok(())
+}
+
 fn capabilities_from_plan(plan: &InstallPlan) -> Result<BTreeMap<String, bool>, String> {
     let mut capabilities = CAPABILITY_KEYS
         .iter()
@@ -1163,7 +1189,10 @@ fn stack_config(mode: &str, capabilities: &BTreeMap<String, bool>) -> serde_json
             "audio_hls": "/audio/hls",
             "discord_audio_bridge_root": "/bridge",
             "belabox_manager": "/belabox",
-            "belabox_mqtt": "/mqtt"
+            "belabox_remote": "/belabox/remote",
+            "belabox_mixer": "/belabox/mixer",
+            "belabox_control": "/belabox/control",
+            "belabox_chunks": "/belabox-chunks"
         },
         "public_route_prefixes": PUBLIC_PREFIXES.iter().map(|(prefix, _)| *prefix).collect::<Vec<_>>()
     })
@@ -1335,6 +1364,13 @@ fn build_apply_environment(
     } else {
         edge_lan_base_url.clone()
     };
+    let default_belabox_control_url = format!(
+        "{}/belabox/control",
+        edge_public_base_url
+            .replacen("https://", "wss://", 1)
+            .replacen("http://", "ws://", 1)
+            .trim_end_matches('/')
+    );
     let public_relay_host = plan
         .advanced_settings
         .get("PUBLIC_RELAY_HOST")
@@ -1563,6 +1599,10 @@ fn build_apply_environment(
         existing_or(existing, "BELABOX_SSH_KEY_PATH", ""),
     );
     env.insert(
+        "BELABOX_SSH_CREDENTIAL_KEY".to_string(),
+        preserve_secret(existing, "BELABOX_SSH_CREDENTIAL_KEY", 32),
+    );
+    env.insert(
         "BELABOX_PASSWORD".to_string(),
         existing_or(existing, "BELABOX_PASSWORD", ""),
     );
@@ -1587,48 +1627,29 @@ fn build_apply_environment(
         existing_or(existing, "BELABOX_AGENT_INSTALL_ENABLED", "false"),
     );
     env.insert(
-        "BELABOX_MQTT_HOST".to_string(),
-        existing_or(existing, "BELABOX_MQTT_HOST", &edge_public_base_url),
+        "BELABOX_CONTROL_PUBLIC_URL".to_string(),
+        if capabilities
+            .get("frame-belabox-manager")
+            .copied()
+            .unwrap_or(false)
+        {
+            default_belabox_control_url
+        } else {
+            String::new()
+        },
     );
     env.insert(
-        "BELABOX_MQTT_INTERNAL_URL".to_string(),
-        existing_or(
-            existing,
-            "BELABOX_MQTT_INTERNAL_URL",
-            "mqtt://frame-belabox-broker:1883",
-        ),
+        "BELABOX_CONTROL_RECONNECT_MS".to_string(),
+        existing_or(existing, "BELABOX_CONTROL_RECONNECT_MS", "5000"),
     );
     env.insert(
-        "BELABOX_MQTT_WS_PATH".to_string(),
-        existing_or(existing, "BELABOX_MQTT_WS_PATH", "/mqtt"),
-    );
-    env.insert(
-        "BELABOX_MQTT_USERNAME".to_string(),
-        existing_or(existing, "BELABOX_MQTT_USERNAME", "frame-belabox"),
-    );
-    env.insert(
-        "BELABOX_MQTT_PASSWORD".to_string(),
-        preserve_secret(existing, "BELABOX_MQTT_PASSWORD", 32),
-    );
-    env.insert(
-        "BELABOX_MQTT_CLIENT_ID_PREFIX".to_string(),
-        existing_or(existing, "BELABOX_MQTT_CLIENT_ID_PREFIX", "frame-belabox"),
-    );
-    env.insert(
-        "BELABOX_MQTT_RECONNECT_MS".to_string(),
-        existing_or(existing, "BELABOX_MQTT_RECONNECT_MS", "5000"),
-    );
-    env.insert(
-        "BELABOX_DEVICE_ID".to_string(),
-        existing_or(existing, "BELABOX_DEVICE_ID", "belabox-1"),
-    );
-    env.insert(
-        "BELABOX_MQTT_KEEPALIVE".to_string(),
-        existing_or(existing, "BELABOX_MQTT_KEEPALIVE", "30"),
-    );
-    env.insert(
-        "BELABOX_HEARTBEAT_INTERVAL_MS".to_string(),
-        existing_or(existing, "BELABOX_HEARTBEAT_INTERVAL_MS", "10000"),
+        "BELABOX_CONTROL_HEARTBEAT_MS".to_string(),
+        existing
+            .get("BELABOX_CONTROL_HEARTBEAT_MS")
+            .or_else(|| existing.get("BELABOX_HEARTBEAT_INTERVAL_MS"))
+            .filter(|value| !value.trim().is_empty())
+            .cloned()
+            .unwrap_or_else(|| "10000".to_string()),
     );
     env.insert(
         "BELABOX_TELEMETRY_INTERVAL_MS".to_string(),
@@ -1980,21 +2001,15 @@ fn serialize_env(env: &BTreeMap<String, String>) -> String {
                 "BELABOX_USER",
                 "BELABOX_PORT",
                 "BELABOX_SSH_KEY_PATH",
+                "BELABOX_SSH_CREDENTIAL_KEY",
                 "BELABOX_PASSWORD",
                 "BELABOX_AGENT_REMOTE_PATH",
                 "BELABOX_SSH_ENABLED",
                 "BELABOX_AGENT_COMMANDS_ENABLED",
                 "BELABOX_AGENT_INSTALL_ENABLED",
-                "BELABOX_MQTT_HOST",
-                "BELABOX_MQTT_INTERNAL_URL",
-                "BELABOX_MQTT_WS_PATH",
-                "BELABOX_MQTT_USERNAME",
-                "BELABOX_MQTT_PASSWORD",
-                "BELABOX_MQTT_CLIENT_ID_PREFIX",
-                "BELABOX_MQTT_RECONNECT_MS",
-                "BELABOX_DEVICE_ID",
-                "BELABOX_MQTT_KEEPALIVE",
-                "BELABOX_HEARTBEAT_INTERVAL_MS",
+                "BELABOX_CONTROL_PUBLIC_URL",
+                "BELABOX_CONTROL_RECONNECT_MS",
+                "BELABOX_CONTROL_HEARTBEAT_MS",
                 "BELABOX_TELEMETRY_INTERVAL_MS",
                 "BELABOX_CHUNK_UPLOAD_URL",
                 "BELABOX_CHUNK_SIZE_BYTES",
@@ -2174,7 +2189,12 @@ fn run_compose_config(
     )
 }
 
-fn run_compose_up(app: &AppHandle, repo_root: &Path, logs: &mut Vec<String>) -> Result<(), String> {
+fn run_compose_up(
+    app: &AppHandle,
+    repo_root: &Path,
+    logs: &mut Vec<String>,
+    recreate_public_gateway: bool,
+) -> Result<(), String> {
     run_logged_command(
         app,
         repo_root,
@@ -2190,6 +2210,27 @@ fn run_compose_up(app: &AppHandle, repo_root: &Path, logs: &mut Vec<String>) -> 
             "-d",
             "--build",
             "--remove-orphans",
+        ],
+    )?;
+    if !recreate_public_gateway {
+        return Ok(());
+    }
+    run_logged_command(
+        app,
+        repo_root,
+        logs,
+        "docker",
+        &[
+            "compose",
+            "--env-file",
+            ".env",
+            "-f",
+            "docker-compose.yml",
+            "up",
+            "-d",
+            "--force-recreate",
+            "--no-deps",
+            "frame-public-gateway",
         ],
     )
 }
@@ -2259,5 +2300,76 @@ fn setup_url(plan: &InstallPlan) -> String {
         "http://localhost/setup".to_string()
     } else {
         format!("http://localhost:{}/setup", plan.ports.edge)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn belabox_manager_requires_hybrid_mode() {
+        let mut plan = InstallPlan {
+            mode: "advanced".to_string(),
+            deployment_mode: "LAN".to_string(),
+            public_hostname: String::new(),
+            install_root: "C:\\FRAME".to_string(),
+            subfolders: BTreeMap::new(),
+            selected_services: vec!["frame-belabox-manager".to_string()],
+            ports: PortPlan {
+                edge: 80,
+                photo_ftp: 2121,
+                photo_ftp_passive: "30000-30019".to_string(),
+                srtla: 5000,
+                srt_player: 4000,
+                srt_sender: 4001,
+            },
+            auto_ports: true,
+            advanced_settings: BTreeMap::new(),
+            created_at: "2026-07-25T00:00:00Z".to_string(),
+        };
+
+        assert!(validate_install_plan(&plan)
+            .unwrap_err()
+            .contains("requires Hybrid mode"));
+        plan.deployment_mode = "HYBRID".to_string();
+        assert!(validate_install_plan(&plan).is_ok());
+    }
+
+    #[test]
+    fn belabox_ssh_credential_key_survives_reconfigure() {
+        let key = "existing-credential-key-0123456789abcdef";
+        let plan = InstallPlan {
+            mode: "advanced".to_string(),
+            deployment_mode: "HYBRID".to_string(),
+            public_hostname: "frame.example.com".to_string(),
+            install_root: "C:\\FRAME".to_string(),
+            subfolders: BTreeMap::new(),
+            selected_services: vec!["frame-belabox-manager".to_string()],
+            ports: PortPlan {
+                edge: 80,
+                photo_ftp: 2121,
+                photo_ftp_passive: "30000-30019".to_string(),
+                srtla: 5000,
+                srt_player: 4000,
+                srt_sender: 4001,
+            },
+            auto_ports: true,
+            advanced_settings: BTreeMap::new(),
+            created_at: "2026-07-25T00:00:00Z".to_string(),
+        };
+        let capabilities = capabilities_from_plan(&plan).unwrap();
+        let profiles = compute_profiles(&capabilities, "HYBRID");
+        let existing =
+            BTreeMap::from([("BELABOX_SSH_CREDENTIAL_KEY".to_string(), key.to_string())]);
+
+        let env =
+            build_apply_environment(&plan, "HYBRID", &capabilities, &profiles, &existing).unwrap();
+
+        assert_eq!(
+            env.get("BELABOX_SSH_CREDENTIAL_KEY").map(String::as_str),
+            Some(key)
+        );
+        assert!(serialize_env(&env).contains(&format!("BELABOX_SSH_CREDENTIAL_KEY={key}\n")));
     }
 }

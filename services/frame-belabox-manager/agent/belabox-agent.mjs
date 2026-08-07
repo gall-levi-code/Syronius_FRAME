@@ -9,6 +9,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import {
   createHash,
+  createHmac,
   createPrivateKey,
   createPublicKey,
   generateKeyPairSync,
@@ -17,12 +18,38 @@ import {
   verify as verifyBytes,
 } from "node:crypto";
 
-const VERSION = "0.8.3";
-const REMOTE_BELAUI_HTTP_TIMEOUT_MS = 8000;
-const REMOTE_BELAUI_MAX_HTTP_BODY_BYTES = 2 * 1024 * 1024;
-const REMOTE_BELAUI_STREAM_CHUNK_BYTES = 48 * 1024;
+const VERSION = "0.9.1";
+const CONTROL_PROTOCOL = "frame-belabox-control-v1";
+const CONTROL_MAX_MESSAGE_BYTES = 256 * 1024;
+const CONTROL_AUTH_TIMEOUT_MS = 10000;
+const CONTROL_HIGH_WATER_BYTES = 1024 * 1024;
+const CONTROL_LOW_WATER_BYTES = CONTROL_HIGH_WATER_BYTES / 2;
+const PROXY_BINARY_HEADER_BYTES = 17;
+const PROXY_BINARY_CHUNK_BYTES = CONTROL_MAX_MESSAGE_BYTES - PROXY_BINARY_HEADER_BYTES;
+const PROXY_MAX_STREAMS = 16;
+const PROXY_IDLE_TIMEOUT_MS = 30000;
+const PROXY_MAX_PENDING_INPUT_BYTES = CONTROL_HIGH_WATER_BYTES;
+const VIDEO_MIXER_LOCAL_URL = "http://127.0.0.1:9080";
 const DIAGNOSTIC_REQUEST_TIMEOUT_MS = 30000;
 const EXTERNAL_SPEEDTEST_BASE_URL = "https://speed.cloudflare.com";
+const PROXY_REQUEST_HEADER_BLOCKLIST = new Set([
+  "host",
+  "connection",
+  "content-length",
+  "transfer-encoding",
+  "accept-encoding",
+  "proxy-connection",
+  "authorization",
+  "proxy-authorization",
+  "forwarded",
+  "x-forwarded-for",
+  "x-forwarded-host",
+  "x-forwarded-port",
+  "x-forwarded-proto",
+  "x-real-ip",
+  "x-frame-authenticated-user",
+]);
+const PROXY_RESPONSE_HEADER_BLOCKLIST = new Set(["set-cookie", "set-cookie2"]);
 const ALLOWED_COMMANDS = new Set([
   "agent_update",
   "agent_restart",
@@ -39,16 +66,15 @@ const ALLOWED_COMMANDS = new Set([
   "network_speed_test",
 ]);
 const selfTestMode = process.argv.includes("--self-test");
-const deviceId = selfTestMode ? "selftest" : sanitizeId(process.env.BELABOX_DEVICE_ID || `belabox-${os.hostname()}`);
-const username = process.env.BELABOX_MQTT_USERNAME || "";
-const password = process.env.BELABOX_MQTT_PASSWORD || "";
+const configuredDeviceId = String(process.env.BELABOX_DEVICE_ID || "").trim();
+const deviceId = selfTestMode ? "selftest" : sanitizeId(configuredDeviceId);
+const controlSecret = String(process.env.BELABOX_CONTROL_SECRET || "");
 const publicKeyPem = readPublicKeyPem();
 const usedNonces = new Set();
-const heartbeatMs = readInt("BELABOX_HEARTBEAT_INTERVAL_MS", 2000, 2000, 300000);
+const heartbeatMs = readInt("BELABOX_CONTROL_HEARTBEAT_MS", 10000, 2000, 300000);
 const telemetryMs = readInt("BELABOX_TELEMETRY_INTERVAL_MS", 30000, 1000, 600000);
 const activePhotoTelemetryMs = readInt("BELABOX_ACTIVE_PHOTO_TELEMETRY_INTERVAL_MS", 500, 200, 5000);
-const reconnectMs = readInt("BELABOX_MQTT_RECONNECT_MS", 5000, 1000, 60000);
-const keepalive = readInt("BELABOX_MQTT_KEEPALIVE", 30, 5, 300);
+const reconnectMs = readInt("BELABOX_CONTROL_RECONNECT_MS", 5000, 1000, 60000);
 const photoConfigPath = process.env.BELABOX_PHOTO_CONFIG_PATH || `${os.homedir()}/.frame-belabox-agent/photo-config.json`;
 const egressStatusPath = process.env.BELABOX_EGRESS_STATUS_PATH || `${os.homedir()}/.frame-belabox-agent/egress.json`;
 const egressProbeMs = readInt("BELABOX_EGRESS_PROBE_INTERVAL_MS", 1000, 500, 60000);
@@ -62,18 +88,25 @@ const remoteBelaui = {
   localUrl: loopbackHttpUrl(process.env.BELABOX_REMOTE_BELAUI_LOCAL_URL || "http://127.0.0.1"),
   rewriteWebSocket: readBool("BELABOX_REMOTE_BELAUI_REWRITE_WS", true),
 };
-const url = process.env.BELABOX_MQTT_URL || mqttUrlFromHost();
-const topics = topicSet(deviceId);
+const agentSessionId = randomBytes(16).toString("hex");
+let controlUrl = "";
 let diagnosticState = null;
 let diagnosticRunning = false;
 let remoteBelauiState = remoteBelauiSnapshot(remoteBelaui.enabled ? "unchecked" : "disabled");
+let videoMixerState = videoMixerSnapshot("unchecked", videoMixerInstalled());
 let egressState = egressSnapshot([]);
 let egressRefreshRunning = false;
 let relayHealthRunning = false;
+let relayHealthState = null;
 let photoTelemetryWasActive = false;
 let relayCatalogState = initialRelayCatalogState();
+let proxyStateRefreshPromise = null;
 const proxyStreams = new Map();
-let client;
+let WebSocketClient;
+let client = null;
+let authenticated = false;
+let reconnectTimer = null;
+let authTimer = null;
 
 if (selfTestMode) {
   selfTest();
@@ -86,67 +119,219 @@ main().catch((error) => {
 });
 
 async function main() {
-  if (!username || !password) throw new Error("MQTT credentials are required.");
+  if (!configuredDeviceId) throw new Error("BELABOX_DEVICE_ID is required.");
+  if (Buffer.byteLength(controlSecret, "utf8") < 32 || Buffer.byteLength(controlSecret, "utf8") > 512) {
+    throw new Error("BELABOX_CONTROL_SECRET must be 32-512 bytes.");
+  }
   if (!publicKeyPem) throw new Error("command signing public key is required.");
-
-  const mqtt = await import("mqtt").then((module) => module.default || module);
-  client = mqtt.connect(url, {
-    username,
-    password,
-    clientId: `${process.env.BELABOX_MQTT_CLIENT_ID_PREFIX || "frame-belabox-agent"}-${deviceId}`,
-    reconnectPeriod: reconnectMs,
-    keepalive,
-    clean: true,
-    will: {
-      topic: topics.status,
-      payload: JSON.stringify({ device_id: deviceId, state: "offline", reason: "lwt", at: new Date().toISOString() }),
-      qos: 1,
-      retain: true,
-    },
-  });
-
-  client.on("connect", () => {
-    publishJson(topics.status, { device_id: deviceId, state: "online", at: new Date().toISOString() }, true);
-    publishJson(topics.version, { device_id: deviceId, version: VERSION, at: new Date().toISOString() }, true);
-    client.subscribe([topics.cmdRequest, topics.proxyHttpRequest, topics.proxyStreamClient], { qos: 1 });
-    publishHeartbeat();
-    publishTelemetry();
-  });
-
-  client.on("message", (topic, payload) => {
-    if (topic === topics.cmdRequest) {
-      void handleCommand(payload);
-      return;
-    }
-    const httpRequestId = proxyHttpRequestId(topic);
-    if (httpRequestId) {
-      void handleProxyHttpRequest(httpRequestId, payload);
-      return;
-    }
-    const stream = proxyStreamClientId(topic);
-    if (stream) {
-      handleProxyStreamMessage(stream, payload);
-    }
-  });
-
-  client.on("error", (error) => {
-    console.error(`[belabox-agent] MQTT error: ${error.message}`);
-  });
+  controlUrl = normalizeControlUrl(process.env.BELABOX_CONTROL_URL || "");
+  const wsModule = await import("ws");
+  WebSocketClient = wsModule.WebSocket || wsModule.default || wsModule;
 
   setInterval(publishHeartbeat, heartbeatMs);
-  setInterval(publishTelemetry, telemetryMs);
   setInterval(publishActivePhotoTelemetry, activePhotoTelemetryMs);
-  setInterval(refreshRemoteBelauiState, telemetryMs);
+  setInterval(publishTelemetry, telemetryMs);
+  setInterval(() => { void refreshProxyStatesAndPublish(false); }, Math.min(5000, telemetryMs));
   setInterval(() => { void refreshEgressState(); }, egressProbeMs);
   setInterval(() => { void refreshRelayHealth(); }, relayProbeMs);
-  refreshRemoteBelauiState();
   void refreshEgressState();
   void refreshRelayHealth();
+  connectControl();
+}
+
+function connectControl() {
+  if (client && (client.readyState === 0 || client.readyState === 1)) return;
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+
+  let socket;
+  try {
+    socket = new WebSocketClient(controlUrl, {
+      handshakeTimeout: CONTROL_AUTH_TIMEOUT_MS,
+      maxPayload: CONTROL_MAX_MESSAGE_BYTES,
+      perMessageDeflate: false,
+    });
+  } catch (error) {
+    console.error(`[belabox-agent] control connection failed: ${error instanceof Error ? error.message : String(error)}`);
+    scheduleControlReconnect();
+    return;
+  }
+
+  client = socket;
+  authenticated = false;
+  socket.on("open", () => {
+    authTimer = setTimeout(() => {
+      if (!authenticated && socket.readyState === 1) socket.close(1008, "authentication timeout");
+    }, CONTROL_AUTH_TIMEOUT_MS);
+    if (typeof authTimer.unref === "function") authTimer.unref();
+  });
+  socket.on("message", (data, isBinary) => {
+    try {
+      if (isBinary) handleControlBinary(Buffer.from(data));
+      else handleControlMessage(Buffer.from(data).toString("utf8"));
+    } catch (error) {
+      console.error(`[belabox-agent] invalid control message: ${error instanceof Error ? error.message : String(error)}`);
+      if (socket.readyState === 1) socket.close(1008, "invalid control message");
+    }
+  });
+  socket.on("error", (error) => {
+    console.error(`[belabox-agent] control error: ${error.message}`);
+  });
+  socket.on("close", () => {
+    if (client !== socket) return;
+    client = null;
+    authenticated = false;
+    clearControlAuthTimer();
+    closeAllProxyStreams();
+    scheduleControlReconnect();
+  });
+}
+
+function scheduleControlReconnect() {
+  if (reconnectTimer) return;
+  const delay = Math.round(reconnectMs * (0.75 + Math.random() * 0.5));
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    connectControl();
+  }, delay);
+  if (typeof reconnectTimer.unref === "function") reconnectTimer.unref();
+}
+
+function clearControlAuthTimer() {
+  if (!authTimer) return;
+  clearTimeout(authTimer);
+  authTimer = null;
+}
+
+function handleControlMessage(raw) {
+  if (Buffer.byteLength(raw, "utf8") > CONTROL_MAX_MESSAGE_BYTES) throw new Error("control message is too large");
+  const message = JSON.parse(raw);
+  if (!message || typeof message !== "object" || Array.isArray(message) || typeof message.type !== "string") {
+    throw new Error("control message must be an object with a type");
+  }
+
+  if (message.type === "challenge") {
+    if (authenticated) throw new Error("unexpected authentication challenge");
+    const nonce = controlNonce(message.nonce);
+    sendJson({
+      type: "hello",
+      device_id: deviceId,
+      agent_version: VERSION,
+      nonce,
+      proof: controlProof(controlSecret, deviceId, VERSION, nonce),
+    }, false);
+    return;
+  }
+
+  if (message.type === "authenticated") {
+    if (authenticated) return;
+    authenticated = true;
+    clearControlAuthTimer();
+    sendFullState();
+    return;
+  }
+
+  if (!authenticated) throw new Error("control message received before authentication");
+  if (message.type === "command") {
+    const requestId = controlRequestId(message.request_id);
+    if (!message.payload || typeof message.payload !== "object" || Array.isArray(message.payload)) {
+      throw new Error("command payload is invalid");
+    }
+    void handleCommand(message.payload, requestId);
+    return;
+  }
+  if (message.type === "proxy_open") {
+    openProxy(message);
+    return;
+  }
+  if (message.type === "proxy_end") {
+    endProxyInput(normalizeStreamId(message.stream_id));
+    return;
+  }
+  if (message.type === "proxy_pause") {
+    setProxyOutputPaused(normalizeStreamId(message.stream_id), true);
+    return;
+  }
+  if (message.type === "proxy_resume") {
+    setProxyOutputPaused(normalizeStreamId(message.stream_id), false);
+    return;
+  }
+  if (message.type === "proxy_cancel") {
+    closeProxyStream(normalizeStreamId(message.stream_id), false);
+    return;
+  }
+  if (message.type === "proxy_error") {
+    closeProxyStream(normalizeStreamId(message.stream_id), false);
+    return;
+  }
+  if (message.type === "error") {
+    console.error(`[belabox-agent] control server error: ${text(message.message || message.error, 200) || "unknown error"}`);
+  }
+}
+
+function sendFullState() {
+  const now = new Date().toISOString();
+  sendControl("status", {
+    device_id: deviceId,
+    state: "online",
+    agent_session_id: agentSessionId,
+    at: now,
+  });
+  sendControl("version", { device_id: deviceId, version: VERSION, at: now });
+  publishHeartbeat();
+  publishTelemetry();
+  if (relayHealthState) sendControl("relay_health", relayHealthState);
+  void refreshProxyStatesAndPublish(true);
+}
+
+function sendControl(type, payload, extra = {}) {
+  sendJson({ type, ...extra, payload }, true);
+}
+
+function sendJson(message, requireAuthentication = true) {
+  if (!client || client.readyState !== 1 || (requireAuthentication && !authenticated)) return false;
+  const socket = client;
+  const raw = JSON.stringify(message);
+  if (Buffer.byteLength(raw, "utf8") > CONTROL_MAX_MESSAGE_BYTES) {
+    console.error(`[belabox-agent] ${message.type || "control"} message exceeds ${CONTROL_MAX_MESSAGE_BYTES} bytes`);
+    return false;
+  }
+  if (socket.bufferedAmount > CONTROL_HIGH_WATER_BYTES * 2) {
+    socket.terminate();
+    return false;
+  }
+  socket.send(raw, (error) => {
+    if (error && client === socket && socket.readyState === 1) socket.terminate();
+  });
+  return true;
+}
+
+function controlProof(secret, id, version, nonce) {
+  return createHmac("sha256", secret)
+    .update(`${CONTROL_PROTOCOL}\n${id}\n${version}\n${nonce}`)
+    .digest("hex");
+}
+
+function controlNonce(value) {
+  if (typeof value !== "string" || !/^[A-Za-z0-9+/_=-]{16,256}$/.test(value)) {
+    throw new Error("control challenge nonce is invalid");
+  }
+  return value;
+}
+
+function controlRequestId(value) {
+  if (typeof value !== "string" || !/^[A-Za-z0-9_-]{8,128}$/.test(value)) {
+    throw new Error("control request id is invalid");
+  }
+  return value;
 }
 
 function publishHeartbeat() {
-  publishJson(topics.heartbeat, {
+  sendControl("heartbeat", {
     device_id: deviceId,
+    agent_session_id: agentSessionId,
     at: new Date().toISOString(),
     uptime_seconds: Math.round(os.uptime()),
     agent_version: VERSION,
@@ -155,7 +340,7 @@ function publishHeartbeat() {
 
 function publishTelemetry(ftpUpload = readFtpUploadStatus()) {
   if (ftpUpload) photoTelemetryWasActive = photoTransferIsActive(ftpUpload);
-  publishJson(topics.telemetry, collectTelemetry(ftpUpload));
+  sendControl("telemetry", collectTelemetry(ftpUpload));
 }
 
 function publishActivePhotoTelemetry() {
@@ -163,21 +348,21 @@ function publishActivePhotoTelemetry() {
   if (!ftpUpload) return;
   const publish = photoTelemetryNeedsPublish(ftpUpload, photoTelemetryWasActive);
   photoTelemetryWasActive = photoTransferIsActive(ftpUpload);
-  if (publish) publishJson(topics.telemetry, collectTelemetry(ftpUpload));
+  if (publish) sendControl("telemetry", collectTelemetry(ftpUpload));
 }
 
-async function handleCommand(payload) {
+async function handleCommand(payload, requestId) {
   const startedAt = new Date().toISOString();
   let commandId = randomId();
   let commandName = "unknown";
   try {
-    const command = verifyCommand(JSON.parse(payload.toString("utf8")), publicKeyPem, usedNonces);
+    const command = verifyCommand(payload, publicKeyPem, usedNonces);
     commandId = command.command_id;
     commandName = command.command;
     const result = await runCommand(command);
-    publishResponse({ command_id: commandId, status: "success", started_at: startedAt, result_summary: result });
+    publishResponse(requestId, { command_id: commandId, status: "success", started_at: startedAt, result_summary: result });
   } catch (error) {
-    publishResponse({
+    publishResponse(requestId, {
       command_id: commandId,
       status: "rejected",
       started_at: startedAt,
@@ -192,7 +377,7 @@ async function runCommand(command) {
     case "agent_status":
       return `agent ${VERSION} online; uptime ${Math.round(os.uptime())}s`;
     case "telemetry_refresh":
-      publishTelemetry();
+      await refreshProxyStatesAndPublish(true);
       return "telemetry refreshed";
     case "photo_transfer_mode_set":
       writePhotoConfig({ transfer_mode: command.args.mode });
@@ -234,7 +419,7 @@ async function runCommand(command) {
         uptime_seconds: Math.round(os.uptime()),
         collected_at: new Date().toISOString(),
       };
-      publishJson(topics.logs, { device_id: deviceId, at: summary.collected_at, message: JSON.stringify(summary) });
+      sendControl("log", { device_id: deviceId, at: summary.collected_at, message: JSON.stringify(summary) });
       return "log bundle metadata collected";
     }
     case "log_bundle_upload_stub":
@@ -244,8 +429,8 @@ async function runCommand(command) {
   }
 }
 
-function publishResponse({ command_id, status, started_at, result_summary, error_message = null }) {
-  publishJson(topics.cmdResponse, {
+function publishResponse(requestId, { command_id, status, started_at, result_summary, error_message = null }) {
+  sendControl("command_result", {
     command_id,
     device_id: deviceId,
     status,
@@ -253,7 +438,7 @@ function publishResponse({ command_id, status, started_at, result_summary, error
     finished_at: new Date().toISOString(),
     result_summary,
     error_message,
-  });
+  }, { request_id: requestId });
 }
 
 function verifyCommand(command, keyPem, nonceSet) {
@@ -720,139 +905,380 @@ function formatBytes(bytes) {
   return `${Math.round((bytes / 1024) * 10) / 10} KiB`;
 }
 
-async function handleProxyHttpRequest(requestId, payload) {
-  let message = {};
+function openProxy(message) {
+  const streamId = normalizeStreamId(message.stream_id);
+  if (proxyStreams.has(streamId)) {
+    sendProxyError(streamId, "proxy stream already exists");
+    return;
+  }
+  if (proxyStreams.size >= PROXY_MAX_STREAMS) {
+    sendProxyError(streamId, "proxy stream limit reached");
+    return;
+  }
   try {
-    message = parseJsonPayload(payload, 512 * 1024);
-    const response = await localBelauiHttpRequest(message);
-    publishJson(topics.proxyHttpResponse(requestId), { request_id: requestId, ...response });
+    if (message.kind === "http") {
+      openHttpProxy(streamId, message);
+      return;
+    }
+    if (message.kind === "websocket") {
+      openWebSocketProxy(streamId, message);
+      return;
+    }
+    throw new Error("proxy kind is invalid");
   } catch (error) {
-    publishJson(topics.proxyHttpResponse(requestId), {
-      request_id: requestId,
-      status_code: 502,
-      headers: { "content-type": "text/plain; charset=utf-8" },
-      body_b64: "",
-      error: error instanceof Error ? error.message.slice(0, 200) : String(error).slice(0, 200),
-    });
+    sendProxyError(streamId, error instanceof Error ? error.message : String(error));
   }
 }
 
-function localBelauiHttpRequest(message) {
-  if (!remoteBelaui.enabled) throw new Error("remote belaUI is disabled");
-  const target = localBelauiUrl(text(message.path, 2000) || "/");
-  const method = text(message.method, 16) || "GET";
-  const probeOnly = message.probe_only === true;
-  const body = Buffer.from(text(message.body_b64, REMOTE_BELAUI_MAX_HTTP_BODY_BYTES * 2) || "", "base64");
-  if (body.length > REMOTE_BELAUI_MAX_HTTP_BODY_BYTES) throw new Error("proxy body too large");
-  const headers = proxyHeaders(message.headers, target);
-  if (body.length) headers["content-length"] = String(body.length);
+function openHttpProxy(streamId, message) {
+  const proxy = proxyTarget(message);
+  const target = localProxyUrl(proxy.localUrl, text(message.path, 2000) || "/");
+  const headers = proxyHeaders(message.headers, target, proxy);
+  const contentLength = proxyContentLength(message.headers);
+  if (contentLength !== null) headers["content-length"] = contentLength;
   const transport = target.protocol === "https:" ? https : http;
-  return new Promise((resolve, reject) => {
-    const request = transport.request(target, { method, headers, timeout: REMOTE_BELAUI_HTTP_TIMEOUT_MS }, (response) => {
-      if (probeOnly) {
-        response.resume();
-        response.on("end", () => resolve({
-          status_code: response.statusCode || 502,
-          headers: responseHeaders(response.headers),
-          body_b64: "",
-        }));
-        return;
-      }
-      const chunks = [];
-      let size = 0;
-      response.on("data", (chunk) => {
-        size += chunk.length;
-        if (size > REMOTE_BELAUI_MAX_HTTP_BODY_BYTES) {
-          request.destroy(new Error("proxy response too large"));
-          return;
-        }
-        chunks.push(Buffer.from(chunk));
-      });
-      response.on("end", () => resolve({
-        status_code: response.statusCode || 502,
-        headers: responseHeaders(response.headers),
-        body_b64: Buffer.concat(chunks).toString("base64"),
-      }));
+  const stream = {
+    id: streamId,
+    kind: "http",
+    destination: null,
+    source: null,
+    ready: true,
+    pendingInput: [],
+    pendingInputBytes: 0,
+    pendingEnd: false,
+    inputBlocked: false,
+    inputDrainWaiting: false,
+    inputPauseSent: false,
+    remoteOutputPaused: false,
+    controlOutputPaused: false,
+    idleTimer: null,
+    connectTimer: null,
+    drainTimer: null,
+  };
+  const request = transport.request(target, {
+    method: proxyMethod(message.method),
+    headers,
+  }, (response) => {
+    if (proxyStreams.get(streamId) !== stream) {
+      response.destroy();
+      return;
+    }
+    stream.source = response;
+    if (stream.remoteOutputPaused || stream.controlOutputPaused) response.pause();
+    touchProxyStream(stream);
+    sendJson({
+      type: "proxy_response",
+      stream_id: streamId,
+      status: response.statusCode || 502,
+      headers: responseHeaders(response.headers, proxy),
     });
-    request.on("timeout", () => request.destroy(new Error("remote belaUI timed out")));
-    request.on("error", reject);
-    request.end(body);
+    response.on("data", (chunk) => {
+      touchProxyStream(stream);
+      sendProxyBinary(stream, Buffer.from(chunk), response);
+    });
+    response.on("end", () => finishProxyStream(stream, true));
+    response.on("aborted", () => failProxyStream(stream, "local proxy response aborted"));
+    response.on("error", (error) => failProxyStream(stream, error.message));
   });
+  stream.destination = request;
+  proxyStreams.set(streamId, stream);
+  touchProxyStream(stream);
+  request.on("error", (error) => failProxyStream(stream, error.message));
 }
 
-function handleProxyStreamMessage({ sessionId }, payload) {
-  let message;
-  try {
-    message = parseJsonPayload(payload, REMOTE_BELAUI_STREAM_CHUNK_BYTES * 2);
-  } catch {
-    return;
-  }
-  const type = text(message.type, 16);
-  if (type === "open") {
-    openProxyStream(sessionId, message);
-    return;
-  }
-  const stream = proxyStreams.get(sessionId);
-  if (!stream) return;
-  if (type === "data") {
-    const data = Buffer.from(text(message.data_b64, REMOTE_BELAUI_STREAM_CHUNK_BYTES * 2) || "", "base64");
-    if (data.length) stream.socket.write(data);
-    return;
-  }
-  if (type === "close") closeProxyStream(sessionId);
-}
-
-function openProxyStream(sessionId, message) {
-  if (proxyStreams.has(sessionId)) return;
-  const target = localBelauiUrl(text(message.path, 2000) || "/");
+function openWebSocketProxy(streamId, message) {
+  const destination = proxyStreamDestination(message);
+  const proxy = destination.proxy;
+  const target = destination.target;
+  const method = proxyMethod(message.method);
+  const httpVersion = proxyHttpVersion(message.http_version);
   const port = Number(target.port || (target.protocol === "https:" ? 443 : 80));
   const socket = target.protocol === "https:"
     ? tls.connect({ host: target.hostname, port, servername: target.hostname })
     : net.connect(port, target.hostname);
-  proxyStreams.set(sessionId, { socket });
-  const close = (type = "close", error = "") => {
-    if (!proxyStreams.has(sessionId)) return;
-    proxyStreams.delete(sessionId);
-    publishJson(topics.proxyStreamServer(sessionId), { type, session_id: sessionId, error });
-    socket.destroy();
+  const stream = {
+    id: streamId,
+    kind: "websocket",
+    destination: socket,
+    source: socket,
+    ready: false,
+    pendingInput: [],
+    pendingInputBytes: 0,
+    pendingEnd: false,
+    inputBlocked: false,
+    inputDrainWaiting: false,
+    inputPauseSent: false,
+    remoteOutputPaused: false,
+    controlOutputPaused: false,
+    idleTimer: null,
+    connectTimer: null,
+    drainTimer: null,
   };
+  proxyStreams.set(streamId, stream);
+  stream.connectTimer = setTimeout(() => failProxyStream(stream, "local proxy connection timed out"), PROXY_IDLE_TIMEOUT_MS);
+  if (typeof stream.connectTimer.unref === "function") stream.connectTimer.unref();
   socket.once(target.protocol === "https:" ? "secureConnect" : "connect", () => {
-    socket.write(`${text(message.method, 16) || "GET"} ${target.pathname}${target.search} HTTP/${text(message.http_version, 16) || "1.1"}\r\n`);
-    const headers = proxyHeaders(message.headers, target);
+    if (proxyStreams.get(streamId) !== stream) return;
+    if (stream.connectTimer) clearTimeout(stream.connectTimer);
+    stream.connectTimer = null;
+    const headers = proxyHeaders(message.headers, target, proxy);
     headers.connection = "Upgrade";
+    let requestHead = `${method} ${target.pathname}${target.search} HTTP/${httpVersion}\r\n`;
     for (const [name, value] of Object.entries(headers)) {
       const values = Array.isArray(value) ? value : [value];
-      for (const item of values) socket.write(`${name}: ${item}\r\n`);
+      for (const item of values) requestHead += `${name}: ${item}\r\n`;
     }
-    socket.write("\r\n");
-    const head = Buffer.from(text(message.head_b64, REMOTE_BELAUI_STREAM_CHUNK_BYTES * 2) || "", "base64");
-    if (head.length) socket.write(head);
+    socket.write(`${requestHead}\r\n`);
+    stream.ready = true;
+    flushPendingProxyInput(stream);
   });
-  socket.on("data", (chunk) => publishProxyStreamData(sessionId, Buffer.from(chunk)));
-  socket.on("close", () => close("close"));
-  socket.on("error", (error) => close("error", error.message.slice(0, 160)));
+  socket.on("data", (chunk) => {
+    sendProxyBinary(stream, Buffer.from(chunk), socket);
+  });
+  socket.on("end", () => finishProxyStream(stream, true));
+  socket.on("close", () => finishProxyStream(stream, true));
+  socket.on("error", (error) => failProxyStream(stream, error.message));
 }
 
-function closeProxyStream(sessionId) {
-  const stream = proxyStreams.get(sessionId);
-  if (!stream) return;
-  proxyStreams.delete(sessionId);
-  stream.socket.destroy();
+function handleControlBinary(frame) {
+  if (!authenticated) throw new Error("binary control data received before authentication");
+  if (frame.length < PROXY_BINARY_HEADER_BYTES || frame.length > CONTROL_MAX_MESSAGE_BYTES || frame[0] !== 1) {
+    throw new Error("proxy binary frame is invalid");
+  }
+  const streamId = streamIdFromBytes(frame.subarray(1, PROXY_BINARY_HEADER_BYTES));
+  const stream = proxyStreams.get(streamId);
+  if (!stream || !stream.destination || stream.destination.destroyed || stream.destination.writableEnded) return;
+  touchProxyStream(stream);
+  const data = frame.subarray(PROXY_BINARY_HEADER_BYTES);
+  if (!data.length) return;
+  if (!stream.ready || stream.inputBlocked) {
+    queuePendingProxyInput(stream, data);
+    return;
+  }
+  if (!stream.destination.write(data)) pauseProxyInput(stream);
 }
 
-function publishProxyStreamData(sessionId, data) {
-  for (let offset = 0; offset < data.length; offset += REMOTE_BELAUI_STREAM_CHUNK_BYTES) {
-    publishJson(topics.proxyStreamServer(sessionId), {
-      type: "data",
-      session_id: sessionId,
-      data_b64: data.subarray(offset, offset + REMOTE_BELAUI_STREAM_CHUNK_BYTES).toString("base64"),
+function endProxyInput(streamId) {
+  const stream = proxyStreams.get(streamId);
+  if (!stream || !stream.destination || stream.destination.destroyed || stream.destination.writableEnded) return;
+  touchProxyStream(stream);
+  if (!stream.ready || stream.inputBlocked || stream.pendingInput.length) {
+    stream.pendingEnd = true;
+    return;
+  }
+  stream.destination.end();
+}
+
+function flushPendingProxyInput(stream) {
+  if (!stream.ready || stream.inputBlocked) return;
+  while (stream.pendingInput.length) {
+    const data = stream.pendingInput.shift();
+    stream.pendingInputBytes -= data.length;
+    if (!stream.destination.write(data)) {
+      pauseProxyInput(stream);
+      return;
+    }
+  }
+  stream.pendingInputBytes = 0;
+  resumeProxyInput(stream);
+  if (stream.pendingEnd && !stream.destination.writableEnded) stream.destination.end();
+}
+
+function queuePendingProxyInput(stream, data) {
+  stream.pendingInputBytes += data.length;
+  if (stream.pendingInputBytes > PROXY_MAX_PENDING_INPUT_BYTES) {
+    failProxyStream(stream, "proxy client sent too much data while the local service was backpressured");
+    return;
+  }
+  stream.pendingInput.push(Buffer.from(data));
+  sendProxyInputPause(stream);
+}
+
+function pauseProxyInput(stream) {
+  stream.inputBlocked = true;
+  sendProxyInputPause(stream);
+  if (stream.inputDrainWaiting) return;
+  stream.inputDrainWaiting = true;
+  stream.destination.once("drain", () => {
+    stream.inputDrainWaiting = false;
+    if (proxyStreams.get(stream.id) !== stream) return;
+    stream.inputBlocked = false;
+    flushPendingProxyInput(stream);
+  });
+}
+
+function sendProxyInputPause(stream) {
+  if (stream.inputPauseSent) return;
+  stream.inputPauseSent = true;
+  sendJson({ type: "proxy_pause", stream_id: stream.id });
+}
+
+function resumeProxyInput(stream) {
+  if (!stream.inputPauseSent || stream.inputBlocked || !stream.ready || stream.pendingInput.length) return;
+  stream.inputPauseSent = false;
+  sendJson({ type: "proxy_resume", stream_id: stream.id });
+}
+
+function sendProxyBinary(stream, data, source) {
+  if (!client || client.readyState !== 1 || !authenticated) {
+    closeProxyStream(stream.id, false);
+    return;
+  }
+  const socket = client;
+  for (let offset = 0; offset < data.length; offset += PROXY_BINARY_CHUNK_BYTES) {
+    const chunk = data.subarray(offset, offset + PROXY_BINARY_CHUNK_BYTES);
+    const frame = Buffer.allocUnsafe(PROXY_BINARY_HEADER_BYTES + chunk.length);
+    frame[0] = 1;
+    streamIdBytes(stream.id).copy(frame, 1);
+    chunk.copy(frame, PROXY_BINARY_HEADER_BYTES);
+    socket.send(frame, { binary: true }, (error) => {
+      if (error && client === socket && socket.readyState === 1) socket.terminate();
     });
+  }
+  if (socket.bufferedAmount > CONTROL_HIGH_WATER_BYTES && source && typeof source.pause === "function") {
+    stream.controlOutputPaused = true;
+    source.pause();
+    waitForControlDrain(stream);
   }
 }
 
-function localBelauiUrl(path) {
-  const target = new URL(remoteBelaui.localUrl);
-  const incoming = new URL(path || "/", "http://frame.local");
+function waitForControlDrain(stream) {
+  if (stream.drainTimer) return;
+  const check = () => {
+    stream.drainTimer = null;
+    if (proxyStreams.get(stream.id) !== stream || !client || client.readyState !== 1) return;
+    if (client.bufferedAmount <= CONTROL_LOW_WATER_BYTES) {
+      stream.controlOutputPaused = false;
+      resumeProxySource(stream);
+      return;
+    }
+    stream.drainTimer = setTimeout(check, 10);
+    if (typeof stream.drainTimer.unref === "function") stream.drainTimer.unref();
+  };
+  stream.drainTimer = setTimeout(check, 10);
+  if (typeof stream.drainTimer.unref === "function") stream.drainTimer.unref();
+}
+
+function setProxyOutputPaused(streamId, paused) {
+  const stream = proxyStreams.get(streamId);
+  if (!stream) return;
+  stream.remoteOutputPaused = paused;
+  if (paused) {
+    if (stream.source && typeof stream.source.pause === "function") stream.source.pause();
+    return;
+  }
+  resumeProxySource(stream);
+}
+
+function resumeProxySource(stream) {
+  if (
+    stream.remoteOutputPaused
+    || stream.controlOutputPaused
+    || !stream.source
+    || typeof stream.source.resume !== "function"
+  ) return;
+  stream.source.resume();
+}
+
+function touchProxyStream(stream) {
+  if (stream.kind === "websocket") return;
+  if (stream.idleTimer) clearTimeout(stream.idleTimer);
+  stream.idleTimer = setTimeout(() => failProxyStream(stream, "local proxy stream timed out"), PROXY_IDLE_TIMEOUT_MS);
+  if (typeof stream.idleTimer.unref === "function") stream.idleTimer.unref();
+}
+
+function finishProxyStream(stream, notify) {
+  const incompleteHttpRequest = stream.kind === "http"
+    && stream.destination
+    && stream.destination.writableEnded !== true;
+  if (!removeProxyStream(stream, stream.kind === "websocket" || incompleteHttpRequest)) return;
+  if (notify) sendJson({ type: "proxy_end", stream_id: stream.id });
+}
+
+function failProxyStream(stream, error) {
+  if (!removeProxyStream(stream, true)) return;
+  sendProxyError(stream.id, error);
+}
+
+function sendProxyError(streamId, error) {
+  sendJson({
+    type: "proxy_error",
+    stream_id: streamId,
+    error: text(error, 200) || "local proxy failed",
+  });
+}
+
+function closeProxyStream(streamId, notify) {
+  const stream = proxyStreams.get(streamId);
+  if (!stream || !removeProxyStream(stream, true)) return;
+  if (notify) sendJson({ type: "proxy_end", stream_id: streamId });
+}
+
+function closeAllProxyStreams() {
+  for (const stream of Array.from(proxyStreams.values())) removeProxyStream(stream, true);
+}
+
+function removeProxyStream(stream, destroy) {
+  if (proxyStreams.get(stream.id) !== stream) return false;
+  proxyStreams.delete(stream.id);
+  if (stream.idleTimer) clearTimeout(stream.idleTimer);
+  if (stream.connectTimer) clearTimeout(stream.connectTimer);
+  if (stream.drainTimer) clearTimeout(stream.drainTimer);
+  if (destroy) {
+    if (stream.destination && typeof stream.destination.destroy === "function") stream.destination.destroy();
+    if (stream.source && stream.source !== stream.destination && typeof stream.source.destroy === "function") stream.source.destroy();
+  }
+  return true;
+}
+
+function proxyContentLength(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const entry = Object.entries(value).find(([name]) => name.toLowerCase() === "content-length");
+  if (!entry) return null;
+  const raw = Array.isArray(entry[1]) ? entry[1][0] : entry[1];
+  const parsed = typeof raw === "string" ? raw.trim() : "";
+  return /^\d{1,20}$/.test(parsed) ? parsed : null;
+}
+
+function proxyTarget(message) {
+  const requested = message.target === undefined ? "belaui" : text(message.target, 32);
+  if (requested === "belaui") {
+    if (!remoteBelaui.enabled) throw new Error("remote belaUI is disabled");
+    return { id: "belaui", label: "remote belaUI", localUrl: remoteBelaui.localUrl };
+  }
+  if (requested === "video_mixer") {
+    return { id: "video_mixer", label: "video mixer", localUrl: VIDEO_MIXER_LOCAL_URL };
+  }
+  throw new Error("proxy target is not allowed");
+}
+
+function proxyStreamDestination(message) {
+  const proxy = proxyTarget(message);
+  const requestPath = text(message.path, 2000) || "/";
+  if (proxy.id === "video_mixer") {
+    const rawPath = requestPath.split("?", 1)[0];
+    const sourceHeaders = message.headers && typeof message.headers === "object" && !Array.isArray(message.headers)
+      ? message.headers
+      : {};
+    const upgradeEntry = Object.entries(sourceHeaders)
+      .find(([name]) => name.toLowerCase() === "upgrade");
+    const upgrade = upgradeEntry ? upgradeEntry[1] : "";
+    if (
+      rawPath !== "/wsenc"
+      || proxyMethod(message.method) !== "GET"
+      || String(Array.isArray(upgrade) ? upgrade[0] : upgrade || "").toLowerCase() !== "websocket"
+    ) {
+      throw new Error("video mixer websocket request is not allowed");
+    }
+    const belaui = proxyTarget({ target: "belaui" });
+    return { proxy: belaui, target: localProxyUrl(belaui.localUrl, "/") };
+  }
+  return { proxy, target: localProxyUrl(proxy.localUrl, requestPath) };
+}
+
+function localProxyUrl(localUrl, requestPath) {
+  const target = new URL(localUrl);
+  const incoming = new URL(requestPath || "/", "http://frame.local");
   const base = target.pathname.replace(/\/+$/, "");
   target.pathname = `${base}${incoming.pathname}`.replace(/\/{2,}/g, "/");
   target.search = incoming.search;
@@ -860,26 +1286,49 @@ function localBelauiUrl(path) {
   return target;
 }
 
-function proxyHeaders(value, target) {
+function proxyHeaders(value, target, proxy) {
   const source = value && typeof value === "object" && !Array.isArray(value) ? value : {};
   const headers = {};
   for (const [name, item] of Object.entries(source)) {
     const lower = name.toLowerCase();
-    if (["host", "connection", "content-length", "accept-encoding", "proxy-connection", "cookie", "authorization", "x-frame-authenticated-user"].includes(lower)) continue;
-    if (typeof item === "string") headers[lower] = item.slice(0, 4096);
-    else if (Array.isArray(item) && item.every((entry) => typeof entry === "string")) headers[lower] = item.map((entry) => entry.slice(0, 4096)).slice(0, 16);
+    if (["cookie", "cookie2"].includes(lower) && proxy.id !== "video_mixer") continue;
+    if (PROXY_REQUEST_HEADER_BLOCKLIST.has(lower)) continue;
+    const next = typeof item === "string"
+      ? item.slice(0, 4096)
+      : Array.isArray(item) && item.every((entry) => typeof entry === "string")
+        ? item.map((entry) => entry.slice(0, 4096)).slice(0, 16)
+        : null;
+    if (next === null) continue;
+    const entries = Array.isArray(next) ? next : [next];
+    if (!/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/.test(lower)) continue;
+    if (entries.some((entry) => !/^[\t\x20-\x7e\x80-\xff]*$/.test(entry))) continue;
+    headers[lower] = next;
   }
   headers.host = target.host;
   headers["accept-encoding"] = "identity";
+  if (headers.origin) headers.origin = target.origin;
   return headers;
 }
 
-function responseHeaders(headers) {
+function responseHeaders(headers, proxy) {
   return Object.fromEntries(Object.entries(headers).flatMap(([name, value]) => {
-    if (value === undefined) return [];
+    const lower = name.toLowerCase();
+    if (value === undefined || lower === "set-cookie2" || (proxy.id !== "video_mixer" && PROXY_RESPONSE_HEADER_BLOCKLIST.has(lower))) return [];
     if (Array.isArray(value)) return [[name, value.map(String)]];
     return [[name, String(value)]];
   }));
+}
+
+function proxyMethod(value) {
+  const method = text(value, 16) || "GET";
+  if (!/^[A-Za-z]+$/.test(method)) throw new Error("proxy method is invalid");
+  return method.toUpperCase();
+}
+
+function proxyHttpVersion(value) {
+  const version = text(value, 16) || "1.1";
+  if (!["1.0", "1.1"].includes(version)) throw new Error("proxy HTTP version is invalid");
+  return version;
 }
 
 function collectTelemetry(ftpUpload = readFtpUploadStatus()) {
@@ -888,6 +1337,7 @@ function collectTelemetry(ftpUpload = readFtpUploadStatus()) {
   const disk = diskUsage("/");
   const telemetry = {
     device_id: deviceId,
+    agent_session_id: agentSessionId,
     at: new Date().toISOString(),
     hostname: os.hostname(),
     uptime_seconds: Math.round(os.uptime()),
@@ -904,6 +1354,7 @@ function collectTelemetry(ftpUpload = readFtpUploadStatus()) {
     egress: egressState,
     agent_version: VERSION,
     remote_belaui: remoteBelauiState,
+    video_mixer: videoMixerState,
     relay_catalog: relayCatalogState,
   };
   if (ftpUpload) telemetry.ftp_upload = ftpUpload;
@@ -941,16 +1392,18 @@ async function refreshRelayHealth() {
       address: lane.address,
       ...await tcpRelayProbe(target.address, relayProbePort, lane.address),
     })));
-    publishJson(topics.relayHealth, summarizeRelayHealth(serverId, server, results, probeHost));
+    relayHealthState = summarizeRelayHealth(serverId, server, results, probeHost);
+    sendControl("relay_health", relayHealthState);
   } catch (error) {
-    publishJson(topics.relayHealth, {
+    relayHealthState = {
       state: "error",
       rtt_ms: null,
       reachable_lane_count: 0,
       lane_count: 0,
       error: text(error && error.message, 160) || "relay probe failed",
       updated_at: new Date().toISOString(),
-    });
+    };
+    sendControl("relay_health", relayHealthState);
   } finally {
     relayHealthRunning = false;
   }
@@ -1060,29 +1513,70 @@ function writeAtomicJson(file, value) {
   fs.renameSync(temporary, file);
 }
 
-function refreshRemoteBelauiState() {
+async function refreshRemoteBelauiState() {
   if (!remoteBelaui.enabled) {
     remoteBelauiState = remoteBelauiSnapshot("disabled");
     return;
   }
-  const parsed = new URL(remoteBelaui.localUrl);
+  const probe = await probeLocalHttp(remoteBelaui.localUrl);
+  remoteBelauiState = { ...remoteBelauiSnapshot(probe.state), ...probe };
+}
+
+async function refreshVideoMixerState() {
+  const installed = videoMixerInstalled();
+  if (!installed) {
+    videoMixerState = videoMixerSnapshot("unreachable", false);
+    return;
+  }
+  const probe = await probeLocalHttp(VIDEO_MIXER_LOCAL_URL);
+  videoMixerState = { ...videoMixerSnapshot(probe.state, true), ...probe };
+}
+
+function refreshProxyStatesAndPublish(force = false) {
+  if (proxyStateRefreshPromise) return proxyStateRefreshPromise;
+  const previous = proxyStateSignature();
+  proxyStateRefreshPromise = Promise.all([refreshRemoteBelauiState(), refreshVideoMixerState()])
+    .then(() => {
+      if (force || proxyStateSignature() !== previous) publishTelemetry();
+    })
+    .finally(() => {
+      proxyStateRefreshPromise = null;
+    });
+  return proxyStateRefreshPromise;
+}
+
+function proxyStateSignature() {
+  return JSON.stringify([
+    remoteBelauiState.enabled,
+    remoteBelauiState.state,
+    remoteBelauiState.http_status || 0,
+    remoteBelauiState.error || "",
+    videoMixerState.installed === true,
+    videoMixerState.state,
+    videoMixerState.http_status || 0,
+    videoMixerState.error || "",
+  ]);
+}
+
+function probeLocalHttp(localUrl) {
+  const parsed = new URL(localUrl);
   const transport = parsed.protocol === "https:" ? https : http;
-  const request = transport.request(parsed, {
-    method: "GET",
-    timeout: 1500,
-    headers: { "user-agent": `FRAME-Belabox-Agent/${VERSION}` },
-  }, (response) => {
-    response.resume();
-    remoteBelauiState = {
-      ...remoteBelauiSnapshot(response.statusCode && response.statusCode < 500 ? "reachable" : "error"),
-      http_status: response.statusCode || 0,
-    };
+  return new Promise((resolve) => {
+    const request = transport.request(parsed, {
+      method: "GET",
+      timeout: 1500,
+      headers: { "user-agent": `FRAME-Belabox-Agent/${VERSION}` },
+    }, (response) => {
+      response.resume();
+      resolve({
+        state: response.statusCode && response.statusCode < 500 ? "reachable" : "error",
+        http_status: response.statusCode || 0,
+      });
+    });
+    request.on("timeout", () => request.destroy(new Error("timeout")));
+    request.on("error", (error) => resolve({ state: "unreachable", error: text(error.message, 120) }));
+    request.end();
   });
-  request.on("timeout", () => request.destroy(new Error("timeout")));
-  request.on("error", (error) => {
-    remoteBelauiState = { ...remoteBelauiSnapshot("unreachable"), error: text(error.message, 120) };
-  });
-  request.end();
 }
 
 function remoteBelauiSnapshot(state) {
@@ -1094,6 +1588,35 @@ function remoteBelauiSnapshot(state) {
     transport: "agent-wss-proxy",
     checked_at: new Date().toISOString(),
   };
+}
+
+function videoMixerSnapshot(state, installed) {
+  return {
+    enabled: installed,
+    installed,
+    target: "video_mixer",
+    state,
+    local_url: VIDEO_MIXER_LOCAL_URL,
+    transport: "agent-wss-proxy",
+    checked_at: new Date().toISOString(),
+  };
+}
+
+function videoMixerInstalled() {
+  const unit = "irlplus-video-mixer.service";
+  for (const directory of ["/etc/systemd/system", "/lib/systemd/system", "/usr/lib/systemd/system"]) {
+    if (fs.existsSync(path.join(directory, unit))) return true;
+  }
+  try {
+    const output = execFileSync("systemctl", ["list-unit-files", unit, "--no-legend", "--no-pager"], {
+      encoding: "utf8",
+      timeout: 1000,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    return output.split(/\r?\n/).some((line) => line.trim().split(/\s+/, 1)[0] === unit);
+  } catch {
+    return false;
+  }
 }
 
 function photoTransferIsActive(status) {
@@ -1184,7 +1707,7 @@ function lookupIpv4(host) {
 }
 
 function egressTargetHost() {
-  for (const value of [process.env.BELABOX_CHUNK_UPLOAD_URL, process.env.BELABOX_MQTT_URL, url]) {
+  for (const value of [process.env.BELABOX_CHUNK_UPLOAD_URL, process.env.BELABOX_CONTROL_URL, controlUrl]) {
     try {
       const parsed = new URL(value || "");
       if (parsed.hostname) return parsed.hostname;
@@ -1429,18 +1952,6 @@ function safeJourneyId(value) {
   return parsed && /^[A-Za-z0-9_-]{8,96}$/.test(parsed) && !parsed.includes("__") ? parsed : null;
 }
 
-function publishJson(topic, payload, retain = false) {
-  if (!client || !client.connected) return;
-  client.publish(topic, JSON.stringify(payload), { qos: 1, retain });
-}
-
-function parseJsonPayload(payload, maxBytes) {
-  const textValue = payload.toString("utf8").slice(0, maxBytes);
-  const parsed = JSON.parse(textValue);
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("proxy payload must be an object");
-  return parsed;
-}
-
 function readPublicKeyPem() {
   if (process.env.BELABOX_COMMAND_SIGNING_PUBLIC_KEY_B64) {
     return Buffer.from(process.env.BELABOX_COMMAND_SIGNING_PUBLIC_KEY_B64, "base64").toString("utf8");
@@ -1578,6 +2089,224 @@ function selfTest() {
   } finally {
     fs.rmSync(queueRoot, { recursive: true, force: true });
   }
+  assertEqual(proxyTarget({}).id, "belaui", "legacy proxy target");
+  assertEqual(proxyTarget({ target: "video_mixer" }).localUrl, VIDEO_MIXER_LOCAL_URL, "video mixer proxy target");
+  assertEqual(localProxyUrl(VIDEO_MIXER_LOCAL_URL, "/api/status?full=1").toString(), `${VIDEO_MIXER_LOCAL_URL}/api/status?full=1`, "video mixer proxy URL");
+  assertReject(() => proxyTarget({ target: "http://127.0.0.1:1234" }), "arbitrary proxy target");
+  assertReject(() => proxyTarget({ target: null }), "non-string proxy target");
+  const belauiProxy = proxyTarget({});
+  const mixerProxy = proxyTarget({ target: "video_mixer" });
+  const safeProxyHeaders = proxyHeaders({
+    authorization: "Bearer frame-secret",
+    cookie: "frame_session=secret",
+    origin: "https://frame.example.test",
+    upgrade: "websocket",
+    "x-forwarded-for": "203.0.113.10",
+    "x-safe-header": "safe",
+    "x-invalid-header": "bad\r\ninjected: true",
+  }, new URL(remoteBelaui.localUrl), belauiProxy);
+  assertEqual(safeProxyHeaders.authorization, undefined, "proxy authorization removal");
+  assertEqual(safeProxyHeaders.cookie, undefined, "proxy cookie removal");
+  assertEqual(safeProxyHeaders["x-forwarded-for"], undefined, "proxy forwarding header removal");
+  assertEqual(safeProxyHeaders.origin, new URL(remoteBelaui.localUrl).origin, "proxy origin rewrite");
+  assertEqual(safeProxyHeaders.upgrade, "websocket", "proxy WebSocket upgrade header");
+  assertEqual(safeProxyHeaders["x-safe-header"], "safe", "proxy safe header");
+  assertEqual(safeProxyHeaders["x-invalid-header"], undefined, "proxy invalid header removal");
+  const mixerProxyHeaders = proxyHeaders({
+    authorization: "Bearer frame-secret",
+    cookie: "mixer_session=allowed",
+  }, new URL(VIDEO_MIXER_LOCAL_URL), mixerProxy);
+  assertEqual(mixerProxyHeaders.authorization, undefined, "mixer authorization removal");
+  assertEqual(mixerProxyHeaders.cookie, "mixer_session=allowed", "mixer cookie forwarding");
+  const mixerBridge = proxyStreamDestination({
+    target: "video_mixer",
+    method: "GET",
+    path: "/wsenc?port=65535",
+    headers: { upgrade: "websocket" },
+  });
+  const expectedBelauiRoot = localProxyUrl(remoteBelaui.localUrl, "/");
+  assertEqual(mixerBridge.proxy.id, "belaui", "mixer encoder bridge target");
+  assertEqual(mixerBridge.target.toString(), expectedBelauiRoot.toString(), "mixer encoder bridge ignores port query");
+  assertEqual(proxyHeaders({ cookie: "mixer_session=secret" }, mixerBridge.target, mixerBridge.proxy).cookie, undefined, "mixer encoder bridge cookie isolation");
+  const mixerUpgrade = { method: "GET", headers: { upgrade: "websocket" } };
+  assertReject(() => proxyStreamDestination({ target: "video_mixer", path: "/ws?port=65535", ...mixerUpgrade }), "other mixer websocket path");
+  assertReject(() => proxyStreamDestination({ target: "video_mixer", path: "/wsenc/", ...mixerUpgrade }), "trailing-slash mixer websocket path");
+  assertReject(() => proxyStreamDestination({ target: "video_mixer", path: "//anything/wsenc", ...mixerUpgrade }), "authority-like mixer websocket path");
+  assertReject(() => proxyStreamDestination({ target: "video_mixer", path: "/foo/../wsenc", ...mixerUpgrade }), "normalized mixer websocket path");
+  assertReject(() => proxyStreamDestination({ target: "video_mixer", method: "POST", path: "/wsenc", headers: { upgrade: "websocket" } }), "non-GET mixer websocket request");
+  assertReject(() => proxyStreamDestination({ target: "video_mixer", method: "GET", path: "/wsenc", headers: {} }), "missing mixer websocket upgrade");
+  const cookieResponseHeaders = { "set-cookie": ["mixer_session=allowed; Path=/; HttpOnly"], "content-type": "text/html" };
+  assertEqual(responseHeaders(cookieResponseHeaders, belauiProxy)["set-cookie"], undefined, "belaUI response cookie removal");
+  assertEqual(responseHeaders(cookieResponseHeaders, mixerProxy)["set-cookie"][0], cookieResponseHeaders["set-cookie"][0], "mixer response cookie forwarding");
+  const streamId = "00112233-4455-6677-8899-aabbccddeeff";
+  assertEqual(streamIdFromBytes(streamIdBytes(streamId)), streamId, "binary stream id round trip");
+  assertEqual(normalizeStreamId("00112233445566778899AABBCCDDEEFF"), streamId, "compact stream id");
+  assertReject(() => normalizeStreamId("not-a-uuid"), "invalid stream id");
+  const previousClient = client;
+  const previousAuthenticated = authenticated;
+  let sentBinary = null;
+  const sentJson = [];
+  client = {
+    readyState: 1,
+    bufferedAmount: 0,
+    send(value, options, callback) {
+      if (typeof options === "function") {
+        callback = options;
+        options = undefined;
+      }
+      if (options && options.binary) sentBinary = Buffer.from(value);
+      else sentJson.push(JSON.parse(String(value)));
+      if (callback) callback();
+    },
+  };
+  authenticated = true;
+  sendProxyBinary({ id: streamId, drainTimer: null, controlOutputPaused: false }, Buffer.from("streamed"), null);
+  assertEqual(sentBinary.length, PROXY_BINARY_HEADER_BYTES + 8, "binary frame length");
+  assertEqual(sentBinary.subarray(PROXY_BINARY_HEADER_BYTES).toString("utf8"), "streamed", "binary frame body");
+  let receivedBinary = "";
+  const incomingStream = {
+    id: streamId,
+    kind: "http",
+    ready: true,
+    destination: {
+      destroyed: false,
+      write(value) {
+        receivedBinary += Buffer.from(value).toString("utf8");
+        return true;
+      },
+      destroy() {},
+    },
+    source: null,
+    inputBlocked: false,
+    pendingInput: [],
+    pendingInputBytes: 0,
+    inputPauseSent: false,
+    idleTimer: null,
+    drainTimer: null,
+  };
+  proxyStreams.set(streamId, incomingStream);
+  handleControlBinary(sentBinary);
+  assertEqual(receivedBinary, "streamed", "binary frame delivery");
+  removeProxyStream(incomingStream, true);
+  let flushedInput = "";
+  const pendingStream = {
+    id: "10213243-5465-7687-98a9-bacbdcedfe0f",
+    ready: true,
+    destination: {
+      writableEnded: false,
+      write(value) {
+        flushedInput += Buffer.from(value).toString("utf8");
+        return true;
+      },
+      end() {},
+    },
+    pendingInput: [Buffer.from("head"), Buffer.from("body")],
+    pendingInputBytes: 8,
+    pendingEnd: false,
+    inputBlocked: false,
+    inputDrainWaiting: false,
+    inputPauseSent: true,
+  };
+  flushPendingProxyInput(pendingStream);
+  assertEqual(flushedInput, "headbody", "pre-connect websocket input ordering");
+  assertEqual(pendingStream.pendingInputBytes, 0, "pre-connect websocket buffer release");
+  assertEqual(sentJson[sentJson.length - 1].type, "proxy_resume", "pre-connect websocket input resume");
+  let backpressuredInput = "";
+  let drainInput = null;
+  const backpressuredStream = {
+    id: "11223344-5566-7788-99aa-bbccddeeff00",
+    ready: true,
+    destination: {
+      writableEnded: false,
+      write(value) {
+        backpressuredInput += Buffer.from(value).toString("utf8");
+        return backpressuredInput !== "first";
+      },
+      once(event, callback) {
+        if (event === "drain") drainInput = callback;
+      },
+      destroy() {},
+    },
+    source: null,
+    pendingInput: [Buffer.from("first"), Buffer.from("second")],
+    pendingInputBytes: 11,
+    pendingEnd: false,
+    inputBlocked: false,
+    inputDrainWaiting: false,
+    inputPauseSent: false,
+    idleTimer: null,
+    connectTimer: null,
+    drainTimer: null,
+  };
+  proxyStreams.set(backpressuredStream.id, backpressuredStream);
+  flushPendingProxyInput(backpressuredStream);
+  assertEqual(backpressuredInput, "first", "queued proxy input stops at first backpressure");
+  assertEqual(backpressuredStream.pendingInput.length, 1, "backpressured proxy input remains queued");
+  assertEqual(sentJson[sentJson.length - 1].type, "proxy_pause", "backpressured proxy input pause");
+  drainInput();
+  assertEqual(backpressuredInput, "firstsecond", "queued proxy input resumes after drain");
+  assertEqual(sentJson[sentJson.length - 1].type, "proxy_resume", "backpressured proxy input resume");
+  removeProxyStream(backpressuredStream, true);
+  const websocketTimer = { kind: "websocket", idleTimer: null };
+  touchProxyStream(websocketTimer);
+  assertEqual(websocketTimer.idleTimer, null, "websocket proxy has no idle timer");
+  let firstPauses = 0;
+  let firstResumes = 0;
+  let secondPauses = 0;
+  const firstFlowStream = {
+    id: "22334455-6677-8899-aabb-ccddeeff0011",
+    destination: { destroy() {} },
+    source: {
+      pause() { firstPauses += 1; },
+      resume() { firstResumes += 1; },
+      destroy() {},
+    },
+    remoteOutputPaused: false,
+    controlOutputPaused: false,
+    idleTimer: null,
+    connectTimer: null,
+    drainTimer: null,
+  };
+  const secondFlowStream = {
+    id: "33445566-7788-99aa-bbcc-ddeeff001122",
+    destination: { destroy() {} },
+    source: {
+      pause() { secondPauses += 1; },
+      resume() {},
+      destroy() {},
+    },
+    remoteOutputPaused: false,
+    controlOutputPaused: false,
+    idleTimer: null,
+    connectTimer: null,
+    drainTimer: null,
+  };
+  proxyStreams.set(firstFlowStream.id, firstFlowStream);
+  proxyStreams.set(secondFlowStream.id, secondFlowStream);
+  setProxyOutputPaused(firstFlowStream.id, true);
+  assertEqual(firstPauses, 1, "per-stream output pause");
+  assertEqual(secondPauses, 0, "output pause does not block another stream");
+  firstFlowStream.controlOutputPaused = true;
+  setProxyOutputPaused(firstFlowStream.id, false);
+  assertEqual(firstResumes, 0, "control-buffer pause survives remote resume");
+  firstFlowStream.controlOutputPaused = false;
+  resumeProxySource(firstFlowStream);
+  assertEqual(firstResumes, 1, "per-stream output resumes after all pause reasons clear");
+  removeProxyStream(firstFlowStream, true);
+  removeProxyStream(secondFlowStream, true);
+  client = previousClient;
+  authenticated = previousAuthenticated;
+  assertEqual(normalizeControlUrl("https://frame.example.test/belabox/control"), "wss://frame.example.test/belabox/control", "HTTPS control URL");
+  assertEqual(normalizeControlUrl("wss://frame.example.test/belabox/control"), "wss://frame.example.test/belabox/control", "WSS control URL");
+  assertReject(() => normalizeControlUrl("ws://frame.example.test/belabox/control"), "plaintext control URL");
+  assertEqual(
+    controlProof("01234567890123456789012345678901", "selftest", VERSION, "abcdefghijklmnop"),
+    "83c63fb823b4ab63aa4541db893c624b516dbf0c27b62e08b45ac932a807aec9",
+    "control authentication proof",
+  );
+  assertReject(() => controlNonce("short"), "short challenge nonce");
+  assertEqual(proxyContentLength({ "Content-Length": "4294967296" }), "4294967296", "streamed content length");
+  assertEqual(proxyContentLength({ "content-length": "invalid" }), null, "invalid content length");
   assertEqual(loopbackHttpUrl("http://127.0.0.1:3741/"), "http://127.0.0.1:3741", "loopback URL");
   assertEqual(readBool("FRAME_SELFTEST_MISSING_BOOL", true), true, "bool fallback");
 }
@@ -1595,48 +2324,29 @@ function assertEqual(actual, expected, label) {
   if (actual !== expected) throw new Error(`${label} expected ${expected} but got ${actual}`);
 }
 
-function topicSet(id) {
-  const root = `frame/belabox/${id}`;
-  return {
-    root,
-    status: `${root}/status`,
-    heartbeat: `${root}/heartbeat`,
-    telemetry: `${root}/telemetry`,
-    relayHealth: `${root}/relay/health`,
-    logs: `${root}/logs`,
-    version: `${root}/agent/version`,
-    cmdRequest: `${root}/cmd/request`,
-    cmdResponse: `${root}/cmd/response`,
-    proxyHttpRequest: `${root}/proxy/http/request/+`,
-    proxyStreamClient: `${root}/proxy/stream/+/client`,
-    proxyHttpResponse: (requestId) => `${root}/proxy/http/response/${requestId}`,
-    proxyStreamServer: (sessionId) => `${root}/proxy/stream/${sessionId}/server`,
-  };
-}
-
-function proxyHttpRequestId(topic) {
-  const prefix = `${topics.root}/proxy/http/request/`;
-  const requestId = topic.startsWith(prefix) ? topic.slice(prefix.length) : "";
-  return /^[A-Za-z0-9_-]{8,80}$/.test(requestId) ? requestId : "";
-}
-
-function proxyStreamClientId(topic) {
-  const prefix = `${topics.root}/proxy/stream/`;
-  if (!topic.startsWith(prefix) || !topic.endsWith("/client")) return null;
-  const sessionId = topic.slice(prefix.length, -"/client".length);
-  return /^[A-Za-z0-9_-]{8,80}$/.test(sessionId) ? { sessionId } : null;
-}
-
-function mqttUrlFromHost() {
-  const host = process.env.BELABOX_MQTT_HOST || "wss://localhost";
-  const path = process.env.BELABOX_MQTT_WS_PATH || "/mqtt";
-  const parsed = new URL(host);
+function normalizeControlUrl(value) {
+  const parsed = new URL(value);
   if (parsed.protocol === "https:") parsed.protocol = "wss:";
-  if (parsed.protocol === "http:") parsed.protocol = "ws:";
-  parsed.pathname = path;
-  parsed.search = "";
+  if (parsed.protocol !== "wss:") throw new Error("BELABOX_CONTROL_URL must use https or wss");
+  if (parsed.username || parsed.password) throw new Error("BELABOX_CONTROL_URL must not contain credentials");
   parsed.hash = "";
   return parsed.toString();
+}
+
+function normalizeStreamId(value) {
+  if (typeof value !== "string") throw new Error("proxy stream id is invalid");
+  const compact = value.replace(/-/g, "").toLowerCase();
+  if (!/^[a-f0-9]{32}$/.test(compact)) throw new Error("proxy stream id is invalid");
+  return `${compact.slice(0, 8)}-${compact.slice(8, 12)}-${compact.slice(12, 16)}-${compact.slice(16, 20)}-${compact.slice(20)}`;
+}
+
+function streamIdBytes(value) {
+  return Buffer.from(normalizeStreamId(value).replace(/-/g, ""), "hex");
+}
+
+function streamIdFromBytes(value) {
+  if (!Buffer.isBuffer(value) || value.length !== 16) throw new Error("proxy binary stream id is invalid");
+  return normalizeStreamId(value.toString("hex"));
 }
 
 function sanitizeId(value) {

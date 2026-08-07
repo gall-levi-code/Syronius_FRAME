@@ -393,7 +393,7 @@ function renderCreateDataSource() {
             ${sourceChoice({ key:"upload:all", title:"All uploads", detail:"One journey queue for every upload method", active:selectedKey === "upload:all" })}
             ${sourceChoice({ key:"upload:web_upload", title:"Web upload", detail:"Browser and mobile upload telemetry", active:selectedKey === "upload:web_upload" })}
             ${sourceChoice({ key:"upload:ftp", title:"FTP ingest", detail:"Live file-growth and staged-camera-upload telemetry", active:selectedKey === "upload:ftp" })}
-            ${sourceChoice({ key:"upload:belabox_agent", title:"Belabox transfer connector", detail:"Live Belabox transfer progress from MQTT telemetry", active:selectedKey === "upload:belabox_agent" })}
+            ${sourceChoice({ key:"upload:belabox_agent", title:"Belabox transfer connector", detail:"Live Belabox transfer progress from device telemetry", active:selectedKey === "upload:belabox_agent" })}
           </div>
         </section>
       </div>

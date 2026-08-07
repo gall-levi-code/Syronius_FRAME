@@ -13,6 +13,7 @@ import {
   computeEffectivePublicPrefixes,
   enforceDependencies,
   normalizePrefixes,
+  upgradeStackConfig,
 } from "../installer/frame-contract.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -23,6 +24,21 @@ test("canonical registry matches the published stack-config schema", async () =>
   assert.deepEqual(Object.keys(schema.properties.capabilities.properties), CAPABILITIES);
   assert.deepEqual(schema.properties.routes.required, Object.keys(ROUTES));
   assert.deepEqual(Object.keys(schema.properties.routes.properties), Object.keys(ROUTES));
+});
+
+test("verification, spec, and ignores keep their canonical project contracts", async () => {
+  const [workflow, spec, gitignore] = await Promise.all([
+    readFile(".github/workflows/verify.yml", "utf8"),
+    readFile("docs/spec/v1.1.md", "utf8"),
+    readFile(".gitignore", "utf8"),
+  ]);
+  assert.match(workflow, /^\s+- frame-belabox-manager\s*$/m);
+  assert.match(workflow, /^\s+- run: npm test\s*$/m);
+  assert.ok(!workflow.includes("contains(fromJSON("), "Every service must run its test script");
+  const schemaAppendix = spec.slice(spec.indexOf("### Appendix A — Canonical JSON Schema"));
+  assert.ok(schemaAppendix.includes("](../schemas/stack-config.schema.json)"));
+  assert.ok(!schemaAppendix.includes("```json"), "The spec must not embed a second schema copy");
+  assert.match(gitignore, /^\/\.codex-remote-attachments\/$/m);
 });
 
 test("runtime overlay schema and stock defaults match their canonical copies", async () => {
@@ -37,14 +53,10 @@ test("runtime overlay schema and stock defaults match their canonical copies", a
 });
 
 test("installer Compose template stays synchronized with the service contracts", async () => {
-  const [compose, brokerConfig] = await Promise.all([
-    readFile("installer/templates/docker-compose.yml", "utf8"),
-    readFile("services/frame-belabox-broker/mosquitto.conf", "utf8"),
-  ]);
+  const compose = await readFile("installer/templates/docker-compose.yml", "utf8");
   const photoUpload = composeServiceBlock(compose, "frame-photo-upload");
   const photoFtp = composeServiceBlock(compose, "frame-photo-ftp");
   const photoPipeline = composeServiceBlock(compose, "frame-pipeline-photos");
-  const belaboxBroker = composeServiceBlock(compose, "frame-belabox-broker");
   const belabox = composeServiceBlock(compose, "frame-belabox-manager");
   const today = composeServiceBlock(compose, "frame-today");
   const streams = composeServiceBlock(compose, "frame-streams");
@@ -59,24 +71,22 @@ test("installer Compose template stays synchronized with the service contracts",
   assert.ok(photoFtp.includes("${PHOTO_FTP_PASSIVE_MIN:-30000}-${PHOTO_FTP_PASSIVE_MAX:-30019}:${PHOTO_FTP_PASSIVE_MIN:-30000}-${PHOTO_FTP_PASSIVE_MAX:-30019}"));
   assert.ok(photoPipeline.includes("PIPELINE_CONCURRENCY: ${PIPELINE_CONCURRENCY:-2}"));
   assert.ok(photoPipeline.includes("PORTAL_SERVICE_TOKEN: ${PORTAL_SERVICE_TOKEN}"));
-  assert.ok(belaboxBroker.includes("image: eclipse-mosquitto@sha256:"));
-  assert.ok(belaboxBroker.includes("BELABOX_MQTT_PASSWORD: ${BELABOX_MQTT_PASSWORD:-}"));
-  assert.ok(belaboxBroker.includes("Path(`/mqtt`) || PathPrefix(`/mqtt/`)"));
-  assert.ok(belaboxBroker.includes("topic write frame/belabox/+/proxy/http/request/+"));
-  assert.ok(belaboxBroker.includes("topic read frame/belabox/+/proxy/stream/+/server"));
-  assert.ok(brokerConfig.includes("acl_file /mosquitto/data/acl"));
-  assert.ok(!belaboxBroker.includes("ports:"));
+  assert.ok(!compose.includes("frame-belabox-broker"));
+  assert.ok(!compose.includes("mosquitto"));
+  assert.ok(!compose.includes("Path(`/mqtt`)"));
   assert.ok(belabox.includes("BELABOX_HOST: ${BELABOX_HOST:-}"));
   assert.ok(belabox.includes("FRAME_MODE: ${FRAME_MODE:-LAN}"));
   assert.ok(belabox.includes("BELABOX_SSH_CREDENTIAL_KEY: ${BELABOX_SSH_CREDENTIAL_KEY:-}"));
   assert.ok(belabox.includes("BELABOX_AGENT_COMMANDS_ENABLED: ${BELABOX_AGENT_COMMANDS_ENABLED:-false}"));
-  assert.ok(belabox.includes("BELABOX_MQTT_INTERNAL_URL: ${BELABOX_MQTT_INTERNAL_URL:-mqtt://frame-belabox-broker:1883}"));
-  assert.ok(belabox.includes("BELABOX_MQTT_PASSWORD: ${BELABOX_MQTT_PASSWORD:-}"));
+  assert.ok(belabox.includes("BELABOX_CONTROL_PUBLIC_URL: ${BELABOX_CONTROL_PUBLIC_URL:-ws://localhost/belabox/control}"));
+  assert.ok(belabox.includes("BELABOX_CONTROL_RECONNECT_MS: ${BELABOX_CONTROL_RECONNECT_MS:-5000}"));
+  assert.ok(belabox.includes("BELABOX_CONTROL_HEARTBEAT_MS: ${BELABOX_CONTROL_HEARTBEAT_MS:-10000}"));
+  assert.ok(belabox.includes("traefik.http.routers.frame-belabox-control.priority: \"270\""));
+  assert.ok(belabox.includes("traefik.http.routers.frame-belabox-control.rule: Path(`/belabox/control`)"));
+  assert.ok(!belabox.includes("traefik.http.routers.frame-belabox-control.middlewares"));
   assert.ok(belabox.includes("BELABOX_CHUNK_UPLOAD_URL: ${BELABOX_CHUNK_UPLOAD_URL:-}"));
   assert.ok(belabox.includes("Path(`/belabox-chunks`) || PathPrefix(`/belabox-chunks/`)"));
   assert.ok(belabox.includes("BELABOX_DIAGNOSTIC_UPLOAD_BYTES: ${BELABOX_DIAGNOSTIC_UPLOAD_BYTES:-8388608}"));
-  assert.ok(belabox.includes("BELABOX_BROKER_DATA_DIR: /broker-data"));
-  assert.ok(belabox.includes("frame-belabox-broker:"));
   assert.ok(!belabox.includes("ports:"));
   assert.ok(overlays.includes("PORTAL_SERVICE_TOKEN: ${PORTAL_SERVICE_TOKEN}"));
   assert.ok(overlays.includes("PHOTO_UPLOAD_API_URL: http://frame-photo-upload:3736"));
@@ -344,6 +354,33 @@ test("implemented capability profiles are stable and ordered", () => {
   ]);
 });
 
+test("legacy Belabox MQTT config upgrades to the canonical control routes", () => {
+  const legacyCapabilities = Object.fromEntries(CAPABILITIES.map((name) => [name, name === "frame-belabox-manager"]));
+  legacyCapabilities["frame-belabox-broker"] = true;
+  const legacyRoutes = {
+    ...Object.fromEntries(Object.entries(ROUTES).filter(([name]) => !["belabox_mixer", "belabox_control"].includes(name))),
+    belabox_mqtt: "/mqtt",
+  };
+  const legacyPrefixes = PUBLIC_PREFIXES.filter((prefix) => !["/belabox/mixer", "/belabox/control"].includes(prefix));
+  legacyPrefixes.push("/mqtt");
+
+  const upgraded = upgradeStackConfig({
+    mode: "HYBRID",
+    capabilities: legacyCapabilities,
+    routes: legacyRoutes,
+    public_route_prefixes: legacyPrefixes,
+  });
+
+  assert.deepEqual(Object.keys(upgraded.capabilities), CAPABILITIES);
+  assert.equal("frame-belabox-broker" in upgraded.capabilities, false);
+  assert.deepEqual(Object.keys(upgraded.routes), Object.keys(ROUTES));
+  assert.equal("belabox_mqtt" in upgraded.routes, false);
+  assert.equal(upgraded.routes.belabox_control, "/belabox/control");
+  assert.equal(upgraded.routes.belabox_mixer, "/belabox/mixer");
+  assert.deepEqual(upgraded.public_route_prefixes, [...PUBLIC_PREFIXES]);
+  assert.equal(upgraded.public_route_prefixes.includes("/mqtt"), false);
+});
+
 test("photo pipeline is internal and activated by every photo capability", () => {
   assert.equal(SERVICE_REGISTRY.internalServices["frame-auth"].userSelectable, false);
   assert.equal(SERVICE_REGISTRY.internalServices["frame-pipeline-photos"].userSelectable, false);
@@ -448,7 +485,7 @@ test("Hybrid exposes unauthenticated read-only stream stats without exposing Str
   assert.ok(!prefixes.includes("/slsui"));
 });
 
-test("Belabox pairing UI hides MQTT implementation details", async () => {
+test("Belabox pairing UI hides transport implementation details", async () => {
   const [html, frontend, backend, dockerfile, agent, photoAgent, styles] = await Promise.all([
     readFile("services/frame-belabox-manager/public/index.html", "utf8"),
     readFile("services/frame-belabox-manager/public/app.js", "utf8"),
@@ -528,7 +565,14 @@ test("Belabox pairing UI hides MQTT implementation details", async () => {
   for (const tab of ["overview", "photos", "connections", "diagnostics", "system"]) {
     assert.ok(frontend.includes(`data-workspace-pane="${tab}"`), `Belabox workspace should include the ${tab} tab`);
   }
+  assert.ok(frontend.includes('...(mixerInstalled ? [["mixer", "Video Mixer"]] : [])'), "Video Mixer should be a capability-driven tab");
   assert.ok(frontend.includes("LAST_WORKSPACE_TAB_KEY"), "Belabox Manager should restore the selected workflow tab");
+  assert.ok(frontend.includes('elements.devicePanel.addEventListener("keydown", handleWorkspaceTabKeydown);'), "Workspace tabs should register keyboard navigation");
+  assert.ok(frontend.includes('["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)'), "Workspace tabs should support arrow and boundary keys");
+  assert.ok(frontend.includes("if (activeWorkspaceTab !== state.workspaceTab)"), "Unavailable capability tabs should normalize the saved selection");
+  assert.ok(frontend.includes('if (!event.target.closest?.("input, textarea, select, [contenteditable=\'true\']")) return;'), "Passive panel actions must not freeze status refreshes");
+  assert.ok(frontend.includes("holdCurrentPanelRender(event);"), "Editable form input should retain the panel render hold");
+  assert.ok(!frontend.includes("holdCurrentPanelRender();"), "Render holds must not be activated without an editable event target");
   assert.ok(frontend.includes("ADVANCED_VIEW_KEY"), "Belabox Manager should restore the Simple/Advanced preference");
   assert.ok(frontend.includes('data-view-mode="simple"') && frontend.includes('data-view-mode="advanced"'), "Technical details should use an explicit Simple/Advanced segmented control");
   assert.ok(frontend.includes('querySelectorAll("[data-view-mode]")'), "Simple/Advanced state should stay synchronized without replacing the panel");
@@ -584,7 +628,7 @@ test("Belabox pairing UI hides MQTT implementation details", async () => {
   assert.ok(backend.includes("SSH password is required."));
   assert.ok(backend.includes("aes-256-gcm"));
   assert.ok(backend.includes("safeFtpPassword"));
-  assert.ok(backend.includes("if (!device.last_heartbeat_at) return false"));
+  assert.ok(backend.includes("controlConnections.get(device.device_id)?.socket.readyState === WebSocket.OPEN"), "The live WSS connection should be authoritative for online state");
   assert.ok(backend.includes("/belabox/api/diagnostics/speed-test"));
   assert.ok(backend.includes("network_speed_test"));
   assert.ok(backend.includes('app.get("/belabox-chunks/api/diagnostics/speed-test"'), "FRAME diagnostics should provide authenticated downloads");
@@ -593,20 +637,19 @@ test("Belabox pairing UI hides MQTT implementation details", async () => {
   assert.ok(backend.includes('mode: "interface_speed_test"'), "Manager diagnostics should request the per-interface agent test");
   assert.ok(backend.includes("interface_name: input.interfaceName"), "Manager diagnostics should preserve the selected interface");
   assert.equal((backend.match(/safePositiveInt\([^\n]+config\.chunkUpload\.chunkSizeBytes\)/g) || []).length, 2, "Chunk manifests and commands must respect the receiver body limit");
-  assert.ok(backend.includes("isProvisionedDevice(parsedTopic.deviceId)"));
-  assert.ok(backend.includes("proxy/http/request"));
+  assert.ok(backend.includes("controlProof(provisioned.control_secret"), "Device sessions must authenticate with their provisioned secret");
+  assert.ok(backend.includes('type: "proxy_open"'));
+  assert.ok(backend.includes("sendControlBinary"), "Proxy bodies must use binary streaming frames");
   assert.ok(backend.includes("agent-wss-only"));
   assert.ok(backend.includes("This encoder is offline."));
   assert.ok(backend.includes('response.setHeader("Refresh", "2")'));
   assert.ok(backend.includes('`${REMOTE_BELAUI_ROUTE_PREFIX}/status`'));
   assert.ok(backend.includes("remoteBelauiShellPage"));
-  assert.ok(backend.includes("REMOTE_BELAUI_STATUS_TIMEOUT_MS"));
   assert.ok(backend.includes("REMOTE_BELAUI_STATUS_POLL_MS"));
   assert.ok(backend.includes("REMOTE_BELAUI_READY_STATUS_POLL_MS"));
   assert.ok(backend.includes("REMOTE_BELAUI_OFFLINE_FAILURES"));
-  assert.ok(backend.includes("probe_only: true"));
   assert.ok(backend.includes("noteOffline"));
-  assert.ok(backend.includes("requireReachable: false"));
+  assert.ok(backend.includes('const ready = remoteState === "reachable"'));
   assert.ok(backend.includes("Reconnecting to encoder..."));
   assert.ok(backend.includes("frame-belabox-remote-offline"));
   assert.ok(frontend.includes('/belabox/remote?key=${encodeURIComponent(deviceId)}'));
@@ -619,7 +662,7 @@ test("Belabox pairing UI hides MQTT implementation details", async () => {
   assert.ok(agent.includes("selectDiagnosticLanes"), "Agent diagnostics should reject unroutable interfaces");
   assert.ok(agent.includes("BELABOX_CHUNK_UPLOAD_TOKEN"));
   assert.ok(agent.includes("BELABOX_EGRESS_STATUS_PATH"));
-  assert.ok(agent.includes("message.probe_only === true"));
+  assert.ok(agent.includes("proxy_open"));
   assert.ok(agent.includes("routeForSource"));
   assert.ok(agent.includes("agent-wss-proxy"));
   assert.ok(photoAgent.includes("source_address="));
@@ -642,8 +685,14 @@ test("Belabox pairing UI hides MQTT implementation details", async () => {
   assert.ok(styles.includes(".diagnostic-target-selector"), "Diagnostic targets should use a segmented selector");
   assert.ok(backend.includes("frame-belabox-photo-agent.service"));
   assert.ok(backend.includes("photo-agent.py"));
+  assert.ok(backend.includes('dependencies: { ws: "8.21.1" }'), "Generated agent installs must pin the tested WebSocket dependency");
+  assert.ok(backend.includes("refresh_photo_agent_upload_credentials"), "Agent repair must refresh an existing Photo Agent upload credential");
+  assert.ok(backend.includes("mv -f \"$photo_env_tmp\" \"$photo_env\""), "Photo Agent credential refresh must replace its env atomically");
+  assert.ok(backend.includes("restart_existing_photo_agent"), "Agent repair must restart the existing Photo Agent after credential refresh");
+  assert.ok(backend.includes("photo_upload_token=\"$(printf %s '${b64(device.upload_token)}' | base64 -d)\""), "Photo Agent refresh must install the separate upload token");
   assert.ok(!html.includes("MQTT password"));
   assert.ok(!frontend.includes("BELABOX_MQTT_PASSWORD"));
+  assert.ok(!frontend.includes("mqtt_status"));
 });
 
 test("Photo Stage exposes Open and Copy actions for its Hybrid links", async () => {
@@ -689,6 +738,71 @@ test("Belabox agent rejects invalid signed commands", async () => {
   await execFileAsync("node", ["services/frame-belabox-manager/agent/belabox-agent.mjs", "--self-test"]);
 });
 
+test("Belabox Video Mixer proxy stays fixed, namespaced, and fail-closed", async () => {
+  const [backend, agent, frontend] = await Promise.all([
+    readFile("services/frame-belabox-manager/src/index.ts", "utf8"),
+    readFile("services/frame-belabox-manager/agent/belabox-agent.mjs", "utf8"),
+    readFile("services/frame-belabox-manager/public/app.js", "utf8"),
+  ]);
+
+  assert.ok(backend.includes('const VIDEO_MIXER_ROUTE_PREFIX = "/belabox/mixer";'));
+  assert.ok(backend.includes('app.get(`${VIDEO_MIXER_ROUTE_PREFIX}/status`'));
+  assert.ok(backend.includes("videoMixerShellPage(remoteBelauiKey(key))"));
+  assert.ok(backend.includes('`${VIDEO_MIXER_ROUTE_PREFIX}/:deviceId/*`'));
+  assert.ok(backend.includes('proxyRemoteBelaui(request, response, next, "video_mixer")'));
+  assert.ok(backend.includes('return remoteProxyStatusPayload(deviceId, "video_mixer");'));
+
+  assert.ok(backend.includes('const VIDEO_MIXER_LOCAL_URL = "http://127.0.0.1:9080";'));
+  assert.ok(backend.includes("target: parsed.target"), "Mixer WebSocket upgrades must retain their fixed target");
+  assert.ok(backend.includes('parsed.path !== "/wsenc"'), "Manager must reject unrecognized mixer WebSocket paths");
+  assert.ok(backend.includes('request.method !== "GET"'), "Manager must reject non-GET mixer WebSocket upgrades");
+  assert.ok(backend.includes('String(upgrade || "").toLowerCase() !== "websocket"'), "Manager must require the WebSocket upgrade token");
+  assert.ok(agent.includes('const VIDEO_MIXER_LOCAL_URL = "http://127.0.0.1:9080";'));
+  assert.ok(agent.includes('if (requested === "video_mixer")'));
+  assert.ok(agent.includes('return { id: "video_mixer", label: "video mixer", localUrl: VIDEO_MIXER_LOCAL_URL };'));
+  assert.ok(agent.includes('throw new Error("proxy target is not allowed")'), "The agent must reject arbitrary proxy targets");
+  assert.ok(agent.includes("video_mixer: videoMixerState"), "Mixer availability must be reported in telemetry");
+  assert.ok(agent.includes('rawPath !== "/wsenc"'), "Only the exact raw mixer encoder bridge path may leave port 9080");
+  assert.ok(agent.includes('target: localProxyUrl(belaui.localUrl, "/")'), "Mixer encoder WebSockets must use the allowlisted belaUI root");
+  assert.ok(agent.includes('path: "/wsenc?port=65535"'), "The agent self-test must prove browser port input is ignored");
+  assert.ok(agent.includes('path: "//anything/wsenc"'), "The agent self-test must reject URL-normalized path confusion");
+  assert.ok(agent.includes('"missing mixer websocket upgrade"'), "The agent self-test must require an explicit WebSocket upgrade");
+  assert.ok(agent.includes('"mixer encoder bridge cookie isolation"'), "Mixer session cookies must not reach belaUI");
+
+  assert.ok(backend.includes("if (mixer && !videoMixerInstalled(live))"));
+  assert.ok(backend.includes('stringValue(mixer.target) === "video_mixer"'), "Mixer capability telemetry must identify its fixed target");
+  assert.ok(backend.includes("mixer?.installed === true"), "Mixer installation must remain distinct from service reachability");
+  assert.ok(backend.includes('throw new RequestError(409, "Video Mixer is not installed.");'));
+  assert.ok(agent.includes('const unit = "irlplus-video-mixer.service";'), "Agent must detect the real IRL+ unit");
+  assert.ok(agent.includes("videoMixerSnapshot(probe.state, true)"), "Agent must publish installation independently from port state");
+  assert.ok(agent.includes("agent_session_id: agentSessionId"), "Agent status and telemetry must carry a process-session capability marker");
+  assert.ok(agent.includes("if (proxyStateRefreshPromise) return proxyStateRefreshPromise;"), "Mixer probes must be single-flight");
+  assert.ok(!agent.includes("http.validateHeaderName"), "WebSocket header validation must support the Belabox image's Node runtime");
+  assert.ok(agent.includes('"proxy WebSocket upgrade header"'), "Agent self-test must prove WebSocket upgrade headers survive validation");
+  assert.ok(agent.includes("void refreshProxyStatesAndPublish(true);"), "Agent connect must probe mixer availability before publishing telemetry");
+  assert.ok(agent.includes("await refreshProxyStatesAndPublish(true);"), "Manual telemetry refresh must include a fresh mixer probe");
+  assert.ok(backend.includes('if (target === "video_mixer") return rewriteVideoMixerText(route, text);'));
+  assert.ok(backend.includes("(api|media|wsenc)(?=[/?#"), "Only the mixer's known absolute routes should be rewritten");
+
+  assert.ok(backend.includes("videoMixerUpstreamCookie(deviceId, headers.cookie)"));
+  assert.ok(backend.includes("rewriteVideoMixerSetCookie(deviceId, value)"));
+  assert.ok(!backend.includes("REMOTE_BELAUI_MAX_HTTP_BODY_BYTES"), "Remote media must not have a total body-size ceiling");
+  assert.ok(backend.includes("CONTROL_SEND_HIGH_WATER_BYTES"), "Remote media must use bounded backpressure");
+  assert.ok(
+    backend.includes("request.iterator({ destroyOnReturn: false })"),
+    "Remote request bodies must stream without destroying early-response uploads",
+  );
+  assert.ok(backend.includes('return `frame_mixer_${createHash("sha256").update(deviceId)'));
+  assert.ok(backend.includes('const cookiePath = `${remoteProxyDeviceRoute(deviceId, "video_mixer")}/`;'));
+  assert.ok(agent.includes('(proxy.id !== "video_mixer" && PROXY_RESPONSE_HEADER_BLOCKLIST.has(lower))'));
+
+  assert.ok(frontend.includes("const mixerReachable = Boolean(live?.online && videoMixer?.state === \"reachable\");"));
+  assert.ok(frontend.includes("const mixerInstalled = videoMixer?.installed === true;"));
+  assert.ok(frontend.includes('data-workspace-pane="mixer"'));
+  assert.ok(frontend.includes("The access link remains available and will reconnect when the mixer service is running."));
+  assert.ok(frontend.includes('const path = `/belabox/mixer?key=${encodeURIComponent(deviceId)}`;'));
+});
+
 test("Stream Management exports FRAME destinations through the remote BelaUI bridge", async () => {
   const [streams, manager, agent] = await Promise.all([
     readFile("services/frame-streams/src/index.ts", "utf8"),
@@ -709,13 +823,15 @@ test("Hybrid exposes Belabox agent routes and remote UI without exposing the man
   const prefixes = computeEffectivePublicPrefixes({
     mode: "HYBRID",
     capabilities,
-    public_route_prefixes: [...PUBLIC_PREFIXES, "/belabox", "/belabox/api"],
+    public_route_prefixes: [...PUBLIC_PREFIXES, "/belabox", "/belabox/api", "/belabox/assets"],
   });
   assert.ok(prefixes.includes("/belabox/remote"));
-  assert.ok(prefixes.includes("/mqtt"));
+  assert.ok(prefixes.includes("/belabox/mixer"));
+  assert.ok(prefixes.includes("/belabox/control"));
   assert.ok(prefixes.includes("/belabox-chunks"));
   assert.ok(!prefixes.includes("/belabox"));
   assert.ok(!prefixes.includes("/belabox/api"));
+  assert.ok(!prefixes.includes("/belabox/assets"));
 });
 
 test("FRAME Edge denies management surfaces when a tunnel bypasses the public gateway", async () => {
@@ -777,6 +893,24 @@ test("Windows and Unix wrappers preserve direct commands while offering the numb
     assert.ok(wrapper.includes("set-discord-auth"));
     assert.ok(wrapper.includes("set-service-auth"));
   }
+  assert.ok(
+    powershell.includes('"--force-recreate", "--no-deps"') &&
+      powershell.includes('"frame-public-gateway"'),
+    "Windows Hybrid startup must recreate the public gateway after regenerating routes",
+  );
+  assert.ok(
+    shell.includes("compose up -d --force-recreate --no-deps") &&
+      shell.includes("frame-public-gateway"),
+    "Unix Hybrid startup must recreate the public gateway after regenerating routes",
+  );
+  assert.ok(
+    powershell.includes('Invoke-Runtime @("install")'),
+    "Windows startup must migrate an existing stack configuration before validating it",
+  );
+  assert.ok(
+    shell.includes("runtime install"),
+    "Unix startup must migrate an existing stack configuration before validating it",
+  );
   assert.ok(installer.includes('"set"'));
   assert.ok(installer.includes("CUSTOMIZABLE_ENV_KEYS"));
   assert.ok(installer.includes("setDiscordAuth"));
@@ -797,6 +931,54 @@ test("Windows and Unix wrappers preserve direct commands while offering the numb
   assert.ok(shell.includes("read_photo_ftp_passive_host"), "Unix wrapper must prompt with a passive FTP LAN host helper");
   assert.ok(shell.includes("Portal login needs setup."), "Unix setup must require Portal credentials in every mode");
   assert.ok(shell.includes('[ "$current" != "127.0.0.1" ]'), "Unix passive FTP prompt must not preserve loopback as the default");
+});
+
+test("Belabox agent installation is Hybrid/WSS-only across both installers", async () => {
+  const [installer, powershell, shell, setupFrontend, setupBackend, installerReadme, managerReadme] = await Promise.all([
+    readFile("installer/frame-installer.mjs", "utf8"),
+    readFile("installer/stack.ps1", "utf8"),
+    readFile("installer/stack.sh", "utf8"),
+    readFile("apps/frame-setup/src/main.js", "utf8"),
+    readFile("apps/frame-setup/src-tauri/src/lib.rs", "utf8"),
+    readFile("installer/README.md", "utf8"),
+    readFile("services/frame-belabox-manager/README.md", "utf8"),
+  ]);
+
+  assert.ok(installer.includes("assertBelaboxManagerDeployment(mode, capabilities)"));
+  assert.ok(installer.includes('parsed.protocol !== "wss:"'));
+  assert.ok(installer.includes("must be a public wss:// URL ending in /belabox/control"));
+  assert.ok(installer.includes("normalizeControlUrl(controlWebSocketUrl(edgePublicBaseUrl))"));
+  assert.ok(installer.includes("must be derived from EDGE_PUBLIC_BASE_URL"));
+  assert.ok(
+    setupBackend.includes('"--force-recreate"') &&
+      setupBackend.includes('"frame-public-gateway"'),
+    "FRAME Setup must recreate the Hybrid public gateway after regenerating routes",
+  );
+  const importableSettings = installer.match(/const IMPORTABLE_ENV_KEYS = new Set\(\[([\s\S]*?)\]\);/)?.[1] ?? "";
+  const customizableSettings = installer.match(/const CUSTOMIZABLE_ENV_KEYS = new Set\(\[([\s\S]*?)\]\);/)?.[1] ?? "";
+  assert.ok(!importableSettings.includes("BELABOX_CONTROL_PUBLIC_URL"));
+  assert.ok(!customizableSettings.includes("BELABOX_CONTROL_PUBLIC_URL"));
+  assert.ok(!powershell.includes('"BELABOX_CONTROL_PUBLIC_URL"'));
+  assert.ok(!shell.includes("\nBELABOX_CONTROL_PUBLIC_URL\n"));
+  assert.match(
+    powershell,
+    /\$needsBelaboxHybrid[\s\S]*?Read-Default "Cloudflare public hostname \(or 0 to cancel\)"[\s\S]*?IsNullOrWhiteSpace\(\$hostname\)[\s\S]*?Invoke-Runtime \(@\("install", "--mode", "HYBRID", "--public-hostname", \$hostname\) \+ \$arguments\)/,
+    "Windows service selection must require a hostname and stage Hybrid without losing the selected services",
+  );
+  assert.match(
+    shell,
+    /\[ "\$capability" = "frame-belabox-manager" \][\s\S]*?read_default "Cloudflare public hostname \(or 0 to cancel\)"[\s\S]*?\[ -z "\$REPLY" \][\s\S]*?if runtime install --mode HYBRID --public-hostname "\$REPLY" --enable "\$capability"; then/,
+    "Unix service selection must retry invalid hostnames without triggering set -e",
+  );
+  assert.ok(setupFrontend.includes("hybridOnly: true"));
+  assert.ok(!setupFrontend.includes('["BELABOX_CONTROL_PUBLIC_URL"'));
+  assert.ok(setupFrontend.includes('state.deploymentMode = "HYBRID";'));
+  assert.ok(setupFrontend.includes('state.selectedServices["frame-belabox-manager"] = false;'));
+  assert.ok(setupBackend.includes("validate_install_plan(plan)?;"));
+  assert.ok(setupBackend.includes("requires Hybrid mode and a public WSS control endpoint"));
+  assert.match(setupBackend, /"BELABOX_CONTROL_PUBLIC_URL"[\s\S]*?default_belabox_control_url/);
+  assert.ok(installerReadme.includes("cannot be enabled in LAN mode"));
+  assert.ok(managerReadme.includes("Belabox agent install and repair are Hybrid-only"));
 });
 
 test("FRAME Setup app captures the approved GUI installer decisions", async () => {

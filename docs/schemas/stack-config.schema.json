@@ -89,7 +89,8 @@
         "discord_audio_bridge_root",
         "belabox_manager",
         "belabox_remote",
-        "belabox_mqtt",
+        "belabox_mixer",
+        "belabox_control",
         "belabox_chunks"
       ],
       "properties": {
@@ -173,7 +174,11 @@
           "type": "string",
           "pattern": "^/"
         },
-        "belabox_mqtt": {
+        "belabox_mixer": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "belabox_control": {
           "type": "string",
           "pattern": "^/"
         },

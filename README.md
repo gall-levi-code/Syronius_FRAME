@@ -137,6 +137,9 @@ Connect a Belabox to FRAME:
 6. Open `http://localhost/belabox` and follow the **Add device** wizard while the Belabox is on the
    same LAN and reachable through SSH.
 
+Belabox agent installation and repair are intentionally Hybrid-only: the agent must receive a
+public `wss://.../belabox/control` endpoint even though the initial SSH hop occurs on the LAN.
+
 The SRTLA address is stored as `PUBLIC_RELAY_HOST`. It may differ from the Cloudflare/browser
 hostname when web traffic and SRTLA traffic use different public endpoints.
 
@@ -201,10 +204,8 @@ flowchart TD
   streams --> ingestVideo["frame-ingest-video"]
   edge --> overlays["frame-overlays"]
 
-  belabox["Belabox agent"] --> publicGateway
-  edge --> belaboxBroker["frame-belabox-broker"]
-  belaboxManager["frame-belabox-manager"] --> belaboxBroker
-  edge --> belaboxManager
+  belabox["Belabox agent"] -->|"authenticated WSS control"| publicGateway
+  edge --> belaboxManager["frame-belabox-manager"]
   streams --> belaboxManager
 
   edge --> audio["frame-audio"]
@@ -240,8 +241,7 @@ flowchart TD
 | `frame-overlays` | Overlays | OBS overlay sources and the Overlay Wizard. |
 | `frame-audio` | Audio Monitor | Browser capture, audio relay, listen pages, and HLS output. |
 | `frame-audio-bridge` | Discord Audio Bridge | Discord voice audio, OBS mixes, speaking overlay, and controls. |
-| `frame-belabox-broker` | Belabox Manager | Per-device MQTT/WSS transport with generated credentials and topic ACLs. |
-| `frame-belabox-manager` | Belabox Manager | Agent installation, FRAME Remote belaUI, relay selection, photo controls, diagnostics, and maintenance. |
+| `frame-belabox-manager` | Belabox Manager | Authenticated device WSS control, agent installation, FRAME Remote belaUI and Mixer access, relay selection, photo controls, diagnostics, and maintenance. |
 | `frame-photo-upload` | Browser Photo Upload | Protected browser/phone upload page. |
 | `frame-photo-ftp` | Photo FTP Ingest | Camera FTP upload intake. |
 | `frame-pipeline-photos` | Any photo feature | Photo validation, conversion, sidecars, `.ready` files, and archive output. |

@@ -29,7 +29,8 @@ const FALLBACK_ROUTES: Record<string, string> = {
   discord_audio_bridge_root: "/bridge",
   belabox_manager: "/belabox",
   belabox_remote: "/belabox/remote",
-  belabox_mqtt: "/mqtt",
+  belabox_mixer: "/belabox/mixer",
+  belabox_control: "/belabox/control",
   belabox_chunks: "/belabox-chunks",
 };
 
@@ -98,7 +99,7 @@ const TOOL_DEFINITIONS: Array<
   {
     id: "belabox",
     name: "Belabox Manager",
-    description: "Monitor Belabox MQTT check-ins and agent scaffolding.",
+    description: "Monitor Belabox devices, transfers, and remote tools.",
     routeKey: "belabox_manager",
     capability: "frame-belabox-manager",
     serviceName: "frame-belabox-manager",

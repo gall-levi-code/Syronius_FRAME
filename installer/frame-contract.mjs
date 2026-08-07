@@ -53,6 +53,27 @@ export function computeComposeProfiles(capabilities, mode) {
   return SERVICE_REGISTRY.profileOrder.filter((profile) => enabledProfiles.has(profile));
 }
 
+export function upgradeStackConfig(config) {
+  const existingCapabilities = config?.capabilities && typeof config.capabilities === "object"
+    ? config.capabilities
+    : {};
+  const existingRoutes = config?.routes && typeof config.routes === "object"
+    ? config.routes
+    : {};
+  return {
+    mode: config?.mode,
+    capabilities: Object.fromEntries(CAPABILITIES.map((name) => [
+      name,
+      Object.hasOwn(existingCapabilities, name) ? existingCapabilities[name] : false,
+    ])),
+    routes: Object.fromEntries(Object.entries(ROUTES).map(([name, route]) => [
+      name,
+      Object.hasOwn(existingRoutes, name) ? existingRoutes[name] : route,
+    ])),
+    public_route_prefixes: [...PUBLIC_PREFIXES],
+  };
+}
+
 export function computeEffectivePublicPrefixes(config, onWarning = () => undefined) {
   if (config.mode !== "HYBRID") return [];
   const effective = [];

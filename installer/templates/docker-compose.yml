@@ -233,63 +233,6 @@ services:
     networks:
       - frame-internal
 
-  frame-belabox-broker:
-    profiles: ["belabox"]
-    image: eclipse-mosquitto@sha256:6f8d8a947c506f8a2290ec65cd4bd2bc7cb4d43fb5f6271f861cb013e2ef9797
-    container_name: frame-belabox-broker
-    restart: unless-stopped
-    user: root
-    environment:
-      BELABOX_MQTT_USERNAME: ${BELABOX_MQTT_USERNAME:-frame-belabox}
-      BELABOX_MQTT_PASSWORD: ${BELABOX_MQTT_PASSWORD:-}
-    command:
-      - /bin/sh
-      - -c
-      - |
-        set -eu
-        mkdir -p /mosquitto/config /mosquitto/data /mosquitto/log
-        if [ ! -s /mosquitto/data/passwords ]; then
-          if [ -n "$${BELABOX_MQTT_PASSWORD:-}" ]; then
-            mosquitto_passwd -H sha512-pbkdf2 -b -c /mosquitto/data/passwords "$${BELABOX_MQTT_USERNAME:-frame-belabox}" "$${BELABOX_MQTT_PASSWORD}"
-          else
-            mosquitto_passwd -H sha512-pbkdf2 -b -c /mosquitto/data/passwords "__disabled__" "$$(head -c 32 /dev/urandom | base64)"
-          fi
-        fi
-        if [ ! -s /mosquitto/data/acl ]; then
-          printf 'user %s\ntopic read frame/belabox/+/status\ntopic read frame/belabox/+/heartbeat\ntopic read frame/belabox/+/telemetry\ntopic read frame/belabox/+/logs\ntopic read frame/belabox/+/agent/version\ntopic write frame/belabox/+/cmd/request\ntopic read frame/belabox/+/cmd/response\ntopic write frame/belabox/+/proxy/http/request/+\ntopic read frame/belabox/+/proxy/http/response/+\ntopic write frame/belabox/+/proxy/stream/+/client\ntopic read frame/belabox/+/proxy/stream/+/server\n' "$${BELABOX_MQTT_USERNAME:-frame-belabox}" > /mosquitto/data/acl
-        fi
-        chown mosquitto:mosquitto /mosquitto/data/passwords /mosquitto/data /mosquitto/log
-        chown mosquitto:mosquitto /mosquitto/data/acl
-        chmod 0640 /mosquitto/data/passwords
-        mosquitto -c /mosquitto/config/mosquitto.conf &
-        pid=$$!
-        stamp=""
-        while kill -0 "$$pid" 2>/dev/null; do
-          next="$$(stat -c '%Y:%s' /mosquitto/data/passwords /mosquitto/data/acl 2>/dev/null | tr '\n' ':')"
-          if [ -n "$$stamp" ] && [ "$$next" != "$$stamp" ]; then kill -HUP "$$pid"; fi
-          stamp="$$next"
-          sleep 5
-        done
-        wait "$$pid"
-    volumes:
-      - ./services/frame-belabox-broker/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
-      - ${FRAME_DATA_ROOT:-./data}/belabox-broker:/mosquitto/data
-    labels:
-      traefik.enable: "true"
-      traefik.http.routers.frame-belabox-mqtt.entrypoints: web
-      traefik.http.routers.frame-belabox-mqtt.priority: "250"
-      traefik.http.routers.frame-belabox-mqtt.rule: Path(`/mqtt`) || PathPrefix(`/mqtt/`)
-      traefik.http.routers.frame-belabox-mqtt.service: frame-belabox-mqtt
-      traefik.http.services.frame-belabox-mqtt.loadbalancer.server.port: "9001"
-    healthcheck:
-      test: ["CMD-SHELL", "pidof mosquitto >/dev/null"]
-      interval: 30s
-      timeout: 3s
-      start_period: 5s
-      retries: 3
-    networks:
-      - frame-internal
-
   frame-belabox-manager:
     profiles: ["belabox"]
     build:
@@ -310,19 +253,11 @@ services:
       BELABOX_SSH_ENABLED: ${BELABOX_SSH_ENABLED:-false}
       BELABOX_AGENT_COMMANDS_ENABLED: ${BELABOX_AGENT_COMMANDS_ENABLED:-false}
       BELABOX_AGENT_INSTALL_ENABLED: ${BELABOX_AGENT_INSTALL_ENABLED:-false}
-      BELABOX_MQTT_HOST: ${BELABOX_MQTT_HOST:-http://localhost}
-      BELABOX_MQTT_INTERNAL_URL: ${BELABOX_MQTT_INTERNAL_URL:-mqtt://frame-belabox-broker:1883}
-      BELABOX_MQTT_WS_PATH: ${BELABOX_MQTT_WS_PATH:-/mqtt}
-      BELABOX_MQTT_USERNAME: ${BELABOX_MQTT_USERNAME:-frame-belabox}
-      BELABOX_MQTT_PASSWORD: ${BELABOX_MQTT_PASSWORD:-}
-      BELABOX_MQTT_CLIENT_ID_PREFIX: ${BELABOX_MQTT_CLIENT_ID_PREFIX:-frame-belabox}
-      BELABOX_MQTT_RECONNECT_MS: ${BELABOX_MQTT_RECONNECT_MS:-5000}
-      BELABOX_DEVICE_ID: ${BELABOX_DEVICE_ID:-belabox-1}
-      BELABOX_MQTT_KEEPALIVE: ${BELABOX_MQTT_KEEPALIVE:-30}
-      BELABOX_HEARTBEAT_INTERVAL_MS: ${BELABOX_HEARTBEAT_INTERVAL_MS:-2000}
+      BELABOX_CONTROL_PUBLIC_URL: ${BELABOX_CONTROL_PUBLIC_URL:-ws://localhost/belabox/control}
+      BELABOX_CONTROL_RECONNECT_MS: ${BELABOX_CONTROL_RECONNECT_MS:-5000}
+      BELABOX_CONTROL_HEARTBEAT_MS: ${BELABOX_CONTROL_HEARTBEAT_MS:-10000}
       BELABOX_TELEMETRY_INTERVAL_MS: ${BELABOX_TELEMETRY_INTERVAL_MS:-30000}
       BELABOX_ACTIVE_PHOTO_TELEMETRY_INTERVAL_MS: ${BELABOX_ACTIVE_PHOTO_TELEMETRY_INTERVAL_MS:-500}
-      BELABOX_BROKER_DATA_DIR: /broker-data
       PHOTO_FTP_PASSIVE_HOST: ${PHOTO_FTP_PASSIVE_HOST:-127.0.0.1}
       PHOTO_FTP_PORT: ${PHOTO_FTP_PORT:-2121}
       PHOTO_FTP_USERNAME: ${PHOTO_FTP_USERNAME:-frame}
@@ -351,10 +286,6 @@ services:
       REQUEST_TIMEOUT_MS: ${REQUEST_TIMEOUT_MS:-3000}
     volumes:
       - ${FRAME_DATA_ROOT:-./data}/belabox-manager:/data
-      - ${FRAME_DATA_ROOT:-./data}/belabox-broker:/broker-data
-    depends_on:
-      frame-belabox-broker:
-        condition: service_healthy
     labels:
       traefik.enable: "true"
       traefik.http.routers.frame-belabox.entrypoints: web
@@ -362,6 +293,10 @@ services:
       traefik.http.routers.frame-belabox.rule: Path(`/belabox`) || PathPrefix(`/belabox/`)
       traefik.http.routers.frame-belabox.middlewares: frame-sso
       traefik.http.routers.frame-belabox.service: frame-belabox
+      traefik.http.routers.frame-belabox-control.entrypoints: web
+      traefik.http.routers.frame-belabox-control.priority: "270"
+      traefik.http.routers.frame-belabox-control.rule: Path(`/belabox/control`)
+      traefik.http.routers.frame-belabox-control.service: frame-belabox
       traefik.http.routers.frame-belabox-chunks.entrypoints: web
       traefik.http.routers.frame-belabox-chunks.priority: "260"
       traefik.http.routers.frame-belabox-chunks.rule: Path(`/belabox-chunks`) || PathPrefix(`/belabox-chunks/`)

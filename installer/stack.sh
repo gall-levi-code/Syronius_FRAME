@@ -34,15 +34,8 @@ BELABOX_AGENT_REMOTE_PATH
 BELABOX_SSH_ENABLED
 BELABOX_AGENT_COMMANDS_ENABLED
 BELABOX_AGENT_INSTALL_ENABLED
-BELABOX_MQTT_HOST
-BELABOX_MQTT_INTERNAL_URL
-BELABOX_MQTT_WS_PATH
-BELABOX_MQTT_USERNAME
-BELABOX_MQTT_CLIENT_ID_PREFIX
-BELABOX_MQTT_RECONNECT_MS
-BELABOX_DEVICE_ID
-BELABOX_MQTT_KEEPALIVE
-BELABOX_HEARTBEAT_INTERVAL_MS
+BELABOX_CONTROL_RECONNECT_MS
+BELABOX_CONTROL_HEARTBEAT_MS
 BELABOX_TELEMETRY_INTERVAL_MS
 BELABOX_FTP_TARGET_HOST
 BELABOX_FTP_TARGET_PORT
@@ -333,9 +326,15 @@ run_install() {
 }
 
 start_stack() {
+  echo "Reconciling configuration..."
+  runtime install
+  compose config --quiet
   echo "Validating startup requirements..."
   runtime validate --for-start
   compose up -d --build --remove-orphans --wait --wait-timeout 120
+  if [ "$(env_value FRAME_MODE LAN)" = "HYBRID" ]; then
+    compose up -d --force-recreate --no-deps --wait --wait-timeout 60 frame-public-gateway
+  fi
   echo "FRAME stack reconciliation completed."
 }
 
@@ -376,7 +375,26 @@ configure_capability() {
   printf "%s: 0) Keep  1) Enable  2) Disable: " "$label"
   read -r choice
   case "$choice" in
-    1) run_install --enable "$capability" ;;
+    1)
+      if [ "$capability" = "frame-belabox-manager" ] && [ "$(env_value FRAME_MODE LAN)" != "HYBRID" ]; then
+        echo "Belabox Manager requires Hybrid mode. FRAME will stage Hybrid access now."
+        while :; do
+          read_default "Cloudflare public hostname (or 0 to cancel)" "$(env_value CLOUDFLARE_PUBLIC_HOSTNAME "")"
+          [ "$REPLY" != "0" ] || return
+          if [ -z "$REPLY" ]; then
+            echo "A public hostname is required."
+            continue
+          fi
+          if runtime install --mode HYBRID --public-hostname "$REPLY" --enable "$capability"; then
+            compose config --quiet
+            return
+          fi
+          echo "Hybrid setup was not applied. Enter a valid public hostname or 0 to cancel."
+        done
+      else
+        run_install --enable "$capability"
+      fi
+      ;;
     2) run_install --disable "$capability" ;;
   esac
 }
@@ -731,8 +749,7 @@ case "$COMMAND" in
     echo "FRAME contracts, scripts, and Docker Compose configuration are valid."
     ;;
   start)
-    runtime validate --for-start
-    compose up -d --build --remove-orphans --wait --wait-timeout 120
+    start_stack
     ;;
   stop)
     compose down
