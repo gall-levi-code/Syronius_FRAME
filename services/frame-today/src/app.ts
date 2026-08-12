@@ -58,15 +58,6 @@ export function createApp(
       next(error);
     }
   });
-  app.get("/today/image/:date/:file", async (request, response, next) => {
-    try {
-      const base = stripExtension(request.params.file, ".jpg");
-      response.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-      response.sendFile(await store.requireImage(request.params.date, base));
-    } catch (error) {
-      next(error);
-    }
-  });
   app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
     const status = error instanceof TodayCommandError || error instanceof TodayRequestError
       ? error instanceof TodayRequestError ? error.status : 400
@@ -75,11 +66,6 @@ export function createApp(
     response.status(status).json({ error: status === 500 ? "Today request failed." : errorMessage(error) });
   });
   return app;
-}
-
-function stripExtension(value: string, extension: string): string {
-  if (!value.endsWith(extension)) throw new TodayRequestError("Invalid media path.", 400);
-  return value.slice(0, -extension.length);
 }
 
 function errorMessage(error: unknown): string {

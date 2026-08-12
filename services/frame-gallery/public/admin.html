@@ -29,7 +29,7 @@
       })();
     </script>
     <script src="/assets/frame-theme.js?v=global-theme-v1"></script>
-    <link rel="stylesheet" href="/gallery/assets/admin.css?v=explore-4">
+    <link rel="stylesheet" href="/gallery/assets/admin.css?v=gallery-owner-settings-9">
   </head>
   <body>
     <header class="topbar">
@@ -53,12 +53,13 @@
           <h1>Gallery Admin</h1>
           <span id="summary">Loading photo library...</span>
         </div>
-        <span id="status" class="status">Connecting</span>
+        <span id="status" class="status" role="status" aria-live="polite">Connecting</span>
       </section>
 
       <nav class="section-tabs" role="tablist" aria-label="Gallery admin sections">
         <button id="content-management-tab" type="button" role="tab" aria-selected="true" aria-controls="content-management-view">Content management</button>
-        <button id="gallery-styling-tab" type="button" role="tab" aria-selected="false" aria-controls="gallery-styling-view" tabindex="-1">Gallery Branding</button>
+        <button id="gallery-styling-tab" type="button" role="tab" aria-selected="false" aria-controls="gallery-styling-view" tabindex="-1">Gallery Settings</button>
+        <button id="socials-tab" type="button" role="tab" aria-selected="false" aria-controls="socials-view" tabindex="-1">Socials</button>
       </nav>
 
       <section id="content-management-view" role="tabpanel" aria-labelledby="content-management-tab">
@@ -74,9 +75,16 @@
               <div><p>Published album</p><h2 id="album-title"></h2><span id="album-summary"></span></div>
               <div class="section-actions">
                 <a id="manage-explore" class="restore-button" href="/gallery/admin/explore">Manage Explore</a>
-                <button id="trash-album" class="danger-button" type="button">Move album to trash</button>
+                <button id="trash-album" class="icon-danger-button" type="button" aria-label="Move album to trash" title="Move album to trash"><svg class="trash-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 11v6M14 11v6"/></svg></button>
               </div>
             </div>
+            <section id="cover-management-panel" class="cover-management-panel" aria-labelledby="cover-management-title" tabindex="-1">
+              <div>
+                <strong id="cover-management-title">Cover image</strong>
+                <p id="cover-management-status" role="status" aria-live="polite">Automatic cover uses the earliest published photo.</p>
+              </div>
+              <button id="cover-action" class="secondary-button" type="button">Select cover image</button>
+            </section>
             <div id="photos" class="photo-grid"></div>
           </section>
         </section>
@@ -97,91 +105,83 @@
 
       <section id="gallery-styling-view" role="tabpanel" aria-labelledby="gallery-styling-tab" hidden>
         <div class="section-heading">
-          <div><p>Public gallery branding</p><h2>Gallery Branding</h2><span id="branding-summary">Loading gallery branding...</span></div>
-          <button id="save-branding" class="restore-button" type="button">Save branding</button>
+          <div><p>Public gallery preferences</p><h2>Gallery Settings</h2><span id="branding-summary">Loading gallery settings...</span></div>
         </div>
         <form id="branding-form" class="branding-form">
-          <section class="branding-panel">
-            <div class="mini-heading"><strong>Branding</strong><small>Logo uploads are constrained to stay readable in the web header.</small></div>
-            <div class="field-grid branding-fields">
-              <label>Brand name<input id="brand-name-input" name="brand_name" maxlength="60" autocomplete="organization"></label>
-              <label>Gallery title<input id="gallery-title-input" name="gallery_title" maxlength="80" autocomplete="off"></label>
+          <section class="branding-panel settings-section" aria-labelledby="visitor-controls-title">
+            <div class="mini-heading">
+              <div><strong id="visitor-controls-title">Visitor Controls</strong><small>Choose the actions available to everyone viewing your galleries.</small></div>
             </div>
-            <div class="logo-controls">
-              <img id="logo-preview" src="/gallery/assets/frame-logo-square.svg" alt="">
-              <div>
-                <small>PNG, JPEG, WebP, or SVG source under 20 MB. Crop before upload; saved as a transparent optimized WebP.</small>
-                <input id="logo-input" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg">
-                <button id="remove-logo" class="danger-button" type="button">Remove logo</button>
+            <div class="visitor-control-row">
+              <div><strong>Downloads</strong><small>Disabled uses page-bound image tiles. Enabled displays and offers the full gallery JPEG; camera originals remain private.</small></div>
+              <div class="segmented-control" role="group" aria-label="Downloads">
+                <button id="downloads-disabled" type="button" aria-pressed="true">Disabled</button>
+                <button id="downloads-enabled" type="button" aria-pressed="false">Enabled</button>
               </div>
             </div>
           </section>
 
-          <section class="branding-panel" hidden>
-            <div class="mini-heading"><strong>Style</strong><button id="new-preset" class="restore-button compact-button" type="button">New custom preset</button></div>
-            <div class="style-fields">
-              <label>Default appearance
-                <span class="select-shell">
-                  <select id="default-mode" name="mode">
-                    <option value="day">Day</option>
-                    <option value="night">Night</option>
-                  </select>
-                </span>
-              </label>
-              <div class="preset-field">
-                <span class="field-label">Style preset</span>
-                <div class="preset-select">
-                  <button id="preset-trigger" class="preset-trigger" type="button" aria-haspopup="listbox" aria-expanded="false">
-                    <span id="preset-trigger-swatches" class="swatches"></span>
-                    <span><strong id="preset-trigger-name">Frame Blue</strong><small id="preset-trigger-meta">#2cb4fb</small></span>
-                  </button>
-                  <div id="preset-menu" class="preset-menu" role="listbox" hidden></div>
-                </div>
+          <section class="branding-panel settings-section" aria-labelledby="branding-title">
+            <div class="mini-heading">
+              <div><strong id="branding-title">Branding</strong><small>Set the identity shown across the public gallery.</small></div>
+            </div>
+            <div class="branding-layout">
+              <div class="logo-editor">
+                <button id="logo-trigger" class="logo-preview-button" type="button" aria-label="Upload gallery logo">
+                  <img id="logo-preview" src="/gallery/assets/frame-logo-square.svg" alt="">
+                  <span>Upload or replace logo</span>
+                </button>
+                <button id="remove-logo" class="logo-remove-button" type="button" aria-label="Remove custom logo" title="Remove custom logo" hidden><svg class="trash-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 11v6M14 11v6"/></svg></button>
+                <input id="logo-input" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg" hidden>
+                <small>PNG, JPEG, WebP, or SVG under 20 MB. Select the preview to upload or replace it.</small>
+              </div>
+              <div class="field-grid branding-fields">
+                <label>Brand name<input id="brand-name-input" name="brand_name" maxlength="60" autocomplete="organization"></label>
+                <label>Gallery title<input id="gallery-title-input" name="gallery_title" maxlength="80" autocomplete="off"></label>
               </div>
             </div>
           </section>
         </form>
       </section>
+
+      <section id="socials-view" role="tabpanel" aria-labelledby="socials-tab" hidden>
+        <div class="section-heading">
+          <div><p>Public gallery links</p><h2>Socials</h2><span id="socials-summary">No social links published.</span></div>
+          <button id="save-socials" class="restore-button" type="button">Save socials</button>
+        </div>
+        <form id="socials-form" class="socials-form">
+          <section class="branding-panel">
+            <div class="mini-heading"><strong>Add a social</strong><small>Paste a profile URL, or enter a handle and choose its platform.</small></div>
+            <div class="field-grid social-add-fields">
+              <label>URL or handle<input id="social-value-input" maxlength="2048" autocomplete="off" placeholder="https://example.com or @handle"></label>
+              <label>Platform
+                <span class="select-shell"><select id="social-platform-select"><option value="">Select platform</option></select></span>
+              </label>
+              <label>Display label (optional)<input id="social-label-input" maxlength="60" autocomplete="off" placeholder="My photography"></label>
+              <button id="add-social" class="restore-button" type="submit">Add social</button>
+            </div>
+            <p id="social-form-error" class="social-form-error" role="alert" hidden></p>
+          </section>
+        </form>
+        <section class="branding-panel">
+          <div class="mini-heading"><strong>Published links</strong><small>Edit links in place, then save to update every gallery.</small></div>
+          <div id="social-admin-list" class="social-admin-list"></div>
+          <p id="social-empty" class="inline-empty">No social links added.</p>
+        </section>
+      </section>
+
+      <div id="settings-action-bar" class="settings-action-bar" role="region" aria-label="Unsaved gallery settings" hidden>
+        <span id="settings-action-message" role="status" aria-live="polite">You have unsaved changes.</span>
+        <div>
+          <button id="discard-branding" class="secondary-button" type="button">Discard</button>
+          <button id="save-branding" class="restore-button" type="button">Save changes</button>
+        </div>
+      </div>
     </main>
 
-    <dialog id="preset-dialog" class="preset-dialog">
-      <div id="preset-kind-step" class="dialog-panel">
-        <div class="dialog-heading"><p>New custom preset</p><h2>Preset type</h2></div>
-        <div class="choice-grid">
-          <button id="color-theme-choice" type="button">Color based theme</button>
-          <button id="full-custom-choice" type="button">Fully custom</button>
-        </div>
-        <div class="dialog-actions">
-          <button id="cancel-preset-kind" class="secondary-button" type="button">Cancel</button>
-        </div>
-      </div>
-
-      <div id="preset-editor-step" class="dialog-panel" hidden>
-        <div class="dialog-heading"><p id="preset-editor-eyebrow">Custom preset</p><h2 id="preset-editor-title">Color based theme</h2></div>
-        <div class="field-grid">
-          <label>Preset name<input id="preset-name-input" maxlength="40" autocomplete="off"></label>
-          <label>Default appearance
-            <span class="select-shell">
-              <select id="preset-default-mode">
-                <option value="day">Day</option>
-                <option value="night">Night</option>
-              </select>
-            </span>
-          </label>
-          <label id="preset-theme-color-label">Theme color<input id="preset-theme-color" type="color" value="#2cb4fb"></label>
-        </div>
-        <div id="palette-fields" class="palette-fields" hidden></div>
-        <div class="dialog-actions">
-          <button id="back-preset-kind" class="secondary-button" type="button">Back</button>
-          <button id="cancel-preset-editor" class="secondary-button" type="button">Cancel</button>
-          <button id="save-preset" class="restore-button" type="button">Create preset</button>
-        </div>
-      </div>
-    </dialog>
-
-    <dialog id="logo-crop-dialog" class="preset-dialog logo-crop-dialog" data-crop-mode="full">
+    <dialog id="logo-crop-dialog" class="preset-dialog logo-crop-dialog" data-crop-mode="full" aria-labelledby="logo-crop-title">
       <div class="dialog-panel">
-        <div class="dialog-heading"><p>Logo source</p><h2>Prepare logo</h2></div>
+        <div class="dialog-heading"><p id="logo-crop-eyebrow">Logo source</p><h2 id="logo-crop-title">Prepare logo</h2></div>
         <div class="logo-crop-layout">
           <div id="logo-crop-stage" class="logo-crop-stage">
             <img id="logo-crop-image" alt="">
@@ -193,7 +193,7 @@
             </div>
           </div>
           <div class="logo-crop-controls">
-            <div>
+            <div id="logo-shape-controls">
               <span class="field-label">Logo shape</span>
               <div class="logo-ratio-grid" role="radiogroup" aria-label="Logo crop ratio">
                 <button class="logo-aspect-option" type="button" data-logo-aspect="full" aria-pressed="true" aria-label="Use full image">Full</button>
@@ -224,9 +224,10 @@
       </div>
     </dialog>
 
-    <dialog id="confirm-dialog" class="preset-dialog confirm-dialog">
+    <dialog id="confirm-dialog" class="preset-dialog confirm-dialog" aria-labelledby="confirm-title" aria-describedby="confirm-copy">
       <div class="dialog-panel">
         <div class="dialog-heading"><p id="confirm-eyebrow">Confirm change</p><h2 id="confirm-title">Continue?</h2></div>
+        <div id="confirm-media" class="confirm-media" hidden><img id="confirm-image" alt=""></div>
         <p id="confirm-copy" class="dialog-copy"></p>
         <div class="dialog-actions">
           <button id="confirm-cancel" class="secondary-button" type="button">Cancel</button>
@@ -235,21 +236,36 @@
       </div>
     </dialog>
 
+    <dialog id="cover-picker" class="cover-picker" role="dialog" aria-modal="true" aria-labelledby="cover-picker-title">
+      <h2 id="cover-picker-title" class="sr-only">Select cover image</h2>
+      <div class="cover-picker-toolbar">
+        <button id="cancel-cover-picker" class="cover-picker-cancel secondary-button" type="button" autofocus>Cancel selection</button>
+        <p id="cover-picker-status" class="cover-picker-status" role="status" aria-live="polite" tabindex="-1" hidden></p>
+      </div>
+      <div id="cover-picker-grid" class="cover-picker-grid"></div>
+    </dialog>
+
     <template id="album-template">
       <article class="album-card">
         <button class="album-open" type="button">
           <img alt="" loading="lazy">
           <span><strong></strong><small></small></span>
         </button>
-        <button class="album-trash icon-action" type="button">Move to trash</button>
+        <div class="album-actions">
+          <a class="album-explore restore-button" href="/gallery/admin/explore">Add GPS route</a>
+          <button class="album-trash icon-danger-button" type="button" aria-label="Move album to trash" title="Move album to trash"><svg class="trash-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 11v6M14 11v6"/></svg></button>
+        </div>
       </article>
     </template>
 
     <template id="photo-template">
       <article class="photo-card">
         <img alt="" loading="lazy">
-        <span><strong></strong><small></small></span>
-        <button class="danger-button" type="button">Trash</button>
+        <span class="cover-star" role="img" aria-label="Current gallery cover" title="Current gallery cover" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 14.9 8.4 21.4 9.3 16.7 13.9 17.8 20.4 12 17.3 6.2 20.4 7.3 13.9 2.6 9.3 9.1 8.4Z"/></svg></span>
+        <div class="photo-details">
+          <span><strong></strong><small></small></span>
+          <button class="trash-photo-button icon-danger-button" type="button" aria-label="Move photo to trash" title="Move photo to trash"><svg class="trash-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 11v6M14 11v6"/></svg></button>
+        </div>
       </article>
     </template>
 
@@ -277,6 +293,6 @@
       </article>
     </template>
 
-    <script type="module" src="/gallery/assets/admin.js?v=explore-4"></script>
+    <script type="module" src="/gallery/assets/admin.js?v=gallery-owner-settings-9"></script>
   </body>
 </html>

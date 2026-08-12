@@ -7,7 +7,7 @@
     <title>FRAME Photo Stage Viewer</title>
     <link rel="icon" href="/today/assets/frame-logo-square.svg" type="image/svg+xml">
     <script src="/assets/frame-theme.js?v=global-theme-v1"></script>
-    <link rel="stylesheet" href="/today/assets/today.css">
+    <link rel="stylesheet" href="/today/assets/today.css?v=tiled-viewer-3">
   </head>
   <body class="viewer-page">
     <main class="viewer" aria-live="polite">
@@ -16,9 +16,9 @@
         <strong>Waiting for the first staged photo</strong>
         <span>Published photos appear automatically.</span>
       </div>
-      <div id="photo-stage" class="photo-stage" hidden>
-        <img id="photo-current" class="photo-layer current" alt="">
-        <img id="photo-next" class="photo-layer next" alt="">
+      <div id="photo-stage" class="photo-stage" role="img" hidden>
+        <div id="photo-current" class="photo-layer current"></div>
+        <div id="photo-next" class="photo-layer next"></div>
       </div>
       <section id="exif-panel" class="exif-panel" hidden>
         <div class="exif-heading">
@@ -30,6 +30,6 @@
       </section>
       <div id="viewer-status" class="viewer-status">Connecting</div>
     </main>
-    <script type="module" src="/today/assets/viewer.js"></script>
+    <script type="module" src="/today/assets/viewer.js?v=tiled-viewer-3"></script>
   </body>
 </html>

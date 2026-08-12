@@ -1,4 +1,6 @@
 import { buildGalleryShareUrls, captureTimestamp, matchExplorePhotos, routeSegments, simulatedRouteSegments } from "./explore.js?v=gallery-share-7";
+import { SOCIAL_PLATFORMS, socialIcon } from "./socials.js?v=gallery-socials-4";
+import { layoutJustifiedRows } from "./justified-rows.js?v=gallery-justified-1";
 
 const elements = {
   home: document.querySelector("#gallery-home"),
@@ -13,6 +15,15 @@ const elements = {
   count: document.querySelector("#photo-count"),
   refreshState: document.querySelector("#refresh-state"),
   themeToggle: document.querySelector("#theme-toggle"),
+  socialsButton: document.querySelector("#socials-button"),
+  socialsDialog: document.querySelector("#socials-dialog"),
+  socialsList: document.querySelector("#socials-list"),
+  socialsStatus: document.querySelector("#socials-status"),
+  socialQrDialog: document.querySelector("#social-qr-dialog"),
+  socialQrCode: document.querySelector("#social-qr-code"),
+  socialQrTitle: document.querySelector("#social-qr-title"),
+  socialQrLabel: document.querySelector("#social-qr-label"),
+  socialQrDestination: document.querySelector("#social-qr-destination"),
   dateGallery: document.querySelector("#date-gallery"),
   photoGallery: document.querySelector("#photo-gallery"),
   viewSwitch: document.querySelector("#view-switch"),
@@ -31,12 +42,17 @@ const elements = {
   lightbox: document.querySelector("#lightbox"),
   lightboxViewport: document.querySelector("#lightbox-viewport"),
   lightboxImage: document.querySelector("#lightbox-image"),
+  lightboxPreview: document.querySelector("#lightbox-preview"),
+  lightboxFull: document.querySelector("#lightbox-full"),
+  lightboxTiles: document.querySelector("#lightbox-tiles"),
+  lightboxLoading: document.querySelector("#lightbox-loading"),
   lightboxTitle: document.querySelector("#lightbox-title"),
   lightboxPosition: document.querySelector("#lightbox-position"),
   lightboxDetails: document.querySelector("#lightbox-details"),
   lightboxCameraText: document.querySelector("#lightbox-camera-text"),
   lightboxExplore: document.querySelector("#lightbox-explore"),
   lightboxShare: document.querySelector("#lightbox-share"),
+  lightboxDownload: document.querySelector("#lightbox-download"),
   lightboxPrevious: document.querySelector("#lightbox-previous"),
   lightboxNext: document.querySelector("#lightbox-next"),
   lightboxClose: document.querySelector("#lightbox-close"),
@@ -59,8 +75,10 @@ const icons = {
   sun: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/></svg>`,
   map: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 18-6 3V6l6-3 6 3 6-3v15l-6 3-6-3Z"/><path d="M9 3v15"/><path d="M15 6v15"/><circle cx="12" cy="10" r="2"/></svg>`,
   share: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3"/><path d="m7 8 5-5 5 5"/><path d="M5 13v7h14v-7"/></svg>`,
+  download: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>`,
   copy: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg>`,
   check: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>`,
+  qr: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 14h2v4h-2zM14 18h4v2h-4z"/></svg>`,
 };
 
 const ZOOM_MIN = 25;
@@ -70,6 +88,8 @@ const CLICK_ZOOM_STAGES = [50, 100];
 const PAN_DRAG_THRESHOLD = 12;
 const PAN_EASING_RATE = 0.2;
 const PAN_SETTLE_THRESHOLD = 0.75;
+const FULL_IMAGE_RETRY_INITIAL_MS = 15_000;
+const FULL_IMAGE_RETRY_MAX_MS = 120_000;
 const route = parseRoute();
 const initialUrlState = readUrlState();
 const state = {
@@ -85,8 +105,14 @@ const state = {
   mapDirty: true,
   markers: new Map(),
   currentIndex: -1,
+  currentBase: null,
+  lightboxView: null,
+  lightboxMediaMode: null,
+  lightboxFullRetryAt: 0,
+  lightboxFullRetryDelay: FULL_IMAGE_RETRY_INITIAL_MS,
   signature: "",
   branding: null,
+  socialSignature: "",
   userThemeMode: readStoredTheme(),
   zoomMode: "fit",
   zoomValue: DEFAULT_ZOOM,
@@ -94,19 +120,31 @@ const state = {
   zoomSliderPointer: null,
   panAnimation: null,
   panTarget: null,
+  photoGalleryWidth: 0,
+  photoGalleryLayoutFrame: 0,
+  photoGalleryLayoutKey: "",
 };
 const systemTheme = matchMedia("(prefers-color-scheme: dark)");
 const finePointer = matchMedia("(pointer: fine)");
 let shareQrCode;
+let socialQrCode;
+let lightboxNavFadeTimer;
+let lightboxCompletionTimer;
+let lightboxImageLoadId = 0;
+let lightboxSessionController;
+let lightboxTileGeneration = 0;
+let lightboxTileImages = [];
 elements.home.href = route.root;
 elements.allGalleries.href = route.root;
-elements.lightboxImage.draggable = false;
+elements.lightboxPreview.draggable = false;
 elements.lightboxExplore.innerHTML = `${icons.map}<span>View on map</span>`;
 elements.lightboxShare.innerHTML = `${icons.share}<span>Share</span>`;
+elements.lightboxDownload.innerHTML = icons.download;
 setCopyButton(elements.copyGalleryUrl, "Gallery view");
 setCopyButton(elements.copyExploreUrl, "Explore view");
 
 elements.themeToggle.addEventListener("click", toggleTheme);
+elements.socialsButton.addEventListener("click", openSocialsDialog);
 elements.photosView.addEventListener("click", () => setGalleryView("photos", { history: "push" }));
 elements.exploreView.addEventListener("click", () => setGalleryView("explore", { history: "push" }));
 elements.explorePrevious.addEventListener("click", () => moveExplore(-1));
@@ -157,14 +195,31 @@ elements.lightboxViewport.addEventListener("pointerdown", startViewportPointer);
 elements.lightboxViewport.addEventListener("pointermove", moveViewportPointer);
 elements.lightboxViewport.addEventListener("pointerup", finishViewportPointer);
 elements.lightboxViewport.addEventListener("pointercancel", cancelViewportPointer);
-elements.lightboxImage.addEventListener("load", () => {
-  if (elements.lightbox.open) applyZoom({ resetScroll: state.zoomMode === "fit" });
+window.addEventListener("resize", () => {
+  if (elements.lightbox.open && state.zoomMode === "fit") applyZoom();
+  schedulePhotoGalleryLayout();
 });
+new ResizeObserver(([entry]) => {
+  const width = entry.contentRect.width;
+  if (!route.date || state.view !== "photos" || elements.photoGallery.hidden || Math.abs(width - state.photoGalleryWidth) < 0.5) return;
+  state.photoGalleryWidth = width;
+  schedulePhotoGalleryLayout();
+}).observe(elements.photoGallery);
 elements.lightbox.addEventListener("click", (event) => {
   if (event.target === elements.lightbox) elements.lightbox.close();
 });
 elements.lightbox.addEventListener("close", () => {
+  cancelLightboxImageLoad();
+  clearTimeout(lightboxNavFadeTimer);
+  for (const button of [elements.lightboxPrevious, elements.lightboxNext]) button.classList.remove("is-active");
+  setLightboxImageStatus("ready");
   cancelViewportPointer();
+  state.currentIndex = -1;
+  state.currentBase = null;
+  state.lightboxView = null;
+  state.lightboxMediaMode = null;
+  state.lightboxFullRetryAt = 0;
+  state.lightboxFullRetryDelay = FULL_IMAGE_RETRY_INITIAL_MS;
   if (elements.shareDialog.open) elements.shareDialog.close();
   if (state.view === "photos" && state.selectedBase) {
     state.selectedBase = null;
@@ -194,17 +249,25 @@ window.addEventListener("popstate", () => {
 await loadBranding();
 await refresh(true);
 setInterval(() => {
-  if (!document.hidden) refresh(false);
+  if (!document.hidden) void Promise.allSettled([refresh(false), loadBranding()]);
 }, 5000);
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) refresh(false);
+  if (!document.hidden) void Promise.allSettled([refresh(false), loadBranding()]);
 });
 
 async function loadBranding() {
   try {
+    const previousMediaMode = preferredLightboxMediaMode();
     const result = await requestJson("/gallery/api/branding");
     state.branding = result.branding;
     applyBranding();
+    const preferredMediaMode = preferredLightboxMediaMode();
+    const modeChanged = previousMediaMode !== preferredMediaMode && state.lightboxMediaMode !== preferredMediaMode;
+    const retryFullImage = preferredMediaMode === "image" && state.lightboxMediaMode === "tiles" && Date.now() >= state.lightboxFullRetryAt;
+    if (elements.lightbox.open && (modeChanged || retryFullImage)) {
+      const photo = state.photos[state.currentIndex];
+      if (photo) loadLightboxImage(photo, { imagePoint: currentImageCenter(), retryFullImage });
+    }
   } catch {
     applyBranding();
   }
@@ -224,6 +287,7 @@ function applyBranding() {
     const logoUrl = branding.logo?.url || "/gallery/assets/frame-logo-square.svg";
     if (elements.brandLogo.getAttribute("src") !== logoUrl) elements.brandLogo.src = logoUrl;
     elements.brandLogo.alt = branding.logo ? `${branding.brand_name} logo` : "";
+    renderSocials();
   }
   if (palette) {
     const root = document.documentElement;
@@ -245,6 +309,134 @@ function applyBranding() {
   elements.themeToggle.setAttribute("aria-label", `Switch to ${nextMode} mode`);
   elements.themeToggle.title = `Switch to ${nextMode} mode`;
   elements.themeToggle.setAttribute("aria-pressed", String(mode === "day"));
+  if (elements.lightbox.open) syncLightboxDownload(state.photos[state.currentIndex]);
+}
+
+async function openSocialsDialog() {
+  await loadBranding();
+  if (!state.branding?.socials?.length) return;
+  elements.socialsStatus.textContent = "";
+  elements.socialsStatus.removeAttribute("data-error");
+  elements.socialsDialog.showModal();
+}
+
+function renderSocials() {
+  const socials = Array.isArray(state.branding?.socials) ? state.branding.socials : [];
+  elements.socialsButton.hidden = socials.length === 0;
+  const signature = JSON.stringify(socials);
+  if (signature === state.socialSignature) return;
+  state.socialSignature = signature;
+  elements.socialsList.replaceChildren(...socials.map(socialRow));
+  if (!socials.length && elements.socialsDialog.open) elements.socialsDialog.close();
+  if (elements.socialQrDialog.open) {
+    const active = socials.find((link) => link.id === elements.socialQrDialog.dataset.socialId);
+    if (!active) {
+      elements.socialQrDialog.close();
+    } else {
+      const platform = SOCIAL_PLATFORMS.find((entry) => entry.id === active.platform) || SOCIAL_PLATFORMS[0];
+      if (!renderSocialQr(active, platform.label)) elements.socialQrDialog.close();
+    }
+  }
+}
+
+function socialRow(link) {
+  const platform = SOCIAL_PLATFORMS.find((entry) => entry.id === link.platform) || SOCIAL_PLATFORMS[0];
+  const row = document.createElement("article");
+  row.className = "social-link";
+
+  const identity = document.createElement("a");
+  identity.className = "social-link-identity";
+  identity.href = link.url;
+  identity.target = "_blank";
+  identity.rel = "noopener noreferrer";
+  const icon = document.createElement("span");
+  icon.className = "social-platform-icon";
+  icon.innerHTML = socialIcon(link.platform);
+  if (link.graphic?.url) {
+    const graphic = document.createElement("img");
+    graphic.alt = "";
+    graphic.decoding = "async";
+    graphic.addEventListener("load", () => {
+      icon.classList.add("has-custom-graphic");
+      icon.replaceChildren(graphic);
+    }, { once: true });
+    graphic.src = link.graphic.url;
+  }
+  const copy = document.createElement("span");
+  copy.className = "social-link-copy";
+  const title = document.createElement("strong");
+  title.textContent = link.label || platform.label;
+  const destination = document.createElement("small");
+  destination.textContent = link.url;
+  copy.append(title, destination);
+  identity.append(icon, copy);
+  identity.setAttribute("aria-label", `Open ${title.textContent} in a new window`);
+  identity.title = "Open in new window";
+
+  const actions = document.createElement("span");
+  actions.className = "social-link-actions";
+  const copyButton = iconButton(icons.copy, `Copy ${title.textContent}`, "Copy");
+  copyButton.addEventListener("click", () => copySocialUrl(link, copyButton));
+  const qrButton = iconButton(icons.qr, `Show QR code for ${title.textContent}`, "QR code");
+  qrButton.addEventListener("click", () => openSocialQr(link, platform.label));
+  actions.append(copyButton, qrButton);
+  row.append(identity, actions);
+  return row;
+}
+
+function iconButton(icon, label, title) {
+  const button = document.createElement("button");
+  button.className = "icon-button";
+  button.type = "button";
+  button.innerHTML = icon;
+  button.setAttribute("aria-label", label);
+  button.title = title;
+  return button;
+}
+
+async function copySocialUrl(link, button) {
+  try {
+    await copyText(link.url);
+    button.innerHTML = icons.check;
+    elements.socialsStatus.textContent = `${link.label || "Social"} link copied.`;
+    elements.socialsStatus.removeAttribute("data-error");
+    setTimeout(() => {
+      if (button.isConnected) button.innerHTML = icons.copy;
+    }, 1200);
+  } catch {
+    elements.socialsStatus.textContent = "The browser could not copy this link.";
+    elements.socialsStatus.dataset.error = "true";
+  }
+}
+
+function openSocialQr(link, platformLabel) {
+  if (renderSocialQr(link, platformLabel) && !elements.socialQrDialog.open) elements.socialQrDialog.showModal();
+}
+
+function renderSocialQr(link, platformLabel) {
+  elements.socialQrDialog.dataset.socialId = link.id;
+  elements.socialQrTitle.textContent = link.label || platformLabel;
+  elements.socialQrLabel.textContent = platformLabel;
+  elements.socialQrDestination.textContent = link.url;
+  try {
+    const QRCode = window.QRCode;
+    if (typeof QRCode !== "function") throw new Error("QR encoder unavailable");
+    if (!socialQrCode) {
+      socialQrCode = new QRCode(elements.socialQrCode, {
+        width: 260,
+        height: 260,
+        colorDark: "#000000",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.M,
+      });
+    }
+    socialQrCode.makeCode(link.url);
+    return true;
+  } catch {
+    elements.socialsStatus.textContent = "QR code unavailable. Copy the destination instead.";
+    elements.socialsStatus.dataset.error = "true";
+    return false;
+  }
 }
 
 function toggleTheme() {
@@ -290,6 +482,7 @@ function writeStoredTheme(mode) {
 
 async function refresh(forceRender) {
   try {
+    const openPhotoBase = elements.lightbox.open ? state.currentBase : null;
     elements.refreshState.textContent = "Refreshing...";
     if (route.date) {
       const [datesResult, photosResult] = await Promise.all([
@@ -314,8 +507,14 @@ async function refresh(forceRender) {
       state.dates = (await requestJson("/gallery/api/dates")).dates;
     }
     const signature = JSON.stringify([
-      state.dates.map((date) => [date.date_folder, date.count, date.latest_at, date.has_explore]),
-      state.photos.map((photo) => [photo.base, photo.processed_at, photo.capture_clock]),
+      state.dates.map((date) => [
+        date.date_folder,
+        date.count,
+        date.latest_at,
+        date.cover_thumbnail_url,
+        date.has_explore,
+      ]),
+      state.photos.map((photo) => [photo.base, photo.processed_at, photo.capture_clock, photo.thumbnail_url, photo.width, photo.height]),
       state.explore && [
         state.explore.updated_at,
         state.explore.routes?.map((item) => [item.id, item.segments?.length, item.segments?.reduce((sum, segment) => sum + segment.length, 0)]),
@@ -324,7 +523,7 @@ async function refresh(forceRender) {
     ]);
     if (forceRender || signature !== state.signature) {
       state.signature = signature;
-      route.date ? renderDay() : renderDates();
+      route.date ? renderDay(openPhotoBase) : renderDates();
     }
     elements.refreshState.textContent = `Updated ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
   } catch (error) {
@@ -341,7 +540,7 @@ function renderDates() {
   elements.empty.hidden = state.dates.length > 0;
   elements.photoGallery.hidden = true;
   elements.explorePanel.hidden = true;
-  document.body.classList.remove("is-exploring");
+  document.body.classList.remove("is-exploring", "is-photo-grid");
   elements.viewSwitch.hidden = true;
   elements.dateGallery.hidden = false;
   elements.allGalleries.hidden = true;
@@ -352,7 +551,7 @@ function renderDates() {
     const dayHref = `${route.root}/${date.date_folder}/`;
     link.href = dayHref;
     image.src = date.cover_thumbnail_url || "/gallery/assets/frame-logo-square.svg";
-    image.alt = `First photo from ${formatLongDate(date.date_folder)}`;
+    image.alt = `Gallery cover for ${formatLongDate(date.date_folder)}`;
     card.querySelector("strong").textContent = formatLongDate(date.date_folder);
     card.querySelector(".date-card-stats").textContent = `${photoLabel(date.count)} - ${durationLabel(date.duration_ms)}`;
     const mapLink = card.querySelector(".date-map-jump");
@@ -373,7 +572,7 @@ function renderDates() {
   }));
 }
 
-function renderDay() {
+function renderDay(openPhotoBase = null) {
   const date = state.dates.find((item) => item.date_folder === route.date);
   const canExplore = hasExplore();
   elements.headingEyebrow.textContent = "Published photos";
@@ -384,14 +583,25 @@ function renderDay() {
   elements.viewSwitch.hidden = !canExplore;
   elements.allGalleries.hidden = false;
   state.mapDirty = true;
+  state.photoGalleryLayoutKey = "";
   elements.photoGallery.replaceChildren(...state.photos.map((photo, index) => {
     const card = elements.photoTemplate.content.firstElementChild.cloneNode(true);
     const image = card.querySelector("img");
+    const photoName = friendlyBase(photo.base);
+    const width = Number(photo.width);
+    const height = Number(photo.height);
+    card.dataset.ratio = String(width > 0 && height > 0 ? width / height : 4 / 3);
     image.src = photo.thumbnail_url;
-    image.alt = friendlyBase(photo.base);
-    card.querySelector("strong").textContent = friendlyBase(photo.base);
-    card.querySelector("small").textContent = formatTime(photo.processed_at);
-    card.querySelector(".photo-open").addEventListener("click", () => openLightbox(index));
+    image.alt = "";
+    card.querySelector("strong").textContent = photoName;
+    const time = card.querySelector("time");
+    time.id = `photo-time-${index}`;
+    time.dateTime = photo.processed_at;
+    time.textContent = formatTime(photo.processed_at);
+    const openButton = card.querySelector(".photo-open");
+    openButton.setAttribute("aria-label", `Open ${photoName}`);
+    openButton.setAttribute("aria-describedby", time.id);
+    openButton.addEventListener("click", () => openLightbox(index));
     const mapButton = card.querySelector(".photo-map-jump");
     if (state.matches.has(photo.base)) {
       card.classList.add("has-map-action");
@@ -403,50 +613,391 @@ function renderDay() {
     }
     const shareButton = card.querySelector(".photo-share");
     shareButton.innerHTML = icons.share;
-    shareButton.setAttribute("aria-label", `Share ${friendlyBase(photo.base)}`);
+    shareButton.setAttribute("aria-label", `Share ${photoName}`);
     shareButton.title = "Share photo";
     shareButton.addEventListener("click", () => openShareDialog(location.href, state.matches.has(photo.base), photo.base));
     return card;
   }));
   renderExploreFilmstrip();
-  applyGalleryView({ rebuildMap: true, openPopup: Boolean(state.selectedBase) });
+  applyGalleryView({ rebuildMap: true, openPopup: Boolean(state.selectedBase), lightboxBase: openPhotoBase });
 }
 
-function openLightbox(index) {
+function layoutPhotoGallery() {
+  if (!route.date || state.view !== "photos" || elements.photoGallery.hidden) return;
+  const items = [...elements.photoGallery.querySelectorAll(".photo-card")];
+  const width = elements.photoGallery.clientWidth;
+  if (!items.length || width < 1) return;
+  const targetHeight = clamp(window.innerHeight * 0.46, 180, 405);
+  const layoutKey = `${width.toFixed(1)}:${targetHeight.toFixed(1)}`;
+  if (state.photoGalleryLayoutKey === layoutKey && elements.photoGallery.firstElementChild?.classList.contains("gallery-photo-row")) return;
+  state.photoGalleryWidth = width;
+  state.photoGalleryLayoutKey = layoutKey;
+  layoutJustifiedRows(elements.photoGallery, items, {
+    rowClass: "gallery-photo-row",
+    targetHeight,
+  });
+}
+
+function schedulePhotoGalleryLayout() {
+  if (state.photoGalleryLayoutFrame) return;
+  state.photoGalleryLayoutFrame = requestAnimationFrame(() => {
+    state.photoGalleryLayoutFrame = 0;
+    layoutPhotoGallery();
+  });
+}
+
+function openLightbox(index, options = {}) {
   const photo = state.photos[index];
   if (!photo) return;
+  const preserveImage = Boolean(options.preserveImage && elements.lightbox.open && state.currentBase === photo.base);
   state.currentIndex = index;
-  resetZoomState();
+  state.currentBase = photo.base;
+  if (!preserveImage) resetZoomState();
   if (!elements.lightbox.open) elements.lightbox.showModal();
-  renderLightbox();
+  renderLightbox({ preserveImage });
 }
 
 function moveLightbox(offset) {
   const target = state.currentIndex + offset;
   if (target < 0 || target >= state.photos.length) return;
-  state.currentIndex = target;
   if (state.view === "photos" && state.selectedBase) {
     state.selectedBase = state.photos[target].base;
     writeUrlState("replace");
   }
-  resetZoomState();
-  renderLightbox();
+  openLightbox(target);
 }
 
-function renderLightbox() {
+function renderLightbox(options = {}) {
   const photo = state.photos[state.currentIndex];
   if (!photo) return;
-  elements.lightboxImage.src = photo.image_url;
-  elements.lightboxImage.alt = friendlyBase(photo.base);
+  state.currentBase = photo.base;
+  elements.lightboxImage.setAttribute("aria-label", friendlyBase(photo.base));
   elements.lightboxTitle.textContent = friendlyBase(photo.base);
   elements.lightboxPosition.textContent = `${state.currentIndex + 1} of ${state.photos.length}`;
   elements.lightboxCameraText.textContent = photo.camera_text || "";
   elements.lightboxCameraText.hidden = !photo.camera_text;
+  syncLightboxDownload(photo);
   elements.lightboxExplore.hidden = !state.matches.has(photo.base);
   elements.lightboxDetails.hidden = false;
   elements.lightboxPrevious.disabled = state.currentIndex <= 0;
   elements.lightboxNext.disabled = state.currentIndex >= state.photos.length - 1;
-  applyZoom();
+  revealLightboxNavigation();
+  if (!options.preserveImage || state.lightboxMediaMode !== preferredLightboxMediaMode()) loadLightboxImage(photo);
+}
+
+function preferredLightboxMediaMode() {
+  return state.branding?.show_download_button === true ? "image" : "tiles";
+}
+
+function syncLightboxDownload(photo) {
+  const enabled = state.branding?.show_download_button === true && Boolean(route.date && photo);
+  elements.lightboxDownload.hidden = !enabled;
+  elements.lightboxDownload.removeAttribute("href");
+  elements.lightboxDownload.removeAttribute("download");
+  elements.lightboxDownload.removeAttribute("aria-label");
+  if (!enabled) return;
+  elements.lightboxDownload.href = `/gallery/download/${encodeURIComponent(route.date)}/${encodeURIComponent(photo.base)}.jpg`;
+  elements.lightboxDownload.download = `${photo.base}.jpg`;
+  elements.lightboxDownload.setAttribute("aria-label", `Download ${friendlyBase(photo.base)}`);
+}
+
+function loadLightboxImage(photo, options = {}) {
+  cancelLightboxImageLoad();
+  if (!options.retryFullImage) {
+    state.lightboxFullRetryAt = 0;
+    state.lightboxFullRetryDelay = FULL_IMAGE_RETRY_INITIAL_MS;
+  }
+  state.lightboxMediaMode = preferredLightboxMediaMode();
+  const loadId = lightboxImageLoadId;
+  let previewReady = false;
+  const isCurrent = () => loadId === lightboxImageLoadId && elements.lightbox.open && state.currentBase === photo.base;
+  state.lightboxView = lightboxDimensions(photo.width, photo.height);
+  clearLightboxTiles();
+  elements.lightboxPreview.classList.remove("is-ready", "is-complete");
+  elements.lightboxPreview.onload = () => {
+    if (!isCurrent() || !elements.lightboxPreview.naturalWidth) return;
+    previewReady = true;
+    elements.lightboxPreview.classList.add("is-ready");
+    if (["loading", "retrying"].includes(elements.lightboxImage.dataset.status)) setLightboxImageStatus("upgrading");
+    applyZoom({ resetScroll: state.zoomMode === "fit" });
+  };
+  elements.lightboxPreview.onerror = () => {
+    if (!isCurrent() || elements.lightboxFull.classList.contains("is-ready") || elements.lightboxTiles.childElementCount) return;
+    setLightboxImageStatus("loading");
+  };
+
+  setLightboxImageStatus("loading");
+  applyZoom({ resetScroll: true, imagePoint: options.imagePoint });
+  elements.lightboxPreview.src = photo.thumbnail_url;
+  if (state.lightboxMediaMode === "image") {
+    loadLightboxFullImage(photo, loadId, () => previewReady);
+  } else {
+    void loadLightboxTiles(photo, loadId, () => previewReady);
+  }
+}
+
+function cancelLightboxImageLoad() {
+  lightboxImageLoadId += 1;
+  lightboxTileGeneration += 1;
+  clearTimeout(lightboxCompletionTimer);
+  lightboxCompletionTimer = undefined;
+  lightboxSessionController?.abort();
+  lightboxSessionController = undefined;
+  elements.lightboxPreview.onload = null;
+  elements.lightboxPreview.onerror = null;
+  elements.lightboxPreview.removeAttribute("src");
+  elements.lightboxPreview.classList.remove("is-ready", "is-complete");
+  clearLightboxFullImage();
+  clearLightboxTiles();
+  state.lightboxView = null;
+}
+
+function loadLightboxFullImage(photo, loadId, getPreviewReady, attempt = 0) {
+  const image = elements.lightboxFull;
+  const isCurrent = () => loadId === lightboxImageLoadId && elements.lightbox.open && state.currentBase === photo.base;
+  clearLightboxFullImage();
+  if (attempt) setLightboxImageStatus("retrying");
+  image.onload = () => {
+    if (!isCurrent() || !image.naturalWidth || !image.naturalHeight) return;
+    const imagePoint = currentImageCenter();
+    state.lightboxView = lightboxDimensions(image.naturalWidth, image.naturalHeight);
+    state.lightboxFullRetryAt = 0;
+    state.lightboxFullRetryDelay = FULL_IMAGE_RETRY_INITIAL_MS;
+    image.classList.add("is-ready");
+    elements.lightboxPreview.classList.add("is-complete");
+    applyZoom({ imagePoint, resetScroll: state.zoomMode === "fit" });
+    finishLightboxImageLoad({ preserveView: true, celebrate: true });
+  };
+  image.onerror = () => {
+    if (!isCurrent()) return;
+    if (attempt === 0) {
+      loadLightboxFullImage(photo, loadId, getPreviewReady, 1);
+      return;
+    }
+    state.lightboxMediaMode = "tiles";
+    state.lightboxFullRetryAt = Date.now() + state.lightboxFullRetryDelay;
+    state.lightboxFullRetryDelay = Math.min(state.lightboxFullRetryDelay * 2, FULL_IMAGE_RETRY_MAX_MS);
+    void loadLightboxTiles(photo, loadId, getPreviewReady);
+  };
+  const source = `/gallery/image/${encodeURIComponent(route.date)}/${encodeURIComponent(photo.base)}.jpg`;
+  image.src = attempt ? `${source}?retry=${loadId}` : source;
+  setLightboxImageStatus(getPreviewReady() ? "upgrading" : attempt ? "retrying" : "loading");
+}
+
+function clearLightboxFullImage() {
+  elements.lightboxFull.onload = null;
+  elements.lightboxFull.onerror = null;
+  elements.lightboxFull.removeAttribute("src");
+  elements.lightboxFull.classList.remove("is-ready");
+}
+
+async function loadLightboxTiles(photo, loadId, getPreviewReady, attempt = 0) {
+  const isCurrent = () => loadId === lightboxImageLoadId && elements.lightbox.open && state.currentBase === photo.base;
+  const controller = new AbortController();
+  lightboxSessionController?.abort();
+  lightboxSessionController = controller;
+  if (attempt) setLightboxImageStatus("retrying");
+  try {
+    const result = await requestJson("/gallery/api/view-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date_folder: route.date, base: photo.base }),
+      credentials: "same-origin",
+      signal: controller.signal,
+    });
+    if (!isCurrent()) return;
+    const view = normalizeTileView(result.view);
+    const imagePoint = currentImageCenter();
+    state.lightboxView = view;
+    applyZoom({ imagePoint });
+    renderLightboxTiles(view, photo, loadId, getPreviewReady, attempt);
+  } catch (error) {
+    if (error.name === "AbortError" || !isCurrent()) return;
+    if (attempt === 0) {
+      await loadLightboxTiles(photo, loadId, getPreviewReady, 1);
+      return;
+    }
+    setLightboxImageStatus(getPreviewReady() ? "partial" : "error");
+  }
+}
+
+function normalizeTileView(view) {
+  const width = positiveInteger(view?.width);
+  const height = positiveInteger(view?.height);
+  const tileSize = positiveInteger(view?.tile_size);
+  const overlap = positiveInteger(view?.overlap);
+  const columns = positiveInteger(view?.columns);
+  const rows = positiveInteger(view?.rows);
+  if (!width || !height || tileSize !== 512 || !overlap || overlap > tileSize / 2 || columns !== Math.ceil(width / tileSize) || rows !== Math.ceil(height / tileSize) || !Array.isArray(view.tiles) || view.tiles.length !== columns * rows) {
+    throw new Error("Photo detail is unavailable");
+  }
+  const coordinates = new Set();
+  const tiles = view.tiles.map((tile) => {
+    const x = Number(tile.x);
+    const y = Number(tile.y);
+    const tileWidth = positiveInteger(tile.width);
+    const tileHeight = positiveInteger(tile.height);
+    const url = new URL(tile.url, location.origin);
+    const key = `${x}:${y}`;
+    if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x >= columns || y >= rows || tileWidth !== Math.min(tileSize, width - x * tileSize) || tileHeight !== Math.min(tileSize, height - y * tileSize) || coordinates.has(key) || url.origin !== location.origin || !url.pathname.startsWith("/gallery/tile/")) {
+      throw new Error("Photo detail is unavailable");
+    }
+    coordinates.add(key);
+    return { x, y, width: tileWidth, height: tileHeight, url: `${url.pathname}${url.search}` };
+  });
+  return { width, height, tileSize, overlap, columns, rows, tiles };
+}
+
+function renderLightboxTiles(view, photo, loadId, getPreviewReady, attempt) {
+  clearLightboxTiles();
+  const generation = ++lightboxTileGeneration;
+  elements.lightboxTiles.style.width = `${view.width}px`;
+  elements.lightboxTiles.style.height = `${view.height}px`;
+  elements.lightboxTiles.style.gridTemplateColumns = Array.from(
+    { length: view.columns },
+    (_, x) => `${Math.min(view.tileSize, view.width - x * view.tileSize)}px`,
+  ).join(" ");
+  elements.lightboxTiles.style.gridTemplateRows = Array.from(
+    { length: view.rows },
+    (_, y) => `${Math.min(view.tileSize, view.height - y * view.tileSize)}px`,
+  ).join(" ");
+  syncLightboxTileScale(view);
+  let loaded = 0;
+  let retryStarted = false;
+  const isCurrent = () => generation === lightboxTileGeneration && loadId === lightboxImageLoadId && elements.lightbox.open && state.currentBase === photo.base;
+  const retry = () => {
+    if (retryStarted || !isCurrent()) return;
+    retryStarted = true;
+    if (attempt === 0) {
+      void loadLightboxTiles(photo, loadId, getPreviewReady, 1);
+    } else {
+      setLightboxImageStatus(loaded || getPreviewReady() ? "partial" : "error");
+    }
+  };
+  const entries = view.tiles.map((tile) => {
+    const clip = document.createElement("div");
+    clip.className = "lightbox-tile-clip";
+    clip.style.gridColumn = String(tile.x + 1);
+    clip.style.gridRow = String(tile.y + 1);
+    clip.style.width = `${tile.width}px`;
+    clip.style.height = `${tile.height}px`;
+    const image = new Image();
+    image.className = "lightbox-tile-image";
+    image.draggable = false;
+    image.decoding = "async";
+    const sourceX = tile.x > 0 ? view.overlap : 0;
+    const sourceY = tile.y > 0 ? view.overlap : 0;
+    const expectedWidth = tile.width + sourceX + (tile.x < view.columns - 1 ? view.overlap : 0);
+    const expectedHeight = tile.height + sourceY + (tile.y < view.rows - 1 ? view.overlap : 0);
+    image.style.left = `${-sourceX}px`;
+    image.style.top = `${-sourceY}px`;
+    image.style.width = `${expectedWidth}px`;
+    image.style.height = `${expectedHeight}px`;
+    image.onload = () => {
+      if (!isCurrent()) return;
+      if (image.naturalWidth !== expectedWidth || image.naturalHeight !== expectedHeight) {
+        image.onload = null;
+        image.onerror = null;
+        image.removeAttribute("src");
+        retry();
+        return;
+      }
+      image.onload = null;
+      image.onerror = null;
+      loaded += 1;
+      elements.lightboxTiles.classList.add("is-ready");
+      if (loaded !== view.tiles.length) return;
+      elements.lightboxTiles.classList.add("is-complete");
+      elements.lightboxPreview.classList.add("is-complete");
+      finishLightboxImageLoad({ preserveView: true, celebrate: true });
+    };
+    image.onerror = () => {
+      image.onload = null;
+      image.onerror = null;
+      image.removeAttribute("src");
+      retry();
+    };
+    clip.append(image);
+    return { clip, image, tile };
+  });
+  lightboxTileImages = entries.map(({ image }) => image);
+  elements.lightboxTiles.replaceChildren(...entries.map(({ clip }) => clip));
+  for (const { image, tile } of entries) {
+    image.src = tile.url;
+  }
+  setLightboxImageStatus(getPreviewReady() ? "upgrading" : "loading");
+}
+
+function clearLightboxTiles() {
+  lightboxTileGeneration += 1;
+  for (const image of lightboxTileImages) {
+    image.onload = null;
+    image.onerror = null;
+    image.removeAttribute("src");
+  }
+  lightboxTileImages = [];
+  elements.lightboxTiles.classList.remove("is-ready", "is-complete");
+  elements.lightboxTiles.replaceChildren();
+  Object.assign(elements.lightboxTiles.style, {
+    width: "",
+    height: "",
+    gridTemplateColumns: "",
+    gridTemplateRows: "",
+    transform: "",
+  });
+}
+
+function lightboxDimensions(width, height) {
+  return { width: positiveInteger(width) || 1, height: positiveInteger(height) || 1 };
+}
+
+function positiveInteger(value) {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : 0;
+}
+
+function revealLightboxNavigation() {
+  clearTimeout(lightboxNavFadeTimer);
+  for (const button of [elements.lightboxPrevious, elements.lightboxNext]) button.classList.add("is-active");
+  lightboxNavFadeTimer = setTimeout(() => {
+    for (const button of [elements.lightboxPrevious, elements.lightboxNext]) button.classList.remove("is-active");
+  }, 400);
+}
+
+function finishLightboxImageLoad({ preserveView = false, celebrate = false } = {}) {
+  clearTimeout(lightboxCompletionTimer);
+  setLightboxImageStatus(celebrate ? "complete" : "ready");
+  if (celebrate) {
+    const loadId = lightboxImageLoadId;
+    lightboxCompletionTimer = setTimeout(() => {
+      if (loadId === lightboxImageLoadId) setLightboxImageStatus("ready");
+    }, 900);
+  }
+  if (elements.lightbox.open && !preserveView) applyZoom({ resetScroll: state.zoomMode === "fit" });
+}
+
+function setLightboxImageStatus(status) {
+  const loading = status === "loading";
+  const upgrading = status === "upgrading";
+  const retrying = status === "retrying";
+  elements.lightboxImage.dataset.status = status;
+  elements.lightboxViewport.setAttribute("aria-busy", String(loading || upgrading || retrying));
+  elements.lightboxImage.classList.toggle("is-loading", loading);
+  elements.lightboxLoading.hidden = status === "ready";
+  elements.lightboxLoading.classList.toggle("is-error", status === "error" || status === "partial");
+  elements.lightboxLoading.classList.toggle("is-upgrading", upgrading || retrying);
+  elements.lightboxLoading.classList.toggle("is-complete", status === "complete");
+  elements.lightboxLoading.textContent = status === "error"
+    ? "Photo could not be loaded."
+    : status === "partial"
+      ? "Some photo detail could not be loaded."
+      : status === "complete"
+        ? "Full detail ready"
+        : retrying
+          ? "Retrying photo detail…"
+          : upgrading
+            ? "Loading full detail…"
+            : "Loading photo…";
 }
 
 function openShareDialog(href, exploreAvailable, selectedBase = null) {
@@ -514,14 +1065,27 @@ function setCopyButton(button, label, copied = false) {
 }
 
 async function copyText(input) {
-  input.focus();
-  input.select();
+  const value = typeof input === "string" ? input : input.value;
+  const temporary = typeof input === "string" ? document.createElement("textarea") : null;
+  const control = temporary || input;
+  if (temporary) {
+    temporary.value = value;
+    temporary.readOnly = true;
+    temporary.style.position = "fixed";
+    temporary.style.opacity = "0";
+    document.body.append(temporary);
+  }
+  control.focus();
+  control.select();
   try {
     if (document.execCommand("copy")) return;
-  } catch {}
+  } catch {
+  } finally {
+    temporary?.remove();
+  }
   if (!navigator.clipboard?.writeText) throw new Error("Copy unavailable");
   await Promise.race([
-    navigator.clipboard.writeText(input.value),
+    navigator.clipboard.writeText(value),
     new Promise((_, reject) => setTimeout(() => reject(new Error("Copy timed out")), 2000)),
   ]);
 }
@@ -554,6 +1118,7 @@ function applyGalleryView(options = {}) {
   }
   const exploring = state.view === "explore";
   document.body.classList.toggle("is-exploring", exploring);
+  document.body.classList.toggle("is-photo-grid", Boolean(route.date) && !exploring);
   elements.manage.href = route.date
     ? exploring
       ? `/gallery/admin/explore?date=${encodeURIComponent(route.date)}`
@@ -565,9 +1130,11 @@ function applyGalleryView(options = {}) {
   elements.explorePanel.hidden = !exploring;
   elements.empty.hidden = exploring || state.photos.length > 0;
   if (!exploring) {
-    const photoIndex = state.selectedBase ? state.photos.findIndex((photo) => photo.base === state.selectedBase) : -1;
+    schedulePhotoGalleryLayout();
+    const lightboxBase = state.selectedBase || options.lightboxBase;
+    const photoIndex = lightboxBase ? state.photos.findIndex((photo) => photo.base === lightboxBase) : -1;
     if (photoIndex >= 0) {
-      openLightbox(photoIndex);
+      openLightbox(photoIndex, { preserveImage: elements.lightbox.open && state.currentBase === lightboxBase });
     } else {
       if (state.selectedBase) {
         state.selectedBase = null;
@@ -791,6 +1358,8 @@ function resetZoomState() {
 function applyZoom(options = {}) {
   const zoomed = state.zoomMode === "percent";
   const value = clamp(Number(state.zoomValue) || DEFAULT_ZOOM, ZOOM_MIN, ZOOM_MAX);
+  const photo = state.photos[state.currentIndex];
+  const dimensions = state.lightboxView || lightboxDimensions(photo?.width, photo?.height);
   state.zoomValue = value;
   elements.zoomSlider.value = String(value);
   elements.zoomValue.textContent = zoomed ? `${value}%` : "Fit";
@@ -798,17 +1367,35 @@ function applyZoom(options = {}) {
   elements.lightboxImage.classList.toggle("fit", !zoomed);
   if (!zoomed) {
     cancelSmoothPan();
-    elements.lightboxImage.style.width = "";
-    elements.lightboxImage.style.height = "";
+    const toolbarHeight = document.querySelector(".lightbox-toolbar")?.getBoundingClientRect().height || 54;
+    const fitWidth = Math.max(1, elements.lightboxViewport.clientWidth);
+    const fitHeight = Math.max(1, elements.lightboxViewport.clientHeight - toolbarHeight);
+    const scale = Math.min(fitWidth / dimensions.width, fitHeight / dimensions.height);
+    setLightboxImageSize(
+      Math.max(1, Math.round(dimensions.width * scale)),
+      Math.max(1, Math.round(dimensions.height * scale)),
+      dimensions,
+    );
     if (options.resetScroll) elements.lightboxViewport.scrollTo({ top: 0, left: 0 });
     return;
   }
-  const photo = state.photos[state.currentIndex];
-  const imageWidth = photo?.width || elements.lightboxImage.naturalWidth;
-  if (!imageWidth) return;
-  elements.lightboxImage.style.width = `${Math.max(1, imageWidth * (value / 100))}px`;
-  elements.lightboxImage.style.height = "auto";
+  setLightboxImageSize(
+    Math.max(1, dimensions.width * (value / 100)),
+    Math.max(1, dimensions.height * (value / 100)),
+    dimensions,
+  );
   scrollToImagePoint(options.imagePoint || currentImageCenter(), { viewportPoint: options.viewportPoint });
+}
+
+function setLightboxImageSize(width, height, dimensions) {
+  elements.lightboxImage.style.width = `${width}px`;
+  elements.lightboxImage.style.height = `${height}px`;
+  syncLightboxTileScale(dimensions, width, height);
+}
+
+function syncLightboxTileScale(dimensions, width = Number.parseFloat(elements.lightboxImage.style.width), height = Number.parseFloat(elements.lightboxImage.style.height)) {
+  if (!dimensions?.width || !dimensions?.height || !Number.isFinite(width) || !Number.isFinite(height)) return;
+  elements.lightboxTiles.style.transform = `scale(${width / dimensions.width}, ${height / dimensions.height})`;
 }
 
 function startZoomSliderPointer(event) {
@@ -929,13 +1516,11 @@ function usefulClickZoomStages() {
 
 function currentFitZoomPercent() {
   const photo = state.photos[state.currentIndex];
-  const naturalWidth = photo?.width || elements.lightboxImage.naturalWidth;
-  const naturalHeight = photo?.height || elements.lightboxImage.naturalHeight;
-  if (!naturalWidth || !naturalHeight) return 0;
+  const dimensions = state.lightboxView || lightboxDimensions(photo?.width, photo?.height);
   const toolbarHeight = document.querySelector(".lightbox-toolbar")?.getBoundingClientRect().height || 54;
   const fitWidth = Math.max(1, elements.lightboxViewport.clientWidth);
   const fitHeight = Math.max(1, elements.lightboxViewport.clientHeight - toolbarHeight);
-  return Math.min(fitWidth / naturalWidth, fitHeight / naturalHeight) * 100;
+  return Math.min(fitWidth / dimensions.width, fitHeight / dimensions.height) * 100;
 }
 
 function currentImageCenter() {
@@ -953,27 +1538,9 @@ function currentImageCenter() {
 function imagePointFromEvent(event) {
   const image = elements.lightboxImage;
   const rect = image.getBoundingClientRect();
-  const photo = state.photos[state.currentIndex];
-  const naturalWidth = photo?.width || image.naturalWidth || rect.width || 1;
-  const naturalHeight = photo?.height || image.naturalHeight || rect.height || 1;
-  let visibleWidth = rect.width;
-  let visibleHeight = rect.height;
-  let left = rect.left;
-  let top = rect.top;
-  const naturalRatio = naturalWidth / Math.max(1, naturalHeight);
-  const rectRatio = rect.width / Math.max(1, rect.height);
-  if (image.classList.contains("fit")) {
-    if (naturalRatio > rectRatio) {
-      visibleHeight = rect.width / naturalRatio;
-      top += (rect.height - visibleHeight) / 2;
-    } else {
-      visibleWidth = rect.height * naturalRatio;
-      left += (rect.width - visibleWidth) / 2;
-    }
-  }
   return {
-    x: clamp((event.clientX - left) / Math.max(1, visibleWidth), 0, 1),
-    y: clamp((event.clientY - top) / Math.max(1, visibleHeight), 0, 1),
+    x: clamp((event.clientX - rect.left) / Math.max(1, rect.width), 0, 1),
+    y: clamp((event.clientY - rect.top) / Math.max(1, rect.height), 0, 1),
   };
 }
 
@@ -1068,8 +1635,8 @@ function writeUrlState(mode) {
   window.history[mode === "replace" ? "replaceState" : "pushState"]({}, "", url);
 }
 
-async function requestJson(url) {
-  const response = await fetch(url, { cache: "no-store" });
+async function requestJson(url, options = {}) {
+  const response = await fetch(url, { cache: "no-store", ...options });
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`);
   return body;
