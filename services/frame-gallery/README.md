@@ -18,7 +18,8 @@ Use it if you want to:
 - Explore a day's route and jump between mapped photos.
 - Hide or restore photos from the gallery.
 - Permanently delete published gallery copies when needed.
-- Customize gallery branding, colors, and logo.
+- Choose each album's gallery cover.
+- Customize gallery branding, logo, and visitor download controls.
 
 ## What You Use It For
 
@@ -31,6 +32,7 @@ Common uses:
 - Remove unwanted photos from public view.
 - Restore photos that were hidden by mistake.
 - Match the gallery branding to your stream, event, or production.
+- Control whether visitors can view and download the full gallery JPEG.
 - Correct camera-to-GPX clock differences and manually place unmatched photos.
 
 Photo Gallery does not receive uploads directly. Photos come from Photo Upload or Photo FTP, then
@@ -76,7 +78,7 @@ On the public gallery, viewers can:
 
 - Browse available photo days.
 - Open one day's album.
-- View photos in the selected style.
+- View photos through page-bound tiles when downloads are disabled, or the full gallery JPEG when downloads are enabled.
 - Switch between Photos and Explore when a day has attached route data.
 - Select a mapped photo from its thumbnail, lightbox, map marker, or Explore photo strip.
 - Switch day/night mode when enabled.
@@ -89,8 +91,9 @@ On the admin page, operators can:
 - Empty the gallery trash.
 - Add or remove multiple GPX sessions for one day.
 - Adjust camera-to-GPX timing and manually place photos that do not match a route.
-- Change the gallery title, brand name, logo, and colors.
-- Save custom gallery styles.
+- Choose or clear a custom cover for each album.
+- Change the gallery title, brand name, and logo.
+- Enable or disable full gallery JPEG downloads for every public gallery.
 
 Trash is reversible. Permanent delete is not.
 
@@ -127,6 +130,12 @@ The admin page should stay login-protected.
 
 Photo Gallery asks Photo Pipeline to hide, restore, or delete photos. It does not edit the published
 photo files directly.
+
+When downloads are disabled, public lightbox photos are delivered as short-lived, page-bound tiles and
+FRAME does not expose a public full-image route. When downloads are enabled, the lightbox and Download
+action use the full normalized gallery JPEG; the archived camera file remains private. Tiles can still
+be captured or reassembled by a determined visitor, and anything visible in a browser can be
+screenshotted; this is download deterrence and archive-file protection, not image DRM.
 
 Explore uses the camera capture clock retained in the photo sidecar, not the time FRAME processed the
 photo. If the camera clock and GPX clock differ, Gallery Admin can infer the coarse timezone shift and

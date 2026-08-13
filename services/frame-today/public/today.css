@@ -109,11 +109,13 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .viewer { position: relative; width: 100vw; height: 100vh; overflow: hidden; background: color-mix(in srgb, var(--bg) 92%, #000); }
 html.viewer-transparent, .viewer-page.viewer-transparent, .viewer-page.viewer-transparent .viewer { background: transparent; }
 .photo-stage, .photo-layer { position: absolute; inset: 0; width: 100%; height: 100%; }
-.photo-layer { object-fit: contain; opacity: 0; transition: opacity 420ms ease; }
-.photo-layer.current { opacity: 1; }
-.photo-layer.next { opacity: 0; }
-.photo-layer.next.reveal { opacity: 1; }
-.photo-layer.current.auto-scroll { height: auto; bottom: auto; object-fit: initial; transition: none; }
+.photo-layer { overflow: hidden; opacity: 0; transition: opacity 420ms ease; }
+.photo-layer.current, .photo-layer.reveal { opacity: 1; }
+.photo-layer.auto-scroll { transition: none; }
+.photo-frame { position: absolute; overflow: hidden; pointer-events: none; will-change: transform; }
+.tile-surface { position: absolute; top: 0; left: 0; display: grid; gap: 0; transform-origin: top left; }
+.photo-tile-cell { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+.photo-tile { position: absolute; display: block; max-width: none; max-height: none; pointer-events: none; user-select: none; }
 .viewer-empty {
   position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 8px;
   color: #90aebb; text-align: center;

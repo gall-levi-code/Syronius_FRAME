@@ -1,19 +1,23 @@
+import { SOCIAL_PLATFORMS, buildSocialUrl, createSocialId, resolveSocialPlatform, socialIcon } from "./socials.js?v=gallery-socials-4";
+import { layoutJustifiedRows } from "./justified-rows.js?v=gallery-justified-1";
+
 const elements = Object.fromEntries([
-  "summary", "status", "content-management-tab", "gallery-styling-tab", "published-tab",
-  "trash-tab", "published-count", "trash-count", "content-management-view", "gallery-styling-view",
+  "summary", "status", "content-management-tab", "gallery-styling-tab", "socials-tab", "published-tab",
+  "trash-tab", "published-count", "trash-count", "content-management-view", "gallery-styling-view", "socials-view",
   "published-view", "trash-view", "albums", "album-detail", "album-title", "album-summary", "manage-explore", "trash-album",
-  "photos", "trash-albums", "empty-trash", "empty", "branding-summary", "save-branding", "branding-form",
-  "brand-name-input", "gallery-title-input", "default-mode", "preset-trigger", "preset-trigger-swatches",
-  "preset-trigger-name", "preset-trigger-meta", "preset-menu", "new-preset", "logo-preview", "logo-input",
-  "remove-logo", "admin-brand-logo", "admin-brand-name", "preset-dialog", "preset-kind-step",
-  "preset-editor-step", "color-theme-choice", "full-custom-choice", "cancel-preset-kind",
-  "preset-editor-eyebrow", "preset-editor-title", "preset-name-input", "preset-default-mode",
-  "preset-theme-color-label", "preset-theme-color", "palette-fields", "back-preset-kind",
-  "cancel-preset-editor", "save-preset", "confirm-dialog", "confirm-eyebrow", "confirm-title",
+  "cover-management-panel", "cover-management-status", "cover-action", "photos", "trash-albums", "empty-trash", "empty",
+  "branding-summary", "save-branding", "discard-branding", "settings-action-bar", "settings-action-message", "branding-form",
+  "brand-name-input", "gallery-title-input", "downloads-disabled", "downloads-enabled", "logo-trigger", "logo-preview", "logo-input",
+  "remove-logo", "admin-brand-logo", "admin-brand-name", "confirm-dialog", "confirm-eyebrow", "confirm-title",
+  "confirm-media", "confirm-image",
   "confirm-copy", "confirm-cancel", "confirm-accept", "admin-theme-toggle", "logo-crop-dialog",
-  "logo-crop-stage", "logo-crop-image", "logo-crop-frame", "logo-ratio-x", "logo-ratio-y",
+  "logo-crop-stage", "logo-crop-image", "logo-crop-frame", "logo-crop-eyebrow", "logo-crop-title",
+  "logo-shape-controls", "logo-ratio-x", "logo-ratio-y",
   "logo-crop-zoom", "logo-crop-preview",
   "cancel-logo-crop", "save-logo-crop",
+  "socials-summary", "save-socials", "socials-form", "social-value-input", "social-platform-select",
+  "social-label-input", "add-social", "social-form-error", "social-admin-list", "social-empty",
+  "cover-picker", "cover-picker-grid", "cover-picker-status", "cancel-cover-picker",
 ].map((id) => [id.replaceAll("-", "_"), document.getElementById(id)]));
 
 const templates = {
@@ -22,22 +26,6 @@ const templates = {
   trashAlbum: document.getElementById("trash-album-template"),
   trashPhoto: document.getElementById("trash-photo-template"),
 };
-const paletteFields = [
-  ["background", "Background"],
-  ["topbar", "Header"],
-  ["text", "Text"],
-  ["controlText", "Control text"],
-  ["accent", "Primary"],
-  ["secondary", "Secondary"],
-  ["surface", "Surface"],
-  ["surfaceStrong", "Raised surface"],
-  ["border", "Border"],
-  ["muted", "Muted text"],
-  ["danger", "Danger"],
-  ["good", "Success"],
-  ["lightboxBackground", "Lightbox background"],
-  ["lightboxText", "Lightbox text"],
-];
 const state = {
   dates: [],
   photos: [],
@@ -47,39 +35,75 @@ const state = {
   contentView: "published",
   busy: false,
   branding: null,
+  socials: [],
   selectedProfileId: null,
-  presetDraftKind: "color",
   confirmResolve: null,
   userThemeMode: readStoredTheme(),
   appliedThemeMode: null,
   logoCrop: null,
+  draggedSocialId: null,
+  downloadsDraft: false,
+  settingsDirty: false,
+  coverPickerScrollY: 0,
+  coverPickerReturnFocus: null,
+  coverPickerWidth: 0,
 };
+const sections = [
+  { name: "content", tab: elements.content_management_tab, view: elements.content_management_view },
+  { name: "style", tab: elements.gallery_styling_tab, view: elements.gallery_styling_view },
+  { name: "socials", tab: elements.socials_tab, view: elements.socials_view },
+];
 const systemTheme = matchMedia("(prefers-color-scheme: dark)");
 const icons = {
   moon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.4 15.1A8.4 8.4 0 0 1 8.9 3.6 8.5 8.5 0 1 0 20.4 15.1Z"/></svg>`,
   sun: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/></svg>`,
+  up: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 15 6-6 6 6"/></svg>`,
+  grip: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/></svg>`,
+  down: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>`,
+  image: `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9" r="1.5"/><path d="m4 17 5-5 4 4 2-2 5 5"/></svg>`,
+  reset: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7v5h5"/><path d="M5.6 16a8 8 0 1 0 .3-8.4L4 9"/></svg>`,
+  trash: `<svg class="trash-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 11v6M14 11v6"/></svg>`,
 };
 const LOGO_SOURCE_MAX_BYTES = 20 * 1024 * 1024;
 const LOGO_EXPORT_BOX = { width: 720, height: 240 };
+const SOCIAL_GRAPHIC_SIZE = 320;
 const LOGO_EXPORT_QUALITY = 0.9;
 const LOGO_ALLOWED_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/svg+xml"]);
 const LOGO_ASPECTS = { wide: 2, square: 1 };
 const LOGO_FRAME_MIN_SIZE = 64;
 const LOGO_EDGE_SNAP_PX = 12;
 
-elements.content_management_tab.addEventListener("click", () => setSection("content"));
-elements.gallery_styling_tab.addEventListener("click", () => setSection("style"));
+for (const section of sections) {
+  section.tab.addEventListener("click", () => void requestSectionChange(section.name));
+  section.tab.addEventListener("keydown", handleSectionTabKeydown);
+}
 elements.admin_theme_toggle.addEventListener("click", toggleAdminTheme);
 elements.published_tab.addEventListener("click", () => setContentView("published"));
 elements.trash_tab.addEventListener("click", () => setContentView("trash"));
 elements.trash_album.addEventListener("click", () => manage("trash-album", state.selectedDate, null, `Move every photo from ${state.selectedDate} to trash?`));
 elements.empty_trash.addEventListener("click", () => manage("empty-trash", null, null, "Permanently delete every trashed published gallery copy and its .ready receipt? Queued StreamerBot actions will no longer be able to read those published paths. Archived sources follow the separate retention policy."));
+elements.cover_action.addEventListener("click", handleCoverAction);
 elements.save_branding.addEventListener("click", () => saveBranding());
-elements.preset_trigger.addEventListener("click", togglePresetMenu);
-elements.new_preset.addEventListener("click", openPresetDialog);
+elements.discard_branding.addEventListener("click", discardBrandingChanges);
+elements.branding_form.addEventListener("submit", (event) => { event.preventDefault(); void saveBranding(); });
+elements.brand_name_input.addEventListener("input", updateSettingsDirty);
+elements.gallery_title_input.addEventListener("input", updateSettingsDirty);
+elements.downloads_disabled.addEventListener("click", () => setDownloadsDraft(false));
+elements.downloads_enabled.addEventListener("click", () => setDownloadsDraft(true));
+elements.save_socials.addEventListener("click", saveSocials);
+elements.socials_form.addEventListener("submit", addSocial);
+elements.social_value_input.addEventListener("input", () => {
+  const platform = resolveSocialPlatform(elements.social_value_input.value, elements.social_platform_select.value);
+  if (platform) elements.social_platform_select.value = platform;
+});
+elements.logo_trigger.addEventListener("click", () => elements.logo_input.click());
 elements.logo_input.addEventListener("change", uploadLogo);
-elements.remove_logo.addEventListener("click", removeLogo);
+elements.remove_logo.addEventListener("click", confirmRemoveLogo);
 elements.cancel_logo_crop.addEventListener("click", closeLogoCropDialog);
+elements.logo_crop_dialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  closeLogoCropDialog();
+});
 elements.save_logo_crop.addEventListener("click", saveLogoCrop);
 elements.logo_crop_zoom.addEventListener("input", () => {
   if (!state.logoCrop) return;
@@ -98,21 +122,31 @@ document.querySelectorAll(".logo-crop-handle").forEach((handle) => {
 });
 elements.logo_ratio_x.addEventListener("input", updateCustomLogoRatio);
 elements.logo_ratio_y.addEventListener("input", updateCustomLogoRatio);
-elements.color_theme_choice.addEventListener("click", () => showPresetEditor("color"));
-elements.full_custom_choice.addEventListener("click", () => showPresetEditor("full"));
-elements.cancel_preset_kind.addEventListener("click", closePresetDialog);
-elements.back_preset_kind.addEventListener("click", showPresetKindStep);
-elements.cancel_preset_editor.addEventListener("click", closePresetDialog);
-elements.save_preset.addEventListener("click", createCustomPreset);
 elements.confirm_cancel.addEventListener("click", () => resolveConfirm(false));
 elements.confirm_accept.addEventListener("click", () => resolveConfirm(true));
 elements.confirm_dialog.addEventListener("cancel", (event) => {
   event.preventDefault();
   resolveConfirm(false);
 });
-elements.preset_theme_color.addEventListener("input", () => {
-  if (state.presetDraftKind === "full") renderPaletteFields(buildThemeProfileClient("draft", "Draft", elements.preset_theme_color.value).palettes);
+elements.cancel_cover_picker.addEventListener("click", closeCoverPicker);
+elements.cover_picker.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  if (state.busy) return;
+  closeCoverPicker();
 });
+window.addEventListener("resize", layoutCoverPicker);
+new ResizeObserver(([entry]) => {
+  const width = entry.contentRect.width;
+  if (!elements.cover_picker.open || Math.abs(width - state.coverPickerWidth) < 0.5) return;
+  state.coverPickerWidth = width;
+  requestAnimationFrame(layoutCoverPicker);
+}).observe(elements.cover_picker_grid);
+window.addEventListener("beforeunload", (event) => {
+  if (!state.settingsDirty) return;
+  event.preventDefault();
+  event.returnValue = "";
+});
+document.addEventListener("click", handleDirtyLinkNavigation);
 systemTheme.addEventListener("change", () => state.branding && applyAdminBranding());
 window.addEventListener("storage", (event) => {
   if (event.key === "frame-theme-profile") {
@@ -124,10 +158,7 @@ window.addEventListener("storage", (event) => {
     applyAdminBranding();
   }
 });
-document.addEventListener("click", (event) => {
-  if (!elements.preset_trigger.contains(event.target) && !elements.preset_menu.contains(event.target)) closePresetMenu();
-});
-
+elements.social_platform_select.append(...SOCIAL_PLATFORMS.map(socialPlatformOption));
 await refresh();
 
 async function refresh() {
@@ -142,6 +173,7 @@ async function refresh() {
     state.dates = dates.dates;
     state.trash = trash.trash;
     state.branding = branding.branding;
+    state.socials = [...(state.branding.socials || [])];
     state.selectedProfileId = state.branding.profile_id;
     if (state.selectedDate && state.dates.some((date) => date.date_folder === state.selectedDate)) {
       state.photos = (await requestJson(`/gallery/api/photos?date=${encodeURIComponent(state.selectedDate)}`)).photos;
@@ -158,14 +190,70 @@ async function refresh() {
 
 function setSection(section) {
   state.section = section;
-  const contentSelected = section === "content";
-  elements.content_management_tab.setAttribute("aria-selected", String(contentSelected));
-  elements.gallery_styling_tab.setAttribute("aria-selected", String(!contentSelected));
-  elements.content_management_tab.tabIndex = contentSelected ? 0 : -1;
-  elements.gallery_styling_tab.tabIndex = contentSelected ? -1 : 0;
-  elements.content_management_view.hidden = !contentSelected;
-  elements.gallery_styling_view.hidden = contentSelected;
+  for (const entry of sections) {
+    const selected = section === entry.name;
+    const { tab, view } = entry;
+    tab.setAttribute("aria-selected", String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+    view.hidden = !selected;
+  }
   renderEmpty();
+}
+
+async function requestSectionChange(section) {
+  if (section === state.section) return;
+  const currentTab = sections.find((entry) => entry.name === state.section)?.tab;
+  if (state.settingsDirty) {
+    const confirmed = await confirmDiscardSettings("Switch sections?", "Your unsaved Gallery Settings changes will be discarded.");
+    if (!confirmed) {
+      currentTab?.focus();
+      return;
+    }
+    discardBrandingChanges({ focus: false });
+  }
+  setSection(section);
+  sections.find((entry) => entry.name === section)?.tab.focus();
+}
+
+function handleSectionTabKeydown(event) {
+  const index = sections.findIndex((entry) => entry.tab === event.currentTarget);
+  if (index < 0) return;
+  let target = null;
+  if (event.key === "ArrowRight") target = (index + 1) % sections.length;
+  else if (event.key === "ArrowLeft") target = (index - 1 + sections.length) % sections.length;
+  else if (event.key === "Home") target = 0;
+  else if (event.key === "End") target = sections.length - 1;
+  if (target === null) return;
+  event.preventDefault();
+  void requestSectionChange(sections[target].name);
+}
+
+async function handleDirtyLinkNavigation(event) {
+  if (!state.settingsDirty || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  const link = event.target.closest?.("a[href]");
+  if (!link || link.hasAttribute("download") || (link.target && link.target !== "_self")) return;
+  const destination = new URL(link.href, location.href);
+  if (destination.origin !== location.origin) return;
+  if (destination.pathname === location.pathname && destination.search === location.search && destination.hash && destination.hash !== location.hash) return;
+  event.preventDefault();
+  if (state.busy) {
+    setStatus("Wait for the current change to finish", "working");
+    return;
+  }
+  const confirmed = await confirmDiscardSettings("Leave this page?", "Your unsaved Gallery Settings changes will be discarded.");
+  if (!confirmed) return;
+  discardBrandingChanges({ announce: false, focus: false });
+  location.assign(destination.href);
+}
+
+function confirmDiscardSettings(title, copy) {
+  return showConfirm({
+    eyebrow: "Unsaved gallery settings",
+    title,
+    copy,
+    actionLabel: "Discard and continue",
+    danger: true,
+  });
 }
 
 function setContentView(view) {
@@ -197,6 +285,11 @@ function renderAlbums() {
     card.querySelector("strong").textContent = formatDate(date.date_folder);
     card.querySelector("small").textContent = `${photoLabel(date.count)} - ${durationLabel(date.duration_ms)}`;
     card.querySelector(".album-open").addEventListener("click", () => openAlbum(date.date_folder));
+    const exploreLabel = date.has_explore ? "Manage Explore" : "Add GPS route";
+    const exploreLink = card.querySelector(".album-explore");
+    exploreLink.href = `/gallery/admin/explore?date=${encodeURIComponent(date.date_folder)}`;
+    exploreLink.textContent = exploreLabel;
+    exploreLink.setAttribute("aria-label", `${exploreLabel} for ${formatDate(date.date_folder)}`);
     card.querySelector(".album-trash").addEventListener("click", () => manage("trash-album", date.date_folder, null, `Move every photo from ${formatDate(date.date_folder)} to trash?`));
     card.classList.toggle("selected", date.date_folder === state.selectedDate);
     return card;
@@ -207,15 +300,142 @@ function renderAlbums() {
   elements.album_title.textContent = formatDate(selected.date_folder);
   elements.album_summary.textContent = `${photoLabel(selected.count)} - ${durationLabel(selected.duration_ms)}`;
   elements.manage_explore.href = `/gallery/admin/explore?date=${encodeURIComponent(selected.date_folder)}`;
+  elements.manage_explore.textContent = selected.has_explore ? "Manage Explore" : "Add GPS route";
+  elements.cover_action.textContent = selected.cover_is_custom ? "Clear cover image" : "Select cover image";
+  elements.cover_action.className = selected.cover_is_custom ? "danger-button" : "secondary-button";
+  renderCoverManagementStatus(selected);
   elements.photos.replaceChildren(...state.photos.map((photo) => {
     const card = templates.photo.content.firstElementChild.cloneNode(true);
+    const photoName = friendlyBase(photo.base);
+    card.dataset.photoBase = photo.base;
+    card.tabIndex = -1;
     card.querySelector("img").src = photo.thumbnail_url;
-    card.querySelector("img").alt = friendlyBase(photo.base);
-    card.querySelector("strong").textContent = friendlyBase(photo.base);
+    card.querySelector("img").alt = "";
+    card.querySelector("strong").textContent = photoName;
     card.querySelector("small").textContent = formatTime(photo.processed_at);
-    card.querySelector("button").addEventListener("click", () => manage("trash-photo", photo.date_folder, photo.base));
+    const isCover = photo.base === selected.cover_base;
+    card.querySelector(".cover-star").hidden = !(selected.cover_is_custom && !selected.cover_fallback_active && isCover);
+    const trashButton = card.querySelector(".trash-photo-button");
+    trashButton.setAttribute("aria-label", `Move ${photoName} to trash`);
+    trashButton.title = `Move ${photoName} to trash`;
+    trashButton.addEventListener("click", () => manage(
+      "trash-photo",
+      photo.date_folder,
+      photo.base,
+      `Move ${photoName} to trash? You can restore it later.`,
+    ));
     return card;
   }));
+}
+
+async function handleCoverAction() {
+  const selected = state.dates.find((date) => date.date_folder === state.selectedDate);
+  if (!selected) return;
+  if (!selected.cover_is_custom) {
+    openCoverPicker();
+    return;
+  }
+  const confirmed = await showConfirm({
+    eyebrow: "Clear cover image",
+    title: "Return to the automatic cover?",
+    copy: "The earliest published photo will become this gallery's cover.",
+    actionLabel: "Clear cover image",
+    danger: true,
+  });
+  if (!confirmed) return;
+  await saveGallerySettings(
+    { cover_base: null },
+    { saving: "Clearing gallery cover", saved: "Automatic gallery cover restored" },
+  );
+}
+
+function openCoverPicker() {
+  if (!state.photos.length || elements.cover_picker.open) return;
+  state.coverPickerScrollY = window.scrollY;
+  state.coverPickerReturnFocus = document.activeElement;
+  elements.cover_picker_grid.replaceChildren(...state.photos.map((photo) => {
+    const photoName = photo.original_name || friendlyBase(photo.base);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "cover-picker-photo";
+    button.dataset.photoBase = photo.base;
+    button.dataset.ratio = String(clamp((photo.width || 4) / (photo.height || 3), 0.35, 3.5));
+    button.setAttribute("aria-label", `Select ${photoName} as gallery cover`);
+    const image = document.createElement("img");
+    image.src = photo.thumbnail_url;
+    image.alt = "";
+    image.loading = "lazy";
+    button.append(image);
+    button.addEventListener("click", () => confirmCoverSelection(photo, button));
+    return button;
+  }));
+  setCoverPickerStatus();
+  document.body.classList.add("cover-picker-open");
+  elements.cover_picker.showModal();
+  requestAnimationFrame(() => {
+    layoutCoverPicker();
+    elements.cancel_cover_picker.focus();
+  });
+}
+
+function closeCoverPicker() {
+  if (!elements.cover_picker.open) return;
+  const returnFocus = state.coverPickerReturnFocus?.isConnected ? state.coverPickerReturnFocus : elements.cover_action;
+  document.body.classList.remove("cover-picker-open");
+  elements.cover_picker.close();
+  elements.cover_picker_grid.replaceChildren();
+  setCoverPickerStatus();
+  window.scrollTo(0, state.coverPickerScrollY);
+  state.coverPickerReturnFocus = null;
+  requestAnimationFrame(() => returnFocus?.focus());
+}
+
+async function confirmCoverSelection(photo, button) {
+  const photoName = photo.original_name || friendlyBase(photo.base);
+  const confirmed = await showConfirm({
+    eyebrow: "Gallery cover",
+    title: "Use this cover image?",
+    copy: "This photo will become the main image shown for the gallery.",
+    actionLabel: "Set cover",
+    danger: false,
+    imageUrl: photo.thumbnail_url,
+    imageAlt: photoName,
+  });
+  if (!confirmed) return;
+  if (!elements.cover_picker.open) return;
+  elements.cancel_cover_picker.focus();
+  const saved = await saveGallerySettings(
+    { cover_base: photo.base },
+    { saving: "Saving gallery cover", saved: "Gallery cover updated" },
+  );
+  if (saved) {
+    closeCoverPicker();
+    return;
+  }
+  if (elements.cover_picker.open) requestAnimationFrame(() => (button.isConnected ? button : elements.cancel_cover_picker).focus());
+}
+
+function setCoverPickerStatus(message = "", kind = "working") {
+  elements.cover_picker_status.textContent = message;
+  elements.cover_picker_status.hidden = !message;
+  if (message) elements.cover_picker_status.dataset.kind = kind;
+  else delete elements.cover_picker_status.dataset.kind;
+  const busy = Boolean(message) && kind === "working";
+  elements.cover_picker.setAttribute("aria-busy", String(busy));
+  elements.cover_picker_grid.setAttribute("aria-busy", String(busy));
+  if (busy && elements.cover_picker.open) elements.cover_picker_status.focus({ preventScroll: true });
+}
+
+function layoutCoverPicker() {
+  if (!elements.cover_picker.open) return;
+  const items = [...elements.cover_picker_grid.querySelectorAll(".cover-picker-photo")];
+  const width = elements.cover_picker_grid.clientWidth;
+  if (!items.length || width < 1) return;
+  state.coverPickerWidth = width;
+  layoutJustifiedRows(elements.cover_picker_grid, items, {
+    rowClass: "cover-picker-row",
+    targetHeight: clamp(window.innerHeight * 0.46, 180, 405),
+  });
 }
 
 async function openAlbum(dateFolder) {
@@ -259,102 +479,431 @@ function renderTrash() {
   }));
 }
 
-function renderBranding() {
+function renderBranding(options = {}) {
   const branding = state.branding;
   if (!branding) return;
-  elements.branding_summary.textContent = `${branding.brand_name} ${branding.gallery_title} - ${selectedProfile().name}`;
-  elements.brand_name_input.value = branding.brand_name;
-  elements.gallery_title_input.value = branding.gallery_title;
-  elements.default_mode.value = branding.mode === "day" || branding.mode === "night" ? branding.mode : "night";
+  const draft = options.preserveDraft !== false && state.settingsDirty ? readSettingsDraft() : null;
+  elements.branding_summary.textContent = `${branding.brand_name} · ${branding.gallery_title}`;
+  elements.brand_name_input.value = draft?.brandName ?? branding.brand_name;
+  elements.gallery_title_input.value = draft?.galleryTitle ?? branding.gallery_title;
+  state.downloadsDraft = draft?.downloadsEnabled ?? (branding.show_download_button === true);
+  renderDownloadsDraft();
   elements.logo_preview.src = branding.logo?.url || "/gallery/assets/frame-logo-square.svg";
-  elements.logo_preview.alt = branding.logo ? `${branding.brand_name} logo` : "";
+  elements.logo_preview.alt = branding.logo ? `${branding.brand_name} logo` : "Default FRAME logo";
+  elements.logo_trigger.setAttribute("aria-label", branding.logo ? "Replace gallery logo" : "Upload gallery logo");
   elements.remove_logo.hidden = !branding.logo;
-  renderPresetDropdown();
+  updateSettingsDirty();
+  renderSocials();
   applyAdminBranding();
 }
 
-function renderPresetDropdown() {
-  const profile = selectedProfile();
-  elements.preset_trigger_name.textContent = profile.name;
-  elements.preset_trigger_meta.textContent = profile.theme_color;
-  elements.preset_trigger.dataset.defaultProfile = String(profile.id === "frame-blue");
-  elements.preset_trigger_swatches.replaceChildren(...swatchElementsFor(profile));
-  elements.preset_menu.replaceChildren(...orderedProfiles().map((item) => {
-    const row = document.createElement("div");
-    row.className = "preset-option-row";
-    row.dataset.customProfile = String(isCustomProfile(item));
-
-    const option = document.createElement("button");
-    option.type = "button";
-    option.className = "preset-option preset-option-main";
-    option.role = "option";
-    option.dataset.defaultProfile = String(item.id === "frame-blue");
-    option.setAttribute("aria-selected", String(item.id === state.selectedProfileId));
-    option.append(swatchGroupFor(item), optionCopy(item));
-    option.addEventListener("click", () => selectProfile(item.id));
-
-    row.append(option);
-    if (isCustomProfile(item)) {
-      const deleteButton = document.createElement("button");
-      deleteButton.type = "button";
-      deleteButton.className = "preset-delete";
-      deleteButton.title = `Delete ${item.name}`;
-      deleteButton.setAttribute("aria-label", `Delete ${item.name}`);
-      deleteButton.append(trashIcon());
-      deleteButton.addEventListener("click", (event) => {
-        event.stopPropagation();
-        deleteCustomPreset(item.id);
-      });
-      row.append(deleteButton);
-    }
-    return row;
-  }));
+function readSettingsDraft() {
+  return {
+    brandName: elements.brand_name_input.value,
+    galleryTitle: elements.gallery_title_input.value,
+    downloadsEnabled: state.downloadsDraft,
+  };
 }
 
-function selectProfile(id) {
-  state.selectedProfileId = id;
-  renderPresetDropdown();
-  closePresetMenu();
-  applyAdminBranding();
+function setDownloadsDraft(enabled) {
+  state.downloadsDraft = enabled;
+  renderDownloadsDraft();
+  updateSettingsDirty();
 }
 
-function togglePresetMenu() {
-  const open = elements.preset_menu.hidden;
-  elements.preset_menu.hidden = !open;
-  elements.preset_trigger.setAttribute("aria-expanded", String(open));
+function renderDownloadsDraft() {
+  elements.downloads_disabled.setAttribute("aria-pressed", String(!state.downloadsDraft));
+  elements.downloads_enabled.setAttribute("aria-pressed", String(state.downloadsDraft));
 }
 
-function closePresetMenu() {
-  elements.preset_menu.hidden = true;
-  elements.preset_trigger.setAttribute("aria-expanded", "false");
+function updateSettingsDirty() {
+  if (!state.branding) return;
+  state.settingsDirty = elements.brand_name_input.value !== state.branding.brand_name
+    || elements.gallery_title_input.value !== state.branding.gallery_title
+    || state.downloadsDraft !== (state.branding.show_download_button === true);
+  elements.settings_action_bar.hidden = !state.settingsDirty;
+  document.body.classList.toggle("settings-dirty", state.settingsDirty);
+  elements.gallery_styling_tab.dataset.dirty = String(state.settingsDirty);
+  if (state.settingsDirty) elements.gallery_styling_tab.setAttribute("aria-label", "Gallery Settings, unsaved changes");
+  else elements.gallery_styling_tab.removeAttribute("aria-label");
+  setSettingsActionMessage("You have unsaved changes.");
 }
 
-async function deleteCustomPreset(profileId) {
-  if (state.busy || !state.branding) return;
-  const profile = profiles().find((item) => item.id === profileId);
-  if (!isCustomProfile(profile)) return;
+function setSettingsActionMessage(message, kind = "working") {
+  elements.settings_action_message.textContent = message;
+  elements.settings_action_message.dataset.kind = kind;
+}
+
+function discardBrandingChanges(options = {}) {
+  const { announce = true, focus = true } = options;
+  state.settingsDirty = false;
+  renderBranding({ preserveDraft: false });
+  if (announce) setStatus("Gallery setting changes discarded", "ready");
+  if (focus) (state.section === "style" ? elements.brand_name_input : elements.gallery_styling_tab).focus();
+}
+
+function renderSocials() {
+  const count = state.socials.length;
+  elements.socials_summary.textContent = count ? `${count} social link${count === 1 ? "" : "s"} ready to publish.` : "No social links published.";
+  elements.social_empty.hidden = count > 0;
+  elements.social_admin_list.replaceChildren(...state.socials.map((social, index) => socialAdminRow(social, index)));
+}
+
+function socialAdminRow(social, index) {
+  const row = document.createElement("article");
+  row.className = "social-admin-item";
+  row.dataset.socialId = social.id;
+  row.innerHTML = `
+    <div class="social-order-controls" role="group" aria-label="Reorder social link">
+      <button class="social-order-button social-move-up" type="button" title="Move up">${icons.up}</button>
+      <button class="social-order-button social-drag-handle" type="button" draggable="true" title="Drag to reorder">${icons.grip}</button>
+      <button class="social-order-button social-move-down" type="button" title="Move down">${icons.down}</button>
+    </div>
+    <div class="social-admin-graphic">
+      <button class="social-admin-icon social-graphic-trigger" type="button"></button>
+      <button class="social-graphic-reset" type="button" title="Use platform icon" hidden>${icons.reset}</button>
+      <input class="social-graphic-input" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg" hidden>
+    </div>
+    <div class="field-grid social-row-fields">
+      <label>URL<input class="social-row-url" maxlength="2048" autocomplete="off"></label>
+      <label>Platform<span class="select-shell"><select class="social-row-platform"></select></span></label>
+      <label>Display label (optional)<input class="social-row-label" maxlength="60" autocomplete="off"></label>
+    </div>
+    <div class="social-row-actions">
+      <button class="icon-danger-button social-remove" type="button" aria-label="Remove social link" title="Remove social link">${icons.trash}</button>
+    </div>`;
+  const graphic = row.querySelector(".social-graphic-trigger");
+  const graphicInput = row.querySelector(".social-graphic-input");
+  const graphicReset = row.querySelector(".social-graphic-reset");
+  const urlInput = row.querySelector(".social-row-url");
+  const platformSelect = row.querySelector(".social-row-platform");
+  const labelInput = row.querySelector(".social-row-label");
+  renderSocialAdminGraphic(graphic, graphicReset, social);
+  urlInput.value = social.url;
+  platformSelect.append(...SOCIAL_PLATFORMS.map(socialPlatformOption));
+  platformSelect.value = social.platform;
+  labelInput.value = social.label || "";
+  urlInput.addEventListener("input", () => {
+    social.url = urlInput.value;
+    const platform = resolveSocialPlatform(urlInput.value, platformSelect.value);
+    if (!platform) return;
+    social.platform = platform;
+    platformSelect.value = platform;
+    renderSocialAdminGraphic(graphic, graphicReset, social);
+  });
+  platformSelect.addEventListener("change", () => {
+    social.platform = platformSelect.value;
+    renderSocialAdminGraphic(graphic, graphicReset, social);
+  });
+  labelInput.addEventListener("input", () => { social.label = labelInput.value; });
+  const up = row.querySelector(".social-move-up");
+  const down = row.querySelector(".social-move-down");
+  const drag = row.querySelector(".social-drag-handle");
+  up.disabled = index === 0;
+  down.disabled = index === state.socials.length - 1;
+  up.setAttribute("aria-label", `Move ${socialName(social)} up`);
+  down.setAttribute("aria-label", `Move ${socialName(social)} down`);
+  drag.setAttribute("aria-label", `Drag ${socialName(social)} to reorder`);
+  up.addEventListener("click", () => moveSocial(index, -1));
+  down.addEventListener("click", () => moveSocial(index, 1));
+  drag.addEventListener("dragstart", (event) => startSocialDrag(event, row, social.id));
+  drag.addEventListener("dragend", finishSocialDrag);
+  row.addEventListener("dragover", (event) => dragOverSocial(event, row, social.id));
+  row.addEventListener("dragleave", (event) => {
+    if (!row.contains(event.relatedTarget)) row.classList.remove("is-drag-target");
+  });
+  row.addEventListener("drop", (event) => dropSocial(event, social.id));
+  graphic.addEventListener("click", () => graphicInput.click());
+  graphicInput.addEventListener("change", () => selectSocialGraphic(graphicInput, social));
+  graphicReset.addEventListener("click", () => resetSocialGraphic(social));
+  const remove = row.querySelector(".social-remove");
+  remove.setAttribute("aria-label", `Remove ${socialName(social)}`);
+  remove.addEventListener("click", () => confirmRemoveSocial(social));
+  return row;
+}
+
+function socialName(social) {
+  return String(social.label || SOCIAL_PLATFORMS.find((platform) => platform.id === social.platform)?.label || "social link");
+}
+
+function renderSocialAdminGraphic(button, reset, social) {
+  button.replaceChildren();
+  if (social.graphic?.url) {
+    const image = document.createElement("img");
+    image.src = social.graphic.url;
+    image.alt = "";
+    image.addEventListener("error", () => {
+      image.replaceWith(socialIconElement(social.platform));
+    }, { once: true });
+    button.append(image);
+  } else {
+    button.append(socialIconElement(social.platform));
+  }
+  const badge = document.createElement("span");
+  badge.className = "social-graphic-badge";
+  badge.innerHTML = icons.image;
+  button.append(badge);
+  button.setAttribute("aria-label", `${social.graphic ? "Replace" : "Add"} custom graphic for ${socialName(social)}`);
+  button.title = social.graphic ? "Replace custom graphic" : "Add custom graphic";
+  reset.hidden = !social.graphic;
+  reset.setAttribute("aria-label", `Use the ${socialName(social)} platform icon`);
+}
+
+function socialIconElement(platform) {
+  const icon = document.createElement("span");
+  icon.className = "social-admin-platform-icon";
+  icon.innerHTML = socialIcon(platform);
+  return icon;
+}
+
+function startSocialDrag(event, row, socialId) {
+  state.draggedSocialId = socialId;
+  row.classList.add("is-dragging");
+  if (!event.dataTransfer) return;
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", socialId);
+}
+
+function dragOverSocial(event, row, socialId) {
+  if (!state.draggedSocialId || state.draggedSocialId === socialId) return;
+  event.preventDefault();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = "move";
+  document.querySelectorAll(".social-admin-item.is-drag-target").forEach((item) => item.classList.remove("is-drag-target"));
+  row.classList.add("is-drag-target");
+}
+
+function dropSocial(event, targetId) {
+  event.preventDefault();
+  const sourceId = state.draggedSocialId || event.dataTransfer?.getData("text/plain");
+  finishSocialDrag();
+  if (!sourceId || sourceId === targetId) return;
+  const source = state.socials.findIndex((social) => social.id === sourceId);
+  const target = state.socials.findIndex((social) => social.id === targetId);
+  if (source < 0 || target < 0) return;
+  const [social] = state.socials.splice(source, 1);
+  state.socials.splice(target, 0, social);
+  renderSocials();
+  setStatus("Social order changed - save to publish", "working");
+}
+
+function finishSocialDrag() {
+  state.draggedSocialId = null;
+  document.querySelectorAll(".social-admin-item.is-dragging, .social-admin-item.is-drag-target").forEach((item) => {
+    item.classList.remove("is-dragging", "is-drag-target");
+  });
+}
+
+async function confirmRemoveSocial(social) {
   const confirmed = await showConfirm({
-    eyebrow: "Delete preset",
-    title: `Delete ${profile.name}?`,
-    copy: "This custom preset will be removed from the list. The gallery will switch back to Frame Blue after deletion.",
-    actionLabel: "Delete preset",
+    eyebrow: "Confirm social change",
+    title: `Remove ${socialName(social)}?`,
+    copy: "This link and its custom graphic will disappear from every gallery after you save socials.",
+    actionLabel: "Remove link",
     danger: true,
   });
   if (!confirmed) return;
-  closePresetMenu();
-  state.selectedProfileId = "frame-blue";
-  await saveBranding({
-    profile_id: "frame-blue",
-    custom_profiles: customProfiles().filter((item) => item.id !== profile.id),
-  });
+  const index = state.socials.findIndex((item) => item.id === social.id);
+  if (index < 0) return;
+  state.socials.splice(index, 1);
+  renderSocials();
+  setStatus("Social removed - save to publish", "working");
 }
 
-async function saveBranding(overrides = {}) {
-  if (state.busy || !state.branding) return;
-  const payload = brandingPayload(overrides);
+async function selectSocialGraphic(input, social) {
+  const file = input.files?.[0];
+  input.value = "";
+  if (!file || state.busy) return;
+  clearSocialError();
+  if (!isPersistedSocial(social.id)) {
+    showSocialError("Save socials first before adding a custom graphic.");
+    return;
+  }
+  if (!isAllowedLogoFile(file)) {
+    showSocialError("Graphic must be a PNG, JPEG, WebP, or SVG image.");
+    return;
+  }
+  try {
+    await openLogoCropDialog(file, social.id);
+  } catch (error) {
+    showSocialError(error.message || "Graphic file could not be prepared.");
+  }
+}
+
+async function saveGallerySettings(changes, messages) {
+  if (state.busy || !state.selectedDate) return false;
+  state.busy = true;
+  if (elements.cover_picker.open) setCoverPickerStatus(messages.saving, "working");
+  setControlsDisabled(true);
+  setStatus(messages.saving, "working");
+  try {
+    await requestJson(`/gallery/admin/api/galleries/${encodeURIComponent(state.selectedDate)}/settings`, {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(changes),
+    });
+    await refreshAfterManagement();
+    setCoverManagementStatus(messages.saved, "ready");
+    if (elements.cover_picker.open) setCoverPickerStatus(messages.saved, "ready");
+    else restoreCoverManagementFocus(changes);
+    setStatus(messages.saved, "ready");
+    return true;
+  } catch (error) {
+    renderAlbums();
+    const message = error.message || "Gallery settings could not be saved";
+    setCoverManagementStatus(message, "error");
+    if (elements.cover_picker.open) setCoverPickerStatus(message, "error");
+    else restoreCoverManagementFocus(changes);
+    setStatus(message, "error");
+    return false;
+  } finally {
+    state.busy = false;
+    setControlsDisabled(false);
+  }
+}
+
+function renderCoverManagementStatus(date) {
+  if (date.cover_fallback_active) {
+    setCoverManagementStatus("The selected cover is unavailable. The earliest published photo is shown until it is restored or you choose another.", "fallback");
+  } else if (date.cover_is_custom) {
+    setCoverManagementStatus("A custom gallery cover is selected.", "ready");
+  } else {
+    setCoverManagementStatus("Automatic cover uses the earliest published photo.", "ready");
+  }
+}
+
+function setCoverManagementStatus(message, kind) {
+  elements.cover_management_status.textContent = message;
+  elements.cover_management_status.dataset.kind = kind;
+}
+
+function restoreCoverManagementFocus(changes) {
+  if (Object.hasOwn(changes, "cover_base")) {
+    if (typeof changes.cover_base === "string") {
+      [...elements.photos.children].find((card) => card.dataset.photoBase === changes.cover_base)?.focus();
+    } else {
+      elements.cover_management_panel.focus();
+    }
+  }
+}
+
+async function resetSocialGraphic(social) {
+  if (state.busy) return;
+  clearSocialError();
+  if (!isPersistedSocial(social.id)) {
+    showSocialError("Save socials first before changing its graphic.");
+    return;
+  }
   state.busy = true;
   setControlsDisabled(true);
-  setStatus("Saving style", "working");
+  setStatus("Resetting social graphic", "working");
+  try {
+    const result = await requestJson(`/gallery/admin/api/branding/socials/${encodeURIComponent(social.id)}/graphic`, { method: "DELETE" });
+    applySocialGraphicBranding(result.branding, social.id);
+    setStatus("Platform icon restored", "ready");
+  } catch (error) {
+    showSocialError(error.message || "Graphic reset failed.");
+  } finally {
+    state.busy = false;
+    setControlsDisabled(false);
+  }
+}
+
+function isPersistedSocial(id) {
+  return Boolean(state.branding?.socials?.some((social) => social.id === id));
+}
+
+function applySocialGraphicBranding(branding, socialId) {
+  state.branding = branding;
+  const draft = state.socials.find((social) => social.id === socialId);
+  const saved = branding.socials?.find((social) => social.id === socialId);
+  if (draft) {
+    if (saved?.graphic) draft.graphic = saved.graphic;
+    else delete draft.graphic;
+  }
+  renderSocials();
+  applyAdminBranding();
+}
+
+function addSocial(event) {
+  event.preventDefault();
+  clearSocialError();
+  try {
+    if (state.socials.length >= 32) throw new Error("Social links are limited to 32.");
+    const value = elements.social_value_input.value;
+    const platform = resolveSocialPlatform(value, elements.social_platform_select.value);
+    if (!platform) throw new Error("Select a platform for this handle.");
+    const label = elements.social_label_input.value.trim();
+    state.socials.push({ id: createSocialId(), platform, url: buildSocialUrl(value, platform), ...(label ? { label } : {}) });
+    elements.social_value_input.value = "";
+    elements.social_platform_select.value = "";
+    elements.social_label_input.value = "";
+    renderSocials();
+    setStatus("Social added - save to publish", "working");
+  } catch (error) {
+    showSocialError(error.message || "Could not add that social link.");
+  }
+}
+
+function moveSocial(index, delta) {
+  const target = index + delta;
+  if (target < 0 || target >= state.socials.length) return;
+  [state.socials[index], state.socials[target]] = [state.socials[target], state.socials[index]];
+  renderSocials();
+  setStatus("Social order changed - save to publish", "working");
+}
+
+async function saveSocials() {
+  clearSocialError();
+  try {
+    state.socials = state.socials.map((social) => {
+      const platform = resolveSocialPlatform(social.url, social.platform);
+      const label = String(social.label || "").trim();
+      return { id: social.id, platform, url: buildSocialUrl(social.url, platform), ...(label ? { label } : {}) };
+    });
+    await persistBranding(
+      { socials: state.socials },
+      { saving: "Saving socials", saved: "Socials saved", failed: "Socials save failed" },
+      { preserveBrandingDrafts: true },
+    );
+  } catch (error) {
+    showSocialError(error.message || "Could not save social links.");
+  }
+}
+
+function socialPlatformOption(platform) {
+  const option = document.createElement("option");
+  option.value = platform.id;
+  option.textContent = platform.label;
+  return option;
+}
+
+function showSocialError(message) {
+  elements.social_form_error.textContent = message;
+  elements.social_form_error.hidden = false;
+  setStatus(message, "error");
+}
+
+function clearSocialError() {
+  elements.social_form_error.hidden = true;
+  elements.social_form_error.textContent = "";
+}
+
+async function saveBranding(overrides = {}, messages = {}) {
+  return persistBranding(
+    brandingPayload(overrides),
+    { saving: "Saving gallery settings", saved: "Gallery settings saved", failed: "Gallery settings save failed", ...messages },
+    { preserveSocialDrafts: true },
+  );
+}
+
+async function persistBranding(payload, messages = {}, options = {}) {
+  if (state.busy || !state.branding) return;
+  const socialDrafts = state.socials;
+  const savingSettingsDraft = state.settingsDirty && !options.preserveBrandingDrafts;
+  state.busy = true;
+  if (savingSettingsDraft) setSettingsActionMessage(messages.saving || "Saving gallery settings", "working");
+  setControlsDisabled(true);
+  setStatus(messages.saving || "Saving gallery settings", "working");
   try {
     const result = await requestJson("/gallery/admin/api/branding", {
       method: "PUT",
@@ -362,11 +911,20 @@ async function saveBranding(overrides = {}) {
       body: JSON.stringify(payload),
     });
     state.branding = result.branding;
-    state.selectedProfileId = state.branding.profile_id;
-    renderBranding();
-    setStatus("Style saved", "ready");
+    state.socials = options.preserveSocialDrafts ? socialDrafts : [...(state.branding.socials || [])];
+    if (options.preserveBrandingDrafts) {
+      renderSocials();
+      applyAdminBranding();
+    } else {
+      state.settingsDirty = false;
+      state.selectedProfileId = state.branding.profile_id;
+      renderBranding({ preserveDraft: false });
+    }
+    setStatus(messages.saved || "Gallery settings saved", "ready");
   } catch (error) {
-    setStatus(error.message || "Style save failed", "error");
+    const message = error.message || messages.failed || "Gallery settings save failed";
+    if (savingSettingsDraft) setSettingsActionMessage(message, "error");
+    setStatus(message, "error");
   } finally {
     state.busy = false;
     setControlsDisabled(false);
@@ -374,88 +932,16 @@ async function saveBranding(overrides = {}) {
 }
 
 function brandingPayload(overrides = {}) {
+  const shown = state.downloadsDraft;
   return {
     brand_name: elements.brand_name_input.value,
     gallery_title: elements.gallery_title_input.value,
-    mode: elements.default_mode.value,
-    profile_id: state.selectedProfileId || state.branding?.profile_id || "frame-blue",
-    custom_profiles: customProfiles(),
+    show_download_button: shown,
+    mode: state.branding?.mode || "system",
+    profile_id: state.branding?.profile_id || "frame-blue",
+    custom_profiles: state.branding?.custom_profiles || [],
     ...overrides,
   };
-}
-
-function openPresetDialog() {
-  showPresetKindStep();
-  elements.preset_dialog.showModal();
-}
-
-function closePresetDialog() {
-  elements.preset_dialog.close();
-}
-
-function showPresetKindStep() {
-  elements.preset_kind_step.hidden = false;
-  elements.preset_editor_step.hidden = true;
-}
-
-function showPresetEditor(kind) {
-  state.presetDraftKind = kind;
-  elements.preset_kind_step.hidden = true;
-  elements.preset_editor_step.hidden = false;
-  elements.preset_editor_title.textContent = kind === "full" ? "Fully custom" : "Color based theme";
-  elements.preset_editor_eyebrow.textContent = "New custom preset";
-  elements.preset_name_input.value = "";
-  elements.preset_default_mode.value = elements.default_mode.value === "day" ? "day" : "night";
-  elements.preset_theme_color.value = selectedProfile().theme_color || "#2cb4fb";
-  elements.preset_theme_color_label.hidden = false;
-  elements.palette_fields.hidden = kind !== "full";
-  if (kind === "full") renderPaletteFields(buildThemeProfileClient("draft", "Draft", elements.preset_theme_color.value).palettes);
-}
-
-function renderPaletteFields(palettes) {
-  elements.palette_fields.replaceChildren(...["day", "night"].map((mode) => {
-    const group = document.createElement("section");
-    group.className = "palette-group";
-    const heading = document.createElement("h3");
-    heading.textContent = mode === "day" ? "Day colors" : "Night colors";
-    const grid = document.createElement("div");
-    grid.className = "color-grid";
-    for (const [key, labelText] of paletteFields) {
-      const label = document.createElement("label");
-      label.textContent = labelText;
-      const input = document.createElement("input");
-      input.type = "color";
-      input.dataset.mode = mode;
-      input.dataset.key = key;
-      input.value = palettes[mode][key];
-      label.append(input);
-      grid.append(label);
-    }
-    group.append(heading, grid);
-    return group;
-  }));
-}
-
-async function createCustomPreset() {
-  if (!state.branding) return;
-  const name = cleanText(elements.preset_name_input.value, "Custom Preset");
-  const id = uniqueClientProfileId(name);
-  const profile = state.presetDraftKind === "full"
-    ? {
-        id,
-        name,
-        theme_color: colorInput("day", "accent") || elements.preset_theme_color.value,
-        palettes: collectPaletteFields(),
-      }
-    : buildThemeProfileClient(id, name, elements.preset_theme_color.value);
-  state.selectedProfileId = profile.id;
-  elements.default_mode.value = elements.preset_default_mode.value;
-  closePresetDialog();
-  await saveBranding({
-    mode: elements.preset_default_mode.value,
-    profile_id: profile.id,
-    custom_profiles: [...customProfiles().filter((item) => item.id !== profile.id), profile],
-  });
 }
 
 async function uploadLogo() {
@@ -475,9 +961,9 @@ async function uploadLogo() {
   }
 }
 
-async function openLogoCropDialog(file) {
+async function openLogoCropDialog(file, socialId = null) {
   if (file.size > LOGO_SOURCE_MAX_BYTES) {
-    throw new Error("Logo source must be 20 MB or smaller");
+    throw new Error(`${socialId ? "Graphic" : "Logo"} source must be 20 MB or smaller`);
   }
   const imageUrl = URL.createObjectURL(file);
   await loadCropImage(imageUrl);
@@ -486,9 +972,10 @@ async function openLogoCropDialog(file) {
   state.logoCrop = {
     fileName: file.name,
     imageUrl,
+    socialId,
     sourceWidth,
     sourceHeight,
-    aspect: "full",
+    aspect: socialId ? "square" : "full",
     customX: 2,
     customY: 1,
     zoom: 1,
@@ -501,11 +988,15 @@ async function openLogoCropDialog(file) {
   elements.logo_ratio_x.value = "2";
   elements.logo_ratio_y.value = "1";
   elements.logo_crop_zoom.value = "1";
+  elements.logo_crop_dialog.dataset.cropTarget = socialId ? "social" : "logo";
+  elements.logo_crop_eyebrow.textContent = socialId ? "Link graphic source" : "Logo source";
+  elements.logo_crop_title.textContent = socialId ? "Prepare link graphic" : "Prepare logo";
+  elements.save_logo_crop.textContent = socialId ? "Use graphic" : "Use logo";
   syncLogoCropAspectControls();
-  setStatus("Prepare logo", "working");
+  setStatus(socialId ? "Prepare link graphic" : "Prepare logo", "working");
   elements.logo_crop_dialog.showModal();
   requestAnimationFrame(() => {
-    setLogoCropAspect("full", { resetView: false });
+    setLogoCropAspect(socialId ? "square" : "full", { resetView: false });
     renderLogoCrop();
   });
 }
@@ -519,32 +1010,41 @@ function loadCropImage(url) {
 }
 
 function closeLogoCropDialog() {
+  const socialGraphic = Boolean(state.logoCrop?.socialId);
   cleanupLogoCrop();
   if (elements.logo_crop_dialog.open) elements.logo_crop_dialog.close();
-  setStatus("Logo upload cancelled", "ready");
+  setStatus(`${socialGraphic ? "Graphic" : "Logo"} upload cancelled`, "ready");
 }
 
 async function saveLogoCrop() {
   if (!state.logoCrop || state.busy) return;
+  const socialId = state.logoCrop.socialId;
   state.busy = true;
   setControlsDisabled(true);
-  setStatus("Processing logo", "working");
+  setStatus(`Processing ${socialId ? "graphic" : "logo"}`, "working");
   try {
     const dataUrl = await renderCroppedLogoDataUrl();
-    setStatus("Uploading optimized logo", "working");
-    const result = await requestJson("/gallery/admin/api/branding/logo", {
+    setStatus(`Uploading optimized ${socialId ? "graphic" : "logo"}`, "working");
+    const endpoint = socialId
+      ? `/gallery/admin/api/branding/socials/${encodeURIComponent(socialId)}/graphic`
+      : "/gallery/admin/api/branding/logo";
+    const result = await requestJson(endpoint, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ data_url: dataUrl }),
     });
-    state.branding = result.branding;
-    state.selectedProfileId = state.branding.profile_id;
-    renderBranding();
+    if (socialId) {
+      applySocialGraphicBranding(result.branding, socialId);
+    } else {
+      state.branding = result.branding;
+      state.selectedProfileId = state.branding.profile_id;
+      renderBranding();
+    }
     cleanupLogoCrop();
     if (elements.logo_crop_dialog.open) elements.logo_crop_dialog.close();
-    setStatus("Logo saved", "ready");
+    setStatus(`${socialId ? "Link graphic" : "Logo"} saved`, "ready");
   } catch (error) {
-    setStatus(error.message || "Logo upload failed", "error");
+    setStatus(error.message || `${socialId ? "Graphic" : "Logo"} upload failed`, "error");
   } finally {
     state.busy = false;
     setControlsDisabled(false);
@@ -558,7 +1058,9 @@ function isAllowedLogoFile(file) {
 function setLogoCropAspect(aspect, options = {}) {
   const cropState = state.logoCrop;
   if (!cropState) return;
-  const nextAspect = ["full", "wide", "square", "custom", "freeform"].includes(aspect) ? aspect : "full";
+  const nextAspect = cropState.socialId
+    ? "square"
+    : (["full", "wide", "square", "custom", "freeform"].includes(aspect) ? aspect : "full");
   const previousMetrics = nextAspect === "freeform" ? logoCropMetrics() : null;
   cropState.aspect = nextAspect;
   if (nextAspect === "wide") {
@@ -856,7 +1358,9 @@ async function renderCroppedLogoDataUrl() {
   const metrics = logoCropMetrics();
   if (!metrics) throw new Error("Logo crop could not be measured");
   const aspect = metrics.frame.width / Math.max(1, metrics.frame.height);
-  const output = outputSizeForAspect(aspect);
+  const output = state.logoCrop?.socialId
+    ? { width: SOCIAL_GRAPHIC_SIZE, height: SOCIAL_GRAPHIC_SIZE }
+    : outputSizeForAspect(aspect);
   const canvas = document.createElement("canvas");
   canvas.width = output.width;
   canvas.height = output.height;
@@ -967,6 +1471,10 @@ function cleanupLogoCrop() {
   elements.logo_crop_stage.dataset.freeform = "false";
   elements.logo_crop_stage.dataset.full = "false";
   elements.logo_crop_dialog.dataset.cropMode = "full";
+  elements.logo_crop_dialog.dataset.cropTarget = "logo";
+  elements.logo_crop_eyebrow.textContent = "Logo source";
+  elements.logo_crop_title.textContent = "Prepare logo";
+  elements.save_logo_crop.textContent = "Use logo";
   elements.logo_crop_frame.removeAttribute("style");
 }
 
@@ -1069,7 +1577,7 @@ function toggleAdminTheme() {
 
 function resolvedAdminThemeMode() {
   if (state.userThemeMode === "day" || state.userThemeMode === "night") return state.userThemeMode;
-  if (elements.default_mode.value === "day" || elements.default_mode.value === "night") return elements.default_mode.value;
+  if (state.branding?.mode === "day" || state.branding?.mode === "night") return state.branding.mode;
   return systemTheme.matches ? "night" : "day";
 }
 
@@ -1083,24 +1591,6 @@ function updateAdminThemeToggle(mode) {
 
 function profiles() {
   return state.branding?.presets || [];
-}
-
-function customProfiles() {
-  return state.branding?.custom_profiles || profiles().filter((profile) => profile.id.startsWith("custom-"));
-}
-
-function orderedProfiles() {
-  const customIds = new Set(customProfiles().map((profile) => profile.id));
-  const isCustom = (profile) => customIds.has(profile.id) || profile.id.startsWith("custom-");
-  return [
-    ...profiles().filter(isCustom),
-    ...profiles().filter((profile) => !isCustom(profile)),
-  ];
-}
-
-function isCustomProfile(profile) {
-  if (!profile) return false;
-  return profile.id.startsWith("custom-") || customProfiles().some((item) => item.id === profile.id);
 }
 
 function readStoredTheme() {
@@ -1137,62 +1627,44 @@ function selectedProfile() {
     || buildThemeProfileClient("frame-blue", "Frame Blue", "#2cb4fb");
 }
 
-function swatchGroupFor(profile) {
-  const swatches = document.createElement("span");
-  swatches.className = "swatches";
-  swatches.append(...swatchElementsFor(profile));
-  return swatches;
-}
-
-function swatchElementsFor(profile) {
-  return [profile.theme_color, profile.palettes.day.secondary, profile.palettes.night.background].map((color) => {
-    const swatch = document.createElement("i");
-    swatch.style.background = color;
-    return swatch;
+function setControlsDisabled(disabled) {
+  document.querySelectorAll("button, input, select").forEach((control) => {
+    if (disabled) {
+      if (control.dataset.busyDisabledState === undefined) {
+        control.dataset.busyDisabledState = control.disabled ? "disabled" : "enabled";
+      }
+      control.disabled = true;
+      return;
+    }
+    if (control.dataset.busyDisabledState === undefined) return;
+    control.disabled = control.dataset.busyDisabledState === "disabled";
+    delete control.dataset.busyDisabledState;
   });
 }
 
-function optionCopy(profile) {
-  const copy = document.createElement("span");
-  copy.className = "preset-copy";
-  const title = document.createElement("strong");
-  const meta = document.createElement("small");
-  title.textContent = profile.name;
-  meta.textContent = profile.theme_color;
-  copy.append(title, meta);
-  return copy;
+async function confirmRemoveLogo() {
+  if (!state.branding?.logo || state.busy) return;
+  const confirmed = await showConfirm({
+    eyebrow: "Remove logo",
+    title: "Use the default FRAME logo?",
+    copy: "Your custom gallery logo will be removed.",
+    actionLabel: "Remove logo",
+    danger: true,
+  });
+  if (confirmed) await removeLogo();
 }
 
-function trashIcon() {
-  const icon = document.createElement("span");
-  icon.className = "trash-icon";
-  icon.setAttribute("aria-hidden", "true");
-  return icon;
-}
-
-function collectPaletteFields() {
-  const generated = buildThemeProfileClient("draft", "Draft", elements.preset_theme_color.value).palettes;
-  for (const input of elements.palette_fields.querySelectorAll("input[type='color']")) {
-    generated[input.dataset.mode][input.dataset.key] = input.value;
-  }
-  return generated;
-}
-
-function colorInput(mode, key) {
-  return elements.palette_fields.querySelector(`input[data-mode="${mode}"][data-key="${key}"]`)?.value || "";
-}
-
-function setControlsDisabled(disabled) {
-  document.querySelectorAll("button, input, select").forEach((control) => { control.disabled = disabled; });
-}
-
-function showConfirm({ eyebrow, title, copy, actionLabel, danger = true }) {
+function showConfirm({ eyebrow, title, copy, actionLabel, danger = true, imageUrl = "", imageAlt = "" }) {
   return new Promise((resolve) => {
     if (state.confirmResolve) resolveConfirm(false);
     state.confirmResolve = resolve;
     elements.confirm_eyebrow.textContent = eyebrow || "Confirm change";
     elements.confirm_title.textContent = title || "Continue?";
     elements.confirm_copy.textContent = copy || "";
+    elements.confirm_media.hidden = !imageUrl;
+    elements.confirm_dialog.classList.toggle("has-media", Boolean(imageUrl));
+    elements.confirm_image.src = imageUrl || "";
+    elements.confirm_image.alt = imageAlt || "";
     elements.confirm_accept.textContent = actionLabel || "Continue";
     elements.confirm_accept.className = danger ? "danger-button" : "restore-button";
     elements.confirm_dialog.showModal();
@@ -1204,6 +1676,9 @@ function resolveConfirm(confirmed) {
   const resolve = state.confirmResolve;
   state.confirmResolve = null;
   if (elements.confirm_dialog.open) elements.confirm_dialog.close();
+  elements.confirm_dialog.classList.remove("has-media");
+  elements.confirm_media.hidden = true;
+  elements.confirm_image.removeAttribute("src");
   resolve(confirmed);
 }
 
@@ -1328,18 +1803,6 @@ function buildPalette(themeColor, mode) {
   };
 }
 
-function uniqueClientProfileId(name) {
-  const base = `custom-${slug(name) || "preset"}`;
-  const suffix = Date.now().toString(36).slice(-5);
-  let candidate = `${base}-${suffix}`;
-  let counter = 2;
-  while (profiles().some((profile) => profile.id === candidate)) {
-    candidate = `${base}-${suffix}-${counter}`;
-    counter += 1;
-  }
-  return candidate;
-}
-
 function cleanText(value, fallback) {
   const cleaned = String(value || "").replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim();
   return (cleaned || fallback).slice(0, 40);
@@ -1347,10 +1810,6 @@ function cleanText(value, fallback) {
 
 function normalizeHex(value, fallback) {
   return /^#[0-9a-fA-F]{6}$/.test(String(value || "").trim()) ? String(value).trim().toLowerCase() : fallback;
-}
-
-function slug(value) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 34);
 }
 
 function kebab(value) {

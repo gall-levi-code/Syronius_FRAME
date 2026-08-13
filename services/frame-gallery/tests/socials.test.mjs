@@ -1,0 +1,26 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { buildSocialUrl, detectSocialPlatform, resolveSocialPlatform, SOCIAL_PLATFORMS } from "../public/socials.js";
+
+test("detects social destinations and builds canonical handle links", () => {
+  assert.equal(SOCIAL_PLATFORMS.length, 14);
+  assert.equal(detectSocialPlatform("instagram.com/syronius"), "instagram");
+  assert.equal(detectSocialPlatform("https://threads.net/@syronius"), "threads");
+  assert.equal(detectSocialPlatform("https://www.threads.com/@syronius"), "threads");
+  assert.equal(detectSocialPlatform("flickr.com/photos/syronius"), "flickr");
+  assert.equal(detectSocialPlatform("syronius.bsky.social"), "bluesky");
+  assert.equal(detectSocialPlatform("example.com/photos"), "website");
+  assert.equal(detectSocialPlatform("@syronius"), null);
+  assert.equal(detectSocialPlatform("@frame.photos"), null);
+  assert.equal(buildSocialUrl("@syronius", "x"), "https://x.com/syronius");
+  assert.equal(buildSocialUrl("@frame.photos", "instagram"), "https://www.instagram.com/frame.photos/");
+  assert.equal(buildSocialUrl("frame.photos", "instagram"), "https://www.instagram.com/frame.photos/");
+  assert.equal(buildSocialUrl("alice.example.com", "bluesky"), "https://bsky.app/profile/alice.example.com");
+  assert.equal(resolveSocialPlatform("frame.photos", "instagram"), "instagram");
+  assert.equal(resolveSocialPlatform("https://frame.photos", "instagram"), "website");
+  assert.equal(resolveSocialPlatform("https://instagram.com/syronius", "website"), "instagram");
+  assert.equal(buildSocialUrl("syronius", "flickr"), "https://www.flickr.com/photos/syronius/");
+  assert.equal(buildSocialUrl("syronius.bsky.social", "bluesky"), "https://bsky.app/profile/syronius.bsky.social");
+  assert.equal(buildSocialUrl("example.com", "website"), "https://example.com/");
+  assert.throws(() => buildSocialUrl("not a website", "website"), /valid public website URL/);
+});

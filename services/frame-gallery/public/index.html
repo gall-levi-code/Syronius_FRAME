@@ -32,14 +32,22 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
     <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js" integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU" crossorigin="anonymous"></script>
-    <link rel="stylesheet" href="/gallery/assets/styles.css?v=gallery-share-8">
+    <link rel="stylesheet" href="/gallery/assets/styles.css?v=gallery-sticky-header-2">
   </head>
   <body>
     <header class="topbar">
-      <a class="brand" id="gallery-home" href="/today/gallery" aria-label="FRAME Photo Gallery">
-        <img id="brand-logo" src="/gallery/assets/frame-logo-square.svg" alt="">
-        <span><small id="brand-name">Syronius FRAME</small><strong id="gallery-title">Photo Gallery</strong></span>
-      </a>
+      <div class="brand-cluster">
+        <a class="brand" id="gallery-home" href="/today/gallery" aria-label="FRAME Photo Gallery">
+          <img id="brand-logo" src="/gallery/assets/frame-logo-square.svg" alt="">
+          <span><small id="brand-name">Syronius FRAME</small><strong id="gallery-title">Photo Gallery</strong></span>
+        </a>
+        <button id="socials-button" class="secondary-button socials-button" type="button" aria-label="Socials — Connect with me" aria-haspopup="dialog" aria-controls="socials-dialog" hidden>
+          <span class="socials-reel" aria-hidden="true">
+            <span class="socials-label socials-label-default">Socials</span>
+            <span class="socials-label socials-label-invite">Connect with me!</span>
+          </span>
+        </button>
+      </div>
       <div class="topbar-actions">
         <div class="summary">
           <strong id="photo-count">0 photos</strong>
@@ -71,7 +79,7 @@
         <span>Completed photos will appear after the FRAME pipeline publishes them.</span>
       </section>
       <section id="date-gallery" class="date-grid" aria-live="polite"></section>
-      <section id="photo-gallery" class="gallery-grid" aria-live="polite" hidden></section>
+      <section id="photo-gallery" class="gallery-grid" aria-label="Gallery photos" hidden></section>
       <section id="explore-panel" class="explore-panel" aria-label="Explore photos on a map" hidden>
         <div class="explore-map-shell">
           <div id="explore-map" role="region" aria-label="Route and photo map" tabindex="0"></div>
@@ -89,15 +97,21 @@
       </section>
     </main>
 
-    <dialog id="lightbox" class="lightbox">
+    <dialog id="lightbox" class="lightbox" aria-labelledby="lightbox-title">
       <div id="lightbox-viewport" class="lightbox-viewport">
-        <img id="lightbox-image" alt="">
+        <div id="lightbox-image" class="lightbox-image" role="img">
+          <img id="lightbox-preview" class="lightbox-preview" alt="" aria-hidden="true">
+          <img id="lightbox-full" class="lightbox-full" alt="" aria-hidden="true">
+          <div id="lightbox-tiles" class="lightbox-tiles" aria-hidden="true"></div>
+        </div>
+        <span id="lightbox-loading" class="lightbox-loading" role="status" aria-live="polite" hidden>Loading photo…</span>
       </div>
       <aside id="lightbox-details" class="lightbox-details">
         <span id="lightbox-camera-text"></span>
         <span class="lightbox-photo-actions">
           <button id="lightbox-explore" class="lightbox-photo-button" type="button" hidden>View on map</button>
           <button id="lightbox-share" class="lightbox-photo-button" type="button">Share</button>
+          <a id="lightbox-download" class="lightbox-photo-button lightbox-download-button" download aria-label="Download photo" title="Download photo" hidden></a>
         </span>
       </aside>
       <div class="lightbox-toolbar">
@@ -115,8 +129,8 @@
           <button id="lightbox-close" class="lightbox-control close-button" type="button" aria-label="Close photo viewer" title="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
         </div>
       </div>
-      <button id="lightbox-previous" class="lightbox-control lightbox-nav previous" type="button" aria-label="Previous photo">&lt;</button>
-      <button id="lightbox-next" class="lightbox-control lightbox-nav next" type="button" aria-label="Next photo">&gt;</button>
+      <button id="lightbox-previous" class="lightbox-control lightbox-nav previous" type="button" aria-label="Previous photo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 4-8 8 8 8"/></svg></button>
+      <button id="lightbox-next" class="lightbox-control lightbox-nav next" type="button" aria-label="Next photo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 4 8 8-8 8"/></svg></button>
     </dialog>
 
     <dialog id="share-dialog" class="share-dialog" aria-labelledby="share-dialog-title" aria-describedby="share-dialog-copy">
@@ -152,6 +166,31 @@
       </form>
     </dialog>
 
+    <dialog id="socials-dialog" class="socials-dialog" aria-labelledby="socials-dialog-title" aria-describedby="socials-dialog-copy">
+      <form method="dialog" class="socials-dialog-panel">
+        <div class="share-dialog-heading">
+          <div><p>Socials</p><h2 id="socials-dialog-title">Find the gallery owner</h2></div>
+          <button class="secondary-button close-button" type="submit" value="close" aria-label="Close socials dialog" title="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>
+        <p id="socials-dialog-copy" class="share-dialog-copy">Select a platform or link name to open it, or use the buttons to copy or scan it.</p>
+        <div id="socials-list" class="socials-list"></div>
+        <p id="socials-status" class="share-status" role="status" aria-live="polite"></p>
+      </form>
+    </dialog>
+
+    <dialog id="social-qr-dialog" class="share-dialog social-qr-dialog" aria-labelledby="social-qr-title" aria-describedby="social-qr-destination">
+      <form method="dialog" class="share-dialog-panel social-qr-panel">
+        <div class="share-dialog-heading">
+          <div><p>Scan destination</p><h2 id="social-qr-title">Social link</h2></div>
+          <button class="secondary-button close-button" type="submit" value="close" aria-label="Close social QR code" title="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>
+        <figure class="share-qr social-destination-qr">
+          <div id="social-qr-code" class="share-qr-code" role="img" aria-labelledby="social-qr-title"></div>
+          <figcaption><strong id="social-qr-label"></strong><span id="social-qr-destination"></span></figcaption>
+        </figure>
+      </form>
+    </dialog>
+
     <template id="date-template">
       <article class="date-card">
         <a class="date-open">
@@ -171,14 +210,16 @@
       <article class="photo-card">
         <button class="photo-open" type="button">
           <img alt="" loading="lazy">
-          <span class="photo-meta"><strong></strong><small></small></span>
         </button>
-        <span class="card-actions">
-          <button class="card-action photo-map-jump" type="button" hidden></button>
-          <button class="card-action photo-share" type="button"></button>
+        <span class="photo-overlay">
+          <span class="photo-meta"><strong></strong><time></time></span>
+          <span class="card-actions">
+            <button class="card-action photo-map-jump" type="button" hidden></button>
+            <button class="card-action photo-share" type="button"></button>
+          </span>
         </span>
       </article>
     </template>
-    <script type="module" src="/gallery/assets/gallery.js?v=gallery-share-8"></script>
+    <script type="module" src="/gallery/assets/gallery.js?v=gallery-viewer-modes-1"></script>
   </body>
 </html>

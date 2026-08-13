@@ -48,7 +48,7 @@ test("controller follows latest publications and handles remote commands", async
   }
 });
 
-test("HTTP API serves published media and rejects unpublished media", async () => {
+test("HTTP API omits public full-image access", async () => {
   const root = await fixture();
   const store = new TodayStore(root);
   const controller = new TodayController(store, 10_000, 60_000);
@@ -65,7 +65,8 @@ test("HTTP API serves published media and rejects unpublished media", async () =
   try {
     const state = await (await fetch(`${base}/today/api/state`)).json();
     assert.equal(state.count_today, 2);
-    assert.equal((await fetch(`${base}/today/image/2026-06-13/second.jpg`)).status, 200);
+    assert.equal(Object.hasOwn(state.current_photo, "image_url"), false);
+    assert.equal((await fetch(`${base}/today/image/2026-06-13/second.jpg`)).status, 404);
     assert.equal((await fetch(`${base}/today/image/2026-06-13/hidden.jpg`)).status, 404);
     assert.equal((await fetch(`${base}/today/assets/remote.js`)).headers.get("cache-control"), "no-store");
     assert.equal((await fetch(`${base}/today/dashboard`)).status, 401);
@@ -92,11 +93,126 @@ test("HTTP API serves published media and rejects unpublished media", async () =
     assert.equal(dashboard.total_images, 2);
     assert.equal(dashboard.current_gallery.count, 2);
     assert.equal(dashboard.latest_photo.base, "second");
+    assert.equal(Object.hasOwn(dashboard.latest_photo, "image_url"), false);
     assert.equal(dashboard.public_base_url, "https://frame.example");
   } finally {
     controller.close();
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+test("Photo Stage Viewer clips overlapping tiles inside one scaled native grid", async () => {
+  const [appSource, storeSource, viewerHtml, viewerScript] = await Promise.all([
+    readFile(new URL("../src/app.ts", import.meta.url), "utf8"),
+    readFile(new URL("../src/store.ts", import.meta.url), "utf8"),
+    readFile(new URL("../public/viewer.html", import.meta.url), "utf8"),
+    readFile(new URL("../public/viewer.js", import.meta.url), "utf8"),
+  ]);
+  assert.doesNotMatch(appSource, /app\.get\(["']\/today\/image/);
+  assert.doesNotMatch(storeSource, /image_url/);
+  assert.doesNotMatch(viewerScript, /image_url|\/today\/image/);
+  assert.match(viewerScript, /fetch\(["']\/gallery\/api\/view-session/);
+  assert.doesNotMatch(viewerScript, /document\.createElement\(["']canvas["']\)/);
+  assert.match(viewerScript, /gridTemplateColumns/);
+  assert.match(viewerScript, /className = ["']photo-tile-cell["']/);
+  assert.match(viewerScript, /surface\.style\.transform = `scale/);
+  assert.match(viewerScript, /viewerAnimation = frame\.animate/);
+  assert.match(viewerScript, /images\[index\]\.src = manifest\.tiles\[index\]\.url/);
+  assert.match(viewerScript, /cancelTileBatch\(nextLayer\)/);
+  assert.match(viewerScript, /image\.onload = null[\s\S]*image\.onerror = null[\s\S]*removeAttribute\(["']src["']\)/);
+  assert.match(viewerScript, /photoSessionController\?\.abort\(\)/);
+  assert.match(viewerScript, /cancelAnimationFrame\(presentationFrame\)/);
+  assert.match(viewerScript, /presentationKey !== key \|\| currentLayer !== layer/);
+  assert.match(viewerScript, /layoutLayer\(nextLayer, ["']default["']\)/);
+  const renderSource = viewerScript.slice(
+    viewerScript.indexOf("function render"),
+    viewerScript.indexOf("async function stagePhoto"),
+  );
+  const stageSource = viewerScript.slice(
+    viewerScript.indexOf("async function stagePhoto"),
+    viewerScript.indexOf("async function fillLayer"),
+  );
+  assert.doesNotMatch(renderSource, /setAttribute\(["']aria-label["']/);
+  assert.match(stageSource, /layoutLayer\(currentLayer, ["']default["']\)[\s\S]*setAttribute\(["']aria-label["']/);
+  const tileBatchSource = viewerScript.slice(
+    viewerScript.indexOf("function loadTileBatch"),
+    viewerScript.indexOf("function normalizeTileView"),
+  );
+  const loadedImages = [];
+  class PendingImage {
+    constructor() {
+      this.style = {};
+      loadedImages.push(this);
+    }
+    set src(value) { this.source = value; }
+    removeAttribute(name) { if (name === "src") this.source = undefined; }
+  }
+  const { loadTileBatch, cancelTileBatch } = Function(
+    "document",
+    "Image",
+    "tileDrawRect",
+    `"use strict"; const tileBatches = new WeakMap(); ${tileBatchSource}; return { loadTileBatch, cancelTileBatch };`,
+  )(
+    { createElement: () => ({ style: {}, append() {} }) },
+    PendingImage,
+    (tile) => ({ sourceX: 0, sourceY: 0, encodedWidth: tile.width, encodedHeight: tile.height }),
+  );
+  const pendingLayer = {};
+  const pendingTiles = loadTileBatch(pendingLayer, {
+    tiles: [{ x: 0, y: 0, width: 2, height: 2, url: "/gallery/tile/handle/0/0.webp" }],
+  }, { append() {} });
+  cancelTileBatch(pendingLayer);
+  await assert.rejects(pendingTiles, { name: "AbortError" });
+  assert.equal(loadedImages[0].onload, null);
+  assert.equal(loadedImages[0].onerror, null);
+  assert.equal(loadedImages[0].source, undefined);
+  const validatorSource = viewerScript.slice(
+    viewerScript.indexOf("function normalizeTileView"),
+    viewerScript.indexOf("function layoutLayer"),
+  );
+  const { normalizeTileView, tileDrawRect } = Function(
+    "location",
+    `"use strict"; ${validatorSource}; return { normalizeTileView, tileDrawRect };`,
+  )({ origin: "https://frame.example" });
+  const validView = {
+    width: 513,
+    height: 513,
+    tile_size: 512,
+    overlap: 1,
+    columns: 2,
+    rows: 2,
+    tiles: [
+      { x: 0, y: 0, width: 512, height: 512, url: "/gallery/tile/handle/0/0.webp" },
+      { x: 1, y: 0, width: 1, height: 512, url: "/gallery/tile/handle/1/0.webp" },
+      { x: 0, y: 1, width: 512, height: 1, url: "/gallery/tile/handle/0/1.webp" },
+      { x: 1, y: 1, width: 1, height: 1, url: "/gallery/tile/handle/1/1.webp" },
+    ],
+  };
+  assert.equal(normalizeTileView(validView).tiles[1].url, "/gallery/tile/handle/1/0.webp");
+  assert.deepEqual(tileDrawRect(validView.tiles[3], normalizeTileView(validView)), {
+    sourceX: 1,
+    sourceY: 1,
+    destinationX: 512,
+    destinationY: 512,
+    width: 1,
+    height: 1,
+    encodedWidth: 2,
+    encodedHeight: 2,
+  });
+  assert.throws(() => normalizeTileView({
+    ...validView,
+    tiles: validView.tiles.map((tile, index) => index
+      ? { ...tile, url: "https://outside.example/gallery/tile/handle/1/0.webp" }
+      : tile),
+  }), /invalid tile manifest/);
+  assert.throws(() => normalizeTileView({
+    ...validView,
+    tiles: validView.tiles.map((tile) => ({ ...tile, x: 0, width: 512 })),
+  }), /invalid tile manifest/);
+  assert.throws(() => normalizeTileView({ ...validView, overlap: 0 }), /invalid tile manifest/);
+  assert.match(viewerHtml, /id="photo-current" class="photo-layer current"><\/div>/);
+  assert.match(viewerHtml, /today\.css\?v=tiled-viewer-3/);
+  assert.match(viewerHtml, /viewer\.js\?v=tiled-viewer-3/);
 });
 
 async function fixture() {

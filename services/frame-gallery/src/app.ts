@@ -1,7 +1,19 @@
 import express, { type Express } from "express";
+import { createHmac, randomBytes } from "node:crypto";
 import path from "node:path";
 import { type BasicAuthConfig, requireBasicAuth } from "./auth.js";
-import { GalleryRequestError, GalleryStore } from "./store.js";
+import { GalleryRequestError, GalleryStore, type GalleryTileView } from "./store.js";
+
+const VIEW_COOKIE = "frame_gallery_view";
+const VIEW_SESSION_TTL_MS = 5 * 60 * 1000;
+const MAX_VIEW_SESSIONS = 4096;
+const MAX_SESSION_PHOTOS = 32;
+
+interface TileSession {
+  id: string;
+  expires_at: number;
+  photos: Map<string, GalleryTileView>;
+}
 
 export interface GalleryManagementConfig {
   pipelineUrl: string;
@@ -12,6 +24,8 @@ export interface GalleryManagementConfig {
 export async function createApp(store: GalleryStore, publicDir: string, management?: GalleryManagementConfig): Promise<Express> {
   await store.init();
   const app = express();
+  const tileSessions = new Map<string, TileSession>();
+  const tileSecret = randomBytes(32);
   app.disable("x-powered-by");
   app.use(express.json({ limit: "5mb" }));
 
@@ -46,6 +60,14 @@ export async function createApp(store: GalleryStore, publicDir: string, manageme
       next(error);
     }
   });
+  app.get("/gallery/branding/socials/:id/graphic.webp", async (request, response, next) => {
+    try {
+      response.setHeader("Cache-Control", "public, max-age=3600");
+      response.type("image/webp").sendFile(await store.requireSocialGraphic(request.params.id));
+    } catch (error) {
+      next(error);
+    }
+  });
   if (management) {
     const protect = requireBasicAuth(management.auth);
     app.get(["/gallery/admin", "/gallery/admin/", "/today/gallery/admin", "/today/gallery/admin/"], protect, (_request, response) => {
@@ -65,7 +87,13 @@ export async function createApp(store: GalleryStore, publicDir: string, manageme
     app.post(["/gallery/admin/api/manage", "/today/gallery/admin/api/manage"], protect, async (request, response, next) => {
       try {
         response.setHeader("Cache-Control", "no-store");
-        response.json(await pipelineRequest(management, "/api/internal/photo-pipeline/manage", "POST", request.body));
+        const result = await pipelineRequest(management, "/api/internal/photo-pipeline/manage", "POST", request.body);
+        try {
+          await store.pruneGallerySettings();
+        } catch (error) {
+          console.error(`[gallery] settings cleanup failed after photo management: ${errorMessage(error)}`);
+        }
+        response.json(result);
       } catch (error) {
         next(error);
       }
@@ -138,6 +166,39 @@ export async function createApp(store: GalleryStore, publicDir: string, manageme
         next(error);
       }
     });
+    app.post([
+      "/gallery/admin/api/branding/socials/:id/graphic",
+      "/today/gallery/admin/api/branding/socials/:id/graphic",
+    ], protect, async (request, response, next) => {
+      try {
+        response.setHeader("Cache-Control", "no-store");
+        response.json({ branding: await store.saveSocialGraphic(request.params.id, request.body) });
+      } catch (error) {
+        next(error);
+      }
+    });
+    app.delete([
+      "/gallery/admin/api/branding/socials/:id/graphic",
+      "/today/gallery/admin/api/branding/socials/:id/graphic",
+    ], protect, async (request, response, next) => {
+      try {
+        response.setHeader("Cache-Control", "no-store");
+        response.json({ branding: await store.deleteSocialGraphic(request.params.id) });
+      } catch (error) {
+        next(error);
+      }
+    });
+    app.put([
+      "/gallery/admin/api/galleries/:date/settings",
+      "/today/gallery/admin/api/galleries/:date/settings",
+    ], protect, async (request, response, next) => {
+      try {
+        response.setHeader("Cache-Control", "no-store");
+        response.json({ settings: await store.updateGallerySettings(request.params.date, request.body) });
+      } catch (error) {
+        next(error);
+      }
+    });
     app.get(["/gallery/admin/image/:date/:file", "/today/gallery/admin/image/:date/:file"], protect, async (request, response, next) => {
       try {
         const base = stripExtension(request.params.file, ".jpg");
@@ -185,6 +246,93 @@ export async function createApp(store: GalleryStore, publicDir: string, manageme
       next(error);
     }
   });
+  app.post("/gallery/api/view-session", async (request, response, next) => {
+    response.setHeader("Cache-Control", "private, no-store");
+    try {
+      requireSameOriginBrowserRequest(request, "empty");
+      if (!isRecord(request.body) || typeof request.body.date_folder !== "string" || typeof request.body.base !== "string") {
+        throw new GalleryRequestError("A gallery date and photo are required.", 400);
+      }
+      const view = await store.createTileView(request.body.date_folder, request.body.base);
+      const session = requireOrCreateTileSession(request, tileSessions);
+      const handle = createHmac("sha256", tileSecret)
+        .update(`${session.id}\0${view.date_folder}\0${view.base}\0${view.source_version}`)
+        .digest("base64url");
+      session.photos.delete(handle);
+      session.photos.set(handle, view);
+      while (session.photos.size > MAX_SESSION_PHOTOS) session.photos.delete(session.photos.keys().next().value!);
+      response.cookie(VIEW_COOKIE, session.id, {
+        httpOnly: true,
+        sameSite: "strict",
+        secure: requestIsSecure(request),
+        path: "/gallery",
+        maxAge: VIEW_SESSION_TTL_MS,
+      });
+      response.json({
+        view: {
+          handle,
+          width: view.width,
+          height: view.height,
+          tile_size: view.tile_size,
+          overlap: view.overlap,
+          columns: view.columns,
+          rows: view.rows,
+          tiles: tileEntries(handle, view),
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.get("/gallery/tile/:handle/:x/:file", async (request, response, next) => {
+    response.setHeader("Cache-Control", "private, no-store");
+    response.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    try {
+      requireSameOriginBrowserRequest(request, "image");
+      const session = findTileSession(request, tileSessions);
+      const view = session?.photos.get(request.params.handle);
+      if (!view) throw new GalleryRequestError("Tile was not found.", 404);
+      const x = tileCoordinate(request.params.x);
+      const y = tileCoordinate(stripExtension(request.params.file, ".webp"));
+      const tile = await store.requireTile(view, x, y);
+      response.type("image/webp").sendFile(tile);
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.get("/gallery/image/:date/:file", async (request, response, next) => {
+    response.setHeader("Cache-Control", "private, no-cache");
+    response.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    try {
+      requireSameOriginBrowserRequest(request, "image");
+      if (!(await store.getBranding()).show_download_button) {
+        throw new GalleryRequestError("Gallery image was not found.", 404);
+      }
+      const base = stripExtension(request.params.file, ".jpg");
+      const image = await store.requireImage(request.params.date, base);
+      response.setHeader("Content-Disposition", `inline; filename="${base}.jpg"`);
+      response.type("image/jpeg").sendFile(image);
+    } catch (error) {
+      next(error);
+    }
+  });
+  app.get("/gallery/download/:date/:file", async (request, response, next) => {
+    response.setHeader("Cache-Control", "private, no-store");
+    response.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    try {
+      const base = stripExtension(request.params.file, ".jpg");
+      if (!(await store.getBranding()).show_download_button) {
+        throw new GalleryRequestError("Photo download was not found.", 404);
+      }
+      const image = await store.requireImage(request.params.date, base);
+      response.attachment(`${base}.jpg`).sendFile(image);
+    } catch (error) {
+      next(error);
+    }
+  });
   app.get("/gallery/api/explore", async (request, response, next) => {
     try {
       const date = typeof request.query.date === "string" ? request.query.date : "";
@@ -193,15 +341,6 @@ export async function createApp(store: GalleryStore, publicDir: string, manageme
         date_folder: date,
         explore: await store.getPublicExplore(date),
       });
-    } catch (error) {
-      next(error);
-    }
-  });
-  app.get("/gallery/image/:date/:file", async (request, response, next) => {
-    try {
-      const base = stripExtension(request.params.file, ".jpg");
-      response.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-      response.sendFile(await store.requireImage(request.params.date, base));
     } catch (error) {
       next(error);
     }
@@ -251,6 +390,97 @@ async function pipelineRequest(
 function stripExtension(value: string, extension: string): string {
   if (!value.endsWith(extension)) throw new GalleryRequestError("Invalid media path.", 400);
   return value.slice(0, -extension.length);
+}
+
+function requireOrCreateTileSession(request: express.Request, sessions: Map<string, TileSession>): TileSession {
+  const now = Date.now();
+  pruneTileSessions(sessions, now);
+  const existingId = readCookie(request, VIEW_COOKIE);
+  const existing = existingId ? sessions.get(existingId) : undefined;
+  if (existing) {
+    existing.expires_at = now + VIEW_SESSION_TTL_MS;
+    sessions.delete(existing.id);
+    sessions.set(existing.id, existing);
+    return existing;
+  }
+  while (sessions.size >= MAX_VIEW_SESSIONS) sessions.delete(sessions.keys().next().value!);
+  const session: TileSession = {
+    id: randomBytes(32).toString("base64url"),
+    expires_at: now + VIEW_SESSION_TTL_MS,
+    photos: new Map(),
+  };
+  sessions.set(session.id, session);
+  return session;
+}
+
+function findTileSession(request: express.Request, sessions: Map<string, TileSession>): TileSession | null {
+  pruneTileSessions(sessions, Date.now());
+  const id = readCookie(request, VIEW_COOKIE);
+  return id ? sessions.get(id) ?? null : null;
+}
+
+function pruneTileSessions(sessions: Map<string, TileSession>, now: number): void {
+  for (const [id, session] of sessions) {
+    if (session.expires_at <= now) sessions.delete(id);
+  }
+}
+
+function readCookie(request: express.Request, name: string): string | null {
+  for (const part of (request.get("cookie") || "").split(";")) {
+    const separator = part.indexOf("=");
+    if (separator > 0 && part.slice(0, separator).trim() === name) return part.slice(separator + 1).trim();
+  }
+  return null;
+}
+
+function requireSameOriginBrowserRequest(request: express.Request, destination: "empty" | "image"): void {
+  if (request.get("sec-fetch-site") !== "same-origin" || request.get("sec-fetch-dest") !== destination) {
+    throw new GalleryRequestError("Gallery media was not found.", 404);
+  }
+}
+
+function requestIsSecure(request: express.Request): boolean {
+  if (request.secure || (request.get("x-forwarded-proto") || "").split(",", 1)[0].trim().toLowerCase() === "https") {
+    return true;
+  }
+  try {
+    return JSON.parse(request.get("cf-visitor") || "null")?.scheme === "https";
+  } catch {
+    return false;
+  }
+}
+
+function tileCoordinate(value: string): number {
+  if (!/^(?:0|[1-9]\d*)$/.test(value)) throw new GalleryRequestError("Tile was not found.", 404);
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) throw new GalleryRequestError("Tile was not found.", 404);
+  return parsed;
+}
+
+function tileEntries(handle: string, view: GalleryTileView): Array<{
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  url: string;
+}> {
+  const tiles = [];
+  for (let y = 0; y < view.rows; y += 1) {
+    for (let x = 0; x < view.columns; x += 1) {
+      tiles.push({
+        x,
+        y,
+        width: Math.min(view.tile_size, view.width - x * view.tile_size),
+        height: Math.min(view.tile_size, view.height - y * view.tile_size),
+        url: `/gallery/tile/${handle}/${x}/${y}.webp`,
+      });
+    }
+  }
+  return tiles;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function errorMessage(error: unknown): string {

@@ -474,10 +474,21 @@ test("trash and restore preserve ready while every management change advances la
   assert.notEqual(restored.updated_at, trashed.updated_at);
   await assert.rejects(readFile(path.join(gallery, `${published.latest_base}.trashed.json`), "utf8"));
 
+  const legacyThumbnail = path.join(root, "gallery-cache", published.date_folder, `${published.latest_base}.webp`);
+  const tileDirectory = path.join(root, "gallery-cache", "tiles", published.date_folder, published.latest_base);
+  const cachedTile = path.join(tileDirectory, "0-0.webp");
+  await mkdir(path.dirname(legacyThumbnail), { recursive: true });
+  await mkdir(tileDirectory, { recursive: true });
+  await writeFile(legacyThumbnail, "legacy thumbnail\n");
+  await writeFile(cachedTile, "cached tile\n");
   await pipeline.managePhotos("trash-photo", published.date_folder, published.latest_base);
+  await readFile(legacyThumbnail);
+  await readFile(cachedTile);
   const purged = await pipeline.managePhotos("purge-photo", published.date_folder, published.latest_base);
   assert.equal(purged.latest_base, null);
   await assert.rejects(readFile(ready, "utf8"));
+  await assert.rejects(readFile(legacyThumbnail), { code: "ENOENT" });
+  await assert.rejects(readdir(tileDirectory), { code: "ENOENT" });
   assert.equal(JSON.parse(await readFile(path.join(gallery, "_explore.json"), "utf8")).placements[published.latest_base], undefined);
   assert.equal((await pipeline.saveExplore(published.date_folder, exploreCandidate(published.latest_base))).placements[published.latest_base], undefined);
   assert.equal((await readdir(root)).includes("today"), false);

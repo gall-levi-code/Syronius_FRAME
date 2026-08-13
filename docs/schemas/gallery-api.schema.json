@@ -5,13 +5,16 @@
     "date": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["date_folder", "count", "first_at", "latest_at", "duration_ms", "cover_thumbnail_url", "has_explore"],
+      "required": ["date_folder", "count", "first_at", "latest_at", "duration_ms", "cover_base", "cover_fallback_active", "cover_is_custom", "cover_thumbnail_url", "has_explore"],
       "properties": {
         "date_folder": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
         "count": { "type": "integer", "minimum": 1 },
         "first_at": { "type": ["string", "null"], "format": "date-time" },
         "latest_at": { "type": ["string", "null"], "format": "date-time" },
         "duration_ms": { "type": "integer", "minimum": 0 },
+        "cover_base": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9_-]+$" },
+        "cover_fallback_active": { "type": "boolean" },
+        "cover_is_custom": { "type": "boolean" },
         "cover_thumbnail_url": { "type": ["string", "null"], "pattern": "^/gallery/thumb/" },
         "has_explore": { "type": "boolean" }
       }
@@ -22,7 +25,6 @@
       "required": [
         "base",
         "date_folder",
-        "image_url",
         "thumbnail_url",
         "width",
         "height",
@@ -34,7 +36,6 @@
       "properties": {
         "base": { "type": "string", "pattern": "^[A-Za-z0-9_-]+$" },
         "date_folder": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
-        "image_url": { "type": "string", "pattern": "^/gallery/image/" },
         "thumbnail_url": { "type": "string", "pattern": "^/gallery/thumb/" },
         "width": { "type": ["integer", "null"], "minimum": 1 },
         "height": { "type": ["integer", "null"], "minimum": 1 },
@@ -105,9 +106,35 @@
       "required": ["url", "width", "height", "updated_at"],
       "properties": {
         "url": { "type": "string", "pattern": "^/gallery/branding/logo\\.webp\\?v=" },
-        "width": { "type": "integer", "minimum": 1, "maximum": 360 },
-        "height": { "type": "integer", "minimum": 1, "maximum": 120 },
+        "width": { "type": "integer", "minimum": 1, "maximum": 720 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 240 },
         "updated_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "socialGraphic": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "width", "height", "updated_at"],
+      "properties": {
+        "url": { "type": "string", "pattern": "^/gallery/branding/socials/[A-Za-z0-9_-]{1,64}/graphic\\.webp\\?v=" },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "updated_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "social": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "platform", "url"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$" },
+        "platform": {
+          "type": "string",
+          "enum": ["website", "instagram", "tiktok", "youtube", "twitch", "facebook", "x", "threads", "bluesky", "discord", "linkedin", "reddit", "snapchat", "flickr"]
+        },
+        "label": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "url": { "type": "string", "maxLength": 2048, "pattern": "^https?://" },
+        "graphic": { "$ref": "#/$defs/socialGraphic" }
       }
     },
     "branding": {
@@ -116,9 +143,11 @@
       "required": [
         "brand_name",
         "gallery_title",
+        "show_download_button",
         "mode",
         "profile_id",
         "custom_profiles",
+        "socials",
         "logo",
         "updated_at",
         "active_profile",
@@ -127,13 +156,42 @@
       "properties": {
         "brand_name": { "type": "string", "minLength": 1, "maxLength": 60 },
         "gallery_title": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "show_download_button": { "type": "boolean", "default": false },
         "mode": { "type": "string", "enum": ["system", "day", "night"] },
         "profile_id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
         "custom_profiles": { "type": "array", "items": { "$ref": "#/$defs/profile" } },
+        "socials": { "type": "array", "maxItems": 32, "items": { "$ref": "#/$defs/social" } },
         "logo": { "$ref": "#/$defs/logo" },
         "updated_at": { "type": "string", "format": "date-time" },
         "active_profile": { "$ref": "#/$defs/profile" },
         "presets": { "type": "array", "minItems": 5, "items": { "$ref": "#/$defs/profile" } }
+      }
+    },
+    "tile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "width", "height", "url"],
+      "properties": {
+        "x": { "type": "integer", "minimum": 0 },
+        "y": { "type": "integer", "minimum": 0 },
+        "width": { "type": "integer", "minimum": 1, "maximum": 512 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 512 },
+        "url": { "type": "string", "pattern": "^/gallery/tile/[A-Za-z0-9_-]{43}/(?:0|[1-9][0-9]*)/(?:0|[1-9][0-9]*)\\.webp$" }
+      }
+    },
+    "tileView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["handle", "width", "height", "tile_size", "overlap", "columns", "rows", "tiles"],
+      "properties": {
+        "handle": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+        "width": { "type": "integer", "minimum": 1 },
+        "height": { "type": "integer", "minimum": 1 },
+        "tile_size": { "type": "integer", "const": 512 },
+        "overlap": { "type": "integer", "const": 1 },
+        "columns": { "type": "integer", "minimum": 1 },
+        "rows": { "type": "integer", "minimum": 1 },
+        "tiles": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/tile" } }
       }
     }
   },
@@ -161,6 +219,14 @@
       "required": ["branding"],
       "properties": {
         "branding": { "$ref": "#/$defs/branding" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["view"],
+      "properties": {
+        "view": { "$ref": "#/$defs/tileView" }
       }
     },
     {

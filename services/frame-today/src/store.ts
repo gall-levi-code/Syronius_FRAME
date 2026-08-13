@@ -1,4 +1,4 @@
-import { access, readdir, readFile, stat } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import path from "node:path";
 
@@ -16,7 +16,6 @@ export interface TodayPhoto {
   base: string;
   filename: string;
   date_folder: string;
-  image_url: string;
   thumbnail_url: string;
   width: number | null;
   height: number | null;
@@ -132,22 +131,6 @@ export class TodayStore {
     };
   }
 
-  async requireImage(dateFolder: string, base: string): Promise<string> {
-    assertDate(dateFolder);
-    assertBase(base);
-    const directory = path.join(this.galleriesRoot, dateFolder);
-    await access(path.join(directory, `${base}.ready`));
-    try {
-      await access(path.join(directory, `${base}.trashed.json`));
-      throw new TodayRequestError("Photo is in the trash.", 404);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
-    const image = path.join(directory, `${base}.jpg`);
-    await access(image);
-    return image;
-  }
-
   private async readPhoto(dateFolder: string, base: string): Promise<TodayPhoto> {
     assertBase(base);
     const directory = path.join(this.galleriesRoot, dateFolder);
@@ -157,7 +140,6 @@ export class TodayStore {
       base,
       filename: `${base}.jpg`,
       date_folder: dateFolder,
-      image_url: `/today/image/${dateFolder}/${base}.jpg`,
       thumbnail_url: `/gallery/thumb/${dateFolder}/${base}.webp`,
       width: positiveIntegerOrNull(sidecar?.width),
       height: positiveIntegerOrNull(sidecar?.height),

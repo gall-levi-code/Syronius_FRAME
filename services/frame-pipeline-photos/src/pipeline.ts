@@ -1003,7 +1003,10 @@ export class PhotoPipeline {
   }
 
   private async clearThumbnail(dateFolder: string, base: string): Promise<void> {
-    await rm(path.join(this.config.dataRoot, "gallery-cache", dateFolder, `${base}.webp`), { force: true });
+    await Promise.all([
+      rm(path.join(this.config.dataRoot, "gallery-cache", dateFolder, `${base}.webp`), { force: true }),
+      rm(path.join(this.config.dataRoot, "gallery-cache", "tiles", dateFolder, base), { recursive: true, force: true }),
+    ]);
   }
 
   private async ensureCurrentGallery(): Promise<string> {

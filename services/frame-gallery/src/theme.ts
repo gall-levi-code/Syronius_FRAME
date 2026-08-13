@@ -34,12 +34,41 @@ export interface GalleryLogo {
   updated_at: string;
 }
 
+export const GALLERY_SOCIAL_PLATFORMS = [
+  "website",
+  "instagram",
+  "tiktok",
+  "youtube",
+  "twitch",
+  "facebook",
+  "x",
+  "threads",
+  "bluesky",
+  "discord",
+  "linkedin",
+  "reddit",
+  "snapchat",
+  "flickr",
+] as const;
+
+export type GallerySocialPlatform = typeof GALLERY_SOCIAL_PLATFORMS[number];
+
+export interface GallerySocialLink {
+  id: string;
+  platform: GallerySocialPlatform;
+  label?: string;
+  url: string;
+  graphic?: GalleryLogo;
+}
+
 export interface GalleryBranding {
   brand_name: string;
   gallery_title: string;
+  show_download_button: boolean;
   mode: GalleryThemeMode;
   profile_id: string;
   custom_profiles: GalleryThemeProfile[];
+  socials: GallerySocialLink[];
   logo: GalleryLogo | null;
   updated_at: string;
 }
@@ -55,6 +84,10 @@ export const DEFAULT_GALLERY_TITLE = "Photo Gallery";
 const DEFAULT_UPDATED_AT = "1970-01-01T00:00:00.000Z";
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 const CUSTOM_ID_PATTERN = /^custom-[a-z0-9-]{1,50}$/;
+const SOCIAL_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
+const MAX_SOCIAL_LINKS = 32;
+const MAX_SOCIAL_LABEL_LENGTH = 60;
+const MAX_SOCIAL_URL_LENGTH = 2048;
 const PALETTE_KEYS = [
   "background",
   "topbar",
@@ -84,9 +117,11 @@ export function createDefaultBranding(): GalleryBranding {
   return {
     brand_name: DEFAULT_BRAND_NAME,
     gallery_title: DEFAULT_GALLERY_TITLE,
+    show_download_button: false,
     mode: "system",
     profile_id: PRESET_PROFILES[0].id,
     custom_profiles: [],
+    socials: [],
     logo: null,
     updated_at: DEFAULT_UPDATED_AT,
   };
@@ -100,9 +135,11 @@ export function normalizeStoredBranding(value: unknown): GalleryBranding {
   return {
     brand_name: cleanText(record.brand_name, fallback.brand_name, 60),
     gallery_title: cleanText(record.gallery_title, fallback.gallery_title, 80),
+    show_download_button: typeof record.show_download_button === "boolean" ? record.show_download_button : false,
     mode: normalizeMode(record.mode, fallback.mode),
     profile_id: profileId,
     custom_profiles: customProfiles,
+    socials: normalizeStoredSocials(record.socials),
     logo: normalizeLogo(record.logo),
     updated_at: typeof record.updated_at === "string" && record.updated_at ? record.updated_at : fallback.updated_at,
   };
@@ -115,13 +152,18 @@ export function applyBrandingUpdate(previous: GalleryBranding, value: unknown, u
     previous.custom_profiles,
   );
   const profileId = normalizeProfileId(record.profile_id, previous.profile_id, customProfiles);
+  if (record.show_download_button !== undefined && typeof record.show_download_button !== "boolean") {
+    throw badRequest("Show download button must be true or false.");
+  }
   return {
     ...previous,
     brand_name: cleanText(record.brand_name, previous.brand_name, 60),
     gallery_title: cleanText(record.gallery_title, previous.gallery_title, 80),
+    show_download_button: record.show_download_button ?? previous.show_download_button,
     mode: normalizeMode(record.mode, previous.mode),
     profile_id: profileId,
     custom_profiles: customProfiles,
+    socials: record.socials === undefined ? previous.socials : validateSocials(record.socials, previous.socials),
     updated_at: updatedAt,
   };
 }
@@ -201,6 +243,86 @@ function normalizeLogo(value: unknown): GalleryLogo | null {
     height,
     updated_at: value.updated_at,
   };
+}
+
+function normalizeStoredSocials(value: unknown): GallerySocialLink[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const socials: GallerySocialLink[] = [];
+  for (const item of value.slice(0, MAX_SOCIAL_LINKS)) {
+    const social = normalizeStoredSocial(item);
+    if (!social || seen.has(social.id)) continue;
+    seen.add(social.id);
+    socials.push(social);
+  }
+  return socials;
+}
+
+function normalizeStoredSocial(value: unknown): GallerySocialLink | null {
+  if (!isRecord(value) || typeof value.id !== "string" || !SOCIAL_ID_PATTERN.test(value.id)) return null;
+  if (!isSocialPlatform(value.platform)) return null;
+  const url = canonicalHttpUrl(value.url);
+  if (!url) return null;
+  const label = cleanOptionalText(value.label, MAX_SOCIAL_LABEL_LENGTH);
+  const graphic = normalizeLogo(value.graphic);
+  return {
+    id: value.id,
+    platform: value.platform,
+    ...(label ? { label } : {}),
+    url,
+    ...(graphic && graphic.width === graphic.height ? { graphic } : {}),
+  };
+}
+
+function validateSocials(value: unknown, previous: GallerySocialLink[]): GallerySocialLink[] {
+  if (!Array.isArray(value)) throw badRequest("Social links must be an array.");
+  if (value.length > MAX_SOCIAL_LINKS) throw badRequest(`Social links are limited to ${MAX_SOCIAL_LINKS}.`);
+  const seen = new Set<string>();
+  const previousById = new Map(previous.map((social) => [social.id, social]));
+  return value.map((item, index) => {
+    if (!isRecord(item)) throw badRequest(`Social link ${index + 1} is invalid.`);
+    if (typeof item.id !== "string" || !SOCIAL_ID_PATTERN.test(item.id)) {
+      throw badRequest(`Social link ${index + 1} must have a valid id.`);
+    }
+    if (seen.has(item.id)) throw badRequest(`Social link id "${item.id}" is duplicated.`);
+    seen.add(item.id);
+    if (!isSocialPlatform(item.platform)) throw badRequest(`Social link ${index + 1} has an unsupported platform.`);
+    if (item.label !== undefined && typeof item.label !== "string") {
+      throw badRequest(`Social link ${index + 1} has an invalid label.`);
+    }
+    if (typeof item.label === "string" && item.label.length > MAX_SOCIAL_LABEL_LENGTH) {
+      throw badRequest(`Social link labels are limited to ${MAX_SOCIAL_LABEL_LENGTH} characters.`);
+    }
+    const url = canonicalHttpUrl(item.url);
+    if (!url) throw badRequest(`Social link ${index + 1} must use a valid http or https URL.`);
+    const label = cleanOptionalText(item.label, MAX_SOCIAL_LABEL_LENGTH);
+    const graphic = previousById.get(item.id)?.graphic;
+    return { id: item.id, platform: item.platform, ...(label ? { label } : {}), url, ...(graphic ? { graphic } : {}) };
+  });
+}
+
+function isSocialPlatform(value: unknown): value is GallerySocialPlatform {
+  return typeof value === "string" && (GALLERY_SOCIAL_PLATFORMS as readonly string[]).includes(value);
+}
+
+function canonicalHttpUrl(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim() || value.length > MAX_SOCIAL_URL_LENGTH) return null;
+  try {
+    const url = new URL(value.trim());
+    if ((url.protocol !== "http:" && url.protocol !== "https:") || !url.hostname || url.username || url.password) return null;
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
+function cleanOptionalText(value: unknown, maxLength: number): string | undefined {
+  if (typeof value !== "string") return undefined;
+  return value.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, maxLength) || undefined;
+}
+
+function badRequest(message: string): Error & { status: number } {
+  return Object.assign(new Error(message), { status: 400 });
 }
 
 function normalizeHexColor(value: unknown, fallback: string): string {
