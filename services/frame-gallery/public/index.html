@@ -32,7 +32,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
     <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js" integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU" crossorigin="anonymous"></script>
-    <link rel="stylesheet" href="/gallery/assets/styles.css?v=gallery-viewer-modes-1">
+    <link rel="stylesheet" href="/gallery/assets/styles.css?v=gallery-sticky-header-2">
   </head>
   <body>
     <header class="topbar">
@@ -41,7 +41,12 @@
           <img id="brand-logo" src="/gallery/assets/frame-logo-square.svg" alt="">
           <span><small id="brand-name">Syronius FRAME</small><strong id="gallery-title">Photo Gallery</strong></span>
         </a>
-        <button id="socials-button" class="secondary-button socials-button" type="button" hidden>Socials</button>
+        <button id="socials-button" class="secondary-button socials-button" type="button" aria-label="Socials — Connect with me" aria-haspopup="dialog" aria-controls="socials-dialog" hidden>
+          <span class="socials-reel" aria-hidden="true">
+            <span class="socials-label socials-label-default">Socials</span>
+            <span class="socials-label socials-label-invite">Connect with me!</span>
+          </span>
+        </button>
       </div>
       <div class="topbar-actions">
         <div class="summary">
