@@ -206,7 +206,14 @@ test("Stream Management supports a direct add-stream deep link", async () => {
   assert.ok(frontend.includes('"#add-stream"'), "SLSUI must recognize /slsui#add-stream");
   assert.ok(frontend.includes("clearAddStreamHash"), "SLSUI must clear the add-stream hash after the dialog closes");
   assert.ok(html.includes('class="brand brand-link" href="/dashboard"'), "Stream Management logo should return to the LAN dashboard");
-  assert.ok(html.includes("app.js?v=stream-delete-dialog-v1"), "SLSUI app cache key should change when management behavior changes");
+  assert.ok(html.includes("app.js?v=srt-player-local-v1"), "SLSUI app cache key should change when management behavior changes");
+});
+
+test("Stream Management keeps SRT player links local", async () => {
+  const frontend = await readFile("services/frame-streams/public/app.js", "utf8");
+  assert.ok(frontend.includes('["SRT player", `srt://localhost:${ports.player}?streamid=${stream.player}`]'));
+  assert.ok(frontend.includes('["SRTLA publisher", `srtla://${host}:${ports.srtla}?streamid=${stream.publisher}`]'));
+  assert.ok(frontend.includes('["Direct SRT publisher", `srt://${host}:${ports.sender}?streamid=${stream.publisher}`]'));
 });
 
 test("Stream Management deletes streams through a themed unbind dialog", async () => {
