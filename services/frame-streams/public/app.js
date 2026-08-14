@@ -232,7 +232,7 @@ function openLinks(id) {
   const links = [
     ["SRTLA publisher", `srtla://${host}:${ports.srtla}?streamid=${stream.publisher}`],
     ["Direct SRT publisher", `srt://${host}:${ports.sender}?streamid=${stream.publisher}`],
-    ["SRT player", `srt://${host}:${ports.player}?streamid=${stream.player}`],
+    ["SRT player", `srt://localhost:${ports.player}?streamid=${stream.player}`],
     ["FRAME statistics", statsUrl(stream.id)],
     ["BBox Receiver statistics", statsUrl(stream.id, "bbox_receiver")],
   ];

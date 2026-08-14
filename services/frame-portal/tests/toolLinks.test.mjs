@@ -87,7 +87,7 @@ test("collects only sanitized generated links and keeps them on the public dashb
   assert.deepEqual(groups.streams[0].links, [
     { label: "SRTLA publisher", url: "srtla://relay.example.com:5000?streamid=live_main", openable: false },
     { label: "Direct SRT publisher", url: "srt://relay.example.com:4001?streamid=live_main", openable: false },
-    { label: "SRT player", url: "srt://relay.example.com:4000?streamid=play_main", openable: false },
+    { label: "SRT player", url: "srt://localhost:4000?streamid=play_main", openable: false },
     { label: "FRAME statistics", url: "/stats/play_main", openable: true },
     { label: "BBox Receiver statistics", url: "/stats/play_main?output=bbox_receiver", openable: true },
   ]);
@@ -106,6 +106,20 @@ test("collects only sanitized generated links and keeps them on the public dashb
   const serialized = JSON.stringify(groups);
   assert.ok(!serialized.includes("not-exposed"));
   assert.ok(!serialized.includes("lan-only"));
+
+  const streamSettings = payloads.get("streams.test/slsui/api/config");
+  payloads.set("streams.test/slsui/api/config", {
+    ...streamSettings,
+    relay_host: "",
+    ports: { ...streamSettings.ports, player: 4100 },
+  });
+  const localPlayerGroups = await collectToolLinkGroups(config, stack, request);
+  assert.deepEqual(localPlayerGroups.streams[0].links, [
+    { label: "SRT player", url: "srt://localhost:4100?streamid=play_main", openable: false },
+    { label: "FRAME statistics", url: "/stats/play_main", openable: true },
+    { label: "BBox Receiver statistics", url: "/stats/play_main?output=bbox_receiver", openable: true },
+  ]);
+  payloads.set("streams.test/slsui/api/config", streamSettings);
 
   const belaboxStatus = payloads.get("belabox.test/belabox/api/status");
   payloads.set("belabox.test/belabox/api/status", { ...belaboxStatus, remote_belaui: { enabled: false } });

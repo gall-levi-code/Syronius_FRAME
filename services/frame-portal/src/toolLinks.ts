@@ -49,15 +49,15 @@ async function streamLinks(
     const id = token(stream.id, 3, 128);
     if (!id) return [];
     const links: PortalLink[] = [];
-    if (stream.source_type === "sls" && relayHost && ports) {
+    if (stream.source_type === "sls" && ports) {
       const publisher = token(stream.publisher, 3, 128);
       const player = token(stream.player, 3, 128);
       const srtla = port(ports.srtla);
       const sender = port(ports.sender);
       const receiver = port(ports.player);
-      if (publisher && srtla) links.push(copyLink("SRTLA publisher", `srtla://${relayHost}:${srtla}?streamid=${publisher}`));
-      if (publisher && sender) links.push(copyLink("Direct SRT publisher", `srt://${relayHost}:${sender}?streamid=${publisher}`));
-      if (player && receiver) links.push(copyLink("SRT player", `srt://${relayHost}:${receiver}?streamid=${player}`));
+      if (publisher && srtla && relayHost) links.push(copyLink("SRTLA publisher", `srtla://${relayHost}:${srtla}?streamid=${publisher}`));
+      if (publisher && sender && relayHost) links.push(copyLink("Direct SRT publisher", `srt://${relayHost}:${sender}?streamid=${publisher}`));
+      if (player && receiver) links.push(copyLink("SRT player", `srt://localhost:${receiver}?streamid=${player}`));
     }
     const statsUrl = `${statsRoot}/${encodeURIComponent(id)}`;
     links.push(
