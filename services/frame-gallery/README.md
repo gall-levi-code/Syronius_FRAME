@@ -19,7 +19,7 @@ Use it if you want to:
 - Hide or restore photos from the gallery.
 - Permanently delete published gallery copies when needed.
 - Choose each album's gallery cover.
-- Customize gallery branding, logo, and visitor download controls.
+- Customize gallery branding, logo, social links, and visitor download controls.
 
 ## What You Use It For
 
@@ -32,6 +32,7 @@ Common uses:
 - Remove unwanted photos from public view.
 - Restore photos that were hidden by mistake.
 - Match the gallery branding to your stream, event, or production.
+- Add ordered social/profile links with platform icons and optional custom graphics.
 - Control whether visitors can view and download the full gallery JPEG.
 - Correct camera-to-GPX clock differences and manually place unmatched photos.
 
@@ -81,6 +82,7 @@ On the public gallery, viewers can:
 - View photos through page-bound tiles when downloads are disabled, or the full gallery JPEG when downloads are enabled.
 - Switch between Photos and Explore when a day has attached route data.
 - Select a mapped photo from its thumbnail, lightbox, map marker, or Explore photo strip.
+- Open the configured social/profile links from the gallery header.
 - Switch day/night mode when enabled.
 
 On the admin page, operators can:
@@ -93,6 +95,7 @@ On the admin page, operators can:
 - Adjust camera-to-GPX timing and manually place photos that do not match a route.
 - Choose or clear a custom cover for each album.
 - Change the gallery title, brand name, and logo.
+- Add, reorder, label, and optionally illustrate social/profile links.
 - Enable or disable full gallery JPEG downloads for every public gallery.
 
 Trash is reversible. Permanent delete is not.
@@ -128,8 +131,8 @@ The public gallery can be shared with viewers when your FRAME access rules allow
 
 The admin page should stay login-protected.
 
-Photo Gallery asks Photo Pipeline to hide, restore, or delete photos. It does not edit the published
-photo files directly.
+Photo Gallery asks Photo Pipeline to hide, restore, or delete photos and albums. It does not edit the
+published photo files directly.
 
 When downloads are disabled, public lightbox photos are delivered as short-lived, page-bound tiles and
 FRAME does not expose a public full-image route. When downloads are enabled, the lightbox and Download

@@ -27,6 +27,10 @@ Supported overlay feeds:
 | BELABOX cloud telemetry | BELABOX-compatible stream health from a connected telemetry source. |
 | Live photo upload progress | Browser upload, FTP ingest, and Belabox connector progress for incoming photo files. |
 
+Upload-progress sources follow one canonical photo journey across receipt, transfer, processing,
+and publication. A journey completes only after Photo Pipeline publishes the image and writes its
+`.ready` sidecar; the renderer then shows a short completion bubble before resetting.
+
 The main thing users create is a **Source**.
 
 A Source is the OBS browser-source URL plus the data feed and visual settings behind it. The wizard
@@ -101,6 +105,10 @@ In OBS:
 
 Editing a Source keeps the same OBS URL. You should not need to re-add the browser source in OBS
 after normal changes.
+
+Built-in templates are immutable. Creating a Source makes a reusable preset from the selected
+template, and the permanent OBS URL slug is chosen before the first save. Connectivity and upload
+presets remain type-isolated so photo settings cannot overwrite the stock connectivity design.
 
 ## Relies Upon
 

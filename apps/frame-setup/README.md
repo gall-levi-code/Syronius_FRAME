@@ -1,7 +1,6 @@
 # FRAME Setup
 
-FRAME Setup is the native host-facing installer and launcher prototype for the reduced Scenario 2
-stack.
+FRAME Setup is the native host-facing installer and launcher prototype for the FRAME stack.
 
 It is intentionally split from the container web UI:
 
@@ -10,9 +9,10 @@ It is intentionally split from the container web UI:
 - The container web UI handles app concerns: tutorials, service-specific setup, OBS URLs, auth,
   Cloudflare, profiles, overlays, and operator controls.
 
-The native Install FRAME action can detect host state, check ports, write
+The native Install FRAME action can detect host state, check TCP and UDP ports, write
 `state/frame-install-plan.json`, generate the stack `.env` and `docker-compose.yml`, prepare the
-selected data folders, run `docker compose config --quiet`, start the stack with
+selected data folders, generate the capability-aware stack config and tunnel ingress, run
+`docker compose config --quiet`, start the stack with
 `docker compose up -d --build --remove-orphans`, and open `http://localhost/setup`.
 During install, the UI streams progress from the native backend and waits for the FRAME web edge to
 accept connections before launching the browser.
@@ -26,6 +26,16 @@ install root before running Docker Compose.
 - **Guided Setup** explains each service and lets the user opt in with checkboxes.
 - **Advanced** exposes the environment-variable model and subfolder overrides.
 
+## Deployment modes
+
+- **LAN** keeps browser tools on the local FRAME edge and does not expose tunnel routes.
+- **Hybrid** validates a public browser hostname, generates the Cloudflare ingress allowlist, and
+  accepts a separate `PUBLIC_RELAY_HOST` for SRTLA/SRT publishers.
+
+Selecting **Belabox Manager** switches the plan to Hybrid because managed agents require the public,
+authenticated `wss://.../belabox/control` endpoint. Initial agent installation and repair still use
+the Belabox's LAN SSH connection.
+
 ## Exposed ports
 
 The target Scenario 2 stack exposes only:
@@ -34,7 +44,8 @@ The target Scenario 2 stack exposes only:
 - Photo FTP control and passive range, when FTP ingest is enabled.
 - SRTLA/SRT UDP ports, when Stream Relay is enabled.
 
-Other tools route through FRAME Edge.
+Other tools route through FRAME Edge. Hybrid web access uses an outbound Cloudflare Tunnel rather
+than opening another inbound management port.
 
 ## Development
 

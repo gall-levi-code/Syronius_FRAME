@@ -115,8 +115,10 @@ removed.
   - [x] Bind latency, download, and upload requests to each route-checked Belabox IPv4 interface.
   - [x] Offer an external Internet target using Cloudflare and an authenticated FRAME endpoint target.
   - [x] Run all-interface tests sequentially and report latency/download/upload results per interface.
-- Keep remote photo overlay widgets in their own schema/preset namespace so they do not overwrite FRAME's stock connectivity presets.
-- Refactor the overlay wizard so stock defaults are immutable, OBS URL slugs can be chosen before first save, and saving a renamed preset creates a new preset instead of rewriting `default-connectivity`.
+- [x] Supersede separate remote-photo widget presets with the shared, type-isolated upload-progress
+  schema so photo settings cannot overwrite FRAME's stock connectivity presets.
+- [x] Refactor the overlay wizard so stock defaults are immutable, OBS URL slugs can be chosen before
+  first save, and renamed presets are created separately instead of rewriting `default-connectivity`.
 - Belabox Manager UX completion goal: make first-time setup, daily monitoring, photo transfer, and
   maintenance understandable without requiring knowledge of transport protocols, SSH jobs, or egress internals.
   - [ ] Phase UX-6 - Production verification: test desktop/mobile layouts, keyboard and focus behavior,
