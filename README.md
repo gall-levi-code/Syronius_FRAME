@@ -5,7 +5,7 @@
 </p>
 
 FRAME is a modular, Docker-based streaming appliance for IRL and live production workflows.
-The official project name is FRAME; the full styled name is Syronius' F.R.A.M.E.
+F.R.A.M.E. is an acronym for "Federated Relay and Automation of Media and Experiences".
 
 This repository is the platform stack: a shared portal, routing edge, video relay, Belabox remote
 management, OBS overlays, photo upload and gallery tools, Photo Stage controls, audio tools, and an
