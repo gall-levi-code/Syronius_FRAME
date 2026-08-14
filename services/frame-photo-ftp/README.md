@@ -70,6 +70,9 @@ For external uploads, forward these to the FRAME computer:
 - The full passive port range
 
 After upload, FRAME waits until the file is finished before handing it to the Photo Pipeline.
+During receipt, the upload-progress feed reports the growing file size and transfer speed. Standard
+FTP does not tell FRAME the final file size in advance, so a true percentage is unavailable until
+the file is staged and correlated with its canonical photo journey.
 
 ## Relies Upon
 

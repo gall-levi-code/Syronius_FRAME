@@ -29,6 +29,8 @@ Common uses:
 - View live logs for troubleshooting.
 - Restart services, if that option has been enabled by the operator.
 - Confirm whether a tool is available locally only or safe to open through Hybrid/public access.
+- Copy configured stream, overlay, listener, encoder-remote, and Video Mixer links without opening
+  each tool first.
 
 ## How To Install
 
@@ -78,6 +80,11 @@ http://localhost/dashboard
 ```
 
 Use the dashboard to open enabled FRAME tools.
+
+When a tool card has a **Links** action, open it to copy or launch the live links FRAME has collected
+for that tool. Stream links include publisher, local player, and statistics URLs; other cards can
+show OBS browser sources, Audio Monitor listener pages, and per-device Belabox remote or Mixer links.
+Only links for currently configured resources are shown.
 
 Use the status page to check the stack:
 

@@ -82,6 +82,10 @@ To create a FRAME relay stream:
 4. Copy the player link into the tool that will receive or preview the feed.
 5. Watch the stream stats to confirm the feed is stable.
 
+Publisher links use the configured `PUBLIC_RELAY_HOST` so remote senders can reach FRAME. Player
+links intentionally use `localhost` because playback is consumed on the FRAME host; replace it with
+the FRAME machine's LAN address only when the player runs on another trusted LAN device.
+
 When Belabox Manager is enabled, SLS stream profiles with publisher keys are also exported to the
 FRAME Remote belaUI relay list. The relay destination uses `PUBLIC_RELAY_HOST` and `SRTLA_PORT`,
 while each profile name becomes a selectable relay account. Profiles without publisher keys are not

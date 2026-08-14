@@ -27,7 +27,7 @@ Common uses:
 - Let trusted remote helpers send photos through FRAME Tunnel.
 - Add screenshots, phone photos, or edited images to the FRAME photo workflow.
 - Queue several files at once and see which ones were accepted.
-- Feed future upload-progress overlays and status views.
+- Feed live upload-progress overlays and status views through the shared photo journey.
 
 Photo Upload does not decide which images become public. It safely receives the files, then the
 Photo Pipeline validates, converts, and publishes them.
@@ -104,6 +104,10 @@ Optional connections:
 ## Notes For Operators
 
 Photo Upload writes completed uploads into the shared FRAME photo staging flow.
+
+Each accepted file receives a durable journey ID. FRAME uses that ID to correlate browser receipt,
+pipeline processing, publication, retries, and the upload-progress overlay without treating the same
+photo as several unrelated transfers.
 
 The Photo Pipeline remains responsible for validating files, converting images, updating gallery
 data, and rejecting unsupported uploads.

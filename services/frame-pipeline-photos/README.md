@@ -55,7 +55,9 @@ Use your chosen photo input to add photos.
 Photo Pipeline processes accepted files, publishes them to shared gallery data, and updates the
 latest-photo state automatically.
 
-Use Photo Gallery Admin to hide, restore, permanently delete, or empty trashed gallery photos.
+Use Photo Gallery Admin to hide, restore, permanently delete, or empty trashed gallery photos and
+albums. Photo Pipeline recalculates the authoritative latest-photo state after those changes so
+Photo Stage does not point at a hidden or deleted image.
 
 Open `/pipeline` from FRAME Portal to set the published JPG long edge, quality, and maximum output
 file size. These settings apply to new photos only.
