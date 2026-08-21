@@ -231,6 +231,7 @@ test("persists branding settings and constrains uploaded logos", async () => {
   assert.equal(defaults.presets.length, 5);
   assert.deepEqual(defaults.custom_profiles, []);
   assert.deepEqual(defaults.socials, []);
+  assert.deepEqual(defaults.supports, []);
   assert.equal(defaults.show_download_button, false);
   assert.equal(defaults.mode, "system");
   assert.equal(defaults.logo, null);
@@ -253,6 +254,9 @@ test("persists branding settings and constrains uploaded logos", async () => {
       { id: "instagram-main", platform: "instagram", label: " North Studio ", url: "HTTPS://Instagram.COM/northstudio" },
       { id: "portfolio", platform: "website", url: "https://photos.example.com" },
     ],
+    supports: [
+      { id: "paypal-main", platform: "paypal", label: " Support North Studio ", url: "HTTPS://PAYPAL.ME/northstudio" },
+    ],
   });
   assert.equal(updated.brand_name, "North Studio");
   assert.equal(updated.show_download_button, true);
@@ -266,6 +270,9 @@ test("persists branding settings and constrains uploaded logos", async () => {
   assert.deepEqual(updated.socials, [
     { id: "instagram-main", platform: "instagram", label: "North Studio", url: "https://instagram.com/northstudio" },
     { id: "portfolio", platform: "website", url: "https://photos.example.com/" },
+  ]);
+  assert.deepEqual(updated.supports, [
+    { id: "paypal-main", platform: "paypal", label: "Support North Studio", url: "https://paypal.me/northstudio" },
   ]);
   assert.deepEqual((await new GalleryStore(root, 320, 80).getBranding()).socials, updated.socials);
   await assert.rejects(
@@ -589,6 +596,7 @@ test("gallery admin is protected and proxies management through the internal ser
         profile_id: "custom-launch-orange",
         custom_profiles: [{ id: "custom-launch-orange", name: "Launch Orange", theme_color: "#ff6600" }],
         socials: [{ id: "flickr-main", platform: "flickr", label: "Event photos", url: "https://www.flickr.com/photos/frame" }],
+        supports: [{ id: "kofi-main", platform: "kofi", label: "Support FRAME", url: "https://ko-fi.com/frame" }],
       }),
     }).then((response) => response.json());
     assert.equal(branding.branding.brand_name, "North Studio");
@@ -599,6 +607,7 @@ test("gallery admin is protected and proxies management through the internal ser
     assert.equal(publicBranding.gallery_title, "Launch Photos");
     assert.equal(publicBranding.show_download_button, true);
     assert.equal(publicBranding.socials[0].platform, "flickr");
+    assert.equal(publicBranding.supports[0].platform, "kofi");
     const graphicDataUrl = `data:image/png;base64,${(await pngBuffer(500, 240, "#ff6600")).toString("base64")}`;
     assert.equal((await fetch(`${base}/gallery/admin/api/branding/socials/flickr-main/graphic`, {
       method: "POST",
@@ -726,8 +735,10 @@ test("wires cover selection, global downloads, flowing photos, and viewer modes 
   assert.match(adminHtml, /class="photo-details">\s*<span><strong><\/strong><small><\/small><\/span>\s*<button class="trash-photo-button icon-danger-button"/);
   assert.doesNotMatch(adminHtml, /class="photo-actions"/);
   assert.match(adminHtml, /class="cover-star"[^>]+role="img"[^>]+aria-label="Current gallery cover"[^>]*>\s*<svg[^>]+viewBox="0 0 24 24"/);
-  assert.match(adminHtml, /admin\.css\?v=gallery-owner-settings-9/);
-  assert.match(adminHtml, /admin\.js\?v=gallery-owner-settings-9/);
+  assert.match(adminHtml, /admin\.css\?v=gallery-owner-settings-10/);
+  assert.match(adminHtml, /admin\.js\?v=gallery-owner-settings-11/);
+  assert.match(adminHtml, /id="support-tab"[^>]+aria-controls="support-view"/);
+  assert.match(adminHtml, /FRAME will usually identify it automatically/);
   assert.match(adminScript, /cover_base: photo\.base/);
   assert.match(adminScript, /card\.querySelector\("img"\)\.alt = ""/);
   assert.match(adminScript, /trash: `<svg class="trash-icon"[^>]+><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 11v6M14 11v6"\/><\/svg>`/);
@@ -812,8 +823,11 @@ test("wires cover selection, global downloads, flowing photos, and viewer modes 
   assert.match(galleryStyles, /\.social-link-identity\s*\{[^}]*color:\s*inherit[^}]*text-decoration:\s*none/);
   assert.match(galleryStyles, /\.social-link-identity:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--accent\)/);
   assert.match(galleryHtml, /id="socials-button"[^>]*aria-label="Socials — Connect with me"[^>]*aria-haspopup="dialog"[^>]*aria-controls="socials-dialog"/);
+  assert.match(galleryHtml, /id="support-button"[^>]*aria-label="Support — Support this creator"[^>]*aria-haspopup="dialog"[^>]*aria-controls="support-dialog"/);
   assert.match(galleryHtml, /class="socials-reel" aria-hidden="true"[^>]*>[\s\S]*Socials[\s\S]*Connect with me!/);
   assert.match(galleryStyles, /\.socials-button\s*\{[^}]*width:\s*82px[^}]*height:\s*38px[^}]*animation:\s*socials-bounce 8s/);
+  assert.match(galleryStyles, /\.support-button\s*\{[^}]*width:\s*88px[^}]*background:\s*var\(--secondary\)[^}]*animation:\s*socials-bounce 8s ease-in-out 1\.4s/);
+  assert.match(galleryStyles, /\.support-label-default\s*\{[^}]*animation:\s*socials-default-label 8s ease-in-out 1\.4s/);
   assert.match(galleryStyles, /\.socials-reel\s*\{[^}]*overflow:\s*hidden/);
   assert.match(galleryStyles, /\.socials-label-invite\s*\{[^}]*left:\s*100%[^}]*width:\s*max-content/);
   assert.match(galleryStyles, /@keyframes socials-default-label/);
@@ -823,8 +837,8 @@ test("wires cover selection, global downloads, flowing photos, and viewer modes 
   assert.match(galleryStyles, /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*\.socials-label-invite\s*\{\s*display:\s*none/);
   assert.match(galleryStyles, /html, body\s*\{[^}]*overflow-x:\s*clip/);
   assert.match(galleryStyles, /\.topbar\s*\{[^}]*position:\s*sticky[^}]*z-index:\s*1100[^}]*top:\s*0/);
-  assert.match(galleryHtml, /styles\.css\?v=gallery-sticky-header-2/);
-  assert.match(galleryHtml, /gallery\.js\?v=gallery-viewer-modes-1/);
+  assert.match(galleryHtml, /styles\.css\?v=gallery-support-2/);
+  assert.match(galleryHtml, /gallery\.js\?v=gallery-support-1/);
   assert.doesNotMatch(galleryScript, /photo\.image_url/);
   assert.match(galleryScript, /openPhotoBase/);
   assert.match(galleryScript, /options\.lightboxBase/);

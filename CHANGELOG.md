@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Added host-level mDNS discovery for `http://frame.local`, tied to the FRAME stack lifecycle.
 - Added staged Hybrid installation, a pinned Cloudflare Tunnel connector, and an internal-only
   public gateway that enforces generated capability-aware route allowlists.
 - Added safe public Audio Monitor listener APIs and separate LAN capture/public listener base URLs.

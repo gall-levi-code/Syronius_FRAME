@@ -177,6 +177,56 @@ photo_ftp_passive_host_default() {
   printf "%s" "$current"
 }
 
+frame_discovery_state_path() {
+  data_root=$(host_data_path "$(env_value FRAME_DATA_ROOT ./data)")
+  printf "%s/state/frame-mdns.pid" "$data_root"
+}
+
+stop_frame_discovery() {
+  state_path=$(frame_discovery_state_path)
+  [ -f "$state_path" ] || return 0
+  while IFS= read -r pid; do
+    case "$pid" in
+      *[!0-9]*|'') continue ;;
+    esac
+    command_line=$(ps -p "$pid" -o command= 2>/dev/null || true)
+    case "$command_line" in
+      *frame.local*dns-sd*|*dns-sd*frame.local*|*frame.local*avahi-publish*|*avahi-publish*frame.local*) kill "$pid" 2>/dev/null || true ;;
+    esac
+  done < "$state_path"
+  rm -f "$state_path"
+}
+
+start_frame_discovery() {
+  stop_frame_discovery
+  address=$(lan_ipv4_candidates | awk 'NR == 1 { print; exit }')
+  if [ -z "$address" ]; then
+    echo "FRAME is running, but no private LAN address was found for frame.local discovery." >&2
+    return 0
+  fi
+  port=$(env_value EDGE_HTTP_PORT 80)
+  state_path=$(frame_discovery_state_path)
+  state_dir=${state_path%/*}
+  mkdir -p "$state_dir"
+  log_path="$state_dir/frame-mdns.log"
+  : > "$state_path"
+  if command -v dns-sd >/dev/null 2>&1; then
+    nohup dns-sd -P FRAME _http._tcp local "$port" frame.local "$address" path=/dashboard >"$log_path" 2>&1 &
+    printf "%s\n" "$!" > "$state_path"
+  elif command -v avahi-publish >/dev/null 2>&1; then
+    nohup avahi-publish -a frame.local "$address" >"$log_path" 2>&1 &
+    printf "%s\n" "$!" > "$state_path"
+    nohup avahi-publish -s FRAME _http._tcp "$port" path=/dashboard >>"$log_path" 2>&1 &
+    printf "%s\n" "$!" >> "$state_path"
+  else
+    rm -f "$state_path"
+    echo "FRAME is running, but dns-sd/avahi-publish is unavailable; frame.local was not advertised." >&2
+    return 0
+  fi
+  if [ "$port" = "80" ]; then url=http://frame.local; else url="http://frame.local:$port"; fi
+  echo "FRAME is available on the LAN at $url"
+}
+
 read_photo_ftp_passive_host() {
   default=$(photo_ftp_passive_host_default)
   detected=$(lan_ipv4_candidates | awk '!seen[$0]++' | paste -sd ', ' -)
@@ -335,6 +385,7 @@ start_stack() {
   if [ "$(env_value FRAME_MODE LAN)" = "HYBRID" ]; then
     compose up -d --force-recreate --no-deps --wait --wait-timeout 60 frame-public-gateway
   fi
+  start_frame_discovery
   echo "FRAME stack reconciliation completed."
 }
 
@@ -673,12 +724,13 @@ interactive_menu() {
         fi
         pause_menu
         ;;
-      9) if yes_no "Stop the complete FRAME stack?"; then compose down; fi; pause_menu ;;
+      9) if yes_no "Stop the complete FRAME stack?"; then stop_frame_discovery; compose down; fi; pause_menu ;;
       10) advanced_setting; readiness_flow; pause_menu ;;
       11)
         printf "Reset removes FRAME's generated config and data. Type RESET to continue: "
         read -r answer
         if [ "$answer" = "RESET" ]; then
+          stop_frame_discovery
           [ ! -f "$ROOT_DIR/docker-compose.yml" ] || compose down --remove-orphans
           runtime reset --yes
         fi
@@ -751,7 +803,14 @@ case "$COMMAND" in
   start)
     start_stack
     ;;
+  discovery-start)
+    start_frame_discovery
+    ;;
+  discovery-stop)
+    stop_frame_discovery
+    ;;
   stop)
+    stop_frame_discovery
     compose down
     ;;
   status)
@@ -774,6 +833,7 @@ case "$COMMAND" in
         exit 1
       }
     fi
+    stop_frame_discovery
     [ ! -f "$ROOT_DIR/docker-compose.yml" ] || compose down --remove-orphans
     runtime reset --yes
     ;;

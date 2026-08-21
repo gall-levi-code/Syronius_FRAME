@@ -27,4 +27,5 @@ restricted `frame-docker-proxy`.
 - New services can attach a route by adding labels and keeping browser requests inside that prefix.
 - The socket proxy also permits the read-only Docker events, network, ping, and version endpoints
   required by Traefik discovery.
-- The first implementation is LAN HTTP only. HTTPS and HYBRID tunnel exposure remain follow-up work.
+- LAN HTTP is the intended direct-access model; FRAME-owned LAN TLS is out of scope per ADR 0013.
+  HYBRID tunnel exposure is defined separately in ADR 0005.

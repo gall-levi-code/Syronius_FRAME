@@ -1,5 +1,6 @@
 import { buildGalleryShareUrls, captureTimestamp, matchExplorePhotos, routeSegments, simulatedRouteSegments } from "./explore.js?v=gallery-share-7";
-import { SOCIAL_PLATFORMS, socialIcon } from "./socials.js?v=gallery-socials-4";
+import { SOCIAL_PLATFORMS, socialIcon } from "./socials.js?v=gallery-socials-6";
+import { SUPPORT_PLATFORMS, supportIcon } from "./support.js?v=gallery-support-1";
 import { layoutJustifiedRows } from "./justified-rows.js?v=gallery-justified-1";
 
 const elements = {
@@ -19,6 +20,10 @@ const elements = {
   socialsDialog: document.querySelector("#socials-dialog"),
   socialsList: document.querySelector("#socials-list"),
   socialsStatus: document.querySelector("#socials-status"),
+  supportButton: document.querySelector("#support-button"),
+  supportDialog: document.querySelector("#support-dialog"),
+  supportList: document.querySelector("#support-list"),
+  supportStatus: document.querySelector("#support-status"),
   socialQrDialog: document.querySelector("#social-qr-dialog"),
   socialQrCode: document.querySelector("#social-qr-code"),
   socialQrTitle: document.querySelector("#social-qr-title"),
@@ -113,6 +118,7 @@ const state = {
   signature: "",
   branding: null,
   socialSignature: "",
+  supportSignature: "",
   userThemeMode: readStoredTheme(),
   zoomMode: "fit",
   zoomValue: DEFAULT_ZOOM,
@@ -145,6 +151,7 @@ setCopyButton(elements.copyExploreUrl, "Explore view");
 
 elements.themeToggle.addEventListener("click", toggleTheme);
 elements.socialsButton.addEventListener("click", openSocialsDialog);
+elements.supportButton.addEventListener("click", openSupportDialog);
 elements.photosView.addEventListener("click", () => setGalleryView("photos", { history: "push" }));
 elements.exploreView.addEventListener("click", () => setGalleryView("explore", { history: "push" }));
 elements.explorePrevious.addEventListener("click", () => moveExplore(-1));
@@ -288,6 +295,7 @@ function applyBranding() {
     if (elements.brandLogo.getAttribute("src") !== logoUrl) elements.brandLogo.src = logoUrl;
     elements.brandLogo.alt = branding.logo ? `${branding.brand_name} logo` : "";
     renderSocials();
+    renderSupports();
   }
   if (palette) {
     const root = document.documentElement;
@@ -328,13 +336,40 @@ function renderSocials() {
   state.socialSignature = signature;
   elements.socialsList.replaceChildren(...socials.map(socialRow));
   if (!socials.length && elements.socialsDialog.open) elements.socialsDialog.close();
-  if (elements.socialQrDialog.open) {
+  if (elements.socialQrDialog.open && elements.socialQrDialog.dataset.linkKind !== "support") {
     const active = socials.find((link) => link.id === elements.socialQrDialog.dataset.socialId);
     if (!active) {
       elements.socialQrDialog.close();
     } else {
       const platform = SOCIAL_PLATFORMS.find((entry) => entry.id === active.platform) || SOCIAL_PLATFORMS[0];
-      if (!renderSocialQr(active, platform.label)) elements.socialQrDialog.close();
+      if (!renderSocialQr(active, platform.label, "social")) elements.socialQrDialog.close();
+    }
+  }
+}
+
+async function openSupportDialog() {
+  await loadBranding();
+  if (!state.branding?.supports?.length) return;
+  elements.supportStatus.textContent = "";
+  elements.supportStatus.removeAttribute("data-error");
+  elements.supportDialog.showModal();
+}
+
+function renderSupports() {
+  const supports = Array.isArray(state.branding?.supports) ? state.branding.supports : [];
+  elements.supportButton.hidden = supports.length === 0;
+  const signature = JSON.stringify(supports);
+  if (signature === state.supportSignature) return;
+  state.supportSignature = signature;
+  elements.supportList.replaceChildren(...supports.map(supportRow));
+  if (!supports.length && elements.supportDialog.open) elements.supportDialog.close();
+  if (elements.socialQrDialog.open && elements.socialQrDialog.dataset.linkKind === "support") {
+    const active = supports.find((link) => link.id === elements.socialQrDialog.dataset.socialId);
+    if (!active) {
+      elements.socialQrDialog.close();
+    } else {
+      const platform = SUPPORT_PLATFORMS.find((entry) => entry.id === active.platform) || SUPPORT_PLATFORMS[0];
+      if (!renderSocialQr(active, platform.label, "support")) elements.socialQrDialog.close();
     }
   }
 }
@@ -376,9 +411,41 @@ function socialRow(link) {
   const actions = document.createElement("span");
   actions.className = "social-link-actions";
   const copyButton = iconButton(icons.copy, `Copy ${title.textContent}`, "Copy");
-  copyButton.addEventListener("click", () => copySocialUrl(link, copyButton));
+  copyButton.addEventListener("click", () => copySocialUrl(link, copyButton, elements.socialsStatus, "Social"));
   const qrButton = iconButton(icons.qr, `Show QR code for ${title.textContent}`, "QR code");
-  qrButton.addEventListener("click", () => openSocialQr(link, platform.label));
+  qrButton.addEventListener("click", () => openSocialQr(link, platform.label, "social"));
+  actions.append(copyButton, qrButton);
+  row.append(identity, actions);
+  return row;
+}
+
+function supportRow(link) {
+  const platform = SUPPORT_PLATFORMS.find((entry) => entry.id === link.platform) || SUPPORT_PLATFORMS[0];
+  const row = document.createElement("article");
+  row.className = "social-link support-link";
+  const identity = document.createElement("a");
+  identity.className = "social-link-identity";
+  identity.href = link.url;
+  identity.target = "_blank";
+  identity.rel = "noopener noreferrer";
+  const icon = document.createElement("span");
+  icon.className = "social-platform-icon support-platform-icon";
+  icon.innerHTML = supportIcon(link.platform);
+  const copy = document.createElement("span");
+  copy.className = "social-link-copy";
+  const title = document.createElement("strong");
+  title.textContent = link.label || platform.label;
+  const destination = document.createElement("small");
+  destination.textContent = link.url;
+  copy.append(title, destination);
+  identity.append(icon, copy);
+  identity.setAttribute("aria-label", `Open ${title.textContent} in a new window`);
+  const actions = document.createElement("span");
+  actions.className = "social-link-actions";
+  const copyButton = iconButton(icons.copy, `Copy ${title.textContent}`, "Copy");
+  copyButton.addEventListener("click", () => copySocialUrl(link, copyButton, elements.supportStatus, "Support"));
+  const qrButton = iconButton(icons.qr, `Show QR code for ${title.textContent}`, "QR code");
+  qrButton.addEventListener("click", () => openSocialQr(link, platform.label, "support"));
   actions.append(copyButton, qrButton);
   row.append(identity, actions);
   return row;
@@ -394,27 +461,28 @@ function iconButton(icon, label, title) {
   return button;
 }
 
-async function copySocialUrl(link, button) {
+async function copySocialUrl(link, button, status = elements.socialsStatus, fallbackLabel = "Social") {
   try {
     await copyText(link.url);
     button.innerHTML = icons.check;
-    elements.socialsStatus.textContent = `${link.label || "Social"} link copied.`;
-    elements.socialsStatus.removeAttribute("data-error");
+    status.textContent = `${link.label || fallbackLabel} link copied.`;
+    status.removeAttribute("data-error");
     setTimeout(() => {
       if (button.isConnected) button.innerHTML = icons.copy;
     }, 1200);
   } catch {
-    elements.socialsStatus.textContent = "The browser could not copy this link.";
-    elements.socialsStatus.dataset.error = "true";
+    status.textContent = "The browser could not copy this link.";
+    status.dataset.error = "true";
   }
 }
 
-function openSocialQr(link, platformLabel) {
-  if (renderSocialQr(link, platformLabel) && !elements.socialQrDialog.open) elements.socialQrDialog.showModal();
+function openSocialQr(link, platformLabel, kind = "social") {
+  if (renderSocialQr(link, platformLabel, kind) && !elements.socialQrDialog.open) elements.socialQrDialog.showModal();
 }
 
-function renderSocialQr(link, platformLabel) {
+function renderSocialQr(link, platformLabel, kind = "social") {
   elements.socialQrDialog.dataset.socialId = link.id;
+  elements.socialQrDialog.dataset.linkKind = kind;
   elements.socialQrTitle.textContent = link.label || platformLabel;
   elements.socialQrLabel.textContent = platformLabel;
   elements.socialQrDestination.textContent = link.url;

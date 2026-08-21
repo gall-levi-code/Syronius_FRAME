@@ -15,7 +15,8 @@ selected data folders, generate the capability-aware stack config and tunnel ing
 `docker compose config --quiet`, start the stack with
 `docker compose up -d --build --remove-orphans`, and open `http://localhost/setup`.
 During install, the UI streams progress from the native backend and waits for the FRAME web edge to
-accept connections before launching the browser.
+accept connections before launching the browser. It also enables the shared mDNS launcher when
+available so other LAN devices can open `http://frame.local`; on Windows this resumes after sign-in.
 
 The packaged installer bundles the current FRAME stack resources and copies them into the selected
 install root before running Docker Compose.

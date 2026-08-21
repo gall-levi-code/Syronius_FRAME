@@ -45,4 +45,5 @@ The installer stages Hybrid mode without starting it. Startup validation require
 - The tunnel token is not exposed through container environment inspection.
 - Cloudflare account API credentials are not required by FRAME.
 - Creating the tunnel and Published application remains an explicit Cloudflare dashboard step.
-- Cloudflare Access policy automation and LAN HTTPS remain separate follow-up work.
+- Cloudflare Access policy automation remains a separate follow-up. FRAME-owned LAN HTTPS is out of
+  scope per ADR 0013.

@@ -77,6 +77,16 @@ Open the Portal:
 http://localhost/dashboard
 ```
 
+From another device on the same LAN, open:
+
+```text
+http://frame.local
+```
+
+FRAME advertises this address when the host provides mDNS/Bonjour. On Windows, the launcher keeps
+the advertisement active after sign-in and restores it when FRAME Edge returns. The host's LAN IP
+remains the fallback on networks that filter multicast discovery.
+
 Useful first pages:
 
 - Portal: `http://localhost/dashboard`
@@ -98,7 +108,7 @@ Stop the stack:
 - Choose **Stop stack** from the menu.
 
 On Linux/macOS, run `chmod +x stack.sh` once, then run `./stack.sh` without arguments to open the
-same menu.
+same menu. macOS provides the required mDNS publisher; Linux uses `avahi-publish` when available.
 
 ## Optional Setup
 
@@ -272,7 +282,7 @@ The public-facing backlog for the alpha release line:
 **Installer / Platform**
 
 - Add host-port conflict preflight detection.
-- Add LAN HTTPS and optional Cloudflare Access policy automation.
+- Add optional Cloudflare Access policy automation.
 
 **Photo Workflow**
 

@@ -34,6 +34,13 @@ Cloudflare Tunnel and a separate internal FRAME Public Gateway. The public gatew
 the generated capability-aware allowlist; LAN-only admin, capture, ingest, and management routes
 remain unavailable through the tunnel.
 
+Direct LAN access intentionally remains HTTP for operator-controlled networks. FRAME does not manage
+LAN certificates or client trust; public HYBRID routes receive browser-facing HTTPS from Cloudflare.
+When the host provides `dns-sd` or `avahi-publish`, starting FRAME also advertises the Edge as
+`http://frame.local`; stopping or resetting FRAME removes that advertisement. On Windows, a hidden
+per-user watchdog resumes it after sign-in and follows FRAME Edge availability. A custom Edge port
+is advertised as `http://frame.local:<port>`.
+
 FRAME Edge also denies known LAN-only management routes when requests arrive through the configured
 public hostname or Cloudflare headers. This defense-in-depth protects the stack if a remotely
 managed Cloudflare Published application is accidentally pointed at FRAME Edge instead of

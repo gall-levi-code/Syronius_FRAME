@@ -29,7 +29,7 @@
       })();
     </script>
     <script src="/assets/frame-theme.js?v=global-theme-v1"></script>
-    <link rel="stylesheet" href="/gallery/assets/admin.css?v=gallery-owner-settings-9">
+    <link rel="stylesheet" href="/gallery/assets/admin.css?v=gallery-owner-settings-10">
   </head>
   <body>
     <header class="topbar">
@@ -60,6 +60,7 @@
         <button id="content-management-tab" type="button" role="tab" aria-selected="true" aria-controls="content-management-view">Content management</button>
         <button id="gallery-styling-tab" type="button" role="tab" aria-selected="false" aria-controls="gallery-styling-view" tabindex="-1">Gallery Settings</button>
         <button id="socials-tab" type="button" role="tab" aria-selected="false" aria-controls="socials-view" tabindex="-1">Socials</button>
+        <button id="support-tab" type="button" role="tab" aria-selected="false" aria-controls="support-view" tabindex="-1">Support</button>
       </nav>
 
       <section id="content-management-view" role="tabpanel" aria-labelledby="content-management-tab">
@@ -151,7 +152,7 @@
         </div>
         <form id="socials-form" class="socials-form">
           <section class="branding-panel">
-            <div class="mini-heading"><strong>Add a social</strong><small>Paste a profile URL, or enter a handle and choose its platform.</small></div>
+            <div class="mini-heading"><strong>Add a social</strong><small>Paste a link and FRAME will usually find the platform automatically. You can also choose one or enter a supported handle.</small></div>
             <div class="field-grid social-add-fields">
               <label>URL or handle<input id="social-value-input" maxlength="2048" autocomplete="off" placeholder="https://example.com or @handle"></label>
               <label>Platform
@@ -167,6 +168,32 @@
           <div class="mini-heading"><strong>Published links</strong><small>Edit links in place, then save to update every gallery.</small></div>
           <div id="social-admin-list" class="social-admin-list"></div>
           <p id="social-empty" class="inline-empty">No social links added.</p>
+        </section>
+      </section>
+
+      <section id="support-view" role="tabpanel" aria-labelledby="support-tab" hidden>
+        <div class="section-heading">
+          <div><p>Public gallery links</p><h2>Support</h2><span id="support-summary">No support links published.</span></div>
+          <button id="save-support" class="restore-button" type="button">Save support links</button>
+        </div>
+        <form id="support-form" class="socials-form">
+          <section class="branding-panel">
+            <div class="mini-heading"><strong>Add a support link</strong><small>Paste the provider's public payment link and FRAME will usually identify it automatically. Never enter private bank or phone details.</small></div>
+            <div class="field-grid social-add-fields">
+              <label>Payment or support URL<input id="support-value-input" maxlength="2048" autocomplete="off" placeholder="https://provider.example/your-link"></label>
+              <label>Platform
+                <span class="select-shell"><select id="support-platform-select"><option value="">Select platform</option></select></span>
+              </label>
+              <label>Display label (optional)<input id="support-label-input" maxlength="60" autocomplete="off" placeholder="Support my work"></label>
+              <button id="add-support" class="restore-button" type="submit">Add support link</button>
+            </div>
+            <p id="support-form-error" class="social-form-error" role="alert" hidden></p>
+          </section>
+        </form>
+        <section class="branding-panel">
+          <div class="mini-heading"><strong>Published links</strong><small>Edit links in place, then save to update every gallery.</small></div>
+          <div id="support-admin-list" class="social-admin-list"></div>
+          <p id="support-empty" class="inline-empty">No support links added.</p>
         </section>
       </section>
 
@@ -293,6 +320,6 @@
       </article>
     </template>
 
-    <script type="module" src="/gallery/assets/admin.js?v=gallery-owner-settings-9"></script>
+    <script type="module" src="/gallery/assets/admin.js?v=gallery-owner-settings-11"></script>
   </body>
 </html>

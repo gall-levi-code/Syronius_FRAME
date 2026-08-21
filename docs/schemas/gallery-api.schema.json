@@ -130,11 +130,25 @@
         "id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$" },
         "platform": {
           "type": "string",
-          "enum": ["website", "instagram", "tiktok", "youtube", "twitch", "facebook", "x", "threads", "bluesky", "discord", "linkedin", "reddit", "snapchat", "flickr"]
+          "enum": ["website", "fivehundredpx", "applemusic", "bandcamp", "behance", "bluesky", "cara", "discord", "facebook", "flickr", "github", "instagram", "kick", "linkhub", "linkedin", "mastodon", "medium", "pinterest", "pixelfed", "reddit", "snapchat", "soundcloud", "spotify", "substack", "telegram", "threads", "tiktok", "twitch", "vimeo", "whatsapp", "x", "youtube"]
         },
         "label": { "type": "string", "minLength": 1, "maxLength": 60 },
         "url": { "type": "string", "maxLength": 2048, "pattern": "^https?://" },
         "graphic": { "$ref": "#/$defs/socialGraphic" }
+      }
+    },
+    "support": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "platform", "url"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{1,64}$" },
+        "platform": {
+          "type": "string",
+          "enum": ["custom", "buymeacoffee", "gofundme", "justgiving", "kofi", "monzo", "patreon", "paypal", "revolut", "square", "starling", "stripe", "sumup", "tide", "venmo", "wise"]
+        },
+        "label": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "url": { "type": "string", "maxLength": 2048, "pattern": "^https?://" }
       }
     },
     "branding": {
@@ -148,6 +162,7 @@
         "profile_id",
         "custom_profiles",
         "socials",
+        "supports",
         "logo",
         "updated_at",
         "active_profile",
@@ -161,6 +176,7 @@
         "profile_id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
         "custom_profiles": { "type": "array", "items": { "$ref": "#/$defs/profile" } },
         "socials": { "type": "array", "maxItems": 32, "items": { "$ref": "#/$defs/social" } },
+        "supports": { "type": "array", "maxItems": 32, "items": { "$ref": "#/$defs/support" } },
         "logo": { "$ref": "#/$defs/logo" },
         "updated_at": { "type": "string", "format": "date-time" },
         "active_profile": { "$ref": "#/$defs/profile" },
