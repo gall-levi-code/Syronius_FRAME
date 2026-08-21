@@ -3,11 +3,16 @@ import test from "node:test";
 import { buildSocialUrl, detectSocialPlatform, resolveSocialPlatform, SOCIAL_PLATFORMS } from "../public/socials.js";
 
 test("detects social destinations and builds canonical handle links", () => {
-  assert.equal(SOCIAL_PLATFORMS.length, 14);
+  assert.equal(SOCIAL_PLATFORMS[0].label, "Custom");
+  assert.deepEqual(SOCIAL_PLATFORMS.slice(1).map(({ label }) => label), [...SOCIAL_PLATFORMS.slice(1).map(({ label }) => label)].sort((a, b) => a.localeCompare(b)));
   assert.equal(detectSocialPlatform("instagram.com/syronius"), "instagram");
   assert.equal(detectSocialPlatform("https://threads.net/@syronius"), "threads");
   assert.equal(detectSocialPlatform("https://www.threads.com/@syronius"), "threads");
   assert.equal(detectSocialPlatform("flickr.com/photos/syronius"), "flickr");
+  assert.equal(detectSocialPlatform("https://kick.com/syronius"), "kick");
+  assert.equal(detectSocialPlatform("https://linktr.ee/syronius"), "linkhub");
+  assert.equal(detectSocialPlatform("https://github.com/syronius"), "github");
+  assert.equal(detectSocialPlatform("https://www.whatsapp.com/channel/example"), "whatsapp");
   assert.equal(detectSocialPlatform("syronius.bsky.social"), "bluesky");
   assert.equal(detectSocialPlatform("example.com/photos"), "website");
   assert.equal(detectSocialPlatform("@syronius"), null);
@@ -20,6 +25,8 @@ test("detects social destinations and builds canonical handle links", () => {
   assert.equal(resolveSocialPlatform("https://frame.photos", "instagram"), "website");
   assert.equal(resolveSocialPlatform("https://instagram.com/syronius", "website"), "instagram");
   assert.equal(buildSocialUrl("syronius", "flickr"), "https://www.flickr.com/photos/syronius/");
+  assert.equal(buildSocialUrl("@syronius", "kick"), "https://kick.com/syronius");
+  assert.equal(buildSocialUrl("@syronius", "github"), "https://github.com/syronius");
   assert.equal(buildSocialUrl("syronius.bsky.social", "bluesky"), "https://bsky.app/profile/syronius.bsky.social");
   assert.equal(buildSocialUrl("example.com", "website"), "https://example.com/");
   assert.throws(() => buildSocialUrl("not a website", "website"), /valid public website URL/);

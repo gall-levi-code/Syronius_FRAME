@@ -32,7 +32,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
     <script src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js" integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU" crossorigin="anonymous"></script>
-    <link rel="stylesheet" href="/gallery/assets/styles.css?v=gallery-sticky-header-2">
+    <link rel="stylesheet" href="/gallery/assets/styles.css?v=gallery-support-2">
   </head>
   <body>
     <header class="topbar">
@@ -45,6 +45,12 @@
           <span class="socials-reel" aria-hidden="true">
             <span class="socials-label socials-label-default">Socials</span>
             <span class="socials-label socials-label-invite">Connect with me!</span>
+          </span>
+        </button>
+        <button id="support-button" class="secondary-button socials-button support-button" type="button" aria-label="Support — Support this creator" aria-haspopup="dialog" aria-controls="support-dialog" hidden>
+          <span class="socials-reel support-reel" aria-hidden="true">
+            <span class="socials-label socials-label-default support-label-default">Support</span>
+            <span class="socials-label socials-label-invite support-label-invite">Show some love!</span>
           </span>
         </button>
       </div>
@@ -133,6 +139,18 @@
       <button id="lightbox-next" class="lightbox-control lightbox-nav next" type="button" aria-label="Next photo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 4 8 8-8 8"/></svg></button>
     </dialog>
 
+    <dialog id="support-dialog" class="socials-dialog" aria-labelledby="support-dialog-title" aria-describedby="support-dialog-copy">
+      <form method="dialog" class="socials-dialog-panel">
+        <div class="share-dialog-heading">
+          <div><p>Support</p><h2 id="support-dialog-title">Support the gallery owner</h2></div>
+          <button class="secondary-button close-button" type="submit" value="close" aria-label="Close support dialog" title="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+        </div>
+        <p id="support-dialog-copy" class="share-dialog-copy">Choose a trusted provider to open its payment page, or use the buttons to copy or scan the public link.</p>
+        <div id="support-list" class="socials-list"></div>
+        <p id="support-status" class="share-status" role="status" aria-live="polite"></p>
+      </form>
+    </dialog>
+
     <dialog id="share-dialog" class="share-dialog" aria-labelledby="share-dialog-title" aria-describedby="share-dialog-copy">
       <form method="dialog" class="share-dialog-panel">
         <div class="share-dialog-heading">
@@ -181,7 +199,7 @@
     <dialog id="social-qr-dialog" class="share-dialog social-qr-dialog" aria-labelledby="social-qr-title" aria-describedby="social-qr-destination">
       <form method="dialog" class="share-dialog-panel social-qr-panel">
         <div class="share-dialog-heading">
-          <div><p>Scan destination</p><h2 id="social-qr-title">Social link</h2></div>
+          <div><p>Scan destination</p><h2 id="social-qr-title">Destination link</h2></div>
           <button class="secondary-button close-button" type="submit" value="close" aria-label="Close social QR code" title="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
         </div>
         <figure class="share-qr social-destination-qr">
@@ -220,6 +238,6 @@
         </span>
       </article>
     </template>
-    <script type="module" src="/gallery/assets/gallery.js?v=gallery-viewer-modes-1"></script>
+    <script type="module" src="/gallery/assets/gallery.js?v=gallery-support-1"></script>
   </body>
 </html>

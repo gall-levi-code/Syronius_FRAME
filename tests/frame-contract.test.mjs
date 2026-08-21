@@ -938,6 +938,15 @@ test("Windows and Unix wrappers preserve direct commands while offering the numb
   assert.ok(shell.includes("read_photo_ftp_passive_host"), "Unix wrapper must prompt with a passive FTP LAN host helper");
   assert.ok(shell.includes("Portal login needs setup."), "Unix setup must require Portal credentials in every mode");
   assert.ok(shell.includes('[ "$current" != "127.0.0.1" ]'), "Unix passive FTP prompt must not preserve loopback as the default");
+  assert.ok(powershell.includes("Start-FrameDiscovery"));
+  assert.ok(powershell.includes("Stop-FrameDiscovery"));
+  assert.ok(powershell.includes("discovery-watch"), "Windows discovery must recover after user sign-in");
+  assert.ok(powershell.includes("frame-mdns-watch.json"), "Windows discovery must track its watchdog safely");
+  assert.ok(powershell.includes("Test-FrameEdgeReachable"), "Windows discovery must follow Edge availability");
+  assert.ok(powershell.includes("Start Menu\\Programs\\Startup"), "Windows discovery must install a per-user startup entry");
+  assert.ok(shell.includes("start_frame_discovery"));
+  assert.ok(shell.includes("stop_frame_discovery"));
+  assert.ok(powershell.includes("frame.local") && shell.includes("frame.local"));
 });
 
 test("Belabox agent installation is Hybrid/WSS-only across both installers", async () => {
@@ -1065,6 +1074,9 @@ test("FRAME Setup app captures the approved GUI installer decisions", async () =
   assert.match(rust, /"PHOTO_UPLOAD_MAX_SESSIONS"[\s\S]*?"2"/, "Native setup should write the current browser upload concurrency default");
   assert.ok(tauriConfig.bundle.resources["../../../services/"], "setup app must bundle FRAME services");
   assert.ok(tauriConfig.bundle.resources["../../../config/"], "setup app must bundle FRAME config");
+  assert.ok(tauriConfig.bundle.resources["../../../installer/stack.ps1"], "setup app must bundle the Windows stack launcher");
+  assert.ok(tauriConfig.bundle.resources["../../../installer/stack.sh"], "setup app must bundle the Unix stack launcher");
+  assert.ok(rust.includes('"discovery-start"'), "native setup must enable discovery through the shared launcher");
   assert.ok(tauriConfig.bundle.icon.includes("icons/icon.ico"));
   assert.ok((await readFile("apps/frame-setup/src-tauri/src/main.rs", "utf8")).includes("windows_subsystem"));
   assert.ok(frontend.includes("apply_install_plan"), "Install FRAME must call the native apply backend");

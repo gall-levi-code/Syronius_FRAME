@@ -1,9 +1,10 @@
-import { SOCIAL_PLATFORMS, buildSocialUrl, createSocialId, resolveSocialPlatform, socialIcon } from "./socials.js?v=gallery-socials-4";
+import { SOCIAL_PLATFORMS, buildSocialUrl, createSocialId, resolveSocialPlatform, socialIcon } from "./socials.js?v=gallery-socials-6";
+import { SUPPORT_PLATFORMS, buildSupportUrl, createSupportId, resolveSupportPlatform, supportIcon } from "./support.js?v=gallery-support-1";
 import { layoutJustifiedRows } from "./justified-rows.js?v=gallery-justified-1";
 
 const elements = Object.fromEntries([
-  "summary", "status", "content-management-tab", "gallery-styling-tab", "socials-tab", "published-tab",
-  "trash-tab", "published-count", "trash-count", "content-management-view", "gallery-styling-view", "socials-view",
+  "summary", "status", "content-management-tab", "gallery-styling-tab", "socials-tab", "support-tab", "published-tab",
+  "trash-tab", "published-count", "trash-count", "content-management-view", "gallery-styling-view", "socials-view", "support-view",
   "published-view", "trash-view", "albums", "album-detail", "album-title", "album-summary", "manage-explore", "trash-album",
   "cover-management-panel", "cover-management-status", "cover-action", "photos", "trash-albums", "empty-trash", "empty",
   "branding-summary", "save-branding", "discard-branding", "settings-action-bar", "settings-action-message", "branding-form",
@@ -17,6 +18,8 @@ const elements = Object.fromEntries([
   "cancel-logo-crop", "save-logo-crop",
   "socials-summary", "save-socials", "socials-form", "social-value-input", "social-platform-select",
   "social-label-input", "add-social", "social-form-error", "social-admin-list", "social-empty",
+  "support-summary", "save-support", "support-form", "support-value-input", "support-platform-select",
+  "support-label-input", "add-support", "support-form-error", "support-admin-list", "support-empty",
   "cover-picker", "cover-picker-grid", "cover-picker-status", "cancel-cover-picker",
 ].map((id) => [id.replaceAll("-", "_"), document.getElementById(id)]));
 
@@ -36,6 +39,7 @@ const state = {
   busy: false,
   branding: null,
   socials: [],
+  supports: [],
   selectedProfileId: null,
   confirmResolve: null,
   userThemeMode: readStoredTheme(),
@@ -52,6 +56,7 @@ const sections = [
   { name: "content", tab: elements.content_management_tab, view: elements.content_management_view },
   { name: "style", tab: elements.gallery_styling_tab, view: elements.gallery_styling_view },
   { name: "socials", tab: elements.socials_tab, view: elements.socials_view },
+  { name: "support", tab: elements.support_tab, view: elements.support_view },
 ];
 const systemTheme = matchMedia("(prefers-color-scheme: dark)");
 const icons = {
@@ -95,6 +100,12 @@ elements.socials_form.addEventListener("submit", addSocial);
 elements.social_value_input.addEventListener("input", () => {
   const platform = resolveSocialPlatform(elements.social_value_input.value, elements.social_platform_select.value);
   if (platform) elements.social_platform_select.value = platform;
+});
+elements.save_support.addEventListener("click", saveSupports);
+elements.support_form.addEventListener("submit", addSupport);
+elements.support_value_input.addEventListener("input", () => {
+  const platform = resolveSupportPlatform(elements.support_value_input.value, elements.support_platform_select.value);
+  if (platform) elements.support_platform_select.value = platform;
 });
 elements.logo_trigger.addEventListener("click", () => elements.logo_input.click());
 elements.logo_input.addEventListener("change", uploadLogo);
@@ -159,6 +170,7 @@ window.addEventListener("storage", (event) => {
   }
 });
 elements.social_platform_select.append(...SOCIAL_PLATFORMS.map(socialPlatformOption));
+elements.support_platform_select.append(...SUPPORT_PLATFORMS.map(socialPlatformOption));
 await refresh();
 
 async function refresh() {
@@ -174,6 +186,7 @@ async function refresh() {
     state.trash = trash.trash;
     state.branding = branding.branding;
     state.socials = [...(state.branding.socials || [])];
+    state.supports = [...(state.branding.supports || [])];
     state.selectedProfileId = state.branding.profile_id;
     if (state.selectedDate && state.dates.some((date) => date.date_folder === state.selectedDate)) {
       state.photos = (await requestJson(`/gallery/api/photos?date=${encodeURIComponent(state.selectedDate)}`)).photos;
@@ -494,6 +507,7 @@ function renderBranding(options = {}) {
   elements.remove_logo.hidden = !branding.logo;
   updateSettingsDirty();
   renderSocials();
+  renderSupports();
   applyAdminBranding();
 }
 
@@ -863,11 +877,135 @@ async function saveSocials() {
     await persistBranding(
       { socials: state.socials },
       { saving: "Saving socials", saved: "Socials saved", failed: "Socials save failed" },
-      { preserveBrandingDrafts: true },
+      { preserveBrandingDrafts: true, preserveSupportDrafts: true },
     );
   } catch (error) {
     showSocialError(error.message || "Could not save social links.");
   }
+}
+
+function renderSupports() {
+  const count = state.supports.length;
+  elements.support_summary.textContent = count ? `${count} support link${count === 1 ? "" : "s"} ready to publish.` : "No support links published.";
+  elements.support_empty.hidden = count > 0;
+  elements.support_admin_list.replaceChildren(...state.supports.map((support, index) => supportAdminRow(support, index)));
+}
+
+function supportAdminRow(support, index) {
+  const row = document.createElement("article");
+  row.className = "social-admin-item support-admin-item";
+  row.innerHTML = `
+    <div class="social-order-controls" role="group" aria-label="Reorder support link">
+      <button class="social-order-button support-move-up" type="button" title="Move up">${icons.up}</button>
+      <button class="social-order-button support-move-down" type="button" title="Move down">${icons.down}</button>
+    </div>
+    <span class="social-admin-icon support-admin-icon" aria-hidden="true">${supportIcon(support.platform)}</span>
+    <div class="field-grid social-row-fields">
+      <label>URL<input class="support-row-url" maxlength="2048" autocomplete="off"></label>
+      <label>Platform<span class="select-shell"><select class="support-row-platform"></select></span></label>
+      <label>Display label (optional)<input class="support-row-label" maxlength="60" autocomplete="off"></label>
+    </div>
+    <div class="social-row-actions">
+      <button class="icon-danger-button support-remove" type="button" aria-label="Remove support link" title="Remove support link">${icons.trash}</button>
+    </div>`;
+  const urlInput = row.querySelector(".support-row-url");
+  const platformSelect = row.querySelector(".support-row-platform");
+  const labelInput = row.querySelector(".support-row-label");
+  urlInput.value = support.url;
+  platformSelect.append(...SUPPORT_PLATFORMS.map(socialPlatformOption));
+  platformSelect.value = support.platform;
+  labelInput.value = support.label || "";
+  urlInput.addEventListener("input", () => {
+    support.url = urlInput.value;
+    const platform = resolveSupportPlatform(urlInput.value, platformSelect.value);
+    if (platform) support.platform = platformSelect.value = platform;
+  });
+  platformSelect.addEventListener("change", () => { support.platform = platformSelect.value; });
+  labelInput.addEventListener("input", () => { support.label = labelInput.value; });
+  const up = row.querySelector(".support-move-up");
+  const down = row.querySelector(".support-move-down");
+  up.disabled = index === 0;
+  down.disabled = index === state.supports.length - 1;
+  up.setAttribute("aria-label", `Move ${supportName(support)} up`);
+  down.setAttribute("aria-label", `Move ${supportName(support)} down`);
+  up.addEventListener("click", () => moveSupport(index, -1));
+  down.addEventListener("click", () => moveSupport(index, 1));
+  row.querySelector(".support-remove").addEventListener("click", () => confirmRemoveSupport(support));
+  return row;
+}
+
+function supportName(support) {
+  return String(support.label || SUPPORT_PLATFORMS.find((platform) => platform.id === support.platform)?.label || "support link");
+}
+
+function addSupport(event) {
+  event.preventDefault();
+  clearSupportError();
+  try {
+    if (state.supports.length >= 32) throw new Error("Support links are limited to 32.");
+    const value = elements.support_value_input.value;
+    const platform = resolveSupportPlatform(value, elements.support_platform_select.value);
+    if (!platform) throw new Error("Paste a payment link or select its platform.");
+    const label = elements.support_label_input.value.trim();
+    state.supports.push({ id: createSupportId(), platform, url: buildSupportUrl(value), ...(label ? { label } : {}) });
+    elements.support_value_input.value = "";
+    elements.support_platform_select.value = "";
+    elements.support_label_input.value = "";
+    renderSupports();
+    setStatus("Support link added - save to publish", "working");
+  } catch (error) {
+    showSupportError(error.message || "Could not add that support link.");
+  }
+}
+
+function moveSupport(index, delta) {
+  const target = index + delta;
+  if (target < 0 || target >= state.supports.length) return;
+  [state.supports[index], state.supports[target]] = [state.supports[target], state.supports[index]];
+  renderSupports();
+  setStatus("Support order changed - save to publish", "working");
+}
+
+async function confirmRemoveSupport(support) {
+  if (!await showConfirm({
+    eyebrow: "Confirm support change",
+    title: `Remove ${supportName(support)}?`,
+    copy: "This link will disappear from every gallery after you save support links.",
+    actionLabel: "Remove link",
+    danger: true,
+  })) return;
+  state.supports = state.supports.filter((item) => item.id !== support.id);
+  renderSupports();
+  setStatus("Support link removed - save to publish", "working");
+}
+
+async function saveSupports() {
+  clearSupportError();
+  try {
+    state.supports = state.supports.map((support) => {
+      const platform = resolveSupportPlatform(support.url, support.platform);
+      const label = String(support.label || "").trim();
+      return { id: support.id, platform, url: buildSupportUrl(support.url), ...(label ? { label } : {}) };
+    });
+    await persistBranding(
+      { supports: state.supports },
+      { saving: "Saving support links", saved: "Support links saved", failed: "Support links save failed" },
+      { preserveBrandingDrafts: true, preserveSocialDrafts: true },
+    );
+  } catch (error) {
+    showSupportError(error.message || "Could not save support links.");
+  }
+}
+
+function showSupportError(message) {
+  elements.support_form_error.textContent = message;
+  elements.support_form_error.hidden = false;
+  setStatus(message, "error");
+}
+
+function clearSupportError() {
+  elements.support_form_error.hidden = true;
+  elements.support_form_error.textContent = "";
 }
 
 function socialPlatformOption(platform) {
@@ -892,13 +1030,14 @@ async function saveBranding(overrides = {}, messages = {}) {
   return persistBranding(
     brandingPayload(overrides),
     { saving: "Saving gallery settings", saved: "Gallery settings saved", failed: "Gallery settings save failed", ...messages },
-    { preserveSocialDrafts: true },
+    { preserveSocialDrafts: true, preserveSupportDrafts: true },
   );
 }
 
 async function persistBranding(payload, messages = {}, options = {}) {
   if (state.busy || !state.branding) return;
   const socialDrafts = state.socials;
+  const supportDrafts = state.supports;
   const savingSettingsDraft = state.settingsDirty && !options.preserveBrandingDrafts;
   state.busy = true;
   if (savingSettingsDraft) setSettingsActionMessage(messages.saving || "Saving gallery settings", "working");
@@ -912,8 +1051,10 @@ async function persistBranding(payload, messages = {}, options = {}) {
     });
     state.branding = result.branding;
     state.socials = options.preserveSocialDrafts ? socialDrafts : [...(state.branding.socials || [])];
+    state.supports = options.preserveSupportDrafts ? supportDrafts : [...(state.branding.supports || [])];
     if (options.preserveBrandingDrafts) {
       renderSocials();
+      renderSupports();
       applyAdminBranding();
     } else {
       state.settingsDirty = false;

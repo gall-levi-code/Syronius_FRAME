@@ -226,6 +226,170 @@ function Test-LanIPv4Candidate {
   return $Address -match "^(10\.|192\.168\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)"
 }
 
+function Get-FrameDiscoveryStatePath {
+  $env = Get-EnvMap
+  $dataRoot = "./data"
+  if ($env.FRAME_DATA_ROOT) { $dataRoot = $env.FRAME_DATA_ROOT }
+  $stateDir = Join-Path (Resolve-FrameDataPath $dataRoot) "state"
+  New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
+  return Join-Path $stateDir "frame-mdns.json"
+}
+
+function Get-FrameDiscoveryWatchStatePath {
+  return Join-Path (Split-Path -Parent (Get-FrameDiscoveryStatePath)) "frame-mdns-watch.json"
+}
+
+function Get-FrameDiscoveryStartupPath {
+  if (-not $env:APPDATA) { return $null }
+  $startupDir = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup"
+  New-Item -ItemType Directory -Force -Path $startupDir | Out-Null
+  return Join-Path $startupDir "Syronius FRAME Discovery.cmd"
+}
+
+function Get-FrameDiscoveryProcess {
+  $statePath = Get-FrameDiscoveryStatePath
+  if (-not (Test-Path $statePath)) { return $null }
+  try {
+    $state = Get-Content $statePath -Raw | ConvertFrom-Json
+    $processId = [int]$state.pid
+    $process = Get-CimInstance Win32_Process -Filter "ProcessId = $processId" -ErrorAction SilentlyContinue
+    if ($process -and $process.Name -eq "dns-sd.exe" -and $process.CommandLine -like "*frame.local*") {
+      return $process
+    }
+  } catch {}
+  Remove-Item -LiteralPath $statePath -Force -ErrorAction SilentlyContinue
+  return $null
+}
+
+function Stop-FrameDiscoveryPublisher {
+  param([switch]$Quiet)
+  $statePath = Get-FrameDiscoveryStatePath
+  if (-not (Test-Path $statePath)) { return }
+  try {
+    $process = Get-FrameDiscoveryProcess
+    if ($process) {
+      Stop-Process -Id $process.ProcessId -Force -ErrorAction SilentlyContinue
+      if (-not $Quiet) { Write-Host "Stopped frame.local discovery." -ForegroundColor DarkGray }
+    }
+  } catch {
+    if (-not $Quiet) { Write-Host "Could not inspect the previous frame.local publisher." -ForegroundColor Yellow }
+  } finally {
+    Remove-Item -LiteralPath $statePath -Force -ErrorAction SilentlyContinue
+  }
+}
+
+function Start-FrameDiscovery {
+  param([switch]$PublisherOnly)
+  Stop-FrameDiscoveryPublisher -Quiet
+  $publisher = Get-Command dns-sd.exe -ErrorAction SilentlyContinue
+  if (-not $publisher) {
+    Write-Host "FRAME is running, but this computer does not provide dns-sd for frame.local discovery." -ForegroundColor Yellow
+    return
+  }
+  $addresses = @(Get-HostLanIPv4Candidates)
+  if ($addresses.Count -eq 0) {
+    Write-Host "FRAME is running, but no private LAN address was found for frame.local discovery." -ForegroundColor Yellow
+    return
+  }
+  $env = Get-EnvMap
+  $port = 80
+  if ($env.EDGE_HTTP_PORT) { $port = [int]$env.EDGE_HTTP_PORT }
+  $address = $addresses[0]
+  $process = Start-Process -FilePath $publisher.Source -ArgumentList @(
+    "-P", "FRAME", "_http._tcp", "local", "$port", "frame.local", $address, "path=/dashboard"
+  ) -WindowStyle Hidden -PassThru
+  Start-Sleep -Milliseconds 250
+  if ($process.HasExited) {
+    Write-Host "FRAME is running, but frame.local discovery could not start." -ForegroundColor Yellow
+    return
+  }
+  [pscustomobject]@{
+    pid = $process.Id
+    address = $address
+    port = $port
+    startedAt = [DateTime]::UtcNow.ToString("o")
+  } | ConvertTo-Json | Set-Content -LiteralPath (Get-FrameDiscoveryStatePath) -Encoding UTF8
+  $url = "http://frame.local"
+  if ($port -ne 80) { $url = "http://frame.local:$port" }
+  Write-Host "FRAME is available on the LAN at $url" -ForegroundColor Green
+  if (-not $PublisherOnly) { Enable-FrameDiscoveryWatch }
+}
+
+function Test-FrameEdgeReachable {
+  $env = Get-EnvMap
+  $port = 80
+  if ($env.EDGE_HTTP_PORT) { $port = [int]$env.EDGE_HTTP_PORT }
+  $client = New-Object System.Net.Sockets.TcpClient
+  try {
+    $connection = $client.ConnectAsync("127.0.0.1", $port)
+    return $connection.Wait(1000) -and $client.Connected
+  } catch {
+    return $false
+  } finally {
+    $client.Dispose()
+  }
+}
+
+function Test-FrameDiscoveryWatchRunning {
+  $statePath = Get-FrameDiscoveryWatchStatePath
+  if (-not (Test-Path $statePath)) { return $false }
+  try {
+    $state = Get-Content $statePath -Raw | ConvertFrom-Json
+    $processId = [int]$state.pid
+    $process = Get-CimInstance Win32_Process -Filter "ProcessId = $processId" -ErrorAction SilentlyContinue
+    return [bool]($process -and $process.Name -eq "powershell.exe" -and $process.CommandLine -like "*stack.ps1*discovery-watch*")
+  } catch {
+    Remove-Item -LiteralPath $statePath -Force -ErrorAction SilentlyContinue
+    return $false
+  }
+}
+
+function Enable-FrameDiscoveryWatch {
+  $startupPath = Get-FrameDiscoveryStartupPath
+  if ($startupPath) {
+    $command = '@start "" /min powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}" discovery-watch' -f $PSCommandPath
+    Set-Content -LiteralPath $startupPath -Value $command -Encoding ASCII
+  }
+  if (-not (Test-FrameDiscoveryWatchRunning)) {
+    Start-Process -FilePath "powershell.exe" -ArgumentList @(
+      "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", ('"{0}"' -f $PSCommandPath), "discovery-watch"
+    ) -WindowStyle Hidden | Out-Null
+  }
+}
+
+function Watch-FrameDiscovery {
+  $statePath = Get-FrameDiscoveryWatchStatePath
+  [pscustomobject]@{
+    pid = $PID
+    startedAt = [DateTime]::UtcNow.ToString("o")
+  } | ConvertTo-Json | Set-Content -LiteralPath $statePath -Encoding UTF8
+  try {
+    while ($true) {
+      if (Test-FrameEdgeReachable) {
+        if (-not (Get-FrameDiscoveryProcess)) { Start-FrameDiscovery -PublisherOnly }
+      } elseif (Get-FrameDiscoveryProcess) {
+        Stop-FrameDiscoveryPublisher -Quiet
+      }
+      Start-Sleep -Seconds 10
+    }
+  } finally {
+    Remove-Item -LiteralPath $statePath -Force -ErrorAction SilentlyContinue
+  }
+}
+
+function Stop-FrameDiscovery {
+  param([switch]$Quiet)
+  $watchStatePath = Get-FrameDiscoveryWatchStatePath
+  if (Test-FrameDiscoveryWatchRunning) {
+    $state = Get-Content $watchStatePath -Raw | ConvertFrom-Json
+    Stop-Process -Id ([int]$state.pid) -Force -ErrorAction SilentlyContinue
+  }
+  Remove-Item -LiteralPath $watchStatePath -Force -ErrorAction SilentlyContinue
+  $startupPath = Get-FrameDiscoveryStartupPath
+  if ($startupPath) { Remove-Item -LiteralPath $startupPath -Force -ErrorAction SilentlyContinue }
+  Stop-FrameDiscoveryPublisher -Quiet:$Quiet
+}
+
 function Get-PhotoFtpPassiveHostDefault {
   param([hashtable]$Env)
   $current = ""
@@ -345,6 +509,7 @@ function Invoke-StartStack {
   if ($currentEnv.FRAME_MODE -eq "HYBRID") {
     Invoke-Compose @("up", "-d", "--force-recreate", "--no-deps", "--wait", "--wait-timeout", "60", "frame-public-gateway")
   }
+  Start-FrameDiscovery
   Write-Host "FRAME stack reconciliation completed." -ForegroundColor Green
 }
 
@@ -708,11 +873,12 @@ function Invoke-InteractiveMenu {
           }
           Wait-ForMenu
         }
-        "9" { if (Read-YesNo "Stop the complete FRAME stack?") { Invoke-Compose @("down") }; Wait-ForMenu }
+        "9" { if (Read-YesNo "Stop the complete FRAME stack?") { Stop-FrameDiscovery; Invoke-Compose @("down") }; Wait-ForMenu }
         "10" { Configure-AdvancedSetting; Invoke-ReadinessFlow; Wait-ForMenu }
         "11" {
           $answer = Read-Host "Reset removes FRAME's generated config and data. Type RESET to continue"
           if ($answer -ceq "RESET") {
+            Stop-FrameDiscovery
             if (Test-Path (Join-Path $Root "docker-compose.yml")) { Invoke-Compose @("down", "--remove-orphans") }
             Invoke-Runtime @("reset", "--yes")
           }
@@ -727,7 +893,9 @@ function Invoke-InteractiveMenu {
   }
 }
 
-Assert-Docker
+if ($Command -notin @("discovery-start", "discovery-stop", "discovery-watch")) {
+  Assert-Docker
+}
 
 switch ($Command) {
   "menu" {
@@ -776,7 +944,17 @@ switch ($Command) {
   "start" {
     Invoke-StartStack
   }
+  "discovery-start" {
+    Start-FrameDiscovery
+  }
+  "discovery-stop" {
+    Stop-FrameDiscovery
+  }
+  "discovery-watch" {
+    Watch-FrameDiscovery
+  }
   "stop" {
+    Stop-FrameDiscovery
     Invoke-Compose @("down")
   }
   "status" {
@@ -796,6 +974,7 @@ switch ($Command) {
       Write-Host "Reset cancelled."
       exit 1
     }
+    Stop-FrameDiscovery
     if (Test-Path (Join-Path $Root "docker-compose.yml")) {
       Invoke-Compose @("down", "--remove-orphans")
     }

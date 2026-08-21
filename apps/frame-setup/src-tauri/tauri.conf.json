@@ -33,7 +33,9 @@
     "resources": {
       "../../../services/": "frame-stack/services",
       "../../../config/": "frame-stack/config",
-      "../../../installer/templates/docker-compose.yml": "frame-stack/installer/templates/docker-compose.yml"
+      "../../../installer/templates/docker-compose.yml": "frame-stack/installer/templates/docker-compose.yml",
+      "../../../installer/stack.ps1": "frame-stack/installer/stack.ps1",
+      "../../../installer/stack.sh": "frame-stack/installer/stack.sh"
     }
   }
 }

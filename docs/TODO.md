@@ -41,7 +41,7 @@ removed.
 - Add API integration tests for implemented HTTP services.
 - Split installer environment/state responsibilities out of `frame-installer.mjs`.
 - Add host-port conflict preflight detection.
-- Add LAN HTTPS and optional Cloudflare Access policy automation.
+- Add optional Cloudflare Access policy automation.
 - [x] Add a canonical service/capability registry with dependency and profile activation tests.
 - [x] Add a root `stack verify` command and GitHub verification workflow.
 - [x] Decide that `frame-pipeline-photos` is an internal service activated by photo capabilities.

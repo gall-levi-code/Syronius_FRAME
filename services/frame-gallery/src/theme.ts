@@ -36,19 +36,37 @@ export interface GalleryLogo {
 
 export const GALLERY_SOCIAL_PLATFORMS = [
   "website",
-  "instagram",
-  "tiktok",
-  "youtube",
-  "twitch",
-  "facebook",
-  "x",
-  "threads",
+  "fivehundredpx",
+  "applemusic",
+  "bandcamp",
+  "behance",
   "bluesky",
+  "cara",
   "discord",
+  "facebook",
+  "flickr",
+  "github",
+  "instagram",
+  "kick",
+  "linkhub",
   "linkedin",
+  "mastodon",
+  "medium",
+  "pinterest",
+  "pixelfed",
   "reddit",
   "snapchat",
-  "flickr",
+  "soundcloud",
+  "spotify",
+  "substack",
+  "telegram",
+  "threads",
+  "tiktok",
+  "twitch",
+  "vimeo",
+  "whatsapp",
+  "x",
+  "youtube",
 ] as const;
 
 export type GallerySocialPlatform = typeof GALLERY_SOCIAL_PLATFORMS[number];
@@ -61,6 +79,34 @@ export interface GallerySocialLink {
   graphic?: GalleryLogo;
 }
 
+export const GALLERY_SUPPORT_PLATFORMS = [
+  "custom",
+  "buymeacoffee",
+  "gofundme",
+  "justgiving",
+  "kofi",
+  "monzo",
+  "patreon",
+  "paypal",
+  "revolut",
+  "square",
+  "starling",
+  "stripe",
+  "sumup",
+  "tide",
+  "venmo",
+  "wise",
+] as const;
+
+export type GallerySupportPlatform = typeof GALLERY_SUPPORT_PLATFORMS[number];
+
+export interface GallerySupportLink {
+  id: string;
+  platform: GallerySupportPlatform;
+  label?: string;
+  url: string;
+}
+
 export interface GalleryBranding {
   brand_name: string;
   gallery_title: string;
@@ -69,6 +115,7 @@ export interface GalleryBranding {
   profile_id: string;
   custom_profiles: GalleryThemeProfile[];
   socials: GallerySocialLink[];
+  supports: GallerySupportLink[];
   logo: GalleryLogo | null;
   updated_at: string;
 }
@@ -122,6 +169,7 @@ export function createDefaultBranding(): GalleryBranding {
     profile_id: PRESET_PROFILES[0].id,
     custom_profiles: [],
     socials: [],
+    supports: [],
     logo: null,
     updated_at: DEFAULT_UPDATED_AT,
   };
@@ -140,6 +188,7 @@ export function normalizeStoredBranding(value: unknown): GalleryBranding {
     profile_id: profileId,
     custom_profiles: customProfiles,
     socials: normalizeStoredSocials(record.socials),
+    supports: normalizeStoredSupports(record.supports),
     logo: normalizeLogo(record.logo),
     updated_at: typeof record.updated_at === "string" && record.updated_at ? record.updated_at : fallback.updated_at,
   };
@@ -164,6 +213,7 @@ export function applyBrandingUpdate(previous: GalleryBranding, value: unknown, u
     profile_id: profileId,
     custom_profiles: customProfiles,
     socials: record.socials === undefined ? previous.socials : validateSocials(record.socials, previous.socials),
+    supports: record.supports === undefined ? previous.supports : validateSupports(record.supports),
     updated_at: updatedAt,
   };
 }
@@ -303,6 +353,44 @@ function validateSocials(value: unknown, previous: GallerySocialLink[]): Gallery
 
 function isSocialPlatform(value: unknown): value is GallerySocialPlatform {
   return typeof value === "string" && (GALLERY_SOCIAL_PLATFORMS as readonly string[]).includes(value);
+}
+
+function normalizeStoredSupports(value: unknown): GallerySupportLink[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const supports: GallerySupportLink[] = [];
+  for (const item of value.slice(0, MAX_SOCIAL_LINKS)) {
+    if (!isRecord(item) || typeof item.id !== "string" || !SOCIAL_ID_PATTERN.test(item.id) || !isSupportPlatform(item.platform)) continue;
+    const url = canonicalHttpUrl(item.url);
+    if (!url || seen.has(item.id)) continue;
+    seen.add(item.id);
+    const label = cleanOptionalText(item.label, MAX_SOCIAL_LABEL_LENGTH);
+    supports.push({ id: item.id, platform: item.platform, ...(label ? { label } : {}), url });
+  }
+  return supports;
+}
+
+function validateSupports(value: unknown): GallerySupportLink[] {
+  if (!Array.isArray(value)) throw badRequest("Support links must be an array.");
+  if (value.length > MAX_SOCIAL_LINKS) throw badRequest(`Support links are limited to ${MAX_SOCIAL_LINKS}.`);
+  const seen = new Set<string>();
+  return value.map((item, index) => {
+    if (!isRecord(item)) throw badRequest(`Support link ${index + 1} is invalid.`);
+    if (typeof item.id !== "string" || !SOCIAL_ID_PATTERN.test(item.id)) throw badRequest(`Support link ${index + 1} must have a valid id.`);
+    if (seen.has(item.id)) throw badRequest(`Support link id "${item.id}" is duplicated.`);
+    seen.add(item.id);
+    if (!isSupportPlatform(item.platform)) throw badRequest(`Support link ${index + 1} has an unsupported platform.`);
+    if (item.label !== undefined && typeof item.label !== "string") throw badRequest(`Support link ${index + 1} has an invalid label.`);
+    if (typeof item.label === "string" && item.label.length > MAX_SOCIAL_LABEL_LENGTH) throw badRequest(`Support link labels are limited to ${MAX_SOCIAL_LABEL_LENGTH} characters.`);
+    const url = canonicalHttpUrl(item.url);
+    if (!url) throw badRequest(`Support link ${index + 1} must use a valid http or https URL.`);
+    const label = cleanOptionalText(item.label, MAX_SOCIAL_LABEL_LENGTH);
+    return { id: item.id, platform: item.platform, ...(label ? { label } : {}), url };
+  });
+}
+
+function isSupportPlatform(value: unknown): value is GallerySupportPlatform {
+  return typeof value === "string" && (GALLERY_SUPPORT_PLATFORMS as readonly string[]).includes(value);
 }
 
 function canonicalHttpUrl(value: unknown): string | null {

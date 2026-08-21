@@ -230,6 +230,8 @@ h1, h2 { margin: 2px 0; }
   min-width: 0; display: grid; grid-template-columns: 32px 56px minmax(0, 1fr) 42px; align-items: center; gap: 10px;
   padding: 0 0 12px; border-bottom: 1px solid var(--border);
 }
+.support-admin-item .social-order-controls { min-height: 56px; }
+.support-admin-item .support-admin-icon { cursor: default; }
 .social-admin-item:last-child { padding-bottom: 0; border-bottom: 0; }
 .social-admin-item.is-dragging { opacity: .45; }
 .social-admin-item.is-drag-target { box-shadow: inset 3px 0 var(--accent); }
