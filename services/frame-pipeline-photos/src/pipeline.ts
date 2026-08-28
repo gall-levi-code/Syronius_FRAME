@@ -9,6 +9,7 @@ import {
   rename,
   rm,
   stat,
+  statfs,
 } from "node:fs/promises";
 import path from "node:path";
 import exifReader from "exif-reader";
@@ -30,6 +31,8 @@ const MAX_EXPLORE_ROUTES = 20;
 const MAX_EXPLORE_SEGMENTS = 2_000;
 const MAX_EXPLORE_POINTS = 50_000;
 const MAX_EXPLORE_PLACEMENTS = 10_000;
+const STORAGE_CHECK_INTERVAL_MS = 30_000;
+const RETENTION_SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 export type ExplorePoint = [number, number, number];
 
@@ -59,6 +62,16 @@ export interface PipelineStatus {
   last_quarantine_file: string | null;
   last_error: string | null;
   heic_supported: boolean;
+  processing_paused: boolean;
+  disk: {
+    state: "unknown" | "ok" | "warning" | "error";
+    total_bytes: number | null;
+    free_bytes: number | null;
+    percent_used: number | null;
+    message: string | null;
+  };
+  archives_pruned: number;
+  trash_purged: number;
 }
 
 interface Claim {
@@ -155,6 +168,9 @@ export class PhotoPipeline {
   private heicLock: Promise<void> = Promise.resolve();
   private recentJourneyReceipts = new Map<string, JourneyProgress>();
   private settings: PipelineProcessingSettings;
+  private nextStorageCheckAt = 0;
+  private nextRetentionSweepAt = 0;
+  private lastStorageNotice: string | null = null;
 
   constructor(readonly config: PipelineConfig) {
     this.directories = Object.fromEntries(
@@ -175,6 +191,16 @@ export class PhotoPipeline {
       last_quarantine_file: null,
       last_error: null,
       heic_supported: true,
+      processing_paused: false,
+      disk: {
+        state: "unknown",
+        total_bytes: null,
+        free_bytes: null,
+        percent_used: null,
+        message: null,
+      },
+      archives_pruned: 0,
+      trash_purged: 0,
     };
     this.settings = normalizeSettings(config.defaultSettings, config.defaultSettings);
   }
@@ -187,6 +213,7 @@ export class PhotoPipeline {
     await this.loadJourneyReceipts();
     await this.loadSettings();
     await this.ensureCurrentGallery();
+    await this.maintainStorage();
     await this.reconcileLatest();
   }
 
@@ -209,6 +236,8 @@ export class PhotoPipeline {
     this.scanning = true;
     try {
       await this.ensureCurrentGallery();
+      await this.maintainStorage();
+      if (this.status.processing_paused) return;
       await this.claimStagedFiles();
       const claims = await this.readClaims();
       for (const claim of claims) {
@@ -275,6 +304,150 @@ export class PhotoPipeline {
     this.settings = normalizeSettings(candidate, this.config.defaultSettings);
     await atomicWriteJson(path.join(this.directories.state, SETTINGS_FILE), this.settings);
     return this.getSettings();
+  }
+
+  private async maintainStorage(now = Date.now()): Promise<void> {
+    if (now >= this.nextRetentionSweepAt) {
+      this.nextRetentionSweepAt = now + RETENTION_SWEEP_INTERVAL_MS;
+      try {
+        const trashPurged = await this.pruneExpiredTrash(now);
+        const archivesPruned = await this.pruneExpiredArchives(now);
+        this.status.trash_purged += trashPurged;
+        this.status.archives_pruned += archivesPruned;
+        if (trashPurged || archivesPruned) {
+          console.log(`[photo-pipeline] storage cleanup purged ${trashPurged} trashed publication(s) and ${archivesPruned} archived original(s)`);
+        }
+      } catch (error) {
+        console.warn(`[photo-pipeline] storage cleanup skipped: ${errorMessage(error)}`);
+      }
+    }
+    if (now < this.nextStorageCheckAt) return;
+    this.nextStorageCheckAt = now + STORAGE_CHECK_INTERVAL_MS;
+    try {
+      const disk = await statfs(this.config.dataRoot);
+      const totalBytes = disk.blocks * disk.bsize;
+      const freeBytes = disk.bavail * disk.bsize;
+      const percentUsed = totalBytes ? ((totalBytes - freeBytes) / totalBytes) * 100 : 0;
+      const blocked = percentUsed >= this.config.diskErrorPercent || freeBytes < this.config.diskMinimumFreeBytes;
+      const warning = blocked || percentUsed >= this.config.diskWarnPercent;
+      const summary = `FRAME data disk is ${percentUsed.toFixed(1)}% full with ${formatGiB(freeBytes)} free.`;
+      const message = blocked
+        ? `${summary} Photo processing is paused; queued uploads are retained.`
+        : warning ? summary : null;
+      this.status.processing_paused = blocked;
+      this.status.disk = {
+        state: blocked ? "error" : warning ? "warning" : "ok",
+        total_bytes: totalBytes,
+        free_bytes: freeBytes,
+        percent_used: Number(percentUsed.toFixed(1)),
+        message,
+      };
+      this.reportStorageNotice(message);
+    } catch (error) {
+      const message = `Disk usage is unavailable: ${errorMessage(error)}`;
+      this.status.processing_paused = false;
+      this.status.disk = {
+        state: "unknown",
+        total_bytes: null,
+        free_bytes: null,
+        percent_used: null,
+        message,
+      };
+      this.reportStorageNotice(message);
+    }
+  }
+
+  private reportStorageNotice(message: string | null): void {
+    if (message === this.lastStorageNotice) return;
+    if (message) console.warn(`[photo-pipeline] ${message}`);
+    else if (this.lastStorageNotice) console.log("[photo-pipeline] disk pressure cleared; photo processing resumed");
+    this.lastStorageNotice = message;
+  }
+
+  private async pruneExpiredTrash(now: number): Promise<number> {
+    if (!(this.config.trashRetentionDays > 0)) return 0;
+    const cutoff = now - this.config.trashRetentionDays * 24 * 60 * 60 * 1000;
+    return this.withPublishLock(async () => {
+      let purged = 0;
+      for (const item of await this.listTrash()) {
+        const directory = path.join(this.directories.galleries, item.date_folder);
+        const marker = await readJsonOrNull<Record<string, unknown>>(path.join(directory, `${item.base}.trashed.json`));
+        const trashedAt = canonicalTimestampMs(marker?.trashed_at);
+        if (trashedAt === null || trashedAt > cutoff) continue;
+        const sidecar = await readJsonOrNull<Record<string, unknown>>(path.join(directory, `${item.base}.json`));
+        const journeyId = sidecar?.journey_id;
+        if (!validJourneyId(journeyId) || !(await this.verifiedTrackedArchive(item.date_folder, journeyId, item.base))) continue;
+        purged += await this.purgePublication(item.date_folder, item.base);
+      }
+      return purged;
+    });
+  }
+
+  private async pruneExpiredArchives(now: number): Promise<number> {
+    if (!(this.config.archiveRetentionDays > 0)) return 0;
+    const cutoff = now - this.config.archiveRetentionDays * 24 * 60 * 60 * 1000;
+    let pruned = 0;
+    for (const dateFolder of await safeReadDirectories(this.directories.archive)) {
+      if (!isDateFolder(dateFolder)) continue;
+      for (const journeyId of await safeReadDirectories(path.join(this.directories.archive, dateFolder))) {
+        if (!validJourneyId(journeyId)) continue;
+        let receipt: JourneyProgress | null;
+        try {
+          receipt = await this.readJourneyReceipt(journeyId);
+        } catch {
+          continue;
+        }
+        const archivedAt = canonicalTimestampMs(receipt?.updated_at);
+        if (
+          receipt?.state !== "published"
+          || receipt.journey_id !== journeyId
+          || receipt.date_folder !== dateFolder
+          || !isPhotoBase(receipt.base ?? "")
+          || !validContentSha256(receipt.content_sha256)
+          || archivedAt === null
+          || archivedAt > cutoff
+        ) continue;
+        const verifiedReceipt = await this.verifiedTrackedArchive(dateFolder, journeyId, receipt.base);
+        if (!verifiedReceipt) continue;
+        const removed = await this.withPublishLock(async () => {
+          const gallery = path.join(this.directories.galleries, dateFolder);
+          if (!(await exists(path.join(gallery, `${verifiedReceipt.base}.jpg`))) || !(await exists(path.join(gallery, `${verifiedReceipt.base}.ready`)))) return false;
+          let sidecar: Record<string, unknown> | null;
+          try {
+            sidecar = await readJsonOrNull<Record<string, unknown>>(path.join(gallery, `${verifiedReceipt.base}.json`));
+          } catch {
+            return false;
+          }
+          if (sidecar?.journey_id !== journeyId) return false;
+          await rm(path.join(this.directories.archive, dateFolder, journeyId), { recursive: true, force: true });
+          return true;
+        });
+        if (removed) pruned += 1;
+      }
+    }
+    return pruned;
+  }
+
+  private async verifiedTrackedArchive(dateFolder: string, journeyId: string, base?: string): Promise<JourneyProgress | null> {
+    try {
+      const receipt = await this.readJourneyReceipt(journeyId);
+      if (
+        receipt?.state !== "published"
+        || receipt.journey_id !== journeyId
+        || receipt.date_folder !== dateFolder
+        || !isPhotoBase(receipt.base ?? "")
+        || base !== undefined && receipt.base !== base
+        || !validContentSha256(receipt.content_sha256)
+      ) return null;
+      const archiveDirectory = path.join(this.directories.archive, dateFolder, journeyId);
+      for (const entry of await readdir(archiveDirectory, { withFileTypes: true })) {
+        if (!entry.isFile() || !archivedOriginalMatches(entry.name, receipt.original_name)) continue;
+        if (await sha256File(path.join(archiveDirectory, entry.name)) === receipt.content_sha256) return receipt;
+      }
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   async saveExplore(dateFolder: string, candidate: unknown): Promise<GalleryExplore> {
@@ -686,7 +859,7 @@ export class PhotoPipeline {
         await this.recalculateLatest(processedAt);
         await this.markJourneyPublished(claim, publication, processedAt);
       });
-      await this.finishClaim(claim, dateFolder);
+      await this.finishClaim(claim, publication);
       this.status.published += 1;
       this.status.last_publish_at = processedAt;
       this.status.last_publish_file = claim.originalName;
@@ -752,7 +925,7 @@ export class PhotoPipeline {
     await this.withPublishLock(async () => {
       await this.recalculateLatest(new Date().toISOString());
       await this.markJourneyPublished(claim, publication, new Date().toISOString());
-      await this.finishClaim(claim, publication.dateFolder);
+      await this.finishClaim(claim, publication);
     });
     this.status.published += 1;
     this.status.last_publish_at = new Date().toISOString();
@@ -774,9 +947,9 @@ export class PhotoPipeline {
     }
   }
 
-  private async finishClaim(claim: Claim, dateFolder: string): Promise<void> {
+  private async finishClaim(claim: Claim, publication: Publication): Promise<void> {
     if (this.config.archiveOriginals) {
-      const archiveDirectory = path.join(this.directories.archive, dateFolder);
+      const archiveDirectory = path.join(this.directories.archive, publication.dateFolder, claim.journey.journey_id);
       await mkdir(archiveDirectory, { recursive: true });
       await rename(claim.source, await availablePath(archiveDirectory, sanitizeFilename(claim.originalName)));
     }
@@ -1402,6 +1575,16 @@ function sanitizeFilename(filename: string): string {
   return `${sanitizeBase(parsed.name)}${parsed.ext.toLowerCase().replace(/[^.a-z0-9]/g, "").slice(0, 16)}`;
 }
 
+function archivedOriginalMatches(candidate: string, originalName: string): boolean {
+  const expected = path.parse(sanitizeFilename(originalName));
+  const actual = path.parse(candidate);
+  if (actual.ext !== expected.ext) return false;
+  if (actual.name === expected.name) return true;
+  const prefix = `${expected.name}_`;
+  const suffix = actual.name.slice(prefix.length);
+  return actual.name.startsWith(prefix) && /^[1-9]\d*$/.test(suffix) && Number(suffix) >= 2;
+}
+
 function readExif(buffer: Buffer | undefined): Record<string, unknown> {
   if (!buffer) return {};
   try {
@@ -1577,4 +1760,14 @@ async function runPool<T>(items: T[], concurrency: number, operation: (item: T) 
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function formatGiB(bytes: number): string {
+  return `${(bytes / 1024 ** 3).toFixed(1)} GiB`;
+}
+
+function canonicalTimestampMs(value: unknown): number | null {
+  if (typeof value !== "string") return null;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) && new Date(timestamp).toISOString() === value ? timestamp : null;
 }

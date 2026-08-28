@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import os from "node:os";
@@ -56,6 +56,96 @@ test("lists and serves only ready publications", async () => {
   await assert.rejects(store.requireImage(date, "trashed"));
   assert.match(await store.requireAdminImage(date, "trashed"), /trashed\.jpg$/);
   assert.equal((await sharp(await store.requireAdminThumbnail(date, "trashed")).metadata()).format, "webp");
+  store.close();
+});
+
+test("rebuilds its disposable catalog while preserving gallery settings", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-gallery-catalog-"));
+  const date = "2026-06-13";
+  const gallery = path.join(root, "galleries", date);
+  await mkdir(gallery, { recursive: true });
+  await publish(gallery, "oldest", true, "2026-06-13T12:00:00.000Z");
+  await publish(gallery, "newest", true, "2026-06-13T13:00:00.000Z");
+  const store = new GalleryStore(root, 320, 80);
+  await store.init();
+  await store.updateGallerySettings(date, { cover_base: "newest" });
+  assert.equal((await store.listDates())[0].count, 2);
+  assert.ok((await readFile(store.catalogFile)).length > 0);
+  store.close();
+
+  await writeFile(store.catalogFile, "not a sqlite database");
+  const recovered = new GalleryStore(root, 320, 80);
+  let summary = (await recovered.listDates())[0];
+  assert.equal(summary.count, 2);
+  assert.equal(summary.cover_base, "newest");
+  assert.equal(summary.cover_is_custom, true);
+
+  const trashMarker = path.join(gallery, "newest.trashed.json");
+  await writeFile(trashMarker, JSON.stringify({ trashed_at: new Date().toISOString() }));
+  expireCatalog(recovered);
+  summary = (await recovered.listDates())[0];
+  assert.equal(summary.count, 1);
+  assert.equal(summary.cover_base, "oldest");
+  assert.equal(summary.cover_fallback_active, true);
+  await rm(trashMarker);
+  expireCatalog(recovered);
+  assert.equal((await recovered.listDates())[0].cover_base, "newest");
+
+  await writeFile(trashMarker, JSON.stringify({ trashed_at: new Date().toISOString() }));
+  await Promise.all(["jpg", "json", "txt", "ready"].map((extension) => rm(path.join(gallery, `newest.${extension}`))));
+  expireCatalog(recovered);
+  summary = (await recovered.listDates())[0];
+  assert.equal(summary.count, 1);
+  assert.equal(summary.cover_base, "oldest");
+  assert.equal(summary.cover_is_custom, false);
+  assert.deepEqual((await recovered.listPhotos(date)).map((photo) => photo.base), ["oldest"]);
+  recovered.close();
+});
+
+test("normalizes catalog timestamps, deep-scans equal mtimes, and coalesces warm reads", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-gallery-catalog-hardening-"));
+  const date = "2026-06-13";
+  const gallery = path.join(root, "galleries", date);
+  await mkdir(gallery, { recursive: true });
+  await publish(gallery, "offset", true, "2026-06-13T08:00:00-05:00");
+  const malformedCases = [
+    ["malformed", "not-a-date"],
+    ["numeric", "0"],
+    ["date-only", "2026-06-13"],
+    ["impossible", "2026-02-30T12:00:00Z"],
+  ];
+  const fallback = new Date("2026-06-13T11:00:00.000Z");
+  for (const [base, timestamp] of malformedCases) {
+    await publish(gallery, base, true, timestamp);
+    await utimes(path.join(gallery, `${base}.ready`), fallback, fallback);
+  }
+  const store = new GalleryStore(root, 320, 80);
+  await store.init();
+
+  let photos = await store.listPhotos(date);
+  assert.equal(photos.find((photo) => photo.base === "offset").processed_at, "2026-06-13T13:00:00.000Z");
+  for (const [base] of malformedCases) {
+    assert.equal(photos.find((photo) => photo.base === base).processed_at, fallback.toISOString());
+  }
+
+  const directoryTime = await stat(gallery);
+  await publish(gallery, "equal-mtime", true, "2026-06-13T14:00:00.000Z");
+  await utimes(gallery, directoryTime.atime, directoryTime.mtime);
+  await store.pruneGallerySettings();
+  photos = await store.listPhotos(date);
+  assert.equal(photos[0].base, "equal-mtime");
+  assert.deepEqual(new Set(photos.map((photo) => photo.base)), new Set(["equal-mtime", "offset", ...malformedCases.map(([base]) => base)]));
+
+  const reconcile = store.reconcileCatalogInternal.bind(store);
+  let reconciliations = 0;
+  store.reconcileCatalogInternal = async (...args) => {
+    reconciliations += 1;
+    return reconcile(...args);
+  };
+  expireCatalog(store);
+  await Promise.all([store.listDates(), store.listDates(), store.listDates()]);
+  assert.equal(reconciliations, 1);
+  store.close();
 });
 
 test("rebuilds incomplete tile caches before serving them", async () => {
@@ -83,6 +173,12 @@ test("rebuilds incomplete tile caches before serving them", async () => {
   await mkdir(legacyTileSet, { recursive: true });
   await writeFile(path.join(legacyTileSet, ".complete"), "complete\n");
   const tileSet = path.join(store.cacheRoot, "tiles", date, "visible", "v2-overlap-1", view.source_version);
+  const obsoleteSourceSet = path.join(path.dirname(tileSet), "1-1");
+  await mkdir(obsoleteSourceSet, { recursive: true });
+  await writeFile(path.join(obsoleteSourceSet, ".complete"), "complete\n");
+  const abandonedTileSet = path.join(path.dirname(tileSet), `${view.source_version}.tmp-123-0123456789abcdef`);
+  await mkdir(abandonedTileSet, { recursive: true });
+  await writeFile(path.join(abandonedTileSet, "partial.webp"), "partial");
   const requestedTile = path.join(tileSet, "photo_files", "0", "0_0.webp");
   await mkdir(path.dirname(requestedTile), { recursive: true });
   await writeFile(requestedTile, "partial");
@@ -123,7 +219,9 @@ test("rebuilds incomplete tile caches before serving them", async () => {
   assert.ok(reconstructionError / reconstructed.length < 3);
   assert.match(await readFile(path.join(tileSet, "photo.dzi"), "utf8"), /Overlap="1"/);
   assert.equal(await readFile(path.join(tileSet, ".complete"), "utf8"), "complete\n");
-  assert.equal(await readFile(path.join(legacyTileSet, ".complete"), "utf8"), "complete\n");
+  await assert.rejects(readFile(path.join(legacyTileSet, ".complete"), "utf8"), (error) => error.code === "ENOENT");
+  await assert.rejects(readFile(path.join(obsoleteSourceSet, ".complete"), "utf8"), (error) => error.code === "ENOENT");
+  await assert.rejects(readFile(path.join(abandonedTileSet, "partial.webp")), (error) => error.code === "ENOENT");
   assert.equal((await readdir(path.dirname(tileSet))).some((entry) => entry.startsWith(`${view.source_version}.tmp-`)), false);
 });
 
@@ -175,11 +273,13 @@ test("persists per-gallery covers with a safe fallback and ignores retired downl
   assert.equal(Object.hasOwn(selected, "show_download_button"), false);
 
   await writeFile(path.join(gallery, "newest.trashed.json"), JSON.stringify({ trashed_at: new Date().toISOString() }));
+  expireCatalog(store);
   selected = (await store.listDates()).find((item) => item.date_folder === date);
   assert.equal(selected.cover_base, "oldest");
   assert.equal(selected.cover_fallback_active, true);
   assert.equal(selected.cover_is_custom, true);
   await rm(path.join(gallery, "newest.trashed.json"));
+  expireCatalog(store);
   selected = (await store.listDates()).find((item) => item.date_folder === date);
   assert.equal(selected.cover_base, "newest");
   assert.equal(selected.cover_fallback_active, false);
@@ -187,6 +287,7 @@ test("persists per-gallery covers with a safe fallback and ignores retired downl
     rm(path.join(gallery, "newest.ready")),
     rm(path.join(gallery, "newest.jpg")),
   ]);
+  expireCatalog(store);
   selected = (await store.listDates()).find((item) => item.date_folder === date);
   assert.equal(selected.cover_base, "oldest");
   assert.equal(selected.cover_fallback_active, false);
@@ -194,6 +295,7 @@ test("persists per-gallery covers with a safe fallback and ignores retired downl
 
   await store.pruneGallerySettings();
   await publish(gallery, "newest", true, "2026-06-13T13:00:00.000Z");
+  expireCatalog(store);
   selected = (await store.listDates()).find((item) => item.date_folder === date);
   assert.equal(selected.cover_base, "oldest");
   assert.equal(selected.cover_is_custom, false);
@@ -217,6 +319,7 @@ test("persists per-gallery covers with a safe fallback and ignores retired downl
   ]);
   await store.pruneGallerySettings();
   await publish(gallery, "reborn", true, "2026-06-13T15:00:00.000Z");
+  expireCatalog(store);
   selected = (await store.listDates()).find((item) => item.date_folder === date);
   assert.equal(selected.cover_base, "reborn");
   assert.equal(selected.cover_is_custom, false);
@@ -536,6 +639,70 @@ test("gallery HTTP API switches between protected tiles and the globally enabled
   }
 });
 
+test("paginates large gallery metadata with stable cursors", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-gallery-pages-"));
+  const date = "2026-06-13";
+  const gallery = path.join(root, "galleries", date);
+  await mkdir(gallery, { recursive: true });
+  await publish(gallery, "alpha", true, "2026-06-13T12:00:00.000Z");
+  await publish(gallery, "bravo", true, "2026-06-13T12:00:00.000Z");
+  await publish(gallery, "charlie", true, "2026-06-13T13:00:00.000Z");
+  await publish(gallery, "delta", true, "2026-06-13T11:00:00.000Z");
+  const store = new GalleryStore(root, 320, 80);
+  const app = await createApp(store, path.resolve("public"));
+  const server = app.listen(0);
+  await once(server, "listening");
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const firstResponse = await fetch(`${origin}/gallery/api/photos?date=${date}&limit=2`);
+    assert.equal(firstResponse.status, 200);
+    assert.equal(firstResponse.headers.get("cache-control"), "private, no-cache");
+    const first = await firstResponse.json();
+    const photoResponseKeys = ["date_folder", "next_cursor", "photos", "revision", "total"];
+    assert.deepEqual(Object.keys(first).sort(), photoResponseKeys);
+    assert.equal(first.total, 4);
+    assert.deepEqual(first.photos.map((photo) => photo.base), ["charlie", "bravo"]);
+    assert.ok(first.next_cursor);
+
+    await publish(gallery, "newest", true, "2026-06-13T14:00:00.000Z");
+    expireCatalog(store);
+    const second = await fetch(
+      `${origin}/gallery/api/photos?date=${date}&limit=2&cursor=${encodeURIComponent(first.next_cursor)}`,
+    ).then((response) => response.json());
+    assert.equal(second.total, 5);
+    assert.deepEqual(second.photos.map((photo) => photo.base), ["alpha", "delta"]);
+    assert.equal(second.next_cursor, null);
+    assert.deepEqual([...first.photos, ...second.photos].map((photo) => photo.base), ["charlie", "bravo", "alpha", "delta"]);
+
+    const allPages = [];
+    let cursor = null;
+    do {
+      const suffix = cursor ? `&cursor=${encodeURIComponent(cursor)}` : "";
+      const page = await fetch(`${origin}/gallery/api/photos?date=${date}&limit=2${suffix}`).then((response) => response.json());
+      allPages.push(...page.photos.map((photo) => photo.base));
+      cursor = page.next_cursor;
+    } while (cursor);
+    assert.deepEqual(allPages, ["newest", "charlie", "bravo", "alpha", "delta"]);
+    assert.equal(new Set(allPages).size, allPages.length);
+
+    const legacy = await fetch(`${origin}/gallery/api/photos?date=${date}`).then((response) => response.json());
+    assert.deepEqual(Object.keys(legacy).sort(), photoResponseKeys);
+    assert.deepEqual(legacy.photos.map((photo) => photo.base), allPages);
+    assert.equal(legacy.next_cursor, null);
+    const schema = JSON.parse(await readFile(path.resolve("../../docs/schemas/gallery-api.schema.json"), "utf8"));
+    const photoResponseSchema = schema.oneOf.find((branch) => branch.properties?.photos);
+    assert.deepEqual([...photoResponseSchema.required].sort(), photoResponseKeys);
+    assert.deepEqual(Object.keys(photoResponseSchema.properties).sort(), photoResponseKeys);
+    assert.equal((await fetch(`${origin}/gallery/api/photos?date=${date}&limit=0`)).status, 400);
+    assert.equal((await fetch(`${origin}/gallery/api/photos?date=${date}&limit=2&cursor=bad`)).status, 400);
+    const capped = await fetch(`${origin}/gallery/api/photos?date=${date}&limit=999`).then((response) => response.json());
+    assert.equal(capped.photos.length, 5);
+  } finally {
+    await closeServer(server);
+    store.close();
+  }
+});
+
 test("gallery admin is protected and proxies management through the internal service token", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "frame-gallery-"));
   const date = "2026-06-13";
@@ -565,11 +732,12 @@ test("gallery admin is protected and proxies management through the internal ser
     response.end(JSON.stringify({ ok: true, action: "empty-trash", affected: 0 }));
   });
   let server = null;
+  const store = new GalleryStore(root, 320, 80);
   try {
     pipeline.listen(0);
     await once(pipeline, "listening");
     const pipelinePort = pipeline.address().port;
-    const app = await createApp(new GalleryStore(root, 320, 80), path.resolve("public"), {
+    const app = await createApp(store, path.resolve("public"), {
       pipelineUrl: `http://127.0.0.1:${pipelinePort}`,
       serviceToken: "service-secret",
       auth: { username: "frame", password: "secret", realm: "FRAME Test" },
@@ -663,6 +831,7 @@ test("gallery admin is protected and proxies management through the internal ser
       headers: { authorization },
     }).then((response) => response.json())).explore, null);
     await publish(gallery, "hero", true, "2026-06-13T19:00:00.000Z");
+    expireCatalog(store);
     const settingsUrl = `${base}/gallery/admin/api/galleries/${date}/settings`;
     assert.equal((await fetch(settingsUrl, {
       method: "PUT",
@@ -706,6 +875,7 @@ test("gallery admin is protected and proxies management through the internal ser
     }).then((response) => response.json());
     assert.equal(result.action, "empty-trash");
   } finally {
+    store.close();
     await Promise.all([
       closeServer(server),
       closeServer(pipeline),
@@ -776,12 +946,13 @@ test("wires cover selection, global downloads, flowing photos, and viewer modes 
   assert.match(galleryScript, /actions\.append\(copyButton, qrButton\)/);
   assert.doesNotMatch(galleryScript, /actions\.append\(open,|icons\.open/);
   assert.match(galleryScript, /layoutJustifiedRows\(elements\.photoGallery, items/);
-  assert.match(galleryScript, /function schedulePhotoGalleryLayout\(\)/);
+  assert.match(galleryScript, /function schedulePhotoGalleryLayout\(scrollAnchor = null\)/);
   assert.match(galleryScript, /photoGalleryLayoutKey === layoutKey/);
   assert.match(galleryScript, /card\.dataset\.ratio = String/);
   assert.match(galleryScript, /openButton\.setAttribute\("aria-label", `Open \$\{photoName\}`\)/);
   assert.match(galleryScript, /openButton\.setAttribute\("aria-describedby", time\.id\)/);
   assert.match(galleryHtml, /id="photo-gallery"[^>]+aria-label="Gallery photos"/);
+  assert.match(galleryHtml, /id="photo-load-more"[^>]+type="button"[^>]+hidden>Load more photos/);
   assert.doesNotMatch(galleryHtml, /id="photo-gallery"[^>]+aria-live/);
   assert.match(galleryHtml, /class="photo-overlay"/);
   assert.match(galleryHtml, /class="photo-meta"><strong><\/strong><time><\/time>/);
@@ -794,6 +965,43 @@ test("wires cover selection, global downloads, flowing photos, and viewer modes 
   assert.match(galleryStyles, /\.photo-card:focus-within::after\s*\{[^}]*opacity:\s*1/);
   assert.match(galleryStyles, /@media \(hover: none\), \(pointer: coarse\)[\s\S]*?\.photo-card:focus-within \.photo-overlay \.card-action\s*\{[^}]*pointer-events:\s*none/);
   assert.match(galleryStyles, /\.is-photo-grid main\s*\{[^}]*width:\s*100%/);
+  assert.match(galleryStyles, /\.photo-load-more\s*\{[^}]*margin:\s*18px auto 0/);
+  assert.match(galleryScript, /const PHOTO_PAGE_SIZE = 60/);
+  assert.match(galleryScript, /new IntersectionObserver/);
+  assert.match(galleryScript, /requestJson\(photoApiUrl\(requestAllPhotos\)\)/);
+  assert.match(galleryScript, /if \(state\.refreshing\) return;[\s\S]*state\.refreshing = true/);
+  assert.match(galleryScript, /finally\s*\{\s*state\.refreshing = false/);
+  assert.match(galleryScript, /const reconcileLoadedPhotos = !forceRender[\s\S]*&& !appendOnly/);
+  assert.match(galleryScript, /reconcileLoadedPhotos && firstPhotoResult\.next_cursor[\s\S]*photoApiUrl\(true\)/);
+  assert.match(galleryScript, /state\.renderedPhotoCount = Math\.min\(state\.photos\.length, Math\.max\(previousRenderedCount, PHOTO_PAGE_SIZE\)\)/);
+  assert.match(galleryScript, /if \(total > state\.photoTotal && additions\.length === total - state\.photoTotal\)/);
+  assert.match(galleryScript, /async function loadMorePhotos\(\)/);
+  const loadMoreStart = galleryScript.indexOf("async function loadMorePhotos()");
+  const loadMoreEnd = galleryScript.indexOf("async function ensureAllPhotos", loadMoreStart);
+  assert.ok(loadMoreStart >= 0 && loadMoreEnd > loadMoreStart);
+  const loadMoreSource = galleryScript.slice(loadMoreStart, loadMoreEnd);
+  assert.doesNotMatch(loadMoreSource, /\brenderDay\s*\(/);
+  assert.doesNotMatch(loadMoreSource, /state\.photoRevision\s*=/);
+  assert.match(loadMoreSource, /const cursor = state\.photoNextCursor/);
+  assert.match(loadMoreSource, /const revision = state\.photoRevision/);
+  assert.match(loadMoreSource, /state\.photoNextCursor !== cursor \|\| state\.photoRevision !== revision \|\| Number\(result\.revision\) !== revision/);
+  assert.match(loadMoreSource, /finally\s*\{[\s\S]*state\.photosLoading = false;[\s\S]*updatePhotoLoadMore\(\)/);
+  assert.match(loadMoreSource, /\bappendPhotoCards\s*\(/);
+  const appendStart = galleryScript.indexOf("function appendPhotoCards");
+  const appendEnd = galleryScript.indexOf("async function loadMorePhotos", appendStart);
+  assert.ok(appendStart >= 0 && appendEnd > appendStart);
+  const appendSource = galleryScript.slice(appendStart, appendEnd);
+  assert.match(appendSource, /elements\.photoGallery\.append\(/);
+  assert.doesNotMatch(appendSource, /elements\.photoGallery\.replaceChildren/);
+  assert.match(galleryScript, /async function ensureAllPhotos/);
+  assert.match(galleryScript, /async function ensureAllPhotos[\s\S]*const revision = state\.photoRevision[\s\S]*if \(state\.photoRevision !== revision\) return false/);
+  assert.match(galleryScript, /async function selectExplorePhoto[\s\S]*state\.view !== "explore" && !\(await ensureAllPhotos\(\)\)/);
+  assert.match(galleryScript, /card\.dataset\.base = photo\.base/);
+  assert.match(galleryScript, /function capturePhotoGalleryScrollAnchor\(\)/);
+  assert.match(galleryScript, /function restorePhotoGalleryScrollAnchor\(anchor\)/);
+  assert.match(galleryScript, /window\.scrollBy\(0, card\.getBoundingClientRect\(\)\.top - anchor\.top\)/);
+  assert.match(galleryStyles, /\.lightbox\s*\{[^}]*height:\s*100vh;\s*height:\s*100dvh/);
+  assert.match(galleryScript, /state\.currentIndex \+ 1\} of \$\{state\.photoTotal/);
   assert.match(galleryScript, /\/gallery\/download\/\$\{encodeURIComponent\(route\.date\)\}/);
   assert.match(galleryScript, /\/gallery\/image\/\$\{encodeURIComponent\(route\.date\)\}/);
   assert.match(galleryScript, /return state\.branding\?\.show_download_button === true \? "image" : "tiles"/);
@@ -836,12 +1044,91 @@ test("wires cover selection, global downloads, flowing photos, and viewer modes 
   assert.match(galleryStyles, /\.socials-button:hover, \.socials-button:focus-visible\s*\{\s*animation:\s*none/);
   assert.match(galleryStyles, /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*\.socials-label-invite\s*\{\s*display:\s*none/);
   assert.match(galleryStyles, /html, body\s*\{[^}]*overflow-x:\s*clip/);
+  assert.match(galleryStyles, /html:has\(\.lightbox\[open\]\)\s*\{[^}]*overflow:\s*hidden/);
   assert.match(galleryStyles, /\.topbar\s*\{[^}]*position:\s*sticky[^}]*z-index:\s*1100[^}]*top:\s*0/);
-  assert.match(galleryHtml, /styles\.css\?v=gallery-support-2/);
-  assert.match(galleryHtml, /gallery\.js\?v=gallery-support-1/);
+  assert.match(galleryHtml, /styles\.css\?v=gallery-lightbox-scroll-1/);
+  assert.match(galleryHtml, /gallery\.js\?v=gallery-clipboard-2/);
+  assert.match(galleryScript, /Automatic copy was blocked\. Press and hold the link to copy it\./);
+  assert.match(galleryHtml, /<script[^>]*id="leaflet-script"[^>]*defer[^>]*src="https:\/\/unpkg\.com\/leaflet/);
+  assert.match(galleryHtml, /<script defer src="https:\/\/unpkg\.com\/qrcodejs/);
   assert.doesNotMatch(galleryScript, /photo\.image_url/);
   assert.match(galleryScript, /openPhotoBase/);
   assert.match(galleryScript, /options\.lightboxBase/);
+});
+
+test("clipboard copying prefers confirmed writes and rejects false legacy success", async () => {
+  const galleryScript = await readFile(path.resolve("public/gallery.js"), "utf8");
+  const start = galleryScript.indexOf("async function copyText");
+  const end = galleryScript.indexOf("function resetShareDialog", start);
+  assert.ok(start >= 0 && end > start);
+  const compile = (document, navigator) => Function("document", "navigator", `return (${galleryScript.slice(start, end)});`)(document, navigator);
+
+  let modernValue = null;
+  let legacyCalls = 0;
+  const modernCopy = compile({
+    activeElement: { closest: () => null },
+    body: {},
+    execCommand: () => { legacyCalls += 1; return true; },
+  }, { clipboard: { writeText: async (value) => { modernValue = value; } } });
+  await modernCopy("https://frame.test/social");
+  assert.equal(modernValue, "https://frame.test/social");
+  assert.equal(legacyCalls, 0);
+
+  const legacyHarness = (fireCopyEvent) => {
+    const state = {};
+    let copyListener = null;
+    const host = { append: (element) => { state.appended = element; element.isConnected = true; } };
+    const previousFocus = {
+      isConnected: true,
+      closest: (selector) => { state.selector = selector; return host; },
+      focus: (options) => { state.restored = options; },
+    };
+    const textarea = {
+      style: {},
+      focus: (options) => { state.focused = options; },
+      select: () => { state.selected = true; },
+      setSelectionRange: (from, to) => { state.selection = [from, to]; },
+      remove: () => { state.removed = true; },
+    };
+    const document = {
+      activeElement: previousFocus,
+      body: { append: () => { state.appendedToBody = true; } },
+      createElement: (tag) => { state.created = tag; return textarea; },
+      addEventListener: (_type, listener) => { copyListener = listener; },
+      removeEventListener: (_type, listener) => { if (copyListener === listener) copyListener = null; },
+      execCommand: (command) => {
+        state.command = command;
+        if (fireCopyEvent) copyListener?.({
+          clipboardData: { setData: (type, value) => { state.clipboard = [type, value]; } },
+          preventDefault: () => { state.prevented = true; },
+        });
+        return true;
+      },
+    };
+    return { copy: compile(document, {}), state, host, previousFocus, textarea };
+  };
+
+  const accepted = legacyHarness(true);
+  await accepted.copy("http://frame.local/social");
+  assert.equal(accepted.state.appended, accepted.textarea);
+  assert.equal(accepted.state.appendedToBody, undefined);
+  assert.equal(accepted.state.selector, "dialog[open]");
+  assert.deepEqual(accepted.state.clipboard, ["text/plain", "http://frame.local/social"]);
+  assert.deepEqual(accepted.state.selection, [0, "http://frame.local/social".length]);
+  assert.equal(accepted.state.prevented, true);
+  assert.deepEqual(accepted.state.restored, { preventScroll: true });
+
+  const explicitHost = legacyHarness(true);
+  explicitHost.previousFocus.closest = () => { explicitHost.state.usedFocusHost = true; return null; };
+  await explicitHost.copy("http://frame.local/social", {
+    closest: (selector) => { explicitHost.state.triggerSelector = selector; return explicitHost.host; },
+  });
+  assert.equal(explicitHost.state.usedFocusHost, undefined);
+  assert.equal(explicitHost.state.triggerSelector, "dialog[open]");
+  assert.equal(explicitHost.state.appended, explicitHost.textarea);
+
+  const falsePositive = legacyHarness(false);
+  await assert.rejects(falsePositive.copy("http://frame.local/social"), /Copy unavailable/);
 });
 
 async function closeServer(server) {
@@ -850,6 +1137,11 @@ async function closeServer(server) {
     server.close((error) => error ? reject(error) : resolve());
     server.closeAllConnections?.();
   });
+}
+
+function expireCatalog(store) {
+  store.catalogReconciledAt = 0;
+  store.catalogDateReconciledAt.clear();
 }
 
 async function publish(

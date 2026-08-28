@@ -257,10 +257,10 @@ function bindEvents() {
     const copyButton = event.target.closest("[data-copy-link]");
     if (!copyButton) return;
     try {
-      await copyText(copyButton.dataset.copyLink);
+      await copyText(copyButton.dataset.copyLink, copyButton);
       showToolLinksStatus("Link copied.");
     } catch {
-      showToolLinksStatus("Could not copy link.");
+      showToolLinksStatus("Automatic copy was blocked. Press and hold the link to copy it.");
     }
   });
   elements.servicesGrid.addEventListener("click", async (event) => {
@@ -1251,7 +1251,7 @@ function copyIcon() {
   return '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg>';
 }
 
-async function copyText(value) {
+async function copyText(value, trigger) {
   if (navigator.clipboard?.writeText) {
     try {
       await navigator.clipboard.writeText(value);
@@ -1264,19 +1264,34 @@ async function copyText(value) {
   const previousFocus = document.activeElement;
   const textarea = document.createElement("textarea");
   textarea.value = value;
-  textarea.setAttribute("readonly", "");
+  textarea.readOnly = true;
+  textarea.tabIndex = -1;
   textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "0";
   textarea.style.opacity = "0";
-  const container = elements.toolLinksDialog.open ? elements.toolLinksDialog : document.body;
+  const container = trigger?.closest?.("dialog[open]") || document.body;
   container.appendChild(textarea);
+  let copied = false;
+  const onCopy = (event) => {
+    if (!event.clipboardData) return;
+    event.clipboardData.setData("text/plain", value);
+    event.preventDefault();
+    copied = true;
+  };
+  document.addEventListener("copy", onCopy, { once: true });
   try {
-    textarea.focus();
+    textarea.focus({ preventScroll: true });
     textarea.select();
-    if (!document.execCommand("copy")) throw new Error("Copy failed");
+    textarea.setSelectionRange(0, value.length);
+    if (document.execCommand("copy") && copied) return;
+  } catch {
   } finally {
+    document.removeEventListener("copy", onCopy);
     textarea.remove();
-    if (typeof previousFocus?.focus === "function") previousFocus.focus();
+    if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
   }
+  throw new Error("Copy unavailable");
 }
 
 async function fetchJson(url, options) {

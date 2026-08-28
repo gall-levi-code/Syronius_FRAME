@@ -12,6 +12,11 @@ export interface PipelineConfig {
   maxPixels: number;
   conversionAttempts: number;
   archiveOriginals: boolean;
+  archiveRetentionDays: number;
+  trashRetentionDays: number;
+  diskWarnPercent: number;
+  diskErrorPercent: number;
+  diskMinimumFreeBytes: number;
   defaultSettings: PipelineProcessingSettings;
 }
 
@@ -33,6 +38,11 @@ export function loadConfig(): PipelineConfig {
     maxPixels: integer("PHOTO_MAX_MEGAPIXELS", 80, 1, 1000) * 1_000_000,
     conversionAttempts: integer("PHOTO_CONVERSION_ATTEMPTS", 3, 1, 10),
     archiveOriginals: boolean("PHOTO_ARCHIVE_ORIGINALS", true),
+    archiveRetentionDays: integer("PHOTO_ARCHIVE_RETENTION_DAYS", 0, 0, 36500),
+    trashRetentionDays: integer("PHOTO_TRASH_RETENTION_DAYS", 0, 0, 36500),
+    diskWarnPercent: integer("DISK_WARN_PERCENT", 85, 1, 100),
+    diskErrorPercent: integer("DISK_ERROR_PERCENT", 95, 1, 100),
+    diskMinimumFreeBytes: integer("DISK_MINIMUM_FREE_GB", 20, 0, 1_000_000) * 1024 ** 3,
     defaultSettings: {
       long_edge_px: integer("PHOTO_LONG_EDGE_PX", 0, 0, 12000),
       jpeg_quality: integer("PHOTO_JPEG_QUALITY", 92, 40, 100),

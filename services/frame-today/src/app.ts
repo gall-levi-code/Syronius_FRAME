@@ -35,6 +35,18 @@ export function createApp(
     response.redirect(state.date_folder && state.current_base ? `/today/gallery/${state.date_folder}/` : "/today/gallery");
   });
   app.get("/today/viewer", (_request, response) => response.sendFile(path.join(publicDir, "viewer.html")));
+  app.get("/today/image/:date/:file", async (request, response, next) => {
+    response.setHeader("Cache-Control", "private, no-cache");
+    response.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+    response.setHeader("X-Content-Type-Options", "nosniff");
+    try {
+      requireSameOriginImage(request);
+      const base = request.params.file.endsWith(".jpg") ? request.params.file.slice(0, -4) : "";
+      response.type("image/jpeg").sendFile(await store.requireImage(request.params.date, base));
+    } catch (error) {
+      next(error);
+    }
+  });
   app.get(["/today/dashboard", "/today/dashboard/"], requireBasicAuth(auth), (_request, response) => {
     response.sendFile(path.join(publicDir, "dashboard.html"));
   });
@@ -70,4 +82,10 @@ export function createApp(
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+function requireSameOriginImage(request: express.Request): void {
+  if (request.get("sec-fetch-site") !== "same-origin" || request.get("sec-fetch-dest") !== "image") {
+    throw new TodayRequestError("Photo was not found.", 404);
+  }
 }

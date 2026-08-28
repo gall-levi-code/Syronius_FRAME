@@ -15,12 +15,14 @@ const elements = {
   intervalValue: document.querySelector("#interval-value"),
   exif: document.querySelector("#exif-toggle"),
   thumbnailsToggle: document.querySelector("#thumbnails-toggle"),
+  thumbnailsClose: document.querySelector("#thumbnails-close"),
   backgroundToggle: document.querySelector("#background-toggle"),
   thumbnailSection: document.querySelector("#thumbnail-section"),
   thumbnails: document.querySelector("#thumbnails"),
   count: document.querySelector("#photo-count"),
   message: document.querySelector("#remote-message"),
   themeToggle: document.querySelector("#theme-toggle"),
+  headerCollapse: document.querySelector("#header-collapse"),
 };
 
 let socket;
@@ -29,9 +31,15 @@ let thumbnailsVisible = false;
 let previewAnimation = null;
 let presentationKey = "";
 let stateReceivedAt = 0;
+const durationSteps = [1, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30, 45, 60, 90, 120];
 
 initializeTheme();
 elements.themeToggle.addEventListener("click", toggleTheme);
+elements.headerCollapse.addEventListener("click", (event) => {
+  const collapsed = !document.body.classList.contains("header-collapsed");
+  setHeaderCollapsed(collapsed);
+  if (collapsed && event.detail > 0) elements.headerCollapse.blur();
+});
 window.addEventListener("storage", (event) => {
   if (event.key === "frame-theme-profile") {
     setThemeMode(readStoredTheme(), false);
@@ -50,18 +58,25 @@ elements.stop.addEventListener("click", () => send({ type: "STOP_SLIDESHOW" }));
 elements.autoScroll.addEventListener("click", () => send({ type: "AUTO_SCROLL_IMAGE" }));
 elements.exif.addEventListener("click", () => send({ type: "SET_SHOW_EXIF", show_exif: !state?.show_exif }));
 elements.thumbnailsToggle.addEventListener("click", () => {
-  thumbnailsVisible = !thumbnailsVisible;
-  elements.thumbnailsToggle.setAttribute("aria-pressed", String(thumbnailsVisible));
-  elements.thumbnailSection.hidden = !thumbnailsVisible;
+  setThumbnailsVisible(!thumbnailsVisible);
+});
+elements.thumbnailsClose.addEventListener("click", () => setThumbnailsVisible(false));
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && thumbnailsVisible) setThumbnailsVisible(false);
 });
 elements.backgroundToggle.addEventListener("click", () => send({
   type: "SET_SHOW_BACKGROUND",
   show_background: !state?.show_background,
 }));
 elements.interval.addEventListener("input", () => {
-  elements.intervalValue.textContent = durationLabel(Number(elements.interval.value) * 1000);
+  const duration = durationSteps[Number(elements.interval.value)] * 1000;
+  elements.intervalValue.textContent = durationLabel(duration);
+  elements.interval.setAttribute("aria-valuetext", durationLabel(duration));
 });
-elements.interval.addEventListener("change", () => send({ type: "SET_INTERVAL_MS", interval_ms: Number(elements.interval.value) * 1000 }));
+elements.interval.addEventListener("change", () => send({
+  type: "SET_INTERVAL_MS",
+  interval_ms: durationSteps[Number(elements.interval.value)] * 1000,
+}));
 elements.image.addEventListener("load", syncPresentation);
 
 connect();
@@ -69,6 +84,14 @@ requestAnimationFrame(renderProgress);
 
 function initializeTheme() {
   setThemeMode(readStoredTheme(), false);
+}
+
+function setHeaderCollapsed(collapsed) {
+  document.body.classList.toggle("header-collapsed", collapsed);
+  elements.headerCollapse.setAttribute("aria-expanded", String(!collapsed));
+  const label = collapsed ? "Expand header" : "Collapse header";
+  elements.headerCollapse.setAttribute("aria-label", label);
+  elements.headerCollapse.title = label;
 }
 
 function toggleTheme() {
@@ -149,9 +172,13 @@ function render() {
     button.setAttribute("aria-pressed", String(state.playback_state === mode));
   }
   elements.autoScroll.disabled = !photo || state.playback_state === "playing" || state.presentation_mode === "auto-scroll";
-  elements.autoScroll.textContent = state.presentation_mode === "auto-scroll" ? "Scrolling image..." : "Scroll image once";
-  elements.interval.value = String(Math.round(state.interval_ms / 1000));
+  const scrollLabel = state.presentation_mode === "auto-scroll" ? "Scrolling image" : "Scroll image once";
+  elements.autoScroll.setAttribute("aria-label", scrollLabel);
+  elements.autoScroll.title = scrollLabel;
+  elements.autoScroll.setAttribute("aria-pressed", String(state.presentation_mode === "auto-scroll"));
+  elements.interval.value = String(nearestDurationIndex(state.interval_ms));
   elements.intervalValue.textContent = durationLabel(state.interval_ms);
+  elements.interval.setAttribute("aria-valuetext", durationLabel(state.interval_ms));
   elements.exif.setAttribute("aria-pressed", String(state.show_exif));
   elements.backgroundToggle.setAttribute("aria-pressed", String(state.show_background));
   elements.count.textContent = `${state.count_today} photo${state.count_today === 1 ? "" : "s"}`;
@@ -161,10 +188,21 @@ function render() {
     button.className = `thumbnail-button${index === state.current_index ? " active" : ""}`;
     button.title = friendlyBase(item.base);
     button.innerHTML = `<img src="${item.thumbnail_url}" alt="">`;
-    button.addEventListener("click", () => send({ type: "GOTO_INDEX", index }));
+    button.addEventListener("click", () => {
+      send({ type: "GOTO_INDEX", index });
+      setThumbnailsVisible(false);
+    });
     return button;
   }));
   syncPresentation();
+}
+
+function setThumbnailsVisible(visible) {
+  thumbnailsVisible = visible;
+  elements.thumbnailsToggle.setAttribute("aria-pressed", String(visible));
+  elements.thumbnailSection.hidden = !visible;
+  if (visible) elements.thumbnailsClose.focus();
+  else elements.thumbnailsToggle.focus();
 }
 
 function syncPresentation() {
@@ -220,6 +258,13 @@ function setConnection(text, className) {
 function durationLabel(ms) {
   const seconds = Math.round(ms / 1000);
   return `${seconds} second${seconds === 1 ? "" : "s"}`;
+}
+
+function nearestDurationIndex(ms) {
+  const seconds = ms / 1000;
+  return durationSteps.reduce((best, value, index) => (
+    Math.abs(value - seconds) < Math.abs(durationSteps[best] - seconds) ? index : best
+  ), 0);
 }
 
 function friendlyBase(base) {

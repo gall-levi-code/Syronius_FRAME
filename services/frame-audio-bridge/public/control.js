@@ -179,6 +179,7 @@
   let delaySendTimer;
   let overlaySendTimer;
   let bridgeActionTimer;
+  let toastTimer;
   const inputHoldTimers = new Map();
   let bridgeActionPending = null;
   let bridgeActionRetry = false;
@@ -1598,19 +1599,68 @@
     elements.pill.className = `pill pill-${state}`;
   }
 
-  function showToast(message) {
+  function showToast(message, timeoutMs = 2000) {
+    clearTimeout(toastTimer);
     elements.toast.textContent = message;
     elements.toast.classList.add("show");
-    setTimeout(() => elements.toast.classList.remove("show"), 2000);
+    if (timeoutMs > 0) toastTimer = setTimeout(() => elements.toast.classList.remove("show"), timeoutMs);
   }
 
-  async function copyText(text) {
-    if (!text) {
-      return;
+  async function copyText(text, button) {
+    if (!text) throw new Error("Copy unavailable");
+    const previousFocus = document.activeElement;
+    const host = button.closest("dialog[open]") || document.body;
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(text);
+        return;
+      } catch {
+      }
     }
 
-    await navigator.clipboard.writeText(text);
-    showToast("Copied");
+    const temporary = document.createElement("textarea");
+    temporary.value = text;
+    temporary.readOnly = true;
+    temporary.tabIndex = -1;
+    temporary.style.position = "fixed";
+    temporary.style.left = "-9999px";
+    temporary.style.top = "0";
+    temporary.style.opacity = "0";
+    host.append(temporary);
+
+    let copied = false;
+    const onCopy = (event) => {
+      if (!event.clipboardData) return;
+      event.clipboardData.setData("text/plain", text);
+      event.preventDefault();
+      copied = true;
+    };
+    document.addEventListener("copy", onCopy, { once: true });
+    try {
+      temporary.focus({ preventScroll: true });
+      temporary.select();
+      temporary.setSelectionRange(0, text.length);
+      if (document.execCommand("copy") && copied) return;
+    } catch {
+    } finally {
+      document.removeEventListener("copy", onCopy);
+      temporary.remove();
+      if (previousFocus?.isConnected) previousFocus.focus?.({ preventScroll: true });
+    }
+    throw new Error("Copy unavailable");
+  }
+
+  async function copyUrl(text, button, label) {
+    if (!text) {
+      showToast(`${label} URL is not available yet.`);
+      return;
+    }
+    try {
+      await copyText(text, button);
+      showToast(`${label} URL copied.`);
+    } catch {
+      showToast(`Automatic copy was blocked. Press and hold this URL to copy it: ${text}`, 0);
+    }
   }
 
   function clampDelay(delayMs) {
@@ -1636,8 +1686,8 @@
     }
   }
 
-  elements.copyAudio.addEventListener("click", () => copyText(snapshot?.urls.audio));
-  elements.copyOverlay.addEventListener("click", () => copyText(snapshot?.urls.overlay));
+  elements.copyAudio.addEventListener("click", () => void copyUrl(snapshot?.urls.audio, elements.copyAudio, "Audio"));
+  elements.copyOverlay.addEventListener("click", () => void copyUrl(snapshot?.urls.overlay, elements.copyOverlay, "Overlay"));
   elements.bridgeSessionToggle.addEventListener("click", sendBridgeAction);
 
   elements.delaySlider.addEventListener("input", () => {

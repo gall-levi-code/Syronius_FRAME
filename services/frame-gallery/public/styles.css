@@ -35,6 +35,7 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html, body { max-width: 100%; overflow-x: clip; }
+html:has(.lightbox[open]) { overflow: hidden; }
 body { margin: 0; min-height: 100vh; background: var(--background); }
 button, input { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
@@ -133,6 +134,7 @@ main { width: min(1500px, 100%); margin: 0 auto; padding: 18px clamp(12px, 3vw, 
 .date-grid, .gallery-grid { width: 100%; min-width: 0; }
 .date-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 12px; }
 .gallery-grid { display: grid; align-content: start; gap: 5px; }
+.photo-load-more { display: block; margin: 18px auto 0; }
 .gallery-photo-row { min-width: 0; display: flex; flex-wrap: nowrap; align-items: start; gap: 5px; }
 .date-card {
   position: relative; min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
@@ -305,7 +307,7 @@ body.is-exploring { height: 100dvh; min-height: 0; overflow: hidden; }
 .social-destination-qr figcaption span { overflow-wrap: anywhere; }
 
 .lightbox {
-  position: fixed; width: 100vw; max-width: none; height: 100vh; max-height: none; margin: 0; padding: 0;
+  position: fixed; width: 100vw; max-width: none; height: 100vh; height: 100dvh; max-height: none; margin: 0; padding: 0;
   border: 0; background: var(--lightbox-background); color: var(--lightbox-text);
 }
 .lightbox::backdrop { background: var(--lightbox-background); }
@@ -387,7 +389,7 @@ body.is-exploring { height: 100dvh; min-height: 0; overflow: hidden; }
   width: 16px; height: 16px; border: 2px solid var(--lightbox-background); border-radius: 50%; background: var(--accent);
 }
 .lightbox-details {
-  position: absolute; z-index: 3; top: 58px; left: 4px; max-width: min(460px, calc(100vw - 8px)); max-height: calc(100vh - 66px);
+  position: absolute; z-index: 3; top: 58px; left: 4px; max-width: min(460px, calc(100vw - 8px)); max-height: calc(100vh - 66px); max-height: calc(100dvh - 66px);
   overflow: hidden; padding: 3px 5px; border-left: 2px solid var(--accent); border-radius: 2px;
   display: grid; gap: 8px; background: color-mix(in srgb, var(--lightbox-background) 86%, transparent); color: var(--lightbox-text);
   font: 10px/1.25 ui-monospace, SFMono-Regular, Consolas, monospace; pointer-events: none;

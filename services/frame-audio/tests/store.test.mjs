@@ -57,6 +57,14 @@ test("deleting and recreating a stream produces a fresh instance identity", asyn
   assert.equal(recreated.generation, 0);
 });
 
+test("admin URL copying requires browser-confirmed clipboard success", async () => {
+  const script = await readFile(new URL("../public/admin.js", import.meta.url), "utf8");
+  assert.match(script, /navigator\.clipboard\?\.writeText/);
+  assert.match(script, /clipboardData\.setData\("text\/plain", text\)/);
+  assert.match(script, /document\.execCommand\("copy"\) && copied/);
+  assert.match(script, /Automatic copy was blocked\. Press and hold this URL to copy it:/);
+});
+
 async function temporaryDirectory(context) {
   const directory = await mkdtemp(path.join(os.tmpdir(), "frame-audio-store-"));
   context.after(() => rm(directory, { recursive: true, force: true }));

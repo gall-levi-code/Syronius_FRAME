@@ -8,6 +8,7 @@ const VIEW_COOKIE = "frame_gallery_view";
 const VIEW_SESSION_TTL_MS = 5 * 60 * 1000;
 const MAX_VIEW_SESSIONS = 4096;
 const MAX_SESSION_PHOTOS = 32;
+const MAX_PHOTO_PAGE_SIZE = 100;
 
 interface TileSession {
   id: string;
@@ -231,7 +232,7 @@ export async function createApp(store: GalleryStore, publicDir: string, manageme
   });
   app.get("/gallery/api/dates", async (_request, response, next) => {
     try {
-      response.setHeader("Cache-Control", "no-store");
+      response.setHeader("Cache-Control", "private, no-cache");
       response.json({ dates: await store.listDates() });
     } catch (error) {
       next(error);
@@ -240,8 +241,25 @@ export async function createApp(store: GalleryStore, publicDir: string, manageme
   app.get("/gallery/api/photos", async (request, response, next) => {
     try {
       const date = typeof request.query.date === "string" ? request.query.date : "";
-      response.setHeader("Cache-Control", "no-store");
-      response.json({ date_folder: date, photos: await store.listPhotos(date) });
+      response.setHeader("Cache-Control", "private, no-cache");
+      if (request.query.limit === undefined) {
+        if (request.query.cursor !== undefined) throw new GalleryRequestError("Photo cursor requires a page size.", 400);
+        const photos = await store.listPhotos(date);
+        response.json({
+          date_folder: date,
+          photos,
+          total: photos.length,
+          next_cursor: null,
+          revision: await store.galleryRevision(date),
+        });
+        return;
+      }
+      const limit = photoPageLimit(request.query.limit);
+      const cursor = request.query.cursor === undefined
+        ? undefined
+        : typeof request.query.cursor === "string" ? request.query.cursor : null;
+      if (cursor === null) throw new GalleryRequestError("Photo cursor is invalid.", 400);
+      response.json({ date_folder: date, ...await store.listPhotoPage(date, limit, cursor) });
     } catch (error) {
       next(error);
     }
@@ -390,6 +408,15 @@ async function pipelineRequest(
 function stripExtension(value: string, extension: string): string {
   if (!value.endsWith(extension)) throw new GalleryRequestError("Invalid media path.", 400);
   return value.slice(0, -extension.length);
+}
+
+function photoPageLimit(value: unknown): number {
+  if (typeof value !== "string" || !/^[1-9]\d*$/.test(value)) {
+    throw new GalleryRequestError("Photo page size must be a positive integer.", 400);
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) throw new GalleryRequestError("Photo page size is invalid.", 400);
+  return Math.min(parsed, MAX_PHOTO_PAGE_SIZE);
 }
 
 function requireOrCreateTileSession(request: express.Request, sessions: Map<string, TileSession>): TileSession {

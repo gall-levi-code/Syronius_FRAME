@@ -1,4 +1,4 @@
-import { readdir, readFile, stat } from "node:fs/promises";
+import { access, readdir, readFile, stat } from "node:fs/promises";
 import type { Dirent } from "node:fs";
 import path from "node:path";
 
@@ -129,6 +129,22 @@ export class TodayStore {
       total_albums: albums.length,
       total_images: albums.reduce((total, album) => total + album.count, 0),
     };
+  }
+
+  async requireImage(dateFolder: string, base: string): Promise<string> {
+    assertDate(dateFolder);
+    assertBase(base);
+    const directory = path.join(this.galleriesRoot, dateFolder);
+    await access(path.join(directory, `${base}.ready`));
+    try {
+      await access(path.join(directory, `${base}.trashed.json`));
+      throw new TodayRequestError("Photo was not found.", 404);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    const image = path.join(directory, `${base}.jpg`);
+    await access(image);
+    return image;
   }
 
   private async readPhoto(dateFolder: string, base: string): Promise<TodayPhoto> {

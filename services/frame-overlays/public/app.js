@@ -563,7 +563,14 @@ function renderSelectedSource() {
     </section>`;
   bindSourceDetails(type);
   bindDesignControls(type);
-  mainContent.querySelector("#copy-source").addEventListener("click", async () => { await copyText(url); showNotice("OBS URL copied."); });
+  mainContent.querySelector("#copy-source").addEventListener("click", async (event) => {
+    try {
+      await copyText(url, event.currentTarget);
+      showNotice("OBS URL copied.");
+    } catch {
+      showNotice("Automatic copy was blocked. Press and hold the URL to copy it.", true);
+    }
+  });
   mainContent.querySelector("#reset-source").addEventListener("click", resetSourceDesign);
   mainContent.querySelector("#delete-source").addEventListener("click", deleteSource);
   renderPreview();
@@ -1649,14 +1656,46 @@ async function api(path, options = {}) {
   return body;
 }
 
-async function copyText(value) {
-  if (navigator.clipboard?.writeText) return navigator.clipboard.writeText(value);
+async function copyText(value, trigger) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return;
+    } catch {
+      // LAN-only HTTP pages may not have access to the Clipboard API.
+    }
+  }
+  const previousFocus = document.activeElement;
   const area = document.createElement("textarea");
   area.value = value;
-  document.body.append(area);
-  area.select();
-  document.execCommand("copy");
-  area.remove();
+  area.readOnly = true;
+  area.tabIndex = -1;
+  area.style.position = "fixed";
+  area.style.left = "-9999px";
+  area.style.top = "0";
+  area.style.opacity = "0";
+  const container = trigger?.closest?.("dialog[open]") || document.body;
+  container.append(area);
+  let copied = false;
+  const onCopy = (event) => {
+    if (!event.clipboardData) return;
+    event.clipboardData.setData("text/plain", value);
+    event.preventDefault();
+    copied = true;
+  };
+  document.addEventListener("copy", onCopy, { once: true });
+  try {
+    area.focus({ preventScroll: true });
+    area.select();
+    area.setSelectionRange(0, value.length);
+    if (document.execCommand("copy") && copied) return;
+  } catch {
+  } finally {
+    document.removeEventListener("copy", onCopy);
+    area.remove();
+    if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+  }
+  throw new Error("Copy unavailable");
 }
 
 function showNotice(message, isError = false) {

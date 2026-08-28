@@ -1624,6 +1624,30 @@ fn build_apply_environment(
         existing_or(existing, "PHOTO_ARCHIVE_ORIGINALS", "true"),
     );
     env.insert(
+        "PHOTO_ARCHIVE_RETENTION_DAYS".to_string(),
+        advanced_setting_or(
+            plan,
+            existing,
+            "PHOTO_ARCHIVE_RETENTION_DAYS",
+            "0",
+            0,
+            36500,
+            "Photo archive retention days",
+        )?,
+    );
+    env.insert(
+        "PHOTO_TRASH_RETENTION_DAYS".to_string(),
+        advanced_setting_or(
+            plan,
+            existing,
+            "PHOTO_TRASH_RETENTION_DAYS",
+            "0",
+            0,
+            36500,
+            "Photo trash retention days",
+        )?,
+    );
+    env.insert(
         "GALLERY_THUMB_WIDTH".to_string(),
         existing_or(existing, "GALLERY_THUMB_WIDTH", "720"),
     );
@@ -2094,6 +2118,8 @@ fn serialize_env(env: &BTreeMap<String, String>) -> String {
                 "PHOTO_MAX_MEGAPIXELS",
                 "PHOTO_CONVERSION_ATTEMPTS",
                 "PHOTO_ARCHIVE_ORIGINALS",
+                "PHOTO_ARCHIVE_RETENTION_DAYS",
+                "PHOTO_TRASH_RETENTION_DAYS",
                 "GALLERY_THUMB_WIDTH",
                 "GALLERY_THUMB_QUALITY",
                 "TODAY_DEFAULT_INTERVAL_MS",

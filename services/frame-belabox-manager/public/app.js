@@ -1307,11 +1307,55 @@ async function uninstallAgent(button) {
 async function copyToClipboard(button) {
   const text = button.dataset.copyText || "";
   try {
-    await navigator.clipboard.writeText(text);
+    await writeClipboardText(text, button);
     showNotice("URL copied.", "success");
   } catch {
-    showNotice(text, "success");
+    showNotice(`Automatic copy was blocked. Press and hold this URL to copy it: ${text}`, "error");
   }
+}
+
+async function writeClipboardText(text, button) {
+  if (!text) throw new Error("Copy unavailable");
+  const previousFocus = document.activeElement;
+  const host = button.closest("dialog[open]") || document.body;
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+    }
+  }
+
+  const temporary = document.createElement("textarea");
+  temporary.value = text;
+  temporary.readOnly = true;
+  temporary.tabIndex = -1;
+  temporary.style.position = "fixed";
+  temporary.style.left = "-9999px";
+  temporary.style.top = "0";
+  temporary.style.opacity = "0";
+  host.append(temporary);
+
+  let copied = false;
+  const onCopy = (event) => {
+    if (!event.clipboardData) return;
+    event.clipboardData.setData("text/plain", text);
+    event.preventDefault();
+    copied = true;
+  };
+  document.addEventListener("copy", onCopy, { once: true });
+  try {
+    temporary.focus({ preventScroll: true });
+    temporary.select();
+    temporary.setSelectionRange(0, text.length);
+    if (document.execCommand("copy") && copied) return;
+  } catch {
+  } finally {
+    document.removeEventListener("copy", onCopy);
+    temporary.remove();
+    if (previousFocus?.isConnected) previousFocus.focus?.({ preventScroll: true });
+  }
+  throw new Error("Copy unavailable");
 }
 
 async function forgetSavedSsh(button) {

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import path from "node:path";
@@ -8,6 +9,14 @@ const require = createRequire(import.meta.url);
 const express = require("express");
 const { SessionManager } = require("../dist/sessions/sessionManager.js");
 const { registerRoutes } = require("../dist/web/routes.js");
+
+test("control URL copying requires browser-confirmed clipboard success", async () => {
+  const script = await readFile(new URL("../public/control.js", import.meta.url), "utf8");
+  assert.match(script, /navigator\.clipboard\?\.writeText/);
+  assert.match(script, /clipboardData\.setData\("text\/plain", text\)/);
+  assert.match(script, /document\.execCommand\("copy"\) && copied/);
+  assert.match(script, /Automatic copy was blocked\. Press and hold this URL to copy it:/);
+});
 
 test("portal status is disabled without a service token and enforces bearer auth", async () => {
   const disabled = await createFixture({ portalServiceToken: undefined });

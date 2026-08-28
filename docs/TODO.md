@@ -90,7 +90,7 @@ removed.
 
 - Add `/stage/*` Photo Stage routes while preserving `/today/*` compatibility aliases.
 - Build the Discord delivery outbox after Photo Stage stabilizes.
-- Add archive retention controls and disk-pressure policy.
+- [x] Add opt-in archive/trash retention controls and pipeline disk-pressure warning/pause safeguards.
 - [x] Add reliable HEIC/HEIF decoding independent of the production Sharp runtime.
 - Add camera and long-running FTP soak tests.
 - [x] Freeze V1 processing, recovery, sidecar, and quarantine contracts.

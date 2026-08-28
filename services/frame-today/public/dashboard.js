@@ -38,7 +38,8 @@ elements.toolLinks.addEventListener("click", async (event) => {
   if (!(button instanceof HTMLButtonElement)) return;
   const label = button.dataset.copyLabel;
   try {
-    await navigator.clipboard.writeText(publicUrl(button.dataset.copyPath));
+    await copyText(publicUrl(button.dataset.copyPath), button);
+    elements.message.textContent = "";
     button.innerHTML = checkIcon();
     button.setAttribute("aria-label", `${label} URL copied`);
     button.title = `${label} URL copied`;
@@ -48,9 +49,49 @@ elements.toolLinks.addEventListener("click", async (event) => {
       button.title = `Copy ${label} URL`;
     }, 1800);
   } catch {
-    elements.message.textContent = `${label} could not be copied from this browser.`;
+    elements.message.textContent = `Automatic copy was blocked. Press and hold the ${label} open-link button to copy its URL.`;
   }
 });
+
+async function copyText(value, button) {
+  const previousFocus = document.activeElement;
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return;
+    } catch {
+    }
+  }
+  const temporary = document.createElement("textarea");
+  temporary.value = value;
+  temporary.readOnly = true;
+  temporary.tabIndex = -1;
+  temporary.style.position = "fixed";
+  temporary.style.left = "-9999px";
+  temporary.style.top = "0";
+  temporary.style.opacity = "0";
+  (button.closest("dialog[open]") || document.body).append(temporary);
+  let copied = false;
+  const onCopy = (event) => {
+    if (!event.clipboardData) return;
+    event.clipboardData.setData("text/plain", value);
+    event.preventDefault();
+    copied = true;
+  };
+  document.addEventListener("copy", onCopy, { once: true });
+  try {
+    temporary.focus({ preventScroll: true });
+    temporary.select();
+    temporary.setSelectionRange(0, value.length);
+    if (document.execCommand("copy") && copied) return;
+  } catch {
+  } finally {
+    document.removeEventListener("copy", onCopy);
+    temporary.remove();
+    if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+  }
+  throw new Error("Copy unavailable");
+}
 
 refresh();
 setInterval(refresh, 5000);

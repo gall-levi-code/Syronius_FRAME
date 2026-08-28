@@ -120,6 +120,8 @@ const CUSTOMIZABLE_ENV_KEYS = new Set([
   "PHOTO_MAX_MEGAPIXELS",
   "PHOTO_CONVERSION_ATTEMPTS",
   "PHOTO_ARCHIVE_ORIGINALS",
+  "PHOTO_ARCHIVE_RETENTION_DAYS",
+  "PHOTO_TRASH_RETENTION_DAYS",
   "GALLERY_THUMB_WIDTH",
   "GALLERY_THUMB_QUALITY",
   "TODAY_DEFAULT_INTERVAL_MS",
@@ -500,6 +502,8 @@ function buildEnvironment(existing, options, mode, capabilities) {
   const photoFtpMaxSessionsPerIp = normalizeInteger(setting(existing, "PHOTO_FTP_MAX_SESSIONS_PER_IP", "10"), "Photo FTP max sessions per IP", 1, 100);
   const photoUploadMaxFiles = normalizeInteger(setting(existing, "PHOTO_UPLOAD_MAX_FILES", "100"), "Photo upload max files", 1, 100);
   const photoUploadMaxSessions = normalizeInteger(setting(existing, "PHOTO_UPLOAD_MAX_SESSIONS", "2"), "Photo upload max sessions", 1, 100);
+  const photoArchiveRetentionDays = normalizeInteger(setting(existing, "PHOTO_ARCHIVE_RETENTION_DAYS", "0"), "Photo archive retention days", 0, 36500);
+  const photoTrashRetentionDays = normalizeInteger(setting(existing, "PHOTO_TRASH_RETENTION_DAYS", "0"), "Photo trash retention days", 0, 36500);
   const slsStatsPort = normalizePort(setting(existing, "SLS_STATS_PORT", "8080"), "SLS statistics port");
   const srtlaPort = normalizePort(setting(existing, "SRTLA_PORT", "5000"), "SRTLA port");
   const srtPlayerPort = normalizePort(setting(existing, "SRT_PLAYER_PORT", "4000"), "SRT player port");
@@ -581,6 +585,8 @@ function buildEnvironment(existing, options, mode, capabilities) {
     PHOTO_MAX_MEGAPIXELS: setting(existing, "PHOTO_MAX_MEGAPIXELS", "80"),
     PHOTO_CONVERSION_ATTEMPTS: setting(existing, "PHOTO_CONVERSION_ATTEMPTS", "3"),
     PHOTO_ARCHIVE_ORIGINALS: setting(existing, "PHOTO_ARCHIVE_ORIGINALS", "true"),
+    PHOTO_ARCHIVE_RETENTION_DAYS: photoArchiveRetentionDays,
+    PHOTO_TRASH_RETENTION_DAYS: photoTrashRetentionDays,
     GALLERY_THUMB_WIDTH: setting(existing, "GALLERY_THUMB_WIDTH", "720"),
     GALLERY_THUMB_QUALITY: setting(existing, "GALLERY_THUMB_QUALITY", "82"),
     TODAY_DEFAULT_INTERVAL_MS: setting(existing, "TODAY_DEFAULT_INTERVAL_MS", "10000"),
@@ -666,6 +672,8 @@ function validateEnvironment(env, config, forStart) {
   normalizeInteger(setting(env, "PHOTO_FTP_MAX_SESSIONS_PER_IP", "10"), "Photo FTP max sessions per IP", 1, 100);
   normalizeInteger(setting(env, "PHOTO_UPLOAD_MAX_FILES", "100"), "Photo upload max files", 1, 100);
   normalizeInteger(setting(env, "PHOTO_UPLOAD_MAX_SESSIONS", "2"), "Photo upload max sessions", 1, 100);
+  normalizeInteger(setting(env, "PHOTO_ARCHIVE_RETENTION_DAYS", "0"), "Photo archive retention days", 0, 36500);
+  normalizeInteger(setting(env, "PHOTO_TRASH_RETENTION_DAYS", "0"), "Photo trash retention days", 0, 36500);
   const slsStatsPort = normalizePort(defaultIfBlank(env.SLS_STATS_PORT, "8080"), "SLS statistics port");
   const srtlaPort = normalizePort(defaultIfBlank(env.SRTLA_PORT, "5000"), "SRTLA port");
   const srtPlayerPort = normalizePort(defaultIfBlank(env.SRT_PLAYER_PORT, "4000"), "SRT player port");
@@ -1363,6 +1371,8 @@ function serializeEnv(env) {
         "PHOTO_MAX_MEGAPIXELS",
         "PHOTO_CONVERSION_ATTEMPTS",
         "PHOTO_ARCHIVE_ORIGINALS",
+        "PHOTO_ARCHIVE_RETENTION_DAYS",
+        "PHOTO_TRASH_RETENTION_DAYS",
         "GALLERY_THUMB_WIDTH",
         "GALLERY_THUMB_QUALITY",
         "TODAY_DEFAULT_INTERVAL_MS",

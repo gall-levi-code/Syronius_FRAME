@@ -153,6 +153,107 @@ test("service URL utilities use icon-only Copy and Open controls", async () => {
   }
 });
 
+test("service URL copy helpers require browser-confirmed clipboard success", async () => {
+  const implementations = [
+    ["Portal", "services/frame-portal/public/portal.js", "async function copyText", "async function fetchJson"],
+    ["Overlay Wizard", "services/frame-overlays/public/app.js", "async function copyText", "function showNotice"],
+    ["Belabox Manager", "services/frame-belabox-manager/public/app.js", "async function writeClipboardText", "async function forgetSavedSsh"],
+    ["Stream Management", "services/frame-streams/public/app.js", "async function copyText", "function formatBitrate"],
+    ["Today Dashboard", "services/frame-today/public/dashboard.js", "async function copyText", "refresh();"],
+    ["Audio Management", "services/frame-audio/public/admin.js", "async function copyText", "async function api"],
+    ["Audio Bridge", "services/frame-audio-bridge/public/control.js", "async function copyText", "async function copyUrl"],
+  ];
+  const url = "http://frame.local/example";
+
+  for (const [label, path, startMarker, endMarker] of implementations) {
+    const source = await readFile(path, "utf8");
+    const start = source.indexOf(startMarker);
+    const end = source.indexOf(endMarker, start);
+    assert.ok(start >= 0 && end > start, `${label} clipboard helper could not be isolated`);
+    const compile = (document, navigator) => Function(
+      "document",
+      "navigator",
+      `return (${source.slice(start, end).trim()});`,
+    )(document, navigator);
+
+    const modern = clipboardHarness(false);
+    let modernValue = null;
+    await compile(modern.document, {
+      clipboard: { writeText: async (value) => { modernValue = value; } },
+    })(url, modern.button);
+    assert.equal(modernValue, url, `${label} did not use the modern Clipboard API`);
+    assert.equal(modern.state.command, undefined, `${label} used the legacy fallback after modern success`);
+
+    const accepted = clipboardHarness(true);
+    await compile(accepted.document, {})(url, accepted.button);
+    assert.equal(accepted.state.selector, "dialog[open]", `${label} did not resolve the fallback host from the clicked control`);
+    assert.equal(accepted.state.appended, accepted.textarea, `${label} did not mount its fallback in the active host`);
+    assert.deepEqual(accepted.state.clipboard, ["text/plain", url], `${label} did not write the exact URL`);
+    assert.deepEqual(accepted.state.selection, [0, url.length], `${label} did not select the complete URL`);
+    assert.equal(accepted.state.prevented, true, `${label} did not handle the copy event`);
+    assert.deepEqual(accepted.state.restored, { preventScroll: true }, `${label} did not restore focus`);
+
+    const falsePositive = clipboardHarness(false);
+    await assert.rejects(
+      compile(falsePositive.document, {})(url, falsePositive.button),
+      /Copy unavailable/,
+      `${label} accepted execCommand=true without a copy event`,
+    );
+  }
+
+  for (const path of [
+    "services/frame-portal/public/index.html",
+    "services/frame-overlays/public/index.html",
+    "services/frame-belabox-manager/public/index.html",
+    "services/frame-streams/public/index.html",
+    "services/frame-today/public/dashboard.html",
+    "services/frame-audio/public/admin.html",
+  ]) {
+    assert.match(await readFile(path, "utf8"), /\.js\?v=clipboard-confirmed-v1/, `${path} has a stale clipboard script cache key`);
+  }
+});
+
+function clipboardHarness(fireCopyEvent) {
+  const state = {};
+  let copyListener = null;
+  const textarea = {
+    style: {},
+    focus: (options) => { state.focused = options; },
+    select: () => { state.selected = true; },
+    setSelectionRange: (from, to) => { state.selection = [from, to]; },
+    remove: () => { state.removed = true; },
+  };
+  const host = {
+    append: (element) => { state.appended = element; },
+    appendChild: (element) => { state.appended = element; },
+  };
+  const previousFocus = {
+    isConnected: true,
+    focus: (options) => { state.restored = options; },
+  };
+  const document = {
+    activeElement: previousFocus,
+    body: host,
+    createElement: (tag) => { state.created = tag; return textarea; },
+    addEventListener: (_type, listener) => { copyListener = listener; },
+    removeEventListener: (_type, listener) => { if (copyListener === listener) copyListener = null; },
+    execCommand: (command) => {
+      state.command = command;
+      if (fireCopyEvent) {
+        copyListener?.({
+          clipboardData: { setData: (type, value) => { state.clipboard = [type, value]; } },
+          preventDefault: () => { state.prevented = true; },
+        });
+      }
+      return true;
+    },
+  };
+  const button = {
+    closest: (selector) => { state.selector = selector; return host; },
+  };
+  return { button, document, state, textarea };
+}
+
 test("LAN tool headers return to Dashboard and use the shared sign-out icon", async () => {
   const [photoUpload, photoStage, audioAdmin, audioFrontend, audioStyles] = await Promise.all([
     readFile("services/frame-photo-upload/public/index.html", "utf8"),
@@ -206,7 +307,7 @@ test("Stream Management supports a direct add-stream deep link", async () => {
   assert.ok(frontend.includes('"#add-stream"'), "SLSUI must recognize /slsui#add-stream");
   assert.ok(frontend.includes("clearAddStreamHash"), "SLSUI must clear the add-stream hash after the dialog closes");
   assert.ok(html.includes('class="brand brand-link" href="/dashboard"'), "Stream Management logo should return to the LAN dashboard");
-  assert.ok(html.includes("app.js?v=srt-player-local-v1"), "SLSUI app cache key should change when management behavior changes");
+  assert.ok(html.includes("app.js?v=clipboard-confirmed-v1"), "SLSUI app cache key should change when management behavior changes");
 });
 
 test("Stream Management keeps SRT player links local", async () => {
@@ -406,6 +507,9 @@ test("photo pipeline reports per-file outcomes for transfer UX", async () => {
   assert.ok(source.includes("last_publish_file"));
   assert.ok(source.includes("last_quarantine_file"));
   assert.ok(source.includes("last_quarantine_at"));
+  const archiveExpiry = source.match(/private async pruneExpiredArchives[\s\S]*?private async verifiedTrackedArchive/)?.[0] ?? "";
+  assert.match(archiveExpiry, /this\.withPublishLock\(async \(\) => \{[\s\S]*?sidecar\?\.journey_id !== journeyId[\s\S]*?await rm\(/, "Archive expiry must recheck the alternate gallery copy and remove the archive under the publication lock");
+  assert.match(archiveExpiry, /receipt\.journey_id !== journeyId/, "Archive expiry must reject a receipt stored under the wrong journey ID");
   assert.ok(pipelineServer.includes('request.header("x-frame-service-token")'));
   assert.ok(overlayServer.includes('headers.set("X-Frame-Service-Token", config.ingestApiToken)'));
 });
@@ -899,6 +1003,8 @@ test("Windows and Unix wrappers preserve direct commands while offering the numb
     assert.ok(wrapper.includes("Start or update stack"));
     assert.ok(wrapper.includes("set-discord-auth"));
     assert.ok(wrapper.includes("set-service-auth"));
+    assert.ok(wrapper.includes("PHOTO_ARCHIVE_RETENTION_DAYS"));
+    assert.ok(wrapper.includes("PHOTO_TRASH_RETENTION_DAYS"));
   }
   assert.ok(
     powershell.includes('"--force-recreate", "--no-deps"') &&
@@ -1045,13 +1151,15 @@ test("FRAME Setup app captures the approved GUI installer decisions", async () =
     assert.ok(frontend.includes(expected), `${expected} is missing from public hostname malformed checks`);
   }
   assert.ok(!frontend.includes("window.prompt"), "Storage selection should use the native folder picker, not typed browser prompts");
-  for (const expected of ["EDGE_HTTP_PORT", "PHOTO_FTP_PORT", "PHOTO_FTP_PASSIVE_MIN", "PHOTO_FTP_PASSIVE_MAX", "PHOTO_FTP_PASSIVE_MIN/MAX", "PHOTO_FTP_MIN_PASSWORD_LENGTH", "PHOTO_FTP_MAX_SESSIONS", "PHOTO_UPLOAD_MAX_FILES", "PHOTO_UPLOAD_MAX_SESSIONS", "SRTLA_PORT", "SRT_PLAYER_PORT", "SRT_SENDER_PORT"]) {
+  for (const expected of ["EDGE_HTTP_PORT", "PHOTO_FTP_PORT", "PHOTO_FTP_PASSIVE_MIN", "PHOTO_FTP_PASSIVE_MAX", "PHOTO_FTP_PASSIVE_MIN/MAX", "PHOTO_FTP_MIN_PASSWORD_LENGTH", "PHOTO_FTP_MAX_SESSIONS", "PHOTO_UPLOAD_MAX_FILES", "PHOTO_UPLOAD_MAX_SESSIONS", "PHOTO_ARCHIVE_RETENTION_DAYS", "PHOTO_TRASH_RETENTION_DAYS", "SRTLA_PORT", "SRT_PLAYER_PORT", "SRT_SENDER_PORT"]) {
     assert.ok(frontend.includes(expected), `${expected} is missing from exposed port planning`);
   }
   assert.match(frontend, /key: "ftpPassiveMax"[\s\S]*?defaultValue: 30019/, "Photo FTP passive max should default to the wider installer range");
   assert.match(frontend, /key: "PHOTO_FTP_MAX_SESSIONS"[\s\S]*?defaultValue: "20"/, "Photo FTP max sessions should match the installer default");
   assert.match(frontend, /key: "PHOTO_UPLOAD_MAX_FILES"[\s\S]*?defaultValue: "100"/, "Browser uploads should allow the larger queue by default");
   assert.match(frontend, /key: "PHOTO_UPLOAD_MAX_SESSIONS"[\s\S]*?defaultValue: "2"/, "Browser uploads should default to two concurrent sessions");
+  assert.match(frontend, /key: "PHOTO_ARCHIVE_RETENTION_DAYS"[\s\S]*?defaultValue: "0"[\s\S]*?min: 0[\s\S]*?max: 36500/, "Archive retention should be opt-in and bounded");
+  assert.match(frontend, /key: "PHOTO_TRASH_RETENTION_DAYS"[\s\S]*?defaultValue: "0"[\s\S]*?min: 0[\s\S]*?max: 36500/, "Trash retention should be opt-in and bounded");
   assert.ok(frontend.includes('photoFtpPassive: "30000-30019"'), "Initial install plan should use the wider FTP passive range");
   assert.ok(frontend.includes("selectedServices"));
   assert.ok(frontend.includes("subfolders"));
@@ -1064,7 +1172,7 @@ test("FRAME Setup app captures the approved GUI installer decisions", async () =
   for (const expected of ["detect_previous_installations", "run_preflight", "save_install_plan", "apply_install_plan", "frame-install.json", "record_installation"]) {
     assert.ok(rust.includes(expected), `${expected} is missing from host setup commands`);
   }
-  for (const expected of ["docker", "compose", "docker-compose.yml", "COMPOSE_PROFILES", "find_stack_source", "frame-stack", "resource_dir", "hidden_command", "CREATE_NO_WINDOW", "BUILDKIT_PROGRESS", "advanced_settings", "PHOTO_FTP_MIN_PASSWORD_LENGTH", "PHOTO_UPLOAD_MAX_FILES"]) {
+  for (const expected of ["docker", "compose", "docker-compose.yml", "COMPOSE_PROFILES", "find_stack_source", "frame-stack", "resource_dir", "hidden_command", "CREATE_NO_WINDOW", "BUILDKIT_PROGRESS", "advanced_settings", "PHOTO_FTP_MIN_PASSWORD_LENGTH", "PHOTO_UPLOAD_MAX_FILES", "PHOTO_ARCHIVE_RETENTION_DAYS", "PHOTO_TRASH_RETENTION_DAYS"]) {
     assert.ok(rust.includes(expected), `${expected} is missing from native install/apply backend`);
   }
   assert.ok(rust.includes("is_valid_relay_host"), "Native setup must validate the advertised SRTLA host");
@@ -1072,6 +1180,8 @@ test("FRAME Setup app captures the approved GUI installer decisions", async () =
   assert.match(rust, /"PHOTO_FTP_MAX_SESSIONS"[\s\S]*?"20"/, "Native setup should write the current FTP session default");
   assert.match(rust, /"PHOTO_UPLOAD_MAX_FILES"[\s\S]*?"100"/, "Native setup should write the current browser upload queue default");
   assert.match(rust, /"PHOTO_UPLOAD_MAX_SESSIONS"[\s\S]*?"2"/, "Native setup should write the current browser upload concurrency default");
+  assert.match(rust, /"PHOTO_ARCHIVE_RETENTION_DAYS"[\s\S]*?"0"[\s\S]*?0,[\s\S]*?36500/, "Native setup should validate and persist archive retention");
+  assert.match(rust, /"PHOTO_TRASH_RETENTION_DAYS"[\s\S]*?"0"[\s\S]*?0,[\s\S]*?36500/, "Native setup should validate and persist trash retention");
   assert.ok(tauriConfig.bundle.resources["../../../services/"], "setup app must bundle FRAME services");
   assert.ok(tauriConfig.bundle.resources["../../../config/"], "setup app must bundle FRAME config");
   assert.ok(tauriConfig.bundle.resources["../../../installer/stack.ps1"], "setup app must bundle the Windows stack launcher");

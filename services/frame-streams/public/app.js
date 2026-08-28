@@ -239,7 +239,7 @@ function openLinks(id) {
   document.querySelector("#links-list").innerHTML = links.map(([label, url]) => `
     <div class="link-row"><label>${escapeHtml(label)}<input readonly value="${escapeAttr(url)}"></label>
     <button class="icon-button link-action" type="button" data-copy="${escapeAttr(url)}" aria-label="Copy ${escapeAttr(label)}" aria-live="polite" title="Copy ${escapeAttr(label)}">${COPY_ICON}</button></div>`).join("");
-  document.querySelectorAll("[data-copy]").forEach((button) => button.addEventListener("click", async () => copyWithConfirmation(button)));
+  document.querySelectorAll("[data-copy]").forEach((button) => button.addEventListener("click", () => copyWithConfirmation(button)));
   linksDialog.showModal();
 }
 
@@ -283,7 +283,7 @@ function openStatsOutputs(id) {
       </div>
     </div>`;
   }).join("");
-  document.querySelectorAll("[data-copy]").forEach((button) => button.addEventListener("click", async () => copyWithConfirmation(button)));
+  document.querySelectorAll("[data-copy]").forEach((button) => button.addEventListener("click", () => copyWithConfirmation(button)));
   statsOutputDialog.showModal();
 }
 
@@ -305,9 +305,26 @@ function showNotice(message, kind = "error") {
 }
 function clearNotice() { notice.className = "notice hidden"; }
 async function copyWithConfirmation(button) {
-  await navigator.clipboard.writeText(button.dataset.copy);
   const label = button.dataset.copyLabel ||= button.getAttribute("aria-label");
   const title = button.dataset.copyTitle ||= button.title;
+  try {
+    await copyText(button.dataset.copy, button);
+  } catch {
+    const row = button.closest(".link-row");
+    const input = row?.querySelector("input");
+    input?.focus({ preventScroll: true });
+    input?.select();
+    input?.setSelectionRange?.(0, input.value.length);
+    button.closest("dialog")?.querySelectorAll(".copy-failure").forEach((message) => message.remove());
+    const message = document.createElement("small");
+    message.className = "copy-failure";
+    message.setAttribute("role", "status");
+    message.style.gridColumn = "1 / -1";
+    message.textContent = "Automatic copy was blocked. Press and hold the selected URL to copy it manually.";
+    row?.append(message);
+    return;
+  }
+  button.closest("dialog")?.querySelectorAll(".copy-failure").forEach((message) => message.remove());
   button.innerHTML = CHECK_ICON;
   button.setAttribute("aria-label", label.replace(/^Copy/, "Copied"));
   button.title = title.replace(/^Copy/, "Copied");
@@ -316,6 +333,46 @@ async function copyWithConfirmation(button) {
     button.setAttribute("aria-label", label);
     button.title = title;
   }, 1200);
+}
+
+async function copyText(value, button) {
+  const previousFocus = document.activeElement;
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return;
+    } catch {
+    }
+  }
+  const temporary = document.createElement("textarea");
+  temporary.value = value;
+  temporary.readOnly = true;
+  temporary.tabIndex = -1;
+  temporary.style.position = "fixed";
+  temporary.style.left = "-9999px";
+  temporary.style.top = "0";
+  temporary.style.opacity = "0";
+  (button.closest("dialog[open]") || document.body).append(temporary);
+  let copied = false;
+  const onCopy = (event) => {
+    if (!event.clipboardData) return;
+    event.clipboardData.setData("text/plain", value);
+    event.preventDefault();
+    copied = true;
+  };
+  document.addEventListener("copy", onCopy, { once: true });
+  try {
+    temporary.focus({ preventScroll: true });
+    temporary.select();
+    temporary.setSelectionRange(0, value.length);
+    if (document.execCommand("copy") && copied) return;
+  } catch {
+  } finally {
+    document.removeEventListener("copy", onCopy);
+    temporary.remove();
+    if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+  }
+  throw new Error("Copy unavailable");
 }
 function formatBitrate(value) { return value >= 1000 ? `${(value / 1000).toFixed(2)} Mbps` : `${value} kbps`; }
 function formatMilliseconds(value) { return Number.isFinite(value) ? `${Number(value).toFixed(1)} ms` : "--"; }

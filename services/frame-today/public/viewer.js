@@ -17,12 +17,10 @@ let currentPhotoKey = null;
 let latestState = null;
 let viewerAnimation = null;
 let presentationFrame = null;
-let photoSessionController = null;
 let transitionTimer = null;
 let presentationKey = "";
 let stateReceivedAt = 0;
 let loadRevision = 0;
-const tileBatches = new WeakMap();
 
 window.addEventListener("resize", () => {
   clearPresentation();
@@ -87,22 +85,8 @@ function render(state) {
 }
 
 async function stagePhoto(photo, photoKey, accessibleName, revision) {
-  const controller = new AbortController();
-  photoSessionController?.abort();
-  photoSessionController = controller;
   try {
-    const response = await fetch("/gallery/api/view-session", {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ date_folder: photo.date_folder, base: photo.base }),
-      signal: controller.signal,
-    });
-    if (!response.ok) throw new Error(`Photo session failed (${response.status}).`);
-    const { view } = await response.json();
-    if (photoSessionController === controller) photoSessionController = null;
-    if (revision !== loadRevision || currentPhotoKey !== photoKey) return;
-    await fillLayer(nextLayer, view, photoKey);
+    await fillLayer(nextLayer, photo, photoKey);
     if (revision !== loadRevision || currentPhotoKey !== photoKey) return;
 
     layoutLayer(nextLayer, "default");
@@ -127,13 +111,10 @@ async function stagePhoto(photo, photoKey, accessibleName, revision) {
       if (socket?.readyState === WebSocket.OPEN) setStatus("Connected", true);
     }, 440);
   } catch (error) {
-    if (photoSessionController === controller) photoSessionController = null;
-    if (error?.name === "AbortError") return;
     if (revision !== loadRevision || currentPhotoKey !== photoKey) return;
     currentPhotoKey = null;
     elements.stage.setAttribute("aria-busy", "false");
     nextLayer.classList.remove("reveal");
-    cancelTileBatch(nextLayer);
     nextLayer.replaceChildren();
     setStatus("Image unavailable", false);
     setTimeout(() => {
@@ -143,155 +124,37 @@ async function stagePhoto(photo, photoKey, accessibleName, revision) {
   }
 }
 
-async function fillLayer(layer, view, photoKey) {
-  const manifest = normalizeTileView(view);
-  cancelTileBatch(layer);
+async function fillLayer(layer, photo, photoKey) {
   const frame = document.createElement("div");
-  const surface = document.createElement("div");
+  const image = new Image();
   frame.className = "photo-frame";
   frame.setAttribute("aria-hidden", "true");
-  surface.className = "tile-surface";
-  surface.style.width = `${manifest.width}px`;
-  surface.style.height = `${manifest.height}px`;
-  surface.style.gridTemplateColumns = Array.from(
-    { length: manifest.columns },
-    (_, x) => `${Math.min(manifest.tileSize, manifest.width - x * manifest.tileSize)}px`,
-  ).join(" ");
-  surface.style.gridTemplateRows = Array.from(
-    { length: manifest.rows },
-    (_, y) => `${Math.min(manifest.tileSize, manifest.height - y * manifest.tileSize)}px`,
-  ).join(" ");
-  frame.append(surface);
+  image.className = "photo-image";
+  image.alt = "";
+  image.draggable = false;
+  image.decoding = "async";
+  frame.append(image);
   layer.replaceChildren(frame);
+  await new Promise((resolve, reject) => {
+    image.onload = resolve;
+    image.onerror = () => reject(new Error("Photo could not be loaded."));
+    image.src = `/today/image/${photo.date_folder}/${photo.base}.jpg`;
+  });
+  image.onload = null;
+  image.onerror = null;
   Object.assign(layer.dataset, {
     photoKey,
-    width: String(manifest.width),
-    height: String(manifest.height),
+    width: String(image.naturalWidth),
+    height: String(image.naturalHeight),
   });
-  await loadTileBatch(layer, manifest, surface);
-}
-
-function loadTileBatch(layer, manifest, surface) {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    let remaining = manifest.tiles.length;
-    const images = [];
-    const finish = (error) => {
-      if (settled) return;
-      settled = true;
-      for (const image of images) {
-        image.onload = null;
-        image.onerror = null;
-        if (error) image.removeAttribute("src");
-      }
-      if (tileBatches.get(layer) === batch) tileBatches.delete(layer);
-      if (error) reject(error);
-      else resolve();
-    };
-    const batch = {
-      images,
-      cancel() {
-        const error = new Error("Photo tile load was cancelled.");
-        error.name = "AbortError";
-        finish(error);
-      },
-    };
-    tileBatches.set(layer, batch);
-    for (const tile of manifest.tiles) {
-      const draw = tileDrawRect(tile, manifest);
-      const cell = document.createElement("div");
-      const image = new Image();
-      cell.className = "photo-tile-cell";
-      cell.style.gridColumn = String(tile.x + 1);
-      cell.style.gridRow = String(tile.y + 1);
-      cell.style.width = `${tile.width}px`;
-      cell.style.height = `${tile.height}px`;
-      image.className = "photo-tile";
-      image.alt = "";
-      image.draggable = false;
-      image.decoding = "async";
-      image.style.left = `${-draw.sourceX}px`;
-      image.style.top = `${-draw.sourceY}px`;
-      image.style.width = `${draw.encodedWidth}px`;
-      image.style.height = `${draw.encodedHeight}px`;
-      image.onload = () => {
-        if (image.naturalWidth !== draw.encodedWidth || image.naturalHeight !== draw.encodedHeight) {
-          finish(new Error("Photo tile dimensions do not match the manifest."));
-          return;
-        }
-        image.onload = null;
-        image.onerror = null;
-        remaining -= 1;
-        if (!remaining) finish();
-      };
-      image.onerror = () => finish(new Error("Photo tile could not be loaded."));
-      images.push(image);
-      cell.append(image);
-      surface.append(cell);
-    }
-    for (let index = 0; index < images.length; index += 1) images[index].src = manifest.tiles[index].url;
-  });
-}
-
-function cancelTileBatch(layer) {
-  tileBatches.get(layer)?.cancel();
-}
-
-function normalizeTileView(view) {
-  const width = positiveInteger(view?.width);
-  const height = positiveInteger(view?.height);
-  const tileSize = positiveInteger(view?.tile_size);
-  const overlap = positiveInteger(view?.overlap);
-  const columns = positiveInteger(view?.columns);
-  const rows = positiveInteger(view?.rows);
-  if (!width || !height || tileSize !== 512 || overlap !== 1 || columns !== Math.ceil(width / tileSize) || rows !== Math.ceil(height / tileSize) || !Array.isArray(view.tiles) || view.tiles.length !== columns * rows) {
-    throw new Error("Photo session returned an invalid tile manifest.");
-  }
-  const coordinates = new Set();
-  const tiles = view.tiles.map((tile) => {
-    const x = Number(tile.x);
-    const y = Number(tile.y);
-    const tileWidth = positiveInteger(tile.width);
-    const tileHeight = positiveInteger(tile.height);
-    const url = new URL(tile.url, location.origin);
-    const key = `${x}:${y}`;
-    if (!Number.isInteger(x) || !Number.isInteger(y) || x < 0 || y < 0 || x >= columns || y >= rows || tileWidth !== Math.min(tileSize, width - x * tileSize) || tileHeight !== Math.min(tileSize, height - y * tileSize) || coordinates.has(key) || url.origin !== location.origin || !url.pathname.startsWith("/gallery/tile/")) {
-      throw new Error("Photo session returned an invalid tile manifest.");
-    }
-    coordinates.add(key);
-    return { x, y, width: tileWidth, height: tileHeight, url: `${url.pathname}${url.search}` };
-  });
-  return { width, height, tileSize, overlap, columns, rows, tiles };
-}
-
-function positiveInteger(value) {
-  const number = Number(value);
-  return Number.isInteger(number) && number > 0 ? number : 0;
-}
-
-function tileDrawRect(tile, manifest) {
-  const left = tile.x > 0 ? manifest.overlap : 0;
-  const top = tile.y > 0 ? manifest.overlap : 0;
-  const right = tile.x + 1 < manifest.columns ? manifest.overlap : 0;
-  const bottom = tile.y + 1 < manifest.rows ? manifest.overlap : 0;
-  return {
-    sourceX: left,
-    sourceY: top,
-    destinationX: tile.x * manifest.tileSize,
-    destinationY: tile.y * manifest.tileSize,
-    width: tile.width,
-    height: tile.height,
-    encodedWidth: tile.width + left + right,
-    encodedHeight: tile.height + top + bottom,
-  };
 }
 
 function layoutLayer(layer, mode) {
   const frame = layer.querySelector(".photo-frame");
-  const surface = layer.querySelector(".tile-surface");
+  const image = layer.querySelector(".photo-image");
   const width = Number(layer.dataset.width);
   const height = Number(layer.dataset.height);
-  if (!frame || !surface || !width || !height) return;
+  if (!frame || !image || !width || !height) return;
 
   const stageWidth = elements.stage.clientWidth || window.innerWidth;
   const stageHeight = elements.stage.clientHeight || window.innerHeight;
@@ -302,7 +165,7 @@ function layoutLayer(layer, mode) {
   frame.style.top = `${mode === "auto-scroll" ? 0 : (stageHeight - displayHeight) / 2}px`;
   frame.style.width = `${displayWidth}px`;
   frame.style.height = `${displayHeight}px`;
-  surface.style.transform = `scale(${scale})`;
+  image.style.transform = `scale(${scale})`;
   layer.classList.toggle("auto-scroll", mode === "auto-scroll");
 }
 
@@ -354,11 +217,8 @@ function clearPresentation() {
 }
 
 function clearTransition() {
-  photoSessionController?.abort();
-  photoSessionController = null;
   if (transitionTimer) clearTimeout(transitionTimer);
   transitionTimer = null;
-  cancelTileBatch(nextLayer);
   nextLayer.classList.remove("reveal");
   nextLayer.replaceChildren();
 }
@@ -366,7 +226,6 @@ function clearTransition() {
 function clearLayers() {
   clearTransition();
   for (const layer of [elements.current, elements.next]) {
-    cancelTileBatch(layer);
     layer.replaceChildren();
     layer.classList.remove("current", "reveal", "auto-scroll");
     for (const key of Object.keys(layer.dataset)) delete layer.dataset[key];

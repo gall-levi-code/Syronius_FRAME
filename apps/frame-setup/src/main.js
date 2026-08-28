@@ -166,6 +166,8 @@ const ADVANCED_SETTINGS = [
   ["PHOTO_FTP_VERBOSE_LOG", "Temporary diagnostics switch for FTP command logging. Keep false unless troubleshooting."],
   ["PHOTO_UPLOAD_MAX_FILES", "Maximum files the browser upload page lets users queue at one time."],
   ["PHOTO_UPLOAD_MAX_SESSIONS", "Maximum concurrent browser upload sessions from the upload page/service."],
+  ["PHOTO_ARCHIVE_RETENTION_DAYS", "Days to retain verified archived originals. Zero disables automatic expiry."],
+  ["PHOTO_TRASH_RETENTION_DAYS", "Days to retain safely recoverable trashed publications. Zero disables automatic expiry."],
   ["SRTLA_PORT", "UDP ingest port for SRTLA callers."],
   ["SRT_PLAYER_PORT", "UDP output port for SRT playback."],
   ["SRT_SENDER_PORT", "UDP sender/control port used by the relay."],
@@ -222,6 +224,20 @@ const ADVANCED_VALUE_FIELDS = [
     defaultValue: "2",
     min: 1,
     max: 100,
+  },
+  {
+    key: "PHOTO_ARCHIVE_RETENTION_DAYS",
+    label: "Archive retention days",
+    defaultValue: "0",
+    min: 0,
+    max: 36500,
+  },
+  {
+    key: "PHOTO_TRASH_RETENTION_DAYS",
+    label: "Trash retention days",
+    defaultValue: "0",
+    min: 0,
+    max: 36500,
   },
 ];
 

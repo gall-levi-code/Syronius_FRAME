@@ -223,10 +223,13 @@
     {
       "type": "object",
       "additionalProperties": false,
-      "required": ["date_folder", "photos"],
+      "required": ["date_folder", "photos", "total", "next_cursor", "revision"],
       "properties": {
         "date_folder": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
-        "photos": { "type": "array", "items": { "$ref": "#/$defs/photo" } }
+        "photos": { "type": "array", "items": { "$ref": "#/$defs/photo" } },
+        "total": { "type": "integer", "minimum": 0 },
+        "next_cursor": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9_-]+$" },
+        "revision": { "type": "integer", "minimum": 0 }
       }
     },
     {

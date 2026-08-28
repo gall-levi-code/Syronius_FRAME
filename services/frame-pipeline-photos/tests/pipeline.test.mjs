@@ -548,6 +548,149 @@ test("trashing the latest photo recalculates latest_base to the newest visible p
   assert.equal(restored.count_today, 2);
 });
 
+test("storage retention keeps the only correlated copy", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-retention-"));
+  const pipeline = new PhotoPipeline(config(root));
+  await pipeline.init();
+
+  const publish = async (name, background) => {
+    await sharp({ create: { width: 160, height: 90, channels: 3, background } })
+      .jpeg()
+      .toFile(path.join(root, "staging", name));
+    await pipeline.processOnce();
+    const latest = JSON.parse(await readFile(path.join(root, "state", "latest.json"), "utf8"));
+    const sidecar = JSON.parse(await readFile(path.join(root, "galleries", latest.date_folder, `${latest.latest_base}.json`), "utf8"));
+    return { date: latest.date_folder, base: latest.latest_base, journey: sidecar.journey_id };
+  };
+
+  const expiringTrash = await publish("Expired Trash.jpg", "#2cb4fb");
+  const protectedTrash = await publish("Protected Trash.jpg", "#75ffb1");
+  const expiringArchive = await publish("Expired Archive.jpg", "#ffbd59");
+  const reusedBaseArchive = await publish("Reused Base Archive.jpg", "#8f95a3");
+  const malformedTrash = await publish("Malformed Trash.jpg", "#7d5fff");
+  const malformedArchive = await publish("Malformed Archive.jpg", "#ff6b8a");
+  await pipeline.managePhotos("trash-photo", expiringTrash.date, expiringTrash.base);
+  await pipeline.managePhotos("trash-photo", protectedTrash.date, protectedTrash.base);
+  await pipeline.managePhotos("trash-photo", malformedTrash.date, malformedTrash.base);
+  const expiredAt = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+  for (const photo of [expiringTrash, protectedTrash]) {
+    await writeFile(
+      path.join(root, "galleries", photo.date, `${photo.base}.trashed.json`),
+      JSON.stringify({ schema_version: 1, date_folder: photo.date, base: photo.base, trashed_at: expiredAt }),
+    );
+  }
+  await writeFile(
+    path.join(root, "galleries", malformedTrash.date, `${malformedTrash.base}.trashed.json`),
+    JSON.stringify({ schema_version: 1, date_folder: malformedTrash.date, base: malformedTrash.base, trashed_at: "0" }),
+  );
+  const protectedArchiveDirectory = path.join(root, "archive", protectedTrash.date, protectedTrash.journey);
+  const [protectedArchiveSource] = await readdir(protectedArchiveDirectory);
+  await writeFile(path.join(protectedArchiveDirectory, protectedArchiveSource), "corrupted archive bytes");
+  for (const photo of [expiringArchive, reusedBaseArchive]) {
+    const receiptPath = path.join(root, "state", "photo-journeys", `${photo.journey}.json`);
+    const receipt = JSON.parse(await readFile(receiptPath, "utf8"));
+    await writeFile(receiptPath, JSON.stringify({ ...receipt, updated_at: expiredAt }));
+  }
+  const malformedReceiptPath = path.join(root, "state", "photo-journeys", `${malformedArchive.journey}.json`);
+  const malformedReceipt = JSON.parse(await readFile(malformedReceiptPath, "utf8"));
+  await writeFile(malformedReceiptPath, JSON.stringify({ ...malformedReceipt, updated_at: "2026-02-30T12:00:00.000Z" }));
+  const reusedSidecarPath = path.join(root, "galleries", reusedBaseArchive.date, `${reusedBaseArchive.base}.json`);
+  const reusedSidecar = JSON.parse(await readFile(reusedSidecarPath, "utf8"));
+  await writeFile(reusedSidecarPath, JSON.stringify({ ...reusedSidecar, journey_id: "journey-reused-base" }));
+  const legacyArchive = path.join(root, "archive", expiringArchive.date, "legacy-flat-original.jpg");
+  await writeFile(legacyArchive, await testJpeg("#8f95a3"));
+
+  const maintenance = new PhotoPipeline({
+    ...config(root),
+    archiveRetentionDays: 1,
+    trashRetentionDays: 1,
+  });
+  await maintenance.init();
+
+  await assert.rejects(readFile(path.join(root, "galleries", expiringTrash.date, `${expiringTrash.base}.jpg`)));
+  assert.ok((await readdir(path.join(root, "archive", expiringTrash.date, expiringTrash.journey))).length > 0);
+  await readFile(path.join(root, "galleries", protectedTrash.date, `${protectedTrash.base}.jpg`));
+  await readFile(path.join(root, "galleries", protectedTrash.date, `${protectedTrash.base}.trashed.json`));
+  assert.equal(await readFile(path.join(protectedArchiveDirectory, protectedArchiveSource), "utf8"), "corrupted archive bytes");
+  await readFile(path.join(root, "galleries", expiringArchive.date, `${expiringArchive.base}.jpg`));
+  await assert.rejects(readdir(path.join(root, "archive", expiringArchive.date, expiringArchive.journey)));
+  assert.ok((await readdir(path.join(root, "archive", reusedBaseArchive.date, reusedBaseArchive.journey))).length > 0);
+  await readFile(path.join(root, "galleries", malformedTrash.date, `${malformedTrash.base}.jpg`));
+  assert.ok((await readdir(path.join(root, "archive", malformedArchive.date, malformedArchive.journey))).length > 0);
+  await readFile(legacyArchive);
+  assert.equal(maintenance.status.trash_purged, 1);
+  assert.equal(maintenance.status.archives_pruned, 1);
+});
+
+test("archive expiry cannot race permanent deletion into removing both copies", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-retention-race-"));
+  const pipeline = new PhotoPipeline(config(root));
+  await pipeline.init();
+  await writeFile(path.join(root, "staging", "Race Photo.jpg"), await testJpeg("#2cb4fb"));
+  await pipeline.processOnce();
+  const latest = JSON.parse(await readFile(path.join(root, "state", "latest.json"), "utf8"));
+  const sidecar = JSON.parse(await readFile(path.join(root, "galleries", latest.date_folder, `${latest.latest_base}.json`), "utf8"));
+  await pipeline.managePhotos("trash-photo", latest.date_folder, latest.latest_base);
+  const receiptPath = path.join(root, "state", "photo-journeys", `${sidecar.journey_id}.json`);
+  const receipt = JSON.parse(await readFile(receiptPath, "utf8"));
+  await writeFile(receiptPath, JSON.stringify({ ...receipt, updated_at: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString() }));
+
+  const maintenance = new PhotoPipeline(config(root));
+  await maintenance.init();
+  maintenance.config.archiveRetentionDays = 1;
+  maintenance.nextRetentionSweepAt = 0;
+  const verifyArchive = maintenance.verifiedTrackedArchive.bind(maintenance);
+  let releaseVerification;
+  let reportVerified;
+  const verificationBlocked = new Promise((resolve) => { reportVerified = resolve; });
+  const continueVerification = new Promise((resolve) => { releaseVerification = resolve; });
+  maintenance.verifiedTrackedArchive = async (...args) => {
+    const verified = await verifyArchive(...args);
+    if (args[1] === sidecar.journey_id && verified) {
+      reportVerified();
+      await continueVerification;
+    }
+    return verified;
+  };
+
+  const sweep = maintenance.maintainStorage();
+  await verificationBlocked;
+  await maintenance.managePhotos("purge-photo", latest.date_folder, latest.latest_base);
+  releaseVerification();
+  await sweep;
+
+  await assert.rejects(readFile(path.join(root, "galleries", latest.date_folder, `${latest.latest_base}.jpg`)));
+  assert.ok((await readdir(path.join(root, "archive", latest.date_folder, sidecar.journey_id))).length > 0);
+  assert.equal(maintenance.status.archives_pruned, 0);
+});
+
+test("low disk pressure pauses before claiming staged work", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-disk-"));
+  const pipeline = new PhotoPipeline({
+    ...config(root),
+    diskMinimumFreeBytes: Number.MAX_SAFE_INTEGER,
+  });
+  await pipeline.init();
+  await writeFile(path.join(root, "staging", "Queued Photo.jpg"), await testJpeg("#2cb4fb"));
+
+  await pipeline.processOnce();
+
+  assert.equal(pipeline.status.processing_paused, true);
+  assert.equal(pipeline.status.disk.state, "error");
+  assert.match(pipeline.status.disk.message, /processing is paused/i);
+  assert.deepEqual(await readdir(path.join(root, "processing")), []);
+  assert.ok((await readdir(path.join(root, "staging"))).includes("Queued Photo.jpg"));
+
+  pipeline.config.diskMinimumFreeBytes = 0;
+  pipeline.nextStorageCheckAt = 0;
+  await pipeline.processOnce();
+  const latest = JSON.parse(await readFile(path.join(root, "state", "latest.json"), "utf8"));
+  assert.equal(pipeline.status.processing_paused, false);
+  assert.equal(pipeline.status.disk.state, "ok");
+  assert.equal((await readdir(path.join(root, "staging"))).includes("Queued Photo.jpg"), false);
+  await readFile(path.join(root, "galleries", latest.date_folder, `${latest.latest_base}.ready`));
+});
+
 function config(dataRoot) {
   return {
     port: 0,
@@ -560,6 +703,11 @@ function config(dataRoot) {
     maxPixels: 80_000_000,
     conversionAttempts: 3,
     archiveOriginals: true,
+    archiveRetentionDays: 0,
+    trashRetentionDays: 0,
+    diskWarnPercent: 100,
+    diskErrorPercent: 100,
+    diskMinimumFreeBytes: 0,
     defaultSettings: {
       long_edge_px: 0,
       jpeg_quality: 92,

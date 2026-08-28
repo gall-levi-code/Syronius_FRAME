@@ -95,8 +95,13 @@ function render() {
     </div>
   </article>`).join("");
   list.querySelectorAll("[data-copy]").forEach((button) => button.addEventListener("click", async () => {
-    await navigator.clipboard.writeText(button.dataset.copy);
-    showNotice("Listen URL copied.", "ok");
+    const text = button.dataset.copy || "";
+    try {
+      await copyText(text, button);
+      showNotice("Listen URL copied.", "ok");
+    } catch {
+      showNotice(`Automatic copy was blocked. Press and hold this URL to copy it: ${text}`);
+    }
   }));
   list.querySelectorAll("[data-edit]").forEach((button) => button.addEventListener("click", () => openEdit(button.dataset.edit)));
   list.querySelectorAll("[data-delete]").forEach((button) => button.addEventListener("click", () => remove(button.dataset.delete)));
@@ -215,6 +220,49 @@ function validationMessage() {
 function hideDialogNotice() { dialogNotice.textContent = ""; dialogNotice.className = "notice hidden"; }
 function showDialogNotice(message, kind = "error") { dialogNotice.textContent = message; dialogNotice.className = `notice ${kind === "ok" ? "ok" : ""}`; }
 function showNotice(message, kind = "error") { notice.textContent = message; notice.className = `notice ${kind === "ok" ? "ok" : ""}`; }
+async function copyText(text, button) {
+  if (!text) throw new Error("Copy unavailable");
+  const previousFocus = document.activeElement;
+  const host = button.closest("dialog[open]") || document.body;
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+    }
+  }
+
+  const temporary = document.createElement("textarea");
+  temporary.value = text;
+  temporary.readOnly = true;
+  temporary.tabIndex = -1;
+  temporary.style.position = "fixed";
+  temporary.style.left = "-9999px";
+  temporary.style.top = "0";
+  temporary.style.opacity = "0";
+  host.append(temporary);
+
+  let copied = false;
+  const onCopy = (event) => {
+    if (!event.clipboardData) return;
+    event.clipboardData.setData("text/plain", text);
+    event.preventDefault();
+    copied = true;
+  };
+  document.addEventListener("copy", onCopy, { once: true });
+  try {
+    temporary.focus({ preventScroll: true });
+    temporary.select();
+    temporary.setSelectionRange(0, text.length);
+    if (document.execCommand("copy") && copied) return;
+  } catch {
+  } finally {
+    document.removeEventListener("copy", onCopy);
+    temporary.remove();
+    if (previousFocus?.isConnected) previousFocus.focus?.({ preventScroll: true });
+  }
+  throw new Error("Copy unavailable");
+}
 async function api(url, init) { const response = await fetch(url, init); const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`); return body; }
 function escapeHtml(value) { const div = document.createElement("div"); div.textContent = value; return div.innerHTML; }
 function escapeAttr(value) { return escapeHtml(value).replaceAll('"', "&quot;"); }

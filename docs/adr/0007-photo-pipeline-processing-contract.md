@@ -44,4 +44,5 @@ The V1 photo workflow uses these contracts:
 - Every source uses the same completion boundary and cannot bypass pipeline validation.
 - A host crash may cause a claimed file to be retried, but cannot expose a partial publish as ready.
 - HEIC/HEIF behavior no longer depends on optional codecs in the Sharp container build.
-- The archive grows until retention automation is implemented.
+- The archive grows indefinitely by default. Operators may explicitly enable journey-verified
+  retention; automated cleanup must preserve a verified alternate copy.

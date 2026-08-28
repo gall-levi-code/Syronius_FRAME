@@ -29,7 +29,7 @@
       })();
     </script>
     <script src="/assets/frame-theme.js?v=global-theme-v1"></script>
-    <link rel="stylesheet" href="/today/assets/today.css?v=frame-theme-tab">
+    <link rel="stylesheet" href="/today/assets/today.css?v=collapsible-remote-header-1">
   </head>
   <body class="tool-page remote-page">
     <header class="topbar remote-topbar">
@@ -45,6 +45,9 @@
         </button>
         <a class="icon-button" href="/today/dashboard">Dashboard</a>
       </div>
+      <button id="header-collapse" class="header-collapse" type="button" aria-label="Collapse header" aria-expanded="true" title="Collapse header">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 14 5-5 5 5"/></svg>
+      </button>
     </header>
     <main class="remote-main">
       <section class="current-card">
@@ -63,32 +66,30 @@
       </section>
 
       <section class="control-panel">
-        <div class="playback-controls">
-          <button id="play" class="play" type="button" aria-label="Play slideshow">&#9654; Play</button>
-          <button id="pause" class="pause" type="button" aria-label="Pause slideshow">&#10074;&#10074; Pause</button>
-          <button id="stop" class="stop" type="button" aria-label="Stop slideshow">&#9632; Stop</button>
+        <div class="action-controls" role="group" aria-label="Stage controls">
+          <button id="play" class="action-button play" type="button" aria-label="Play slideshow" title="Play slideshow"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7Z"/></svg></button>
+          <button id="pause" class="action-button pause" type="button" aria-label="Pause slideshow" title="Pause slideshow"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM14 5h4v14h-4z"/></svg></button>
+          <button id="stop" class="action-button stop" type="button" aria-label="Stop slideshow" title="Stop slideshow"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h12v12H6z"/></svg></button>
+          <button id="auto-scroll" class="action-button" type="button" aria-label="Scroll image once" title="Scroll image once"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="10" height="18" rx="1"/><path d="m18 7 2-2 2 2M20 5v14m-2-2 2 2 2-2"/></svg></button>
+          <button id="exif-toggle" class="action-button" type="button" aria-label="Toggle camera information" title="Camera information" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h4l2-3h4l2 3h4v11H4Z"/><circle cx="12" cy="13" r="3"/></svg></button>
+          <button id="thumbnails-toggle" class="action-button" type="button" aria-label="Choose from thumbnails" title="Thumbnails" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg></button>
+          <button id="background-toggle" class="action-button" type="button" aria-label="Toggle viewer background" title="Viewer background" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 15 8 10l4 4 3-3 6 6"/></svg></button>
         </div>
-        <button id="auto-scroll" class="auto-scroll-button" type="button">Scroll image once</button>
         <label class="slider-row" for="interval">
           <span><strong>Image duration</strong><output id="interval-value">10 seconds</output></span>
-          <input id="interval" type="range" min="1" max="120" step="1" value="10">
+          <input id="interval" type="range" min="0" max="14" step="1" value="7" aria-valuetext="10 seconds">
         </label>
-        <div class="toggle-row">
-          <button id="exif-toggle" class="toggle-button" type="button" aria-pressed="true">Camera info</button>
-          <button id="thumbnails-toggle" class="toggle-button" type="button" aria-pressed="false">Thumbnails</button>
-          <button id="background-toggle" class="toggle-button" type="button" aria-pressed="true">Viewer background</button>
-        </div>
       </section>
 
-      <section id="thumbnail-section" class="thumbnail-section" hidden>
+      <section id="thumbnail-section" class="thumbnail-section" role="dialog" aria-label="Choose a stage photo" hidden>
         <div class="section-heading">
-          <strong>Stage photos</strong>
-          <span id="photo-count">0 photos</span>
+          <div><strong>Stage photos</strong><span id="photo-count">0 photos</span></div>
+          <button id="thumbnails-close" class="drawer-close" type="button" aria-label="Close thumbnails">&times;</button>
         </div>
         <div id="thumbnails" class="thumbnail-list"></div>
       </section>
       <p id="remote-message" class="remote-message" role="status"></p>
     </main>
-    <script type="module" src="/today/assets/remote.js?v=frame-theme-tab"></script>
+    <script type="module" src="/today/assets/remote.js?v=collapsible-remote-header-1"></script>
   </body>
 </html>

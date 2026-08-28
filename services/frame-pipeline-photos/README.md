@@ -140,7 +140,7 @@ Browser uploads and camera FTP uploads both feed the same pipeline.
 | `/data/galleries/YYYY-MM-DD` | Published photos and sidecars. This is what Gallery and Photo Stage read. |
 | `/data/state/latest.json` | Current latest-photo state for Photo Stage and other tools. |
 | `/data/state/photo-journeys` | Durable receipt for each photo journey, used for progress and retry safety. |
-| `/data/archive/YYYY-MM-DD` | Original uploaded files after successful publish, when archiving is enabled. |
+| `/data/archive/YYYY-MM-DD/<journey_id>` | Original uploaded file after successful publish, when archiving is enabled. Journey folders let FRAME prove which publication still protects an expiring archive. |
 | `/data/quarantine` | Rejected files and their error reports. |
 
 Browser uploads build a hidden temporary envelope and atomically rename it into staging after the
@@ -157,6 +157,31 @@ Every envelope has an immutable `journey_id`. Web upload, FTP, Belabox telemetry
 published metadata, and quarantine reports preserve that ID so retries and multiple observers still
 represent one photo. FRAME verifies the envelope's SHA-256 content digest before processing and
 quarantines any attempt to reuse a journey ID for different bytes.
+
+## Storage Safeguards
+
+Photo processing uses the same disk thresholds shown by FRAME Portal:
+
+| Setting | Default | Behavior |
+| --- | ---: | --- |
+| `DISK_WARN_PERCENT` | `85` | Reports a warning when the FRAME data disk reaches this percentage. |
+| `DISK_ERROR_PERCENT` | `95` | Pauses new photo claims at this percentage. |
+| `DISK_MINIMUM_FREE_GB` | `20` | Also pauses new photo claims when less than this much space remains. Set `0` to disable the free-space floor. |
+
+A disk pause leaves uploads in the queue and keeps the service running so Docker does not restart-loop.
+The pipeline status reports the current disk state and resumes automatically after space is available.
+
+Automatic retention is opt-in:
+
+| Setting | Default | Behavior |
+| --- | ---: | --- |
+| `PHOTO_ARCHIVE_RETENTION_DAYS` | `0` | When greater than zero, removes an expired tracked original only while its published receipt, SHA-256, matching gallery sidecar journey, `.jpg`, and `.ready` files all verify. |
+| `PHOTO_TRASH_RETENTION_DAYS` | `0` | When greater than zero, permanently purges expired trash only while its matching archived original verifies against the published journey receipt and SHA-256. |
+
+`0` disables each retention policy. FRAME never applies these policies to legacy flat archive files,
+unmatched files, malformed records, hash-mismatched archives, or published gallery photos that are not already in trash. If a
+gallery publication becomes the only known copy, its archived source is retained; if an archived
+source is unavailable, the trashed publication is retained.
 
 ## Quarantine And `.error.json`
 

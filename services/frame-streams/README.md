@@ -98,6 +98,32 @@ To use BELABOX or another existing relay:
 3. Confirm that stats appear in Stream Management.
 4. Use the connected stats with overlays if needed.
 
+### Test Local Stats With NOALBS
+
+When NOALBS runs on the same computer as FRAME, configure it to read the receiver's native OpenIRL
+stats endpoint. Add an enabled stream-server entry like this to the NOALBS `config.json`:
+
+```json
+{
+  "streamServer": {
+    "type": "OpenIRL",
+    "statsUrl": "http://127.0.0.1:8080/stats/PLAYER_ID"
+  },
+  "name": "FRAME SLS",
+  "priority": 0,
+  "overrideScenes": null,
+  "dependsOn": null,
+  "enabled": true
+}
+```
+
+Replace `PLAYER_ID` with the player ID shown for the stream in Stream Management. While
+testing, disable other NOALBS stream-server entries or give this entry the highest priority. The
+endpoint reports that the publisher is not streaming until a sender connects.
+
+If NOALBS runs on another trusted LAN computer, replace `127.0.0.1` with the FRAME computer's LAN
+IP address. Port `8080` must also be reachable from that computer.
+
 Useful stats:
 
 | Stat | What It Tells You |

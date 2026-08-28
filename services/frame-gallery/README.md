@@ -79,6 +79,7 @@ On the public gallery, viewers can:
 
 - Browse available photo days.
 - Open one day's album.
+- Scroll through large albums while FRAME loads photo metadata in small batches.
 - View photos through page-bound tiles when downloads are disabled, or the full gallery JPEG when downloads are enabled.
 - Switch between Photos and Explore when a day has attached route data.
 - Select a mapped photo from its thumbnail, lightbox, map marker, or Explore photo strip.
@@ -133,6 +134,20 @@ The admin page should stay login-protected.
 
 Photo Gallery asks Photo Pipeline to hide, restore, or delete photos and albums. It does not edit the
 published photo files directly.
+
+Photo Gallery keeps a rebuildable SQLite catalog in `gallery-cache/gallery-catalog.sqlite`. The
+catalog stores public photo metadata and per-gallery summaries so normal page requests do not parse
+every sidecar. Published files remain authoritative: FRAME reconciles new, trashed, restored, and
+deleted files automatically, and recreates the catalog if it is missing or unreadable. Gallery-owner
+settings are stored separately and are not lost when the catalog is rebuilt.
+
+The visitor photo grid requests 60 records at a time and loads more as the viewer scrolls. Gallery
+Admin keeps using the complete list, while Explore loads the complete day's metadata only when its
+map needs it.
+
+Thumbnail and tile caches remain disposable. A newly generated tile set removes older versions for
+that photo, and permanent photo deletion clears its thumbnail and tile cache. Cache pruning itself
+never touches published or archived source files.
 
 When downloads are disabled, public lightbox photos are delivered as short-lived, page-bound tiles and
 FRAME does not expose a public full-image route. When downloads are enabled, the lightbox and Download

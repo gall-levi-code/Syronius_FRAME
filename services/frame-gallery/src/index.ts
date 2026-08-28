@@ -25,7 +25,10 @@ console.log(
 const server = app.listen(port, () => console.log(`[gallery] listening on ${port}`));
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
-  process.on(signal, () => server.close(() => process.exit(0)));
+  process.on(signal, () => server.close(() => {
+    store.close();
+    process.exit(0);
+  }));
 }
 
 function integer(name: string, fallback: number, minimum: number, maximum: number): number {

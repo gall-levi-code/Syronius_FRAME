@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Fixed Gallery Socials and Support copying on Firefox Mobile by preferring confirmed clipboard writes
+  and keeping the LAN HTTP fallback inside the active dialog.
+- Added a rebuildable Gallery metadata catalog, stable paged loading for large albums, normalized
+  photo timestamps, race-safe continuation loads, mobile scroll anchoring, and stale tile-cache pruning.
+- Added opt-in, journey-safe photo archive and trash retention plus disk-pressure warning and
+  processing pause safeguards that retain queued work and never guess about legacy or unmatched files.
+- Changed Photo Stage Viewer to render each published photo as one full JPEG instead of protected Gallery tiles.
+- Kept Photo Stage Remote controls within one mobile viewport, condensed actions into an icon row,
+  added fine low-second duration steps, made the header collapsible, and moved thumbnails into a
+  dismissible scrolling drawer.
 - Added host-level mDNS discovery for `http://frame.local`, tied to the FRAME stack lifecycle.
 - Added staged Hybrid installation, a pinned Cloudflare Tunnel connector, and an internal-only
   public gateway that enforces generated capability-aware route allowlists.

@@ -31,6 +31,7 @@ const elements = {
   socialQrDestination: document.querySelector("#social-qr-destination"),
   dateGallery: document.querySelector("#date-gallery"),
   photoGallery: document.querySelector("#photo-gallery"),
+  photoLoadMore: document.querySelector("#photo-load-more"),
   viewSwitch: document.querySelector("#view-switch"),
   photosView: document.querySelector("#photos-view"),
   exploreView: document.querySelector("#explore-view"),
@@ -95,11 +96,19 @@ const PAN_EASING_RATE = 0.2;
 const PAN_SETTLE_THRESHOLD = 0.75;
 const FULL_IMAGE_RETRY_INITIAL_MS = 15_000;
 const FULL_IMAGE_RETRY_MAX_MS = 120_000;
+const PHOTO_PAGE_SIZE = 60;
 const route = parseRoute();
 const initialUrlState = readUrlState();
 const state = {
   dates: [],
   photos: [],
+  photoTotal: 0,
+  photoNextCursor: null,
+  photoRevision: 0,
+  photosComplete: false,
+  photosLoading: false,
+  renderedPhotoCount: 0,
+  refreshing: false,
   explore: null,
   exploreCheckedAt: 0,
   matches: new Map(),
@@ -129,6 +138,7 @@ const state = {
   photoGalleryWidth: 0,
   photoGalleryLayoutFrame: 0,
   photoGalleryLayoutKey: "",
+  photoGalleryScrollAnchor: null,
 };
 const systemTheme = matchMedia("(prefers-color-scheme: dark)");
 const finePointer = matchMedia("(pointer: fine)");
@@ -153,7 +163,10 @@ elements.themeToggle.addEventListener("click", toggleTheme);
 elements.socialsButton.addEventListener("click", openSocialsDialog);
 elements.supportButton.addEventListener("click", openSupportDialog);
 elements.photosView.addEventListener("click", () => setGalleryView("photos", { history: "push" }));
-elements.exploreView.addEventListener("click", () => setGalleryView("explore", { history: "push" }));
+elements.exploreView.addEventListener("click", async () => {
+  if (await ensureAllPhotos()) setGalleryView("explore", { history: "push" });
+});
+elements.photoLoadMore.addEventListener("click", () => void loadMorePhotos());
 elements.explorePrevious.addEventListener("click", () => moveExplore(-1));
 elements.exploreNext.addEventListener("click", () => moveExplore(1));
 elements.lightboxExplore.addEventListener("click", () => {
@@ -245,6 +258,11 @@ document.addEventListener("keydown", (event) => {
     moveLightbox(1);
   }
 });
+if ("IntersectionObserver" in window) {
+  new IntersectionObserver((entries) => {
+    if (entries.some((entry) => entry.isIntersecting) && !elements.photoLoadMore.hidden) void loadMorePhotos();
+  }, { rootMargin: "1000px 0px" }).observe(elements.photoLoadMore);
+}
 window.addEventListener("popstate", () => {
   if (elements.shareDialog.open) elements.shareDialog.close();
   const urlState = readUrlState();
@@ -253,8 +271,7 @@ window.addEventListener("popstate", () => {
   if (route.date) applyGalleryView({ openPopup: true });
 });
 
-await loadBranding();
-await refresh(true);
+await Promise.all([loadBranding(), refresh(true)]);
 setInterval(() => {
   if (!document.hidden) void Promise.allSettled([refresh(false), loadBranding()]);
 }, 5000);
@@ -463,7 +480,7 @@ function iconButton(icon, label, title) {
 
 async function copySocialUrl(link, button, status = elements.socialsStatus, fallbackLabel = "Social") {
   try {
-    await copyText(link.url);
+    await copyText(link.url, button);
     button.innerHTML = icons.check;
     status.textContent = `${link.label || fallbackLabel} link copied.`;
     status.removeAttribute("data-error");
@@ -471,7 +488,7 @@ async function copySocialUrl(link, button, status = elements.socialsStatus, fall
       if (button.isConnected) button.innerHTML = icons.copy;
     }, 1200);
   } catch {
-    status.textContent = "The browser could not copy this link.";
+    status.textContent = "Automatic copy was blocked. Press and hold the link to copy it.";
     status.dataset.error = "true";
   }
 }
@@ -549,16 +566,34 @@ function writeStoredTheme(mode) {
 }
 
 async function refresh(forceRender) {
+  if (state.refreshing) return;
+  state.refreshing = true;
   try {
     const openPhotoBase = elements.lightbox.open ? state.currentBase : null;
     elements.refreshState.textContent = "Refreshing...";
     if (route.date) {
-      const [datesResult, photosResult] = await Promise.all([
+      const requestAllPhotos = forceRender && (state.view === "explore" || Boolean(state.selectedBase));
+      const [datesResult, firstPhotoResult] = await Promise.all([
         requestJson("/gallery/api/dates"),
-        requestJson(`/gallery/api/photos?date=${encodeURIComponent(route.date)}`),
+        requestJson(photoApiUrl(requestAllPhotos)),
       ]);
       state.dates = datesResult.dates;
-      state.photos = photosResult.photos;
+      const previousRevision = state.photoRevision;
+      const previousRenderedCount = state.renderedPhotoCount;
+      let photosResult = firstPhotoResult;
+      const incomingTotal = Number(firstPhotoResult.total);
+      const known = new Set(state.photos.map((photo) => photo.base));
+      const additions = firstPhotoResult.photos.filter((photo) => !known.has(photo.base));
+      const appendOnly = incomingTotal > state.photoTotal && additions.length === incomingTotal - state.photoTotal;
+      const reconcileLoadedPhotos = !forceRender
+        && state.photos.length > 0
+        && Number(firstPhotoResult.revision) !== state.photoRevision
+        && !appendOnly;
+      if (reconcileLoadedPhotos && firstPhotoResult.next_cursor) photosResult = await requestJson(photoApiUrl(true));
+      applyPhotoRefresh(photosResult, { reset: forceRender || requestAllPhotos || reconcileLoadedPhotos });
+      if (reconcileLoadedPhotos) {
+        state.renderedPhotoCount = Math.min(state.photos.length, Math.max(previousRenderedCount, PHOTO_PAGE_SIZE));
+      }
       const date = state.dates.find((item) => item.date_folder === route.date);
       if (date?.has_explore === false) {
         state.explore = null;
@@ -570,25 +605,14 @@ async function refresh(forceRender) {
         ));
         state.exploreCheckedAt = Date.now();
       }
+      if (!forceRender && state.view === "explore" && state.photoRevision !== previousRevision) {
+        await ensureAllPhotos({ force: true });
+      }
       state.matches = matchExplorePhotos(state.photos, state.explore);
     } else {
       state.dates = (await requestJson("/gallery/api/dates")).dates;
     }
-    const signature = JSON.stringify([
-      state.dates.map((date) => [
-        date.date_folder,
-        date.count,
-        date.latest_at,
-        date.cover_thumbnail_url,
-        date.has_explore,
-      ]),
-      state.photos.map((photo) => [photo.base, photo.processed_at, photo.capture_clock, photo.thumbnail_url, photo.width, photo.height]),
-      state.explore && [
-        state.explore.updated_at,
-        state.explore.routes?.map((item) => [item.id, item.segments?.length, item.segments?.reduce((sum, segment) => sum + segment.length, 0)]),
-        Object.keys(state.explore.placements || {}).sort(),
-      ],
-    ]);
+    const signature = gallerySignature();
     if (forceRender || signature !== state.signature) {
       state.signature = signature;
       route.date ? renderDay(openPhotoBase) : renderDates();
@@ -596,7 +620,70 @@ async function refresh(forceRender) {
     elements.refreshState.textContent = `Updated ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
   } catch (error) {
     elements.refreshState.textContent = error.message || "Gallery unavailable";
+  } finally {
+    state.refreshing = false;
   }
+}
+
+function gallerySignature() {
+  return JSON.stringify([
+    state.dates.map((date) => [
+      date.date_folder,
+      date.count,
+      date.latest_at,
+      date.cover_thumbnail_url,
+      date.has_explore,
+    ]),
+    state.photos.map((photo) => [photo.base, photo.processed_at, photo.capture_clock, photo.thumbnail_url, photo.width, photo.height]),
+    state.photoTotal,
+    state.photoRevision,
+    state.explore && [
+      state.explore.updated_at,
+      state.explore.routes?.map((item) => [item.id, item.segments?.length, item.segments?.reduce((sum, segment) => sum + segment.length, 0)]),
+      Object.keys(state.explore.placements || {}).sort(),
+    ],
+  ]);
+}
+
+function photoApiUrl(all = false, cursor = null) {
+  const query = new URLSearchParams({ date: route.date });
+  if (!all) query.set("limit", String(PHOTO_PAGE_SIZE));
+  if (cursor) query.set("cursor", cursor);
+  return `/gallery/api/photos?${query}`;
+}
+
+function applyPhotoRefresh(result, { reset = false } = {}) {
+  const incoming = Array.isArray(result.photos) ? result.photos : [];
+  const total = Number.isInteger(Number(result.total)) ? Number(result.total) : incoming.length;
+  const revision = Number.isInteger(Number(result.revision)) ? Number(result.revision) : 0;
+  const complete = !result.next_cursor;
+  if (reset || !state.photos.length) {
+    state.photos = incoming;
+    state.photoTotal = total;
+    state.photoNextCursor = result.next_cursor || null;
+    state.photoRevision = revision;
+    state.photosComplete = complete;
+    state.renderedPhotoCount = Math.min(PHOTO_PAGE_SIZE, incoming.length);
+    return;
+  }
+  if (revision === state.photoRevision) return;
+  const known = new Set(state.photos.map((photo) => photo.base));
+  const additions = incoming.filter((photo) => !known.has(photo.base));
+  if (total > state.photoTotal && additions.length === total - state.photoTotal) {
+    state.photos = sortPhotos([...additions, ...state.photos]);
+    state.renderedPhotoCount = Math.min(state.photos.length, state.renderedPhotoCount + additions.length);
+  } else {
+    state.photos = incoming;
+    state.photoNextCursor = result.next_cursor || null;
+    state.photosComplete = complete;
+    state.renderedPhotoCount = Math.min(PHOTO_PAGE_SIZE, incoming.length);
+  }
+  state.photoTotal = total;
+  state.photoRevision = revision;
+}
+
+function sortPhotos(photos) {
+  return photos.sort((left, right) => right.processed_at.localeCompare(left.processed_at) || right.base.localeCompare(left.base));
 }
 
 function renderDates() {
@@ -607,6 +694,7 @@ function renderDates() {
   elements.count.textContent = `${total} photo${total === 1 ? "" : "s"}`;
   elements.empty.hidden = state.dates.length > 0;
   elements.photoGallery.hidden = true;
+  elements.photoLoadMore.hidden = true;
   elements.explorePanel.hidden = true;
   document.body.classList.remove("is-exploring", "is-photo-grid");
   elements.viewSwitch.hidden = true;
@@ -641,53 +729,145 @@ function renderDates() {
 }
 
 function renderDay(openPhotoBase = null) {
+  const scrollAnchor = capturePhotoGalleryScrollAnchor();
   const date = state.dates.find((item) => item.date_folder === route.date);
   const canExplore = hasExplore();
   elements.headingEyebrow.textContent = "Published photos";
   elements.heading.textContent = formatLongDate(route.date);
-  elements.summary.textContent = date ? `${photoLabel(date.count)} - ${durationLabel(date.duration_ms)}` : photoLabel(state.photos.length);
-  elements.count.textContent = photoLabel(state.photos.length);
+  elements.summary.textContent = date ? `${photoLabel(date.count)} - ${durationLabel(date.duration_ms)}` : photoLabel(state.photoTotal);
+  elements.count.textContent = photoLabel(state.photoTotal);
   elements.dateGallery.hidden = true;
   elements.viewSwitch.hidden = !canExplore;
   elements.allGalleries.hidden = false;
   state.mapDirty = true;
   state.photoGalleryLayoutKey = "";
-  elements.photoGallery.replaceChildren(...state.photos.map((photo, index) => {
-    const card = elements.photoTemplate.content.firstElementChild.cloneNode(true);
-    const image = card.querySelector("img");
-    const photoName = friendlyBase(photo.base);
-    const width = Number(photo.width);
-    const height = Number(photo.height);
-    card.dataset.ratio = String(width > 0 && height > 0 ? width / height : 4 / 3);
-    image.src = photo.thumbnail_url;
-    image.alt = "";
-    card.querySelector("strong").textContent = photoName;
-    const time = card.querySelector("time");
-    time.id = `photo-time-${index}`;
-    time.dateTime = photo.processed_at;
-    time.textContent = formatTime(photo.processed_at);
-    const openButton = card.querySelector(".photo-open");
-    openButton.setAttribute("aria-label", `Open ${photoName}`);
-    openButton.setAttribute("aria-describedby", time.id);
-    openButton.addEventListener("click", () => openLightbox(index));
-    const mapButton = card.querySelector(".photo-map-jump");
-    if (state.matches.has(photo.base)) {
-      card.classList.add("has-map-action");
-      mapButton.hidden = false;
-      mapButton.innerHTML = icons.map;
-      mapButton.setAttribute("aria-label", `Show ${friendlyBase(photo.base)} on the map`);
-      mapButton.title = "Show on map";
-      mapButton.addEventListener("click", () => selectExplorePhoto(photo.base, { history: "push", focus: true }));
+  const renderedPhotos = state.photos.slice(0, state.renderedPhotoCount);
+  elements.photoGallery.replaceChildren(...renderedPhotos.map(createPhotoCard));
+  if (state.view === "explore") renderExploreFilmstrip();
+  updatePhotoLoadMore();
+  applyGalleryView({ rebuildMap: true, openPopup: Boolean(state.selectedBase), lightboxBase: openPhotoBase, scrollAnchor });
+}
+
+function createPhotoCard(photo, index) {
+  const card = elements.photoTemplate.content.firstElementChild.cloneNode(true);
+  const image = card.querySelector("img");
+  const photoName = friendlyBase(photo.base);
+  const width = Number(photo.width);
+  const height = Number(photo.height);
+  card.dataset.base = photo.base;
+  card.dataset.ratio = String(width > 0 && height > 0 ? width / height : 4 / 3);
+  image.src = photo.thumbnail_url;
+  image.alt = "";
+  card.querySelector("strong").textContent = photoName;
+  const time = card.querySelector("time");
+  time.id = `photo-time-${index}`;
+  time.dateTime = photo.processed_at;
+  time.textContent = formatTime(photo.processed_at);
+  const openButton = card.querySelector(".photo-open");
+  openButton.setAttribute("aria-label", `Open ${photoName}`);
+  openButton.setAttribute("aria-describedby", time.id);
+  openButton.addEventListener("click", () => openLightbox(state.photos.findIndex((item) => item.base === photo.base)));
+  const mapButton = card.querySelector(".photo-map-jump");
+  if (state.matches.has(photo.base)) {
+    card.classList.add("has-map-action");
+    mapButton.hidden = false;
+    mapButton.innerHTML = icons.map;
+    mapButton.setAttribute("aria-label", `Show ${friendlyBase(photo.base)} on the map`);
+    mapButton.title = "Show on map";
+    mapButton.addEventListener("click", () => selectExplorePhoto(photo.base, { history: "push", focus: true }));
+  }
+  const shareButton = card.querySelector(".photo-share");
+  shareButton.innerHTML = icons.share;
+  shareButton.setAttribute("aria-label", `Share ${photoName}`);
+  shareButton.title = "Share photo";
+  shareButton.addEventListener("click", () => openShareDialog(location.href, state.matches.has(photo.base), photo.base));
+  return card;
+}
+
+function appendPhotoCards(startIndex) {
+  const photos = state.photos.slice(startIndex, state.renderedPhotoCount);
+  if (photos.length) {
+    elements.photoGallery.append(...photos.map((photo, index) => createPhotoCard(photo, startIndex + index)));
+    state.photoGalleryLayoutKey = "";
+    schedulePhotoGalleryLayout();
+  }
+  updatePhotoLoadMore();
+}
+
+async function loadMorePhotos() {
+  if (!route.date || state.photosLoading || state.view === "explore") return;
+  if (state.renderedPhotoCount < state.photos.length) {
+    const startIndex = state.renderedPhotoCount;
+    state.renderedPhotoCount = Math.min(state.photos.length, state.renderedPhotoCount + PHOTO_PAGE_SIZE);
+    appendPhotoCards(startIndex);
+    return;
+  }
+  const cursor = state.photoNextCursor;
+  const revision = state.photoRevision;
+  if (!cursor) return;
+  state.photosLoading = true;
+  updatePhotoLoadMore();
+  let failed = false;
+  try {
+    const result = await requestJson(photoApiUrl(false, cursor));
+    if (state.photoNextCursor !== cursor || state.photoRevision !== revision || Number(result.revision) !== revision) return;
+    const startIndex = state.renderedPhotoCount;
+    const known = new Set(state.photos.map((photo) => photo.base));
+    state.photos = sortPhotos([...state.photos, ...result.photos.filter((photo) => !known.has(photo.base))]);
+    state.photoTotal = Number(result.total ?? state.photoTotal);
+    state.photoNextCursor = result.next_cursor || null;
+    state.photosComplete = !state.photoNextCursor;
+    state.renderedPhotoCount = state.photos.length;
+    state.matches = matchExplorePhotos(state.photos, state.explore);
+    state.signature = gallerySignature();
+    appendPhotoCards(startIndex);
+  } catch (error) {
+    failed = true;
+    elements.refreshState.textContent = error.message || "More photos could not be loaded";
+  } finally {
+    state.photosLoading = false;
+    updatePhotoLoadMore();
+    if (failed && state.photoNextCursor) {
+      elements.photoLoadMore.hidden = false;
+      elements.photoLoadMore.textContent = "Try loading more photos";
     }
-    const shareButton = card.querySelector(".photo-share");
-    shareButton.innerHTML = icons.share;
-    shareButton.setAttribute("aria-label", `Share ${photoName}`);
-    shareButton.title = "Share photo";
-    shareButton.addEventListener("click", () => openShareDialog(location.href, state.matches.has(photo.base), photo.base));
-    return card;
-  }));
-  renderExploreFilmstrip();
-  applyGalleryView({ rebuildMap: true, openPopup: Boolean(state.selectedBase), lightboxBase: openPhotoBase });
+  }
+}
+
+async function ensureAllPhotos({ force = false } = {}) {
+  if (!route.date) return false;
+  if (state.photosComplete && !force) {
+    renderExploreFilmstrip();
+    return true;
+  }
+  if (state.photosLoading) return false;
+  state.photosLoading = true;
+  updatePhotoLoadMore();
+  try {
+    const revision = state.photoRevision;
+    const rendered = state.renderedPhotoCount;
+    const result = await requestJson(photoApiUrl(true));
+    if (state.photoRevision !== revision) return false;
+    applyPhotoRefresh(result, { reset: true });
+    state.renderedPhotoCount = Math.min(state.photos.length, Math.max(rendered, PHOTO_PAGE_SIZE));
+    state.matches = matchExplorePhotos(state.photos, state.explore);
+    state.mapDirty = true;
+    renderExploreFilmstrip();
+    return true;
+  } catch (error) {
+    elements.refreshState.textContent = error.message || "Explore photos could not be loaded";
+    return false;
+  } finally {
+    state.photosLoading = false;
+    updatePhotoLoadMore();
+  }
+}
+
+function updatePhotoLoadMore() {
+  const hasMore = state.renderedPhotoCount < state.photos.length || Boolean(state.photoNextCursor);
+  elements.photoLoadMore.hidden = !route.date || state.view === "explore" || !hasMore;
+  elements.photoLoadMore.disabled = state.photosLoading;
+  elements.photoLoadMore.textContent = state.photosLoading ? "Loading more photos…" : "Load more photos";
 }
 
 function layoutPhotoGallery() {
@@ -706,12 +886,38 @@ function layoutPhotoGallery() {
   });
 }
 
-function schedulePhotoGalleryLayout() {
+function schedulePhotoGalleryLayout(scrollAnchor = null) {
+  if (scrollAnchor && !state.photoGalleryScrollAnchor) state.photoGalleryScrollAnchor = scrollAnchor;
   if (state.photoGalleryLayoutFrame) return;
   state.photoGalleryLayoutFrame = requestAnimationFrame(() => {
     state.photoGalleryLayoutFrame = 0;
     layoutPhotoGallery();
+    const anchor = state.photoGalleryScrollAnchor;
+    state.photoGalleryScrollAnchor = null;
+    restorePhotoGalleryScrollAnchor(anchor);
   });
+}
+
+function capturePhotoGalleryScrollAnchor() {
+  if (!route.date || state.view !== "photos" || elements.photoGallery.hidden) return null;
+  const cards = [...elements.photoGallery.querySelectorAll(".photo-card[data-base]")];
+  const card = cards.find((item) => {
+    const bounds = item.getBoundingClientRect();
+    return bounds.bottom > 0 && bounds.top < window.innerHeight;
+  });
+  return {
+    base: card?.dataset.base || null,
+    top: card?.getBoundingClientRect().top ?? 0,
+    scrollY: window.scrollY,
+  };
+}
+
+function restorePhotoGalleryScrollAnchor(anchor) {
+  if (!anchor || state.view !== "photos" || elements.photoGallery.hidden) return;
+  const card = [...elements.photoGallery.querySelectorAll(".photo-card[data-base]")]
+    .find((item) => item.dataset.base === anchor.base);
+  if (card) window.scrollBy(0, card.getBoundingClientRect().top - anchor.top);
+  else window.scrollTo(0, anchor.scrollY);
 }
 
 function openLightbox(index, options = {}) {
@@ -725,8 +931,12 @@ function openLightbox(index, options = {}) {
   renderLightbox({ preserveImage });
 }
 
-function moveLightbox(offset) {
-  const target = state.currentIndex + offset;
+async function moveLightbox(offset) {
+  let target = state.currentIndex + offset;
+  if (offset > 0 && target >= state.photos.length && state.photoNextCursor) {
+    await loadMorePhotos();
+    target = state.currentIndex + offset;
+  }
   if (target < 0 || target >= state.photos.length) return;
   if (state.view === "photos" && state.selectedBase) {
     state.selectedBase = state.photos[target].base;
@@ -741,14 +951,14 @@ function renderLightbox(options = {}) {
   state.currentBase = photo.base;
   elements.lightboxImage.setAttribute("aria-label", friendlyBase(photo.base));
   elements.lightboxTitle.textContent = friendlyBase(photo.base);
-  elements.lightboxPosition.textContent = `${state.currentIndex + 1} of ${state.photos.length}`;
+  elements.lightboxPosition.textContent = `${state.currentIndex + 1} of ${state.photoTotal}`;
   elements.lightboxCameraText.textContent = photo.camera_text || "";
   elements.lightboxCameraText.hidden = !photo.camera_text;
   syncLightboxDownload(photo);
   elements.lightboxExplore.hidden = !state.matches.has(photo.base);
   elements.lightboxDetails.hidden = false;
   elements.lightboxPrevious.disabled = state.currentIndex <= 0;
-  elements.lightboxNext.disabled = state.currentIndex >= state.photos.length - 1;
+  elements.lightboxNext.disabled = state.currentIndex >= state.photos.length - 1 && !state.photoNextCursor;
   revealLightboxNavigation();
   if (!options.preserveImage || state.lightboxMediaMode !== preferredLightboxMediaMode()) loadLightboxImage(photo);
 }
@@ -1108,7 +1318,7 @@ async function copyShareUrl(input, button, label) {
   elements.shareStatus.textContent = `Copying ${label.toLowerCase()} link...`;
   elements.shareStatus.removeAttribute("data-error");
   try {
-    await copyText(input);
+    await copyText(input, button);
     if (!elements.shareDialog.open || input.value !== url) return;
     setCopyButton(button, label, true);
     elements.shareStatus.textContent = `${label} link copied.`;
@@ -1132,30 +1342,49 @@ function setCopyButton(button, label, copied = false) {
   button.title = action;
 }
 
-async function copyText(input) {
+async function copyText(input, trigger = document.activeElement) {
   const value = typeof input === "string" ? input : input.value;
+  const previousFocus = document.activeElement;
+  const host = trigger?.closest?.("dialog[open]") || document.body;
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return;
+    } catch {
+    }
+  }
   const temporary = typeof input === "string" ? document.createElement("textarea") : null;
   const control = temporary || input;
   if (temporary) {
     temporary.value = value;
     temporary.readOnly = true;
+    temporary.tabIndex = -1;
     temporary.style.position = "fixed";
+    temporary.style.left = "-9999px";
+    temporary.style.top = "0";
     temporary.style.opacity = "0";
-    document.body.append(temporary);
+    host.append(temporary);
   }
-  control.focus();
-  control.select();
+  let copied = false;
+  const onCopy = (event) => {
+    if (!event.clipboardData) return;
+    event.clipboardData.setData("text/plain", value);
+    event.preventDefault();
+    copied = true;
+  };
+  document.addEventListener("copy", onCopy, { once: true });
   try {
-    if (document.execCommand("copy")) return;
+    control.focus({ preventScroll: true });
+    control.select();
+    control.setSelectionRange?.(0, value.length);
+    if (document.execCommand("copy") && copied) return;
   } catch {
   } finally {
+    document.removeEventListener("copy", onCopy);
     temporary?.remove();
+    if (temporary && previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
   }
-  if (!navigator.clipboard?.writeText) throw new Error("Copy unavailable");
-  await Promise.race([
-    navigator.clipboard.writeText(value),
-    new Promise((_, reject) => setTimeout(() => reject(new Error("Copy timed out")), 2000)),
-  ]);
+  throw new Error("Copy unavailable");
 }
 
 function resetShareDialog() {
@@ -1185,6 +1414,7 @@ function applyGalleryView(options = {}) {
     writeUrlState("replace");
   }
   const exploring = state.view === "explore";
+  updatePhotoLoadMore();
   document.body.classList.toggle("is-exploring", exploring);
   document.body.classList.toggle("is-photo-grid", Boolean(route.date) && !exploring);
   elements.manage.href = route.date
@@ -1198,7 +1428,7 @@ function applyGalleryView(options = {}) {
   elements.explorePanel.hidden = !exploring;
   elements.empty.hidden = exploring || state.photos.length > 0;
   if (!exploring) {
-    schedulePhotoGalleryLayout();
+    schedulePhotoGalleryLayout(options.scrollAnchor);
     const lightboxBase = state.selectedBase || options.lightboxBase;
     const photoIndex = lightboxBase ? state.photos.findIndex((photo) => photo.base === lightboxBase) : -1;
     if (photoIndex >= 0) {
@@ -1230,7 +1460,9 @@ function applyGalleryView(options = {}) {
   });
 }
 
-function selectExplorePhoto(base, options = {}) {
+async function selectExplorePhoto(base, options = {}) {
+  if (!state.matches.has(base)) return;
+  if (state.view !== "explore" && !(await ensureAllPhotos())) return;
   if (!state.matches.has(base)) return;
   const changed = state.view !== "explore" || state.selectedBase !== base;
   state.view = "explore";
@@ -1289,6 +1521,14 @@ function renderExploreMap() {
   if (!window.L) {
     elements.exploreMapState.textContent = "The map could not load. Check your connection and try again.";
     elements.exploreMapState.hidden = false;
+    const script = document.querySelector("#leaflet-script");
+    if (script && script.dataset.galleryRetry !== "true") {
+      script.dataset.galleryRetry = "true";
+      script.addEventListener("load", () => {
+        state.mapDirty = true;
+        if (state.view === "explore") renderExploreMap();
+      }, { once: true });
+    }
     return;
   }
   elements.exploreMapState.hidden = true;
@@ -1704,14 +1944,14 @@ function writeUrlState(mode) {
 }
 
 async function requestJson(url, options = {}) {
-  const response = await fetch(url, { cache: "no-store", ...options });
+  const response = await fetch(url, { cache: "no-cache", ...options });
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`);
   return body;
 }
 
 async function requestOptionalJson(url, options = {}) {
-  const response = await fetch(url, { cache: "no-store", ...options });
+  const response = await fetch(url, { cache: "no-cache", ...options });
   if (response.status === 404) return null;
   const body = await response.json();
   if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`);

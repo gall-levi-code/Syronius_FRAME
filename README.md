@@ -136,6 +136,9 @@ Include subfolders and process only files whose names end exactly in `.ready`.
 Photo Upload defaults to 10 selected files and 10 concurrent upload sessions. Tune
 `PHOTO_UPLOAD_MAX_FILES` and `PHOTO_UPLOAD_MAX_SESSIONS` from Advanced setup or `.env`.
 Photo FTP passwords default to a 5-character minimum through `PHOTO_FTP_MIN_PASSWORD_LENGTH`.
+Photo retention stays off by default. Advanced setup can opt into archive or trash expiry with
+`PHOTO_ARCHIVE_RETENTION_DAYS` and `PHOTO_TRASH_RETENTION_DAYS`; FRAME pauses new photo processing
+at the same disk error and minimum-free-space thresholds shown by Portal.
 
 Connect a Belabox to FRAME:
 
@@ -287,7 +290,6 @@ The public-facing backlog for the alpha release line:
 **Photo Workflow**
 
 - Build the Discord delivery outbox.
-- Add archive retention controls and disk-pressure policy.
 - Add camera and long-running FTP soak tests.
 
 The fuller engineering backlog remains in [`docs/TODO.md`](docs/TODO.md).
