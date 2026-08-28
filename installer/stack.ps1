@@ -514,6 +514,23 @@ function Invoke-StartStack {
   Write-Host "FRAME stack reconciliation completed." -ForegroundColor Green
 }
 
+function Invoke-SourceUpdate {
+  param([string[]]$Arguments)
+  Write-Host "Downloading and applying the FRAME source update..." -ForegroundColor Cyan
+  Invoke-Runtime (@("source-update") + $Arguments)
+  Write-Host "Starting FRAME with the downloaded files..." -ForegroundColor Cyan
+  $launcher = Join-Path $Root "stack.cmd"
+  & $launcher "start"
+  if ($LASTEXITCODE -ne 0) {
+    $exitCode = $LASTEXITCODE
+    Write-Host "FRAME could not start with the downloaded files; the update remains pending." -ForegroundColor Red
+    exit $exitCode
+  }
+  & $launcher "finalize-source-update"
+  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  Write-Host "FRAME source update completed." -ForegroundColor Green
+}
+
 function Invoke-ReadinessFlow {
   Write-Host ""
   Write-Host "Validation" -ForegroundColor Cyan
@@ -524,7 +541,7 @@ function Invoke-ReadinessFlow {
   Invoke-Verification
   Invoke-Compose @("config", "--quiet")
   Write-Host "Configuration and contracts are ready." -ForegroundColor Green
-  if (Read-YesNo "Start or update the complete FRAME stack now?") {
+  if (Read-YesNo "Start or rebuild the complete FRAME stack from the currently installed files now?") {
     Invoke-StartStack
   }
 }
@@ -840,14 +857,15 @@ function Invoke-InteractiveMenu {
     Write-Host "4. Configure Hybrid access      Stage hostname, tunnel token, and Portal login"
     Write-Host "5. Credentials and security     Portal, Cloudflare, and Discord credentials"
     Write-Host "6. Validate and verify          Check configuration and contracts"
-    Write-Host "7. Start or update stack        Reconcile the complete Docker Compose stack"
+    Write-Host "7. Start or update stack        Reconcile using the FRAME files already installed"
     Write-Host "8. Status and logs              Inspect configuration, containers, or logs"
     Write-Host "9. Stop stack                   Stop services without deleting data"
     Write-Host "10. Advanced settings           Edit one advanced non-secret setting"
     Write-Host "11. Reset FRAME                 Remove generated configuration and data"
+    Write-Host "12. Download and update FRAME   Download approved files, then rebuild the stack"
     Write-Host "0. Exit"
     try {
-      switch (Read-MenuChoice "Selection" @("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11")) {
+      switch (Read-MenuChoice "Selection" @("0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12")) {
         "0" { return }
         "1" { Invoke-GuidedSetup; Wait-ForMenu }
         "2" { Select-Capabilities; Invoke-ReadinessFlow; Wait-ForMenu }
@@ -885,6 +903,7 @@ function Invoke-InteractiveMenu {
           }
           Wait-ForMenu
         }
+        "12" { Invoke-SourceUpdate; return }
       }
     } catch {
       Write-Host ""
@@ -944,6 +963,12 @@ switch ($Command) {
   }
   "start" {
     Invoke-StartStack
+  }
+  "update" {
+    Invoke-SourceUpdate $CommandArgs
+  }
+  "finalize-source-update" {
+    Invoke-Runtime @("finalize-source-update")
   }
   "discovery-start" {
     Start-FrameDiscovery

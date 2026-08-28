@@ -91,6 +91,7 @@ stable and do not enter the menu.
 .\stack.cmd discord-auth
 .\stack.cmd validate
 .\stack.cmd verify
+.\stack.cmd update
 .\stack.cmd start
 .\stack.cmd status
 .\stack.cmd logs frame-portal
@@ -113,6 +114,35 @@ not an advanced override, so changing the public hostname cannot leave agents po
 endpoint.
 
 Use `./stack.sh` with the same arguments on Linux/macOS.
+
+## Alpha source updates
+
+Run `stack.cmd update` or `./stack.sh update` to download the current official GitHub `main` source
+and reconcile the stack. The interactive command center exposes the same operation as **Download
+and update FRAME** (option 12). **Start or update stack** (option 7) remains a local/offline
+operation that uses the source already installed.
+
+The updater:
+
+1. Resolves `main` to an immutable Git commit and downloads that exact archive.
+2. Validates the archive structure, size, required files, JSON, and JavaScript syntax in temporary
+   staging before changing the installation.
+3. Overlays FRAME-managed source while protecting `.env`, generated `docker-compose.yml`, and the
+   configured `FRAME_DATA_ROOT`.
+4. Runs the newly installed command wrapper through the existing install, validation, build, and
+   health-check reconciliation path.
+
+This command is an explicit alpha/development refresh. It does not yet provide semantic-version
+comparison, stable/beta channels, per-tool updates, scheduled/background installation, or a complete
+rollback transaction. Those remain part of the release update-system backlog.
+
+Existing installations require one last manual download-and-overlay update to acquire this command.
+After that, future alpha source refreshes can run through `stack update`.
+
+The updater does not normally require an administrator or root prompt. It requires write access to
+the installation directory and the same ordinary Docker access needed by `stack start`. Avoid
+installing FRAME in `Program Files`, `/usr`, or another system-owned directory; if the user or host
+Docker setup itself requires elevation, that host policy still applies.
 
 Advanced automation can repeat `--set KEY=VALUE` for installer-whitelisted non-secret settings:
 

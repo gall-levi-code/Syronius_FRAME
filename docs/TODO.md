@@ -53,13 +53,17 @@ removed.
 
 ### Update System
 
+- [x] Add an explicit bootstrap `stack update` command for alpha testers that resolves official
+  GitHub `main` to an immutable commit, validates and stages the archive, protects local config and
+  data, overlays FRAME-managed source, and reuses the existing stack reconciliation path.
 - Define a GitHub Releases update manifest for FRAME releases, including version, channel,
   release archive URL, SHA256 checksum, minimum installer version, migration notes, and affected
   tool groups.
 - Track installed versions in a FRAME-owned state file with separate entries for the whole FRAME
   release, user-facing tools, service/image build IDs, schema versions, and install timestamps.
-- Add `stack update` and `stack update --tool <tool-id>` commands that preflight Docker, disk,
-  active stream/upload risk, config validity, and migration compatibility before changing files.
+- Evolve the alpha updater into release-aware `stack update` and `stack update --tool <tool-id>`
+  commands that preflight Docker, disk, active stream/upload risk, config validity, and migration
+  compatibility before changing files.
 - Implement stack-safe update transactions: snapshot `.env`, `docker-compose.yml`,
   `stack-config.json`, `/data/state`, and installed version state; download and verify the release;
   rerun the installer; pull/build affected services; restart only required containers; wait for

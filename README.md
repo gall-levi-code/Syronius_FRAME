@@ -107,6 +107,32 @@ Stop the stack:
 
 - Choose **Stop stack** from the menu.
 
+## Update An Existing Install
+
+The installer includes an explicit alpha/development refresh command:
+
+```powershell
+.\stack.cmd update
+```
+
+On Linux or macOS, run `./stack.sh update`. In the interactive command center, choose
+**Download and update FRAME** (option 12). **Start or update stack** (option 7) remains the offline
+choice: it rebuilds from the FRAME files already present and does not download anything.
+
+The update command resolves the official GitHub `main` branch to an immutable commit, downloads and
+validates that exact source archive in a temporary staging area, then overlays FRAME-managed source
+files. It leaves `.env`, the generated `docker-compose.yml`, and the configured `FRAME_DATA_ROOT`
+untouched during the overlay before running the normal installer and Docker Compose reconciliation.
+
+This is deliberately a manual alpha update path, not a stable release channel, semantic-version
+comparison, background updater, or full automatic rollback system. Existing installations need one
+final manual ZIP overlay to receive the updater-capable installer; later updates can use
+`stack update` directly.
+
+Administrator elevation is not normally required. The current user needs write access to the FRAME
+installation folder and ordinary access to Docker. Keep FRAME in a user-writable location such as
+`C:\FRAME\Syronius_FRAME` instead of `Program Files` or another protected system folder.
+
 On Linux/macOS, run `chmod +x stack.sh` once, then run `./stack.sh` without arguments to open the
 same menu. macOS provides the required mDNS publisher; Linux uses `avahi-publish` when available.
 

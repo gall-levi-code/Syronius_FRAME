@@ -18,6 +18,7 @@ import {
   enforceDependencies,
   upgradeStackConfig,
 } from "./frame-contract.mjs";
+import { finalizeSourceUpdate, sourceUpdate } from "./frame-updater.mjs";
 
 const WORKSPACE = "/workspace";
 const ENV_PATH = path.join(WORKSPACE, ".env");
@@ -161,6 +162,10 @@ try {
     await setDiscordAuth();
   } else if (command === "set-service-auth") {
     await setServiceAuth();
+  } else if (command === "source-update") {
+    await sourceUpdate();
+  } else if (command === "finalize-source-update") {
+    await finalizeSourceUpdate();
   } else if (command === "reset") {
     await reset(options);
   } else if (command === "help" || command === "--help" || command === "-h") {
@@ -1219,6 +1224,8 @@ function assertAllowedOptions(command, options) {
     "set-portal-auth": new Set(),
     "set-discord-auth": new Set(),
     "set-service-auth": new Set(),
+    "source-update": new Set(),
+    "finalize-source-update": new Set(),
     reset: new Set(["yes"]),
     status: new Set(),
     help: new Set(),
@@ -1490,6 +1497,7 @@ Usage:
   stack discord-auth       Securely prompt for Discord Audio Bridge credentials
   stack validate           Validate config and startup requirements
   stack verify             Run contract tests and static verification
+  stack update             Download current FRAME source and reconcile the stack
   stack start              Build and start enabled services
   stack stop               Stop the stack without deleting data
   stack status             Show config summary and container status

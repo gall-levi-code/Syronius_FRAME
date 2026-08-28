@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added an explicit `stack update` alpha command and command-center action that resolve official
+  GitHub `main` to an immutable commit, validate and stage the source archive, preserve local
+  configuration and data, overlay FRAME-managed files, and run the existing stack reconciliation.
 - Fixed Gallery Socials and Support copying on Firefox Mobile by preferring confirmed clipboard writes
   and keeping the LAN HTTP fallback inside the active dialog.
 - Added a rebuildable Gallery metadata catalog, stable paged loading for large albums, normalized

@@ -8,6 +8,7 @@ run(process.execPath, ["--test", "tests/frame-contract.test.mjs"], "contract and
 
 const syntaxFiles = [
   "installer/frame-installer.mjs",
+  "installer/frame-updater.mjs",
   "installer/frame-contract.mjs",
   ...(await findJavaScriptFiles(path.join(root, "services"))),
   ...(await findJavaScriptFiles(path.join(root, "apps"))),

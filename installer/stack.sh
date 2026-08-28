@@ -391,6 +391,15 @@ start_stack() {
   echo "FRAME stack reconciliation completed."
 }
 
+source_update() {
+  echo "Downloading and applying the FRAME source update..."
+  runtime source-update "$@"
+  echo "Starting FRAME with the downloaded files..."
+  sh "$ROOT_DIR/stack.sh" start
+  sh "$ROOT_DIR/stack.sh" finalize-source-update
+  echo "FRAME source update completed."
+}
+
 readiness_flow() {
   echo ""
   echo "Validation"
@@ -401,7 +410,7 @@ readiness_flow() {
   verify
   compose config --quiet
   echo "Configuration and contracts are ready."
-  if yes_no "Start or update the complete FRAME stack now?"; then
+  if yes_no "Start or rebuild the complete FRAME stack from the currently installed files now?"; then
     start_stack
   fi
 }
@@ -694,11 +703,12 @@ interactive_menu() {
     echo "4. Configure Hybrid access"
     echo "5. Credentials and security"
     echo "6. Validate and verify"
-    echo "7. Start or update stack"
+    echo "7. Start or update stack (use installed FRAME files)"
     echo "8. Status and logs"
     echo "9. Stop stack"
     echo "10. Advanced settings"
     echo "11. Reset FRAME"
+    echo "12. Download and update FRAME"
     echo "0. Exit"
     printf "Selection: "
     read -r choice
@@ -738,6 +748,7 @@ interactive_menu() {
         fi
         pause_menu
         ;;
+      12) source_update; return ;;
     esac
   done
 }
@@ -804,6 +815,12 @@ case "$COMMAND" in
     ;;
   start)
     start_stack
+    ;;
+  update)
+    source_update "$@"
+    ;;
+  finalize-source-update)
+    runtime finalize-source-update
     ;;
   discovery-start)
     start_frame_discovery

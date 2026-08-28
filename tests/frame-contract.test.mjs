@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 import {
@@ -15,6 +17,13 @@ import {
   normalizePrefixes,
   upgradeStackConfig,
 } from "../installer/frame-contract.mjs";
+import {
+  applyStagedUpdate,
+  finalizeSourceUpdate,
+  relativeDataRootOrNull,
+  validateArchiveEntries,
+  validateArchiveEntryTypes,
+} from "../installer/frame-updater.mjs";
 
 const execFileAsync = promisify(execFile);
 
@@ -990,22 +999,228 @@ test("prefix normalization removes duplicates and child routes", () => {
   ]);
 });
 
+test("source updater overlays code while preserving installation-owned files", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-updater-test-"));
+  const workspace = path.join(root, "workspace");
+  const stagedRoot = path.join(root, "staged");
+  t.after(() => rm(root, { recursive: true, force: true }));
+
+  async function writeTree(base, files) {
+    await Promise.all(Object.entries(files).map(async ([relative, contents]) => {
+      const file = path.join(base, ...relative.split("/"));
+      await mkdir(path.dirname(file), { recursive: true });
+      await writeFile(file, contents);
+    }));
+  }
+
+  await writeTree(workspace, {
+    ".env": "FRAME_DATA_ROOT=./storage\n",
+    "docker-compose.yml": "user compose\n",
+    "storage/galleries/photo.jpg": "photo data",
+    "apps/NOALBS/config.json": "user app config",
+    "stack.cmd": "old root Windows bootstrap",
+    "stack.sh": "old root Unix bootstrap",
+    "installer/stack.ps1": "old Windows wrapper",
+    "installer/stack.sh": "old Unix wrapper",
+    "services/frame-gallery/version.txt": "old gallery source",
+  });
+  const stagedFiles = {
+    "package.json": "new package",
+    "stack.cmd": "new root Windows bootstrap",
+    "stack.sh": "new root Unix bootstrap",
+    "installer/stack.ps1": "new Windows wrapper",
+    "installer/stack.sh": "new Unix wrapper",
+    "services/frame-gallery/version.txt": "new gallery source",
+  };
+  await writeTree(stagedRoot, stagedFiles);
+
+  await applyStagedUpdate({
+    workspace,
+    stagedRoot,
+    files: Object.keys(stagedFiles),
+    protectedPaths: [".env", "docker-compose.yml", "cf_token.txt", ".git", "storage"],
+  });
+
+  assert.equal(await readFile(path.join(workspace, ".env"), "utf8"), "FRAME_DATA_ROOT=./storage\n");
+  assert.equal(await readFile(path.join(workspace, "docker-compose.yml"), "utf8"), "user compose\n");
+  assert.equal(await readFile(path.join(workspace, "storage/galleries/photo.jpg"), "utf8"), "photo data");
+  assert.equal(await readFile(path.join(workspace, "apps/NOALBS/config.json"), "utf8"), "user app config");
+  assert.equal(await readFile(path.join(workspace, "stack.cmd"), "utf8"), "old root Windows bootstrap");
+  assert.equal(await readFile(path.join(workspace, "stack.sh"), "utf8"), "old root Unix bootstrap");
+  assert.equal(await readFile(path.join(workspace, "installer/stack.ps1"), "utf8"), "old Windows wrapper");
+  assert.equal(await readFile(path.join(workspace, "installer/stack.sh"), "utf8"), "old Unix wrapper");
+  assert.equal(await readFile(path.join(workspace, "installer/stack.ps1.next"), "utf8"), "new Windows wrapper");
+  assert.equal(await readFile(path.join(workspace, "installer/stack.sh.next"), "utf8"), "new Unix wrapper");
+  assert.equal(await readFile(path.join(workspace, "services/frame-gallery/version.txt"), "utf8"), "new gallery source");
+  assert.equal(await readFile(path.join(workspace, "package.json"), "utf8"), "new package");
+});
+
+test("source updater rejects unsafe archives and protected payload paths before copying", async (t) => {
+  const archiveRoot = "Syronius_FRAME-0123456789abcdef";
+  assert.doesNotThrow(() => validateArchiveEntries([
+    `${archiveRoot}/`,
+    `${archiveRoot}/package.json`,
+    `${archiveRoot}/installer/frame-updater.mjs`,
+  ], archiveRoot));
+  for (const entries of [
+    [],
+    [`${archiveRoot}/../escape`],
+    [`${archiveRoot}/nested//file`],
+    [`${archiveRoot}\\package.json`],
+    ["/absolute/file"],
+    ["C:/absolute/file"],
+    [`${archiveRoot}/package.json`, "another-root/file"],
+  ]) {
+    assert.throws(() => validateArchiveEntries(entries, archiveRoot));
+  }
+  assert.doesNotThrow(() => validateArchiveEntryTypes([
+    "drwxr-xr-x user/group 0 date root/",
+    "-rw-r--r-- user/group 1 date root/package.json",
+  ], 2));
+  for (const typeLines of [
+    [null],
+    ["lrwxrwxrwx user/group 0 date root/link -> target"],
+    ["hrw-r--r-- user/group 0 date root/hardlink link to target"],
+    ["prw-r--r-- user/group 0 date root/pipe"],
+    ["-rw-r--r-- user/group 1073741825 date root/too-large"],
+    ["-rw-r--r-- user/group 1 date root/package.json", "drwxr-xr-x user/group 0 date root/"],
+  ]) {
+    assert.throws(() => validateArchiveEntryTypes(typeLines, 1));
+  }
+
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-updater-reject-test-"));
+  const workspace = path.join(root, "workspace");
+  const stagedRoot = path.join(root, "staged");
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(path.join(stagedRoot, "services"), { recursive: true });
+  await writeFile(path.join(stagedRoot, "services/good.txt"), "must not be copied");
+  const protectedPaths = [".env", "docker-compose.yml", "cf_token.txt", ".git", "storage"];
+
+  for (const protectedFile of [".env", "docker-compose.yml", ".git/config", "storage/galleries/photo.jpg"]) {
+    await assert.rejects(
+      applyStagedUpdate({ workspace, stagedRoot, files: [protectedFile], protectedPaths }),
+      /protected path/,
+    );
+  }
+  await assert.rejects(
+    applyStagedUpdate({
+      workspace,
+      stagedRoot,
+      files: ["services/good.txt", "storage/private.txt"],
+      protectedPaths,
+    }),
+    /protected path/,
+  );
+  await assert.rejects(readFile(path.join(workspace, "services/good.txt")), { code: "ENOENT" });
+  await assert.rejects(
+    applyStagedUpdate({ workspace, stagedRoot, files: ["services/../../.env"], protectedPaths }),
+    /Unsafe FRAME update path/,
+  );
+  await mkdir(path.join(workspace, "services", "blocked.txt"), { recursive: true });
+  await writeFile(path.join(stagedRoot, "services", "blocked.txt"), "must not be copied");
+  await assert.rejects(
+    applyStagedUpdate({
+      workspace,
+      stagedRoot,
+      files: ["services/good.txt", "services/blocked.txt"],
+      protectedPaths,
+    }),
+    /not a regular file/,
+  );
+  await assert.rejects(readFile(path.join(workspace, "services", "good.txt")), { code: "ENOENT" });
+});
+
+test("source updater refuses destination links before overwriting source", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-updater-link-test-"));
+  const workspace = path.join(root, "workspace");
+  const stagedRoot = path.join(root, "staged");
+  const userData = path.join(workspace, "user-data");
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(userData, { recursive: true });
+  await mkdir(path.join(stagedRoot, "services"), { recursive: true });
+  await writeFile(path.join(userData, "victim.txt"), "user data");
+  await writeFile(path.join(stagedRoot, "services", "victim.txt"), "source data");
+  try {
+    await symlink(userData, path.join(workspace, "services"), process.platform === "win32" ? "junction" : "dir");
+  } catch (error) {
+    if (error?.code === "EPERM") {
+      t.skip("This host does not permit an unprivileged test symlink.");
+      return;
+    }
+    throw error;
+  }
+
+  await assert.rejects(
+    applyStagedUpdate({
+      workspace,
+      stagedRoot,
+      files: ["services/victim.txt"],
+      protectedPaths: [".env", "docker-compose.yml", "user-data"],
+    }),
+    /symbolic link/,
+  );
+  assert.equal(await readFile(path.join(userData, "victim.txt"), "utf8"), "user data");
+});
+
+test("source updater normalizes relative data roots and recognizes external roots", () => {
+  assert.equal(relativeDataRootOrNull("./data"), "data");
+  assert.equal(relativeDataRootOrNull("storage/gallery-cache/"), "storage/gallery-cache");
+  assert.equal(relativeDataRootOrNull(".\\custom\\data\\"), "custom/data");
+  assert.equal(relativeDataRootOrNull("data/./gallery"), "data/gallery");
+  for (const externalRoot of ["/srv/frame", "D:\\FRAME-DATA", "//server/share", "\\\\server\\share"]) {
+    assert.equal(relativeDataRootOrNull(externalRoot), null);
+  }
+  for (const invalidRoot of [
+    "", "   ", ".", "./", "/", "/./", "/tmp/..", "C:\\", "C:/", "C:/./", "C:data",
+    "C:\\FRAME\\..", "//server/share/..", "..", "../data", "data/../other",
+  ]) {
+    assert.throws(() => relativeDataRootOrNull(invalidRoot));
+  }
+});
+
+test("source update finalization uses the last duplicate data-root setting", async (t) => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "frame-updater-finalize-test-"));
+  const stateDirectory = path.join(workspace, "second-data", "state");
+  t.after(() => rm(workspace, { recursive: true, force: true }));
+  await mkdir(stateDirectory, { recursive: true });
+  await writeFile(path.join(workspace, ".env"), "FRAME_DATA_ROOT=./first-data\nFRAME_DATA_ROOT=./second-data\n");
+  for (const buildId of ["a".repeat(40), "b".repeat(40)]) {
+    await writeFile(path.join(stateDirectory, "pending-source-update.json"), JSON.stringify({
+      schema_version: 1,
+      build_id: buildId,
+      source: `github:gall-levi-code/Syronius_FRAME@${buildId}`,
+      staged_at: "2026-08-28T00:00:00.000Z",
+    }));
+    await finalizeSourceUpdate({ workspace });
+  }
+  const installed = JSON.parse(await readFile(path.join(stateDirectory, "installed-build.json"), "utf8"));
+  assert.equal(installed.build_id, "b".repeat(40));
+  await assert.rejects(readFile(path.join(workspace, "first-data", "state", "installed-build.json")), { code: "ENOENT" });
+});
+
 test("Windows and Unix wrappers preserve direct commands while offering the numbered command center", async () => {
-  const [powershell, shell, installer] = await Promise.all([
+  const [powershell, shell, installer, windowsLauncher, unixLauncher] = await Promise.all([
     readFile("installer/stack.ps1", "utf8"),
     readFile("installer/stack.sh", "utf8"),
     readFile("installer/frame-installer.mjs", "utf8"),
+    readFile("stack.cmd", "utf8"),
+    readFile("stack.sh", "utf8"),
   ]);
   for (const wrapper of [powershell, shell]) {
     assert.ok(wrapper.includes("Guided setup"));
     assert.ok(wrapper.includes("Configure services"));
     assert.ok(wrapper.includes("Validate and verify"));
     assert.ok(wrapper.includes("Start or update stack"));
+    assert.ok(wrapper.includes("Download and update FRAME"));
+    assert.ok(wrapper.includes("source-update"));
+    assert.ok(wrapper.includes("finalize-source-update"));
     assert.ok(wrapper.includes("set-discord-auth"));
     assert.ok(wrapper.includes("set-service-auth"));
     assert.ok(wrapper.includes("PHOTO_ARCHIVE_RETENTION_DAYS"));
     assert.ok(wrapper.includes("PHOTO_TRASH_RETENTION_DAYS"));
   }
+  assert.ok(windowsLauncher.includes("stack.ps1.next"));
+  assert.ok(unixLauncher.includes("stack.sh.next"));
   assert.ok(
     powershell.includes('"--force-recreate", "--no-deps"') &&
       powershell.includes('"frame-public-gateway"'),
