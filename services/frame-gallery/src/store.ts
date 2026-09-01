@@ -21,7 +21,12 @@ const MAX_LOGO_SOURCE_PIXELS = 16_777_216;
 const MAX_LOGO_ASPECT_RATIO = 8;
 const MIN_LOGO_EDGE_PX = 24;
 const LOGO_BOX = { width: 720, height: 240 };
+const LOGO_ICON_SIZE = 512;
 const SOCIAL_GRAPHIC_SIZE = 320;
+const SHARE_PREVIEW_WIDTH = 1200;
+const SHARE_PREVIEW_HEIGHT = 630;
+const SHARE_PREVIEW_QUALITY = 88;
+const SHARE_PREVIEW_FILE = "share-preview-v1.jpg";
 const TILE_SIZE = 512;
 const TILE_OVERLAP = 1;
 const TILE_QUALITY = 90;
@@ -29,13 +34,24 @@ const TILE_CACHE_VERSION = `v2-overlap-${TILE_OVERLAP}`;
 const MAX_TILE_GENERATORS = 2;
 const MAX_QUEUED_TILE_SETS = 32;
 const TILE_COMPLETE_FILE = ".complete";
-const CATALOG_SCHEMA_VERSION = 2;
+const CATALOG_SCHEMA_VERSION = 3;
 const MAX_PHOTO_PAGE_SIZE = 100;
 const CATALOG_FRESH_MS = 1_500;
 const CATALOG_DEEP_SCAN_MS = 60_000;
 
+export const PHOTO_SORTS = [
+  "newest",
+  "oldest",
+  "filename_asc",
+  "filename_desc",
+  "captured_asc",
+  "captured_desc",
+] as const;
+export type PhotoSort = typeof PHOTO_SORTS[number];
+
 export interface GalleryPhoto {
   base: string;
+  original_name: string;
   date_folder: string;
   thumbnail_url: string;
   width: number | null;
@@ -43,6 +59,7 @@ export interface GalleryPhoto {
   orientation: 0 | 1;
   processed_at: string;
   capture_clock: string | null;
+  captured_at: string | null;
   camera_text: string;
 }
 
@@ -64,11 +81,13 @@ export interface GalleryPhotoPage {
   total: number;
   next_cursor: string | null;
   revision: number;
+  photo_sort: PhotoSort;
 }
 
 export interface GallerySettings {
   schema_version: 1;
   cover_base: string | null;
+  photo_sort: PhotoSort;
   updated_at: string;
 }
 
@@ -101,10 +120,13 @@ export interface GalleryExplore {
 }
 
 interface PhotoSidecar {
+  original_name?: unknown;
   width?: unknown;
   height?: unknown;
   orientation?: unknown;
   processed_at?: unknown;
+  capture_clock?: unknown;
+  captured_at?: unknown;
   exif?: { Photo?: { DateTimeOriginal?: unknown } };
 }
 
@@ -124,11 +146,16 @@ interface CatalogGalleryRow {
 interface CatalogPhotoRow {
   date_folder: string;
   base: string;
+  original_name: string;
+  original_name_sort: string;
   width: number | null;
   height: number | null;
   orientation: number;
   processed_at: string;
   capture_clock: string | null;
+  captured_at: string | null;
+  capture_missing: number;
+  capture_sort_ms: number;
   camera_text: string;
   trashed: number;
 }
@@ -139,10 +166,13 @@ export class GalleryStore {
   readonly brandingRoot: string;
   readonly brandingConfigFile: string;
   readonly logoFile: string;
+  readonly logoIconFile: string;
   readonly socialGraphicsRoot: string;
   readonly gallerySettingsRoot: string;
   readonly catalogFile: string;
   private thumbnails = new Map<string, Promise<string>>();
+  private sharePreviews = new Map<string, Promise<string>>();
+  private logoIconGeneration: Promise<string> | null = null;
   private tiles = new Map<string, Promise<boolean>>();
   private tileGenerators = 0;
   private tileWaiters: Array<() => void> = [];
@@ -161,6 +191,7 @@ export class GalleryStore {
     this.brandingRoot = path.join(dataRoot, "gallery-branding");
     this.brandingConfigFile = path.join(this.brandingRoot, "config.json");
     this.logoFile = path.join(this.brandingRoot, "logo.webp");
+    this.logoIconFile = path.join(this.brandingRoot, "logo-icon.png");
     this.socialGraphicsRoot = path.join(this.brandingRoot, "socials");
     this.gallerySettingsRoot = path.join(this.brandingRoot, "galleries");
     this.catalogFile = path.join(this.cacheRoot, "gallery-catalog.sqlite");
@@ -213,8 +244,17 @@ export class GalleryStore {
         PRAGMA busy_timeout = 5000;
         PRAGMA foreign_keys = ON;
       `);
-      const version = Number((database.prepare("PRAGMA user_version").get() as { user_version: number }).user_version);
+      let version = Number((database.prepare("PRAGMA user_version").get() as { user_version: number }).user_version);
       if (version > CATALOG_SCHEMA_VERSION) throw new Error(`Catalog schema ${version} is newer than this FRAME version.`);
+      if (version > 0 && version < CATALOG_SCHEMA_VERSION) {
+        // The catalog is disposable; owner settings and published files remain authoritative.
+        database.exec(`
+          DROP TABLE IF EXISTS gallery_photos;
+          DROP TABLE IF EXISTS gallery_catalog;
+          PRAGMA user_version = 0;
+        `);
+        version = 0;
+      }
       if (version < 1) database.exec(`
         CREATE TABLE IF NOT EXISTS gallery_catalog (
           date_folder TEXT PRIMARY KEY,
@@ -232,11 +272,16 @@ export class GalleryStore {
         CREATE TABLE IF NOT EXISTS gallery_photos (
           date_folder TEXT NOT NULL,
           base TEXT NOT NULL,
+          original_name TEXT NOT NULL,
+          original_name_sort TEXT NOT NULL,
           width INTEGER,
           height INTEGER,
           orientation INTEGER NOT NULL,
           processed_at TEXT NOT NULL,
           capture_clock TEXT,
+          captured_at TEXT,
+          capture_missing INTEGER NOT NULL,
+          capture_sort_ms INTEGER NOT NULL,
           camera_text TEXT NOT NULL,
           trashed INTEGER NOT NULL DEFAULT 0,
           PRIMARY KEY (date_folder, base),
@@ -244,11 +289,15 @@ export class GalleryStore {
         ) STRICT;
         CREATE INDEX IF NOT EXISTS gallery_photos_visible_time
           ON gallery_photos(date_folder, trashed, processed_at DESC, base DESC);
+        CREATE INDEX IF NOT EXISTS gallery_photos_visible_filename
+          ON gallery_photos(date_folder, trashed, original_name_sort, base);
+        CREATE INDEX IF NOT EXISTS gallery_photos_visible_capture
+          ON gallery_photos(date_folder, trashed, capture_missing, capture_sort_ms, processed_at, base);
         PRAGMA user_version = ${CATALOG_SCHEMA_VERSION};
       `);
-      if (version === 1) database.exec(`
-        DELETE FROM gallery_catalog;
-        PRAGMA user_version = ${CATALOG_SCHEMA_VERSION};
+      database.exec(`
+        CREATE INDEX IF NOT EXISTS gallery_photos_visible_capture_desc
+          ON gallery_photos(date_folder, trashed, capture_missing ASC, capture_sort_ms DESC, processed_at DESC, base DESC);
       `);
       database.prepare(`
         SELECT date_folder, directory_mtime_ms, directory_entry_count, photo_count, first_at, latest_at,
@@ -256,7 +305,8 @@ export class GalleryStore {
         FROM gallery_catalog LIMIT 0
       `).all();
       database.prepare(`
-        SELECT date_folder, base, width, height, orientation, processed_at, capture_clock, camera_text, trashed
+        SELECT date_folder, base, original_name, original_name_sort, width, height, orientation, processed_at,
+               capture_clock, captured_at, capture_missing, capture_sort_ms, camera_text, trashed
         FROM gallery_photos LIMIT 0
       `).all();
       return database;
@@ -343,7 +393,8 @@ export class GalleryStore {
       .filter((base) => BASE_PATTERN.test(base));
     const ready = new Set(readyBases);
     const indexed = this.catalogDb().prepare(`
-      SELECT date_folder, base, width, height, orientation, processed_at, capture_clock, camera_text, trashed
+      SELECT date_folder, base, original_name, original_name_sort, width, height, orientation, processed_at,
+             capture_clock, captured_at, capture_missing, capture_sort_ms, camera_text, trashed
       FROM gallery_photos WHERE date_folder = ?
     `).all(dateFolder) as unknown as CatalogPhotoRow[];
     const indexedByBase = new Map(indexed.map((photo) => [photo.base, photo]));
@@ -390,26 +441,38 @@ export class GalleryStore {
       for (const photo of removals) removePhoto.run(dateFolder, photo.base);
       const savePhoto = database.prepare(`
         INSERT INTO gallery_photos (
-          date_folder, base, width, height, orientation, processed_at, capture_clock, camera_text, trashed
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          date_folder, base, original_name, original_name_sort, width, height, orientation, processed_at,
+          capture_clock, captured_at, capture_missing, capture_sort_ms, camera_text, trashed
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(date_folder, base) DO UPDATE SET
+          original_name = excluded.original_name,
+          original_name_sort = excluded.original_name_sort,
           width = excluded.width,
           height = excluded.height,
           orientation = excluded.orientation,
           processed_at = excluded.processed_at,
           capture_clock = excluded.capture_clock,
+          captured_at = excluded.captured_at,
+          capture_missing = excluded.capture_missing,
+          capture_sort_ms = excluded.capture_sort_ms,
           camera_text = excluded.camera_text,
           trashed = excluded.trashed
       `);
       for (const photo of additions) {
+        const captureSortMs = bestCaptureTimestamp(photo.captured_at, photo.capture_clock);
         savePhoto.run(
           dateFolder,
           photo.base,
+          photo.original_name,
+          photo.original_name.toLowerCase(),
           photo.width,
           photo.height,
           photo.orientation,
           photo.processed_at,
           photo.capture_clock,
+          photo.captured_at,
+          Number(captureSortMs === null),
+          captureSortMs ?? Date.parse(photo.processed_at),
           photo.camera_text,
           Number(names.has(`${photo.base}.trashed.json`)),
         );
@@ -452,13 +515,9 @@ export class GalleryStore {
     }
   }
 
-  private catalogPhotoRows(dateFolder: string): CatalogPhotoRow[] {
-    return this.catalogDb().prepare(`
-      SELECT date_folder, base, width, height, orientation, processed_at, capture_clock, camera_text, trashed
-      FROM gallery_photos
-      WHERE date_folder = ? AND trashed = 0
-      ORDER BY processed_at DESC, base DESC
-    `).all(dateFolder) as unknown as CatalogPhotoRow[];
+  private catalogPhotoRows(dateFolder: string, photoSort: PhotoSort): CatalogPhotoRow[] {
+    return this.catalogDb().prepare(`${catalogPhotoSelect()} ORDER BY ${photoSortSql(photoSort).order}`)
+      .all(dateFolder) as unknown as CatalogPhotoRow[];
   }
 
   async getBranding(): Promise<GalleryBrandingResponse> {
@@ -504,12 +563,13 @@ export class GalleryStore {
     const logoWidth = integerOrNull(outputMetadata.width);
     const logoHeight = integerOrNull(outputMetadata.height);
     if (!logoWidth || !logoHeight) throw new GalleryRequestError("Logo image could not be processed.", 400);
+    const icon = await renderLogoIcon(output);
 
     return this.mutateBranding(async () => {
       await mkdir(this.brandingRoot, { recursive: true });
-      const temporary = `${this.logoFile}.tmp`;
-      await writeFile(temporary, output);
-      await rename(temporary, this.logoFile);
+      await atomicWriteBuffer(this.logoFile, output);
+      await atomicWriteBuffer(this.logoIconFile, icon);
+      this.logoIconGeneration = null;
 
       const updatedAt = new Date().toISOString();
       const logo: GalleryLogo = {
@@ -526,17 +586,41 @@ export class GalleryStore {
 
   async deleteLogo(): Promise<GalleryBrandingResponse> {
     return this.mutateBranding(async () => {
-      await rm(this.logoFile, { force: true });
       const updatedAt = new Date().toISOString();
       const next = withLogo(await this.readBrandingConfig(), null, updatedAt);
       await this.writeBrandingConfig(next);
+      await Promise.all([
+        rm(this.logoFile, { force: true }),
+        rm(this.logoIconFile, { force: true }),
+      ]);
+      this.logoIconGeneration = null;
       return toBrandingResponse(next);
     });
   }
 
   async requireLogo(): Promise<string> {
+    if (!(await this.readBrandingConfig()).logo) throw new GalleryRequestError("Logo was not found.", 404);
     await access(this.logoFile);
     return this.logoFile;
+  }
+
+  async requireLogoIcon(): Promise<string> {
+    const pending = this.logoIconGeneration ?? this.mutateBranding(() => this.generateLogoIcon());
+    this.logoIconGeneration = pending;
+    try {
+      return await pending;
+    } finally {
+      if (this.logoIconGeneration === pending) this.logoIconGeneration = null;
+    }
+  }
+
+  private async generateLogoIcon(): Promise<string> {
+    const logo = await this.requireLogo();
+    const [logoInfo, iconInfo] = await Promise.all([stat(logo), statOrNull(this.logoIconFile)]);
+    if (!iconInfo || iconInfo.mtimeMs < logoInfo.mtimeMs) {
+      await atomicWriteBuffer(this.logoIconFile, await renderLogoIcon(await readFile(logo)));
+    }
+    return this.logoIconFile;
   }
 
   async saveSocialGraphic(id: string, input: unknown): Promise<GalleryBrandingResponse> {
@@ -658,7 +742,33 @@ export class GalleryStore {
     assertDate(dateFolder);
     await this.init();
     await this.reconcileCatalog(dateFolder);
-    return this.catalogPhotoRows(dateFolder).map(toGalleryPhoto);
+    const { photo_sort: photoSort } = await this.readGallerySettings(dateFolder);
+    return this.catalogPhotoRows(dateFolder, photoSort).map(toGalleryPhoto);
+  }
+
+  async listPhotoSnapshot(dateFolder: string): Promise<GalleryPhotoPage> {
+    assertDate(dateFolder);
+    await this.init();
+    await this.reconcileCatalog(dateFolder);
+    return this.mutateGallerySettings(async () => {
+      const { photo_sort: photoSort } = await this.readGallerySettings(dateFolder);
+      const photos = this.catalogPhotoRows(dateFolder, photoSort).map(toGalleryPhoto);
+      const gallery = this.catalogDb().prepare("SELECT revision FROM gallery_catalog WHERE date_folder = ?")
+        .get(dateFolder) as { revision: number } | undefined;
+      return {
+        photos,
+        total: photos.length,
+        next_cursor: null,
+        revision: Number(gallery?.revision ?? 0),
+        photo_sort: photoSort,
+      };
+    });
+  }
+
+  async getGallerySettings(dateFolder: string): Promise<GallerySettings> {
+    assertDate(dateFolder);
+    await this.init();
+    return this.readGallerySettings(dateFolder);
   }
 
   async galleryRevision(dateFolder: string): Promise<number> {
@@ -677,34 +787,28 @@ export class GalleryStore {
     }
     await this.init();
     await this.reconcileCatalog(dateFolder);
+    const { photo_sort: photoSort } = await this.readGallerySettings(dateFolder);
     const gallery = this.catalogDb().prepare(`
       SELECT photo_count, revision FROM gallery_catalog WHERE date_folder = ?
     `).get(dateFolder) as { photo_count: number; revision: number } | undefined;
-    const position = cursor ? decodePhotoCursor(cursor) : null;
-    const rows = (position
-      ? this.catalogDb().prepare(`
-          SELECT date_folder, base, width, height, orientation, processed_at, capture_clock, camera_text, trashed
-          FROM gallery_photos
-          WHERE date_folder = ? AND trashed = 0
-            AND (processed_at < ? OR (processed_at = ? AND base < ?))
-          ORDER BY processed_at DESC, base DESC
-          LIMIT ?
-        `).all(dateFolder, position.processed_at, position.processed_at, position.base, limit + 1)
-      : this.catalogDb().prepare(`
-          SELECT date_folder, base, width, height, orientation, processed_at, capture_clock, camera_text, trashed
-          FROM gallery_photos
-          WHERE date_folder = ? AND trashed = 0
-          ORDER BY processed_at DESC, base DESC
-          LIMIT ?
-        `).all(dateFolder, limit + 1)) as unknown as CatalogPhotoRow[];
+    const position = cursor ? decodePhotoCursor(cursor, photoSort) : null;
+    const sorting = photoSortSql(photoSort);
+    const rows = this.catalogDb().prepare(
+      `${catalogPhotoSelect()}${position ? ` AND (${sorting.after})` : ""} ORDER BY ${sorting.order} LIMIT ?`,
+    ).all(
+      dateFolder,
+      ...(position ? photoCursorParameters(position) : []),
+      limit + 1,
+    ) as unknown as CatalogPhotoRow[];
     const hasMore = rows.length > limit;
     const page = rows.slice(0, limit);
     const last = page.at(-1);
     return {
       photos: page.map(toGalleryPhoto),
       total: Number(gallery?.photo_count ?? 0),
-      next_cursor: hasMore && last ? encodePhotoCursor(last.processed_at, last.base) : null,
+      next_cursor: hasMore && last ? encodePhotoCursor(photoSort, last) : null,
       revision: Number(gallery?.revision ?? 0),
+      photo_sort: photoSort,
     };
   }
 
@@ -712,24 +816,37 @@ export class GalleryStore {
     assertDate(dateFolder);
     if (!isRecord(input)) throw new GalleryRequestError("Gallery settings must be an object.", 400);
     const updatesCover = Object.hasOwn(input, "cover_base");
-    if (!updatesCover) throw new GalleryRequestError("No gallery settings were supplied.", 400);
+    const updatesPhotoSort = Object.hasOwn(input, "photo_sort");
+    if (!updatesCover && !updatesPhotoSort) throw new GalleryRequestError("No gallery settings were supplied.", 400);
 
     return this.mutateGallerySettings(async () => {
       if (!(await this.listPhotos(dateFolder)).length) throw new GalleryRequestError("Gallery was not found.", 404);
       const current = await this.readGallerySettings(dateFolder);
       let coverBase = current.cover_base;
-      const value = input.cover_base;
-      if (value !== null && typeof value !== "string") {
-        throw new GalleryRequestError("Gallery cover must identify a photo or use automatic selection.", 400);
+      let photoSort = current.photo_sort;
+      if (updatesCover) {
+        const value = input.cover_base;
+        if (value !== null && typeof value !== "string") {
+          throw new GalleryRequestError("Gallery cover must identify a photo or use automatic selection.", 400);
+        }
+        if (typeof value === "string") await this.requireImage(dateFolder, value);
+        coverBase = value;
       }
-      if (typeof value === "string") await this.requireImage(dateFolder, value);
-      coverBase = value;
+      if (updatesPhotoSort) {
+        if (!isPhotoSort(input.photo_sort)) throw new GalleryRequestError("Gallery photo order is invalid.", 400);
+        photoSort = input.photo_sort;
+      }
       const next: GallerySettings = {
         schema_version: 1,
         cover_base: coverBase,
+        photo_sort: photoSort,
         updated_at: new Date().toISOString(),
       };
       await this.writeGallerySettings(dateFolder, next);
+      if (coverBase !== current.cover_base || photoSort !== current.photo_sort) {
+        this.catalogDb().prepare("UPDATE gallery_catalog SET revision = revision + 1 WHERE date_folder = ?")
+          .run(dateFolder);
+      }
       return next;
     });
   }
@@ -860,6 +977,19 @@ export class GalleryStore {
     }
   }
 
+  async requireSharePreview(dateFolder: string, base: string): Promise<string> {
+    assertDate(dateFolder);
+    assertBase(base);
+    const key = `${dateFolder}/${base}`;
+    const pending = this.sharePreviews.get(key) ?? this.generateSharePreview(dateFolder, base);
+    this.sharePreviews.set(key, pending);
+    try {
+      return await pending;
+    } finally {
+      if (this.sharePreviews.get(key) === pending) this.sharePreviews.delete(key);
+    }
+  }
+
   async requireAdminThumbnail(dateFolder: string, base: string): Promise<string> {
     const key = `admin/${dateFolder}/${base}`;
     const pending = this.thumbnails.get(key) ?? this.generateThumbnail(dateFolder, base, true);
@@ -898,6 +1028,27 @@ export class GalleryStore {
       await import("node:fs/promises").then(({ rename }) => rename(temporary, thumbnail));
     }
     return thumbnail;
+  }
+
+  private async generateSharePreview(dateFolder: string, base: string): Promise<string> {
+    const image = await this.requireImage(dateFolder, base);
+    const preview = path.join(this.cacheRoot, "tiles", dateFolder, base, SHARE_PREVIEW_FILE);
+    await mkdir(path.dirname(preview), { recursive: true });
+    const [imageInfo, previewInfo] = await Promise.all([stat(image), statOrNull(preview)]);
+    if (!previewInfo || previewInfo.mtimeMs < imageInfo.mtimeMs) {
+      await this.withTileGenerator(async () => {
+        const visibleImage = await this.requireImage(dateFolder, base);
+        const [currentImageInfo, currentPreviewInfo] = await Promise.all([stat(visibleImage), statOrNull(preview)]);
+        if (currentPreviewInfo && currentPreviewInfo.mtimeMs >= currentImageInfo.mtimeMs) return;
+        const output = await sharp(visibleImage, { failOn: "error" })
+          .resize({ width: SHARE_PREVIEW_WIDTH, height: SHARE_PREVIEW_HEIGHT, fit: "cover" })
+          .jpeg({ quality: SHARE_PREVIEW_QUALITY })
+          .toBuffer();
+        await atomicWriteBuffer(preview, output);
+      });
+    }
+    await this.assertPublished(dateFolder, base);
+    return preview;
   }
 
   private async generateTileSet(image: string, tileSet: string, requestedTile: string): Promise<boolean> {
@@ -973,17 +1124,19 @@ export class GalleryStore {
     const readyInfo = await stat(path.join(directory, `${base}.ready`));
     const cameraText = await readTextOrEmpty(path.join(directory, `${base}.txt`));
     const processedAt = normalizeTimestamp(sidecar?.processed_at);
+    const topLevelCaptureClock = captureClockText(sidecar?.capture_clock);
+    const legacyCaptureClock = captureClockText(sidecar?.exif?.Photo?.DateTimeOriginal);
     return {
       base,
+      original_name: nonemptyText(sidecar?.original_name) ?? base,
       date_folder: dateFolder,
       thumbnail_url: `/gallery/thumb/${dateFolder}/${base}.webp`,
       width: integerOrNull(sidecar?.width),
       height: integerOrNull(sidecar?.height),
       orientation: sidecar?.orientation === 1 ? 1 : 0,
       processed_at: processedAt ?? readyInfo.mtime.toISOString(),
-      capture_clock: typeof sidecar?.exif?.Photo?.DateTimeOriginal === "string"
-        ? sidecar.exif.Photo.DateTimeOriginal
-        : null,
+      capture_clock: topLevelCaptureClock ?? legacyCaptureClock,
+      captured_at: normalizeTimestamp(sidecar?.captured_at),
       camera_text: cameraText,
     };
   }
@@ -1011,6 +1164,7 @@ export class GalleryStore {
     return {
       schema_version: 1,
       cover_base: typeof value.cover_base === "string" && BASE_PATTERN.test(value.cover_base) ? value.cover_base : null,
+      photo_sort: isPhotoSort(value.photo_sort) ? value.photo_sort : "newest",
       updated_at: typeof value.updated_at === "string" && value.updated_at ? value.updated_at : defaultGallerySettings().updated_at,
     };
   }
@@ -1049,6 +1203,29 @@ export class GalleryStore {
     const result = this.gallerySettingsMutation.then(operation, operation);
     this.gallerySettingsMutation = result.then(() => undefined, () => undefined);
     return result;
+  }
+}
+
+async function renderLogoIcon(input: Buffer): Promise<Buffer> {
+  return sharp(input, { failOn: "error" })
+    .resize({
+      width: LOGO_ICON_SIZE,
+      height: LOGO_ICON_SIZE,
+      fit: "contain",
+      background: { r: 0, g: 0, b: 0, alpha: 0 },
+    })
+    .png({ compressionLevel: 9 })
+    .toBuffer();
+}
+
+async function atomicWriteBuffer(file: string, content: Buffer): Promise<void> {
+  await mkdir(path.dirname(file), { recursive: true });
+  const temporary = `${file}.tmp-${process.pid}-${randomBytes(8).toString("hex")}`;
+  try {
+    await writeFile(temporary, content);
+    await rename(temporary, file);
+  } finally {
+    await rm(temporary, { force: true });
   }
 }
 
@@ -1095,6 +1272,39 @@ function integerOrNull(value: unknown): number | null {
   return Number.isInteger(value) && Number(value) > 0 ? Number(value) : null;
 }
 
+function nonemptyText(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function isPhotoSort(value: unknown): value is PhotoSort {
+  return typeof value === "string" && (PHOTO_SORTS as readonly string[]).includes(value);
+}
+
+function captureClockText(value: unknown): string | null {
+  return typeof value === "string" && cameraClockTimestamp(value) !== null ? value : null;
+}
+
+function bestCaptureTimestamp(capturedAt: string | null, captureClock: string | null): number | null {
+  if (capturedAt) {
+    const timestamp = Date.parse(capturedAt);
+    if (Number.isFinite(timestamp)) return timestamp;
+  }
+  return cameraClockTimestamp(captureClock);
+}
+
+function cameraClockTimestamp(value: unknown): number | null {
+  if (typeof value !== "string") return null;
+  const match = value.match(
+    /^(\d{4})[:-](\d{2})[:-](\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,9}))?(?:Z|[+-]\d{2}:\d{2})?$/,
+  );
+  if (!match) return null;
+  const [, year, month, day, hour, minute, second, fraction = ""] = match;
+  const normalized = normalizeTimestamp(
+    `${year}-${month}-${day}T${hour}:${minute}:${second}.${fraction.padEnd(3, "0").slice(0, 3)}Z`,
+  );
+  return normalized ? Date.parse(normalized) : null;
+}
+
 function normalizeTimestamp(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?(Z|[+-]\d{2}:\d{2})$/);
@@ -1127,6 +1337,7 @@ function defaultGallerySettings(): GallerySettings {
   return {
     schema_version: 1,
     cover_base: null,
+    photo_sort: "newest",
     updated_at: "1970-01-01T00:00:00.000Z",
   };
 }
@@ -1146,6 +1357,7 @@ function visibleBases(entries: string[]): string[] {
 function toGalleryPhoto(row: CatalogPhotoRow): GalleryPhoto {
   return {
     base: row.base,
+    original_name: row.original_name,
     date_folder: row.date_folder,
     thumbnail_url: `/gallery/thumb/${row.date_folder}/${row.base}.webp`,
     width: row.width === null ? null : Number(row.width),
@@ -1153,30 +1365,140 @@ function toGalleryPhoto(row: CatalogPhotoRow): GalleryPhoto {
     orientation: Number(row.orientation) === 1 ? 1 : 0,
     processed_at: row.processed_at,
     capture_clock: row.capture_clock,
+    captured_at: row.captured_at,
     camera_text: row.camera_text,
   };
 }
 
-function encodePhotoCursor(processedAt: string, base: string): string {
-  return Buffer.from(JSON.stringify([processedAt, base])).toString("base64url");
+type PhotoCursor =
+  | { photo_sort: "newest" | "oldest"; processed_at: string; base: string }
+  | { photo_sort: "filename_asc" | "filename_desc"; original_name_sort: string; base: string }
+  | {
+      photo_sort: "captured_asc" | "captured_desc";
+      capture_missing: number;
+      capture_sort_ms: number;
+      processed_at: string;
+      base: string;
+    };
+
+function encodePhotoCursor(photoSort: PhotoSort, row: CatalogPhotoRow): string {
+  const value = photoSort === "newest" || photoSort === "oldest"
+    ? [photoSort, row.processed_at, row.base]
+    : photoSort === "filename_asc" || photoSort === "filename_desc"
+      ? [photoSort, row.original_name_sort, row.base]
+      : [photoSort, Number(row.capture_missing), Number(row.capture_sort_ms), row.processed_at, row.base];
+  return Buffer.from(JSON.stringify(value)).toString("base64url");
 }
 
-function decodePhotoCursor(cursor: string): { processed_at: string; base: string } {
+function decodePhotoCursor(cursor: string, expectedSort: PhotoSort): PhotoCursor {
   try {
     if (!/^[A-Za-z0-9_-]+$/.test(cursor)) throw new Error("invalid encoding");
     const value = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+    if (!Array.isArray(value) || value[0] !== expectedSort) throw new Error("sort mismatch");
+    if (expectedSort === "newest" || expectedSort === "oldest") {
+      if (value.length !== 3 || normalizeTimestamp(value[1]) !== value[1] || !validCursorBase(value[2])) {
+        throw new Error("invalid cursor");
+      }
+      return { photo_sort: expectedSort, processed_at: value[1], base: value[2] };
+    }
+    if (expectedSort === "filename_asc" || expectedSort === "filename_desc") {
+      if (value.length !== 3 || typeof value[1] !== "string" || !value[1] || !validCursorBase(value[2])) {
+        throw new Error("invalid cursor");
+      }
+      return { photo_sort: expectedSort, original_name_sort: value[1], base: value[2] };
+    }
     if (
-      !Array.isArray(value)
-      || value.length !== 2
-      || typeof value[0] !== "string"
-      || !Number.isFinite(Date.parse(value[0]))
-      || typeof value[1] !== "string"
-      || !BASE_PATTERN.test(value[1])
+      value.length !== 5
+      || (value[1] !== 0 && value[1] !== 1)
+      || !Number.isSafeInteger(value[2])
+      || normalizeTimestamp(value[3]) !== value[3]
+      || !validCursorBase(value[4])
     ) throw new Error("invalid cursor");
-    return { processed_at: value[0], base: value[1] };
+    return {
+      photo_sort: expectedSort,
+      capture_missing: value[1],
+      capture_sort_ms: value[2],
+      processed_at: value[3],
+      base: value[4],
+    };
   } catch {
     throw new GalleryRequestError("Photo cursor is invalid.", 400);
   }
+}
+
+function photoCursorParameters(cursor: PhotoCursor): Array<string | number> {
+  if (cursor.photo_sort === "newest" || cursor.photo_sort === "oldest") {
+    return [cursor.processed_at, cursor.processed_at, cursor.base];
+  }
+  if (cursor.photo_sort === "filename_asc" || cursor.photo_sort === "filename_desc") {
+    return [cursor.original_name_sort, cursor.original_name_sort, cursor.base];
+  }
+  if (!("capture_missing" in cursor)) throw new GalleryRequestError("Photo cursor is invalid.", 400);
+  return [
+    cursor.capture_missing,
+    cursor.capture_missing,
+    cursor.capture_sort_ms,
+    cursor.capture_sort_ms,
+    cursor.processed_at,
+    cursor.processed_at,
+    cursor.base,
+  ];
+}
+
+function catalogPhotoSelect(): string {
+  return `
+    SELECT date_folder, base, original_name, original_name_sort, width, height, orientation, processed_at,
+           capture_clock, captured_at, capture_missing, capture_sort_ms, camera_text, trashed
+    FROM gallery_photos
+    WHERE date_folder = ? AND trashed = 0
+  `;
+}
+
+function photoSortSql(photoSort: PhotoSort): { order: string; after: string } {
+  switch (photoSort) {
+    case "oldest":
+      return {
+        order: "processed_at ASC, base ASC",
+        after: "processed_at > ? OR (processed_at = ? AND base > ?)",
+      };
+    case "filename_asc":
+      return {
+        order: "original_name_sort ASC, base ASC",
+        after: "original_name_sort > ? OR (original_name_sort = ? AND base > ?)",
+      };
+    case "filename_desc":
+      return {
+        order: "original_name_sort DESC, base DESC",
+        after: "original_name_sort < ? OR (original_name_sort = ? AND base < ?)",
+      };
+    case "captured_asc":
+      return {
+        order: "capture_missing ASC, capture_sort_ms ASC, processed_at ASC, base ASC",
+        after: captureCursorClause(">"),
+      };
+    case "captured_desc":
+      return {
+        order: "capture_missing ASC, capture_sort_ms DESC, processed_at DESC, base DESC",
+        after: captureCursorClause("<"),
+      };
+    default:
+      return {
+        order: "processed_at DESC, base DESC",
+        after: "processed_at < ? OR (processed_at = ? AND base < ?)",
+      };
+  }
+}
+
+function captureCursorClause(direction: ">" | "<"): string {
+  return `capture_missing > ? OR (capture_missing = ? AND (
+    capture_sort_ms ${direction} ? OR (capture_sort_ms = ? AND (
+      processed_at ${direction} ? OR (processed_at = ? AND base ${direction} ?)
+    ))
+  ))`;
+}
+
+function validCursorBase(value: unknown): value is string {
+  return typeof value === "string" && BASE_PATTERN.test(value);
 }
 
 function parseImageUpload(input: unknown, subject: string): { buffer: Buffer; mediaType: string } {

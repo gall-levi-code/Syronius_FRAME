@@ -53,11 +53,21 @@ test("HTTP API serves published full images only to the same-origin Photo Stage 
   const store = new TodayStore(root);
   const controller = new TodayController(store, 10_000, 60_000);
   await controller.init();
+  let pipelineRequestUrl = "";
   const app = createApp(controller, store, path.resolve("public"), {
     username: "frame",
     password: "secret",
     realm: "FRAME Test",
-  }, "https://frame.example");
+  }, "https://frame.example", "http://pipeline.test/", async (url) => {
+    pipelineRequestUrl = String(url);
+    return new Response(JSON.stringify({
+      service: "frame-pipeline-photos",
+      running: true,
+      queue_depth: 2,
+      workers: { active: 1, configured: 10 },
+      active_jobs: [{ job_id: "job-1", filename: "photo.jpg", stage: "encode", started_at: "2026-06-13T12:00:00.000Z" }],
+    }), { headers: { "content-type": "application/json" } });
+  });
   const server = app.listen(0);
   const address = server.address();
   assert.ok(address && typeof address === "object");
@@ -77,6 +87,7 @@ test("HTTP API serves published full images only to the same-origin Photo Stage 
     assert.equal((await fetch(`${base}/today/assets/remote.js`)).headers.get("cache-control"), "no-store");
     assert.equal((await fetch(`${base}/today/dashboard`)).status, 401);
     assert.equal((await fetch(`${base}/today/api/dashboard`)).status, 401);
+    assert.equal((await fetch(`${base}/today/api/pipeline`)).status, 401);
     assert.equal((await fetch(`${base}/today/remote`)).status, 401);
     assert.equal((await fetch(`${base}/today/api/command`, {
       method: "POST",
@@ -101,12 +112,76 @@ test("HTTP API serves published full images only to the same-origin Photo Stage 
     assert.equal(dashboard.latest_photo.base, "second");
     assert.equal(Object.hasOwn(dashboard.latest_photo, "image_url"), false);
     assert.equal(dashboard.public_base_url, "https://frame.example");
+    const pipeline = await (await fetch(`${base}/today/api/pipeline`, {
+      headers: { authorization: `Basic ${Buffer.from("frame:secret").toString("base64")}` },
+    })).json();
+    assert.equal(pipeline.available, true);
+    assert.equal(pipeline.workers.configured, 10);
+    assert.equal(pipeline.active_jobs[0].stage, "encode");
+    assert.equal(pipelineRequestUrl, "http://pipeline.test/api/internal/photo-pipeline/status");
     await writeFile(path.join(root, "galleries", "2026-06-13", "first.trashed.json"), "{}");
     assert.equal((await fetch(`${base}/today/image/2026-06-13/first.jpg`, { headers: imageHeaders })).status, 404);
   } finally {
     controller.close();
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+test("Photo Stage pipeline telemetry fails without breaking its library summary", async () => {
+  const root = await fixture();
+  const store = new TodayStore(root);
+  const controller = new TodayController(store, 10_000, 60_000);
+  await controller.init();
+  const app = createApp(controller, store, path.resolve("public"), {
+    username: "frame",
+    password: "secret",
+    realm: "FRAME Test",
+  }, "https://frame.example", "http://pipeline.test", async () => {
+    throw new Error("offline");
+  });
+  const server = app.listen(0);
+  const address = server.address();
+  assert.ok(address && typeof address === "object");
+  const base = `http://127.0.0.1:${address.port}`;
+  const headers = { authorization: `Basic ${Buffer.from("frame:secret").toString("base64")}` };
+  try {
+    assert.equal((await fetch(`${base}/today/api/dashboard`, { headers })).status, 200);
+    const response = await fetch(`${base}/today/api/pipeline`, { headers });
+    assert.equal(response.status, 502);
+    assert.deepEqual(await response.json(), { available: false, error: "Photo Pipeline is unavailable." });
+  } finally {
+    controller.close();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("Photo Stage dashboard renders named pipeline stages with collapsed performance details", async () => {
+  const [html, script, styles] = await Promise.all([
+    readFile(new URL("../public/dashboard.html", import.meta.url), "utf8"),
+    readFile(new URL("../public/dashboard.js", import.meta.url), "utf8"),
+    readFile(new URL("../public/today.css", import.meta.url), "utf8"),
+  ]);
+  const activity = html.slice(html.indexOf('<section class="pipeline-panel"'), html.indexOf('<section class="dashboard-grid"'));
+  assert.match(activity, /<h2 id="pipeline-heading">Pipeline Activity<\/h2>/);
+  for (const label of ["Workers", "Queued", "Completed", "Published", "Quarantined", "Batch rate", "Input throughput"]) {
+    assert.match(activity, new RegExp(`>${label}<`));
+  }
+  assert.match(activity, /<details class="pipeline-performance">/);
+  assert.doesNotMatch(activity, /<details[^>]+\bopen\b/);
+  assert.doesNotMatch(activity, /<progress|\d+%/);
+  assert.match(script, /fetch\("\/today\/api\/pipeline", \{ cache: "no-store" \}\)/);
+  assert.match(script, /if \(renderPipeline\(pipeline\)\) nextRefreshMs = 1000/);
+  assert.match(script, /stage\.textContent = stageLabel\(job\?\.stage\)/);
+  assert.match(script, /numberOrNull\(job\?\.elapsed_ms\)/);
+  assert.doesNotMatch(script, /Date\.now\(\) - startedAt/);
+  assert.match(script, /renderLastBatch\(record\(pipeline\.last_batch\), !active\)/);
+  assert.match(script, /const batch = active \? record\(pipeline\.current_batch\) : record\(pipeline\.last_batch\)/);
+  assert.match(script, /const headline = batch \|\| rolling/);
+  assert.match(script, /rolling: \$\{formatNumber\(rolling\.images_per_second\)\} img\/s/);
+  const unavailable = script.slice(script.indexOf("function renderPipelineUnavailable"), script.indexOf("function setPipelineStatus"));
+  assert.doesNotMatch(unavailable, /elements\.status/);
+  assert.match(styles, /\.pipeline-metrics/);
+  assert.match(styles, /\.pipeline-performance summary/);
 });
 
 test("Photo Stage Viewer displays one full JPEG without gallery tiles", async () => {

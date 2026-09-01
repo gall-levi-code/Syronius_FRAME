@@ -13,12 +13,12 @@ app.disable("x-powered-by");
 app.use(express.json({ limit: "5mb" }));
 
 app.get("/healthz", (_request, response) => {
-  response.json({ ok: true, service: "frame-pipeline-photos", ...pipeline.status });
+  response.json({ ok: true, service: "frame-pipeline-photos", ...pipeline.statusSnapshot() });
 });
 
 app.get("/api/internal/photo-pipeline/status", (_request, response) => {
   response.setHeader("Cache-Control", "no-store");
-  response.json({ service: "frame-pipeline-photos", ...pipeline.status });
+  response.json({ service: "frame-pipeline-photos", ...pipeline.statusSnapshot() });
 });
 
 app.get("/api/internal/photo-pipeline/progress", requireServiceToken, async (_request, response, next) => {

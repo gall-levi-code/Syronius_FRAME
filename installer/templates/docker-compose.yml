@@ -367,6 +367,7 @@ services:
       TIMEZONE: ${TIMEZONE:-America/Chicago}
       PIPELINE_POLL_MS: ${PIPELINE_POLL_MS:-1000}
       PIPELINE_CONCURRENCY: ${PIPELINE_CONCURRENCY:-2}
+      PIPELINE_LOG_LEVEL: ${PIPELINE_LOG_LEVEL:-info}
       PHOTO_MAX_INPUT_MB: ${PHOTO_MAX_INPUT_MB:-50}
       PHOTO_MAX_MEGAPIXELS: ${PHOTO_MAX_MEGAPIXELS:-80}
       PHOTO_CONVERSION_ATTEMPTS: ${PHOTO_CONVERSION_ATTEMPTS:-3}
@@ -457,6 +458,7 @@ services:
     environment:
       PORT: 3738
       DATA_ROOT: /data
+      PUBLIC_BASE_URL: ${EDGE_PUBLIC_BASE_URL:-http://localhost}
       GALLERY_THUMB_WIDTH: ${GALLERY_THUMB_WIDTH:-720}
       GALLERY_THUMB_QUALITY: ${GALLERY_THUMB_QUALITY:-82}
       PHOTO_PIPELINE_URL: http://frame-pipeline-photos:3735
@@ -496,6 +498,7 @@ services:
     environment:
       PORT: 3739
       DATA_ROOT: /data
+      PHOTO_PIPELINE_URL: http://frame-pipeline-photos:3735
       PUBLIC_BASE_URL: ${EDGE_PUBLIC_BASE_URL:-http://localhost}
       TODAY_DEFAULT_INTERVAL_MS: ${TODAY_DEFAULT_INTERVAL_MS:-10000}
       TODAY_REFRESH_MS: ${TODAY_REFRESH_MS:-1000}
@@ -520,7 +523,7 @@ services:
       traefik.http.routers.frame-today.service: frame-today
       traefik.http.routers.frame-today-control.entrypoints: web
       traefik.http.routers.frame-today-control.priority: "200"
-      traefik.http.routers.frame-today-control.rule: PathPrefix(`/today/dashboard`) || Path(`/today/remote`) || Path(`/today/api/dashboard`) || Path(`/today/api/command`) || Path(`/today/ws/control`)
+      traefik.http.routers.frame-today-control.rule: PathPrefix(`/today/dashboard`) || Path(`/today/remote`) || Path(`/today/api/dashboard`) || Path(`/today/api/pipeline`) || Path(`/today/api/command`) || Path(`/today/ws/control`)
       traefik.http.routers.frame-today-control.middlewares: frame-sso
       traefik.http.routers.frame-today-control.service: frame-today
       traefik.http.services.frame-today.loadbalancer.server.port: "3739"

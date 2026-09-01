@@ -19,6 +19,7 @@ Use it if you want to:
 - Hide or restore photos from the gallery.
 - Permanently delete published gallery copies when needed.
 - Choose each album's gallery cover.
+- Choose each album's photo order without exposing visitor sorting controls.
 - Customize gallery branding, logo, social links, and visitor download controls.
 
 ## What You Use It For
@@ -83,6 +84,7 @@ On the public gallery, viewers can:
 - View photos through page-bound tiles when downloads are disabled, or the full gallery JPEG when downloads are enabled.
 - Switch between Photos and Explore when a day has attached route data.
 - Select a mapped photo from its thumbnail, lightbox, map marker, or Explore photo strip.
+- Share links with branded Open Graph and Twitter previews for the selected photo or album cover.
 - Open the configured social/profile links from the gallery header.
 - Switch day/night mode when enabled.
 
@@ -95,7 +97,9 @@ On the admin page, operators can:
 - Add or remove multiple GPX sessions for one day.
 - Adjust camera-to-GPX timing and manually place photos that do not match a route.
 - Choose or clear a custom cover for each album.
+- Order an album by processing time, original filename, or EXIF capture time in either direction.
 - Change the gallery title, brand name, and logo.
+- Use the owner logo as the gallery favicon and touch icon; the FRAME favicon remains the fallback.
 - Add, reorder, label, and optionally illustrate social/profile links.
 - Enable or disable full gallery JPEG downloads for every public gallery.
 
@@ -130,6 +134,10 @@ Optional connections:
 
 The public gallery can be shared with viewers when your FRAME access rules allow it.
 
+The normal stack passes `EDGE_PUBLIC_BASE_URL` to Photo Gallery as `PUBLIC_BASE_URL`. This value must
+be an `http://` or `https://` origin without a path, query, fragment, or credentials; Gallery uses it
+to publish absolute canonical and preview URLs for link crawlers.
+
 The admin page should stay login-protected.
 
 Photo Gallery asks Photo Pipeline to hide, restore, or delete photos and albums. It does not edit the
@@ -145,9 +153,18 @@ The visitor photo grid requests 60 records at a time and loads more as the viewe
 Admin keeps using the complete list, while Explore loads the complete day's metadata only when its
 map needs it.
 
-Thumbnail and tile caches remain disposable. A newly generated tile set removes older versions for
-that photo, and permanent photo deletion clears its thumbnail and tile cache. Cache pruning itself
-never touches published or archived source files.
+Photo order is stored per gallery day and can be changed only from the protected admin page. The public
+photo API applies that saved order and does not accept a visitor-selected sort parameter. Capture order
+uses the absolute EXIF instant when a camera supplies an offset, otherwise its local camera clock; photos
+without usable capture metadata remain visible at the end in stable processing order. Changing order
+does not move a photo to another day, and Explore keeps its independent route chronology.
+
+Thumbnail, social-preview, and tile caches remain disposable. A shared day uses a valid selected
+photo first, then the album cover; an unavailable custom cover uses the gallery's automatic cover.
+If no published photo is available, the owner logo is used when configured. Photo previews are public,
+cached 1200x630 JPEG derivatives of the normalized publication, never the archived camera original.
+A newly generated tile set removes older versions for that photo, and permanent photo deletion clears
+its generated cache. Cache pruning itself never touches published or archived source files.
 
 When downloads are disabled, public lightbox photos are delivered as short-lived, page-bound tiles and
 FRAME does not expose a public full-image route. When downloads are enabled, the lightbox and Download

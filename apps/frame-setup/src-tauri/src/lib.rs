@@ -1414,6 +1414,12 @@ fn build_apply_environment(
         128,
         "Photo FTP minimum password length",
     )?;
+    let pipeline_log_level = existing_or(existing, "PIPELINE_LOG_LEVEL", "info")
+        .trim()
+        .to_lowercase();
+    if pipeline_log_level != "info" && pipeline_log_level != "debug" {
+        return Err("PIPELINE_LOG_LEVEL must be info or debug.".to_string());
+    }
 
     let edge_lan_base_url = format_local_http_url(plan.ports.edge);
     let edge_public_base_url = if mode == "HYBRID" {
@@ -1607,6 +1613,7 @@ fn build_apply_environment(
         "PIPELINE_CONCURRENCY".to_string(),
         existing_or(existing, "PIPELINE_CONCURRENCY", "10"),
     );
+    env.insert("PIPELINE_LOG_LEVEL".to_string(), pipeline_log_level);
     env.insert(
         "PHOTO_MAX_INPUT_MB".to_string(),
         existing_or(existing, "PHOTO_MAX_INPUT_MB", "50"),
@@ -2114,6 +2121,7 @@ fn serialize_env(env: &BTreeMap<String, String>) -> String {
                 "PHOTO_UPLOAD_MAX_SESSIONS",
                 "PIPELINE_POLL_MS",
                 "PIPELINE_CONCURRENCY",
+                "PIPELINE_LOG_LEVEL",
                 "PHOTO_MAX_INPUT_MB",
                 "PHOTO_MAX_MEGAPIXELS",
                 "PHOTO_CONVERSION_ATTEMPTS",
@@ -2420,7 +2428,7 @@ mod tests {
     }
 
     #[test]
-    fn belabox_ssh_credential_key_survives_reconfigure() {
+    fn reconfigure_preserves_credentials_and_rejects_invalid_pipeline_log_level() {
         let key = "existing-credential-key-0123456789abcdef";
         let plan = InstallPlan {
             mode: "advanced".to_string(),
@@ -2454,5 +2462,15 @@ mod tests {
             Some(key)
         );
         assert!(serialize_env(&env).contains(&format!("BELABOX_SSH_CREDENTIAL_KEY={key}\n")));
+
+        let invalid = BTreeMap::from([
+            ("BELABOX_SSH_CREDENTIAL_KEY".to_string(), key.to_string()),
+            ("PIPELINE_LOG_LEVEL".to_string(), "verbose".to_string()),
+        ]);
+        assert!(
+            build_apply_environment(&plan, "HYBRID", &capabilities, &profiles, &invalid)
+                .unwrap_err()
+                .contains("PIPELINE_LOG_LEVEL must be info or debug")
+        );
     }
 }

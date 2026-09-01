@@ -29,7 +29,7 @@
       })();
     </script>
     <script src="/assets/frame-theme.js?v=global-theme-v1"></script>
-    <link rel="stylesheet" href="/today/assets/today.css?v=frame-theme-tab">
+    <link rel="stylesheet" href="/today/assets/today.css?v=pipeline-activity-v1">
   </head>
   <body class="tool-page dashboard-page">
     <header class="topbar">
@@ -63,6 +63,42 @@
         <article aria-label="Published photos"><span>Photos</span><strong id="total-images">0</strong></article>
         <article aria-label="Photos in the current gallery"><span>Current</span><strong id="current-images">0</strong></article>
         <article aria-label="Capture span"><span>Duration</span><strong id="current-duration">0 min</strong></article>
+      </section>
+
+      <section class="pipeline-panel" aria-labelledby="pipeline-heading">
+        <div class="panel-heading">
+          <div><p>Live processing</p><h2 id="pipeline-heading">Pipeline Activity</h2></div>
+          <span id="pipeline-status" class="status-pill" role="status" aria-live="polite">Connecting</span>
+        </div>
+        <div class="pipeline-metrics" aria-label="Photo pipeline summary">
+          <div><span>Workers</span><strong id="pipeline-workers">0 / 0</strong></div>
+          <div><span>Queued</span><strong id="pipeline-queued">0</strong></div>
+          <div><span>Completed</span><strong id="pipeline-completed">0</strong></div>
+          <div><span>Published</span><strong id="pipeline-published">0</strong></div>
+          <div><span>Quarantined</span><strong id="pipeline-quarantined">0</strong></div>
+          <div><span>Batch rate</span><strong id="pipeline-rate">0 img/s</strong></div>
+          <div><span>Input throughput</span><strong id="pipeline-throughput">0 MiB/s</strong></div>
+        </div>
+        <div class="pipeline-jobs-section">
+          <div class="pipeline-subheading"><h3>Current jobs</h3><span id="pipeline-jobs-count">0 active</span></div>
+          <div id="pipeline-jobs" class="pipeline-jobs"></div>
+          <p id="pipeline-jobs-empty" class="pipeline-empty">No photos are processing.</p>
+        </div>
+        <div id="pipeline-last-batch" class="pipeline-last-batch" hidden>
+          <span>Last ingest</span>
+          <strong id="pipeline-last-batch-title">No completed batch</strong>
+          <small id="pipeline-last-batch-detail"></small>
+        </div>
+        <details class="pipeline-performance">
+          <summary>Performance details</summary>
+          <p id="pipeline-performance-samples" class="panel-description">No completed samples yet.</p>
+          <div class="pipeline-performance-table-wrap">
+            <table>
+              <thead><tr><th scope="col">Timing</th><th scope="col">Avg</th><th scope="col">p50</th><th scope="col">p95</th></tr></thead>
+              <tbody id="pipeline-performance-rows"></tbody>
+            </table>
+          </div>
+        </details>
       </section>
 
       <section class="dashboard-grid">
@@ -140,6 +176,6 @@
       </section>
     </main>
     <p id="dashboard-message" class="dashboard-message" role="status"></p>
-    <script type="module" src="/today/assets/dashboard.js?v=clipboard-confirmed-v1"></script>
+    <script type="module" src="/today/assets/dashboard.js?v=clipboard-confirmed-v1-pipeline-activity-v1"></script>
   </body>
 </html>

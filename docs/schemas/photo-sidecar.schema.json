@@ -37,6 +37,16 @@
     "max_output_mb": { "type": "number", "minimum": 0, "maximum": 500 },
     "processed_at": { "type": "string", "format": "date-time" },
     "date_folder": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "capture_clock": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,9})?$",
+      "description": "The camera wall clock from EXIF DateTimeOriginal, with EXIF subseconds when present. It intentionally has no timezone suffix."
+    },
+    "captured_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "The absolute capture instant when EXIF OffsetTimeOriginal is present and valid."
+    },
     "exif": { "type": "object" },
     "warnings": {
       "type": "array",

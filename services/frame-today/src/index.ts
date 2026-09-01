@@ -9,6 +9,7 @@ import { TodayStore } from "./store.js";
 const port = integer("PORT", 3739, 1, 65535);
 const dataRoot = path.resolve(process.env.DATA_ROOT?.trim() || "./data");
 const publicBaseUrl = stripTrailingSlash(process.env.PUBLIC_BASE_URL?.trim() || "http://localhost");
+const photoPipelineUrl = stripTrailingSlash(process.env.PHOTO_PIPELINE_URL?.trim() || "http://frame-pipeline-photos:3735");
 const controller = new TodayController(
   new TodayStore(dataRoot),
   integer("TODAY_DEFAULT_INTERVAL_MS", 10_000, 1_000, 300_000),
@@ -27,7 +28,7 @@ const auth: BasicAuthConfig = {
   password: process.env.PORTAL_PASSWORD?.trim() || "",
   realm: process.env.PORTAL_REALM?.trim() || "FRAME Portal",
 };
-const app = createApp(controller, store, path.resolve(process.cwd(), "public"), auth, publicBaseUrl);
+const app = createApp(controller, store, path.resolve(process.cwd(), "public"), auth, publicBaseUrl, photoPipelineUrl);
 const server = createServer(app);
 const viewerSockets = new WebSocketServer({ noServer: true, maxPayload: 32 * 1024 });
 const controlSockets = new WebSocketServer({ noServer: true, maxPayload: 32 * 1024 });

@@ -29,7 +29,7 @@
       })();
     </script>
     <script src="/assets/frame-theme.js?v=global-theme-v1"></script>
-    <link rel="stylesheet" href="/gallery/assets/admin.css?v=gallery-owner-settings-10">
+    <link rel="stylesheet" href="/gallery/assets/admin.css?v=gallery-photo-sort-1">
   </head>
   <body>
     <header class="topbar">
@@ -85,6 +85,23 @@
                 <p id="cover-management-status" role="status" aria-live="polite">Automatic cover uses the earliest published photo.</p>
               </div>
               <button id="cover-action" class="secondary-button" type="button">Select cover image</button>
+            </section>
+            <section class="cover-management-panel" aria-labelledby="photo-sort-title">
+              <div>
+                <strong id="photo-sort-title">Photo order</strong>
+                <p id="photo-sort-status" role="status" aria-live="polite">This order is used by the public gallery.</p>
+              </div>
+              <label class="sr-only" for="photo-sort">Photo order</label>
+              <span class="select-shell photo-sort-control">
+                <select id="photo-sort" aria-describedby="photo-sort-status">
+                  <option value="newest">Processed — newest first (default)</option>
+                  <option value="oldest">Processed — oldest first</option>
+                  <option value="filename_asc">Filename — A–Z</option>
+                  <option value="filename_desc">Filename — Z–A</option>
+                  <option value="captured_asc">Captured — oldest first</option>
+                  <option value="captured_desc">Captured — newest first</option>
+                </select>
+              </span>
             </section>
             <div id="photos" class="photo-grid"></div>
           </section>
@@ -320,6 +337,6 @@
       </article>
     </template>
 
-    <script type="module" src="/gallery/assets/admin.js?v=gallery-owner-settings-11"></script>
+    <script type="module" src="/gallery/assets/admin.js?v=gallery-photo-sort-1"></script>
   </body>
 </html>

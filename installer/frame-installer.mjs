@@ -117,6 +117,7 @@ const CUSTOMIZABLE_ENV_KEYS = new Set([
   "BELABOX_DIAGNOSTIC_PARALLEL_STREAMS",
   "PIPELINE_POLL_MS",
   "PIPELINE_CONCURRENCY",
+  "PIPELINE_LOG_LEVEL",
   "PHOTO_MAX_INPUT_MB",
   "PHOTO_MAX_MEGAPIXELS",
   "PHOTO_CONVERSION_ATTEMPTS",
@@ -586,6 +587,7 @@ function buildEnvironment(existing, options, mode, capabilities) {
     PHOTO_UPLOAD_MAX_SESSIONS: photoUploadMaxSessions,
     PIPELINE_POLL_MS: setting(existing, "PIPELINE_POLL_MS", "1000"),
     PIPELINE_CONCURRENCY: setting(existing, "PIPELINE_CONCURRENCY", "2"),
+    PIPELINE_LOG_LEVEL: setting(existing, "PIPELINE_LOG_LEVEL", "info"),
     PHOTO_MAX_INPUT_MB: setting(existing, "PHOTO_MAX_INPUT_MB", "50"),
     PHOTO_MAX_MEGAPIXELS: setting(existing, "PHOTO_MAX_MEGAPIXELS", "80"),
     PHOTO_CONVERSION_ATTEMPTS: setting(existing, "PHOTO_CONVERSION_ATTEMPTS", "3"),
@@ -677,6 +679,9 @@ function validateEnvironment(env, config, forStart) {
   normalizeInteger(setting(env, "PHOTO_FTP_MAX_SESSIONS_PER_IP", "10"), "Photo FTP max sessions per IP", 1, 100);
   normalizeInteger(setting(env, "PHOTO_UPLOAD_MAX_FILES", "100"), "Photo upload max files", 1, 100);
   normalizeInteger(setting(env, "PHOTO_UPLOAD_MAX_SESSIONS", "2"), "Photo upload max sessions", 1, 100);
+  if (!["info", "debug"].includes(defaultIfBlank(env.PIPELINE_LOG_LEVEL, "info").toLowerCase())) {
+    throw new Error("PIPELINE_LOG_LEVEL must be info or debug.");
+  }
   normalizeInteger(setting(env, "PHOTO_ARCHIVE_RETENTION_DAYS", "0"), "Photo archive retention days", 0, 36500);
   normalizeInteger(setting(env, "PHOTO_TRASH_RETENTION_DAYS", "0"), "Photo trash retention days", 0, 36500);
   const slsStatsPort = normalizePort(defaultIfBlank(env.SLS_STATS_PORT, "8080"), "SLS statistics port");
@@ -1374,6 +1379,7 @@ function serializeEnv(env) {
         "PHOTO_UPLOAD_MAX_SESSIONS",
         "PIPELINE_POLL_MS",
         "PIPELINE_CONCURRENCY",
+        "PIPELINE_LOG_LEVEL",
         "PHOTO_MAX_INPUT_MB",
         "PHOTO_MAX_MEGAPIXELS",
         "PHOTO_CONVERSION_ATTEMPTS",

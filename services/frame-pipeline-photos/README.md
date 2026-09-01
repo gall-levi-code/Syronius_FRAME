@@ -128,6 +128,11 @@ FRAME rejects:
 Missing EXIF or camera metadata does not reject a photo. FRAME publishes the image and records a
 warning in the metadata sidecar.
 
+When available, the sidecar keeps EXIF `DateTimeOriginal` as a timezone-free `capture_clock`, including
+`SubSecTimeOriginal`. If the camera also supplies a valid `OffsetTimeOriginal`, FRAME records the
+corresponding absolute UTC instant as `captured_at`. This lets Gallery distinguish precise capture
+order from the later `processed_at` processing time without pretending an unknown camera timezone is UTC.
+
 ## Where Files Travel
 
 Browser uploads and camera FTP uploads both feed the same pipeline.
@@ -170,6 +175,24 @@ Photo processing uses the same disk thresholds shown by FRAME Portal:
 
 A disk pause leaves uploads in the queue and keeps the service running so Docker does not restart-loop.
 The pipeline status reports the current disk state and resumes automatically after space is available.
+
+## Pipeline Activity And Logs
+
+Photo Stage reads live activity from `/api/internal/photo-pipeline/status`. The additive status fields
+include configured and active workers, the true waiting queue, active filenames and named stages,
+60-second image and MiB rates, recent average/p50/p95 stage timings, publish-lock wait and hold time,
+and current/last batch summaries. Batch summaries remain available after a burst drains to idle.
+
+Pipeline job and batch start/completion logs are single-line JSON at INFO level. Enable DEBUG only
+while diagnosing a bottleneck to also log every named stage and publish-lock acquisition:
+
+```env
+PIPELINE_LOG_LEVEL=info
+# PIPELINE_LOG_LEVEL=debug
+```
+
+The default is `info`. Named stages are used instead of percentage progress because image stages do
+not have equal cost. Telemetry is in memory and resets when the service restarts.
 
 Automatic retention is opt-in:
 

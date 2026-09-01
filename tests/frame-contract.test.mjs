@@ -67,6 +67,7 @@ test("installer Compose template stays synchronized with the service contracts",
   const photoFtp = composeServiceBlock(compose, "frame-photo-ftp");
   const photoPipeline = composeServiceBlock(compose, "frame-pipeline-photos");
   const belabox = composeServiceBlock(compose, "frame-belabox-manager");
+  const gallery = composeServiceBlock(compose, "frame-gallery");
   const today = composeServiceBlock(compose, "frame-today");
   const streams = composeServiceBlock(compose, "frame-streams");
   const overlays = composeServiceBlock(compose, "frame-overlays");
@@ -79,6 +80,7 @@ test("installer Compose template stays synchronized with the service contracts",
   assert.ok(photoFtp.includes("PORTAL_SERVICE_TOKEN: ${PORTAL_SERVICE_TOKEN}"));
   assert.ok(photoFtp.includes("${PHOTO_FTP_PASSIVE_MIN:-30000}-${PHOTO_FTP_PASSIVE_MAX:-30019}:${PHOTO_FTP_PASSIVE_MIN:-30000}-${PHOTO_FTP_PASSIVE_MAX:-30019}"));
   assert.ok(photoPipeline.includes("PIPELINE_CONCURRENCY: ${PIPELINE_CONCURRENCY:-2}"));
+  assert.ok(photoPipeline.includes("PIPELINE_LOG_LEVEL: ${PIPELINE_LOG_LEVEL:-info}"));
   assert.ok(photoPipeline.includes("PORTAL_SERVICE_TOKEN: ${PORTAL_SERVICE_TOKEN}"));
   assert.ok(!compose.includes("frame-belabox-broker"));
   assert.ok(!compose.includes("mosquitto"));
@@ -101,10 +103,28 @@ test("installer Compose template stays synchronized with the service contracts",
   assert.ok(overlays.includes("PHOTO_UPLOAD_API_URL: http://frame-photo-upload:3736"));
   assert.ok(overlays.includes("PHOTO_FTP_API_URL: http://frame-photo-ftp:3737"));
   assert.ok(overlays.includes("PHOTO_PIPELINE_URL: http://frame-pipeline-photos:3735"));
+  assert.ok(gallery.includes("PUBLIC_BASE_URL: ${EDGE_PUBLIC_BASE_URL:-http://localhost}"));
+  assert.ok(today.includes("PHOTO_PIPELINE_URL: http://frame-pipeline-photos:3735"));
+  assert.ok(today.includes("Path(`/today/api/pipeline`)"));
   assert.ok(today.includes("PUBLIC_BASE_URL: ${EDGE_PUBLIC_BASE_URL:-http://localhost}"));
   assert.ok(streams.includes("STREAMS_PUBLIC_BASE_URL: ${STREAMS_PUBLIC_BASE_URL:-http://localhost}"));
   assert.ok(streams.includes("Path(`/stats`) || PathPrefix(`/stats/`)"));
   assert.ok(!streams.includes("traefik.http.routers.frame-streams-stats.middlewares"));
+});
+
+test("pipeline log level survives every installer environment path", async () => {
+  const [installer, windowsWrapper, unixWrapper, setupBackend] = await Promise.all([
+    readFile("installer/frame-installer.mjs", "utf8"),
+    readFile("installer/stack.ps1", "utf8"),
+    readFile("installer/stack.sh", "utf8"),
+    readFile("apps/frame-setup/src-tauri/src/lib.rs", "utf8"),
+  ]);
+  assert.ok(installer.includes('PIPELINE_LOG_LEVEL: setting(existing, "PIPELINE_LOG_LEVEL", "info")'));
+  assert.ok(windowsWrapper.includes('"PIPELINE_LOG_LEVEL"'));
+  assert.match(unixWrapper, /^PIPELINE_LOG_LEVEL$/m);
+  assert.match(setupBackend, /existing_or\(existing, "PIPELINE_LOG_LEVEL", "info"\)/);
+  assert.ok(installer.includes("PIPELINE_LOG_LEVEL must be info or debug."));
+  assert.ok(setupBackend.includes("PIPELINE_LOG_LEVEL must be info or debug."));
 });
 
 test("portal routes and implemented Compose profiles stay aligned with the registry", async () => {

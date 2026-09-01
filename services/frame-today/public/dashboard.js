@@ -16,10 +16,27 @@ const elements = {
   latestBase: document.querySelector("#latest-base"),
   latestCount: document.querySelector("#latest-count"),
   latestUpdated: document.querySelector("#latest-updated"),
+  pipelineStatus: document.querySelector("#pipeline-status"),
+  pipelineWorkers: document.querySelector("#pipeline-workers"),
+  pipelineQueued: document.querySelector("#pipeline-queued"),
+  pipelineCompleted: document.querySelector("#pipeline-completed"),
+  pipelinePublished: document.querySelector("#pipeline-published"),
+  pipelineQuarantined: document.querySelector("#pipeline-quarantined"),
+  pipelineRate: document.querySelector("#pipeline-rate"),
+  pipelineThroughput: document.querySelector("#pipeline-throughput"),
+  pipelineJobs: document.querySelector("#pipeline-jobs"),
+  pipelineJobsCount: document.querySelector("#pipeline-jobs-count"),
+  pipelineJobsEmpty: document.querySelector("#pipeline-jobs-empty"),
+  pipelineLastBatch: document.querySelector("#pipeline-last-batch"),
+  pipelineLastBatchTitle: document.querySelector("#pipeline-last-batch-title"),
+  pipelineLastBatchDetail: document.querySelector("#pipeline-last-batch-detail"),
+  pipelinePerformanceSamples: document.querySelector("#pipeline-performance-samples"),
+  pipelinePerformanceRows: document.querySelector("#pipeline-performance-rows"),
   message: document.querySelector("#dashboard-message"),
   themeToggle: document.querySelector("#theme-toggle"),
 };
 const dashboardConfig = { publicBaseUrl: "" };
+let pipelineRefreshTimer = 0;
 
 initializeTheme();
 elements.themeToggle.addEventListener("click", toggleTheme);
@@ -94,6 +111,7 @@ async function copyText(value, button) {
 }
 
 refresh();
+refreshPipeline();
 setInterval(refresh, 5000);
 
 function initializeTheme() {
@@ -147,6 +165,163 @@ async function refresh() {
     elements.status.className = "status-pill bad";
     elements.message.textContent = error instanceof Error ? error.message : String(error);
   }
+}
+
+async function refreshPipeline() {
+  window.clearTimeout(pipelineRefreshTimer);
+  let nextRefreshMs = 5000;
+  try {
+    const response = await fetch("/today/api/pipeline", { cache: "no-store" });
+    const pipeline = await response.json().catch(() => null);
+    if (!response.ok || !pipeline || pipeline.available === false) throw new Error("Photo Pipeline is unavailable.");
+    if (renderPipeline(pipeline)) nextRefreshMs = 1000;
+  } catch {
+    renderPipelineUnavailable();
+  } finally {
+    pipelineRefreshTimer = window.setTimeout(refreshPipeline, nextRefreshMs);
+  }
+}
+
+function renderPipeline(pipeline) {
+  const jobs = Array.isArray(pipeline.active_jobs) ? pipeline.active_jobs : [];
+  const workers = record(pipeline.workers);
+  const activeWorkers = wholeNumber(workers?.active, wholeNumber(pipeline.processing));
+  const configuredWorkers = wholeNumber(workers?.configured, wholeNumber(pipeline.concurrency));
+  const queued = wholeNumber(pipeline.queue_depth);
+  const active = activeWorkers > 0 || queued > 0 || jobs.length > 0;
+  const batch = active ? record(pipeline.current_batch) : record(pipeline.last_batch);
+  const rolling = record(pipeline.rolling);
+  const headline = batch || rolling;
+
+  elements.pipelineWorkers.textContent = `${activeWorkers} / ${configuredWorkers}`;
+  elements.pipelineQueued.textContent = String(queued);
+  elements.pipelineCompleted.textContent = String(wholeNumber(batch?.completed, wholeNumber(rolling?.completed)));
+  elements.pipelinePublished.textContent = String(wholeNumber(batch?.published, wholeNumber(pipeline.published)));
+  elements.pipelineQuarantined.textContent = String(wholeNumber(batch?.quarantined, wholeNumber(pipeline.quarantined)));
+  elements.pipelineRate.textContent = `${formatNumber(headline?.images_per_second)} img/s`;
+  elements.pipelineThroughput.textContent = `${formatNumber(headline?.mib_per_second)} MiB/s`;
+
+  if (pipeline.processing_paused) setPipelineStatus("Paused", "bad");
+  else if (activeWorkers > 0 || jobs.length > 0) setPipelineStatus("Processing", "busy");
+  else if (queued > 0) setPipelineStatus("Queued", "busy");
+  else if (pipeline.running === false) setPipelineStatus("Stopped", "bad");
+  else setPipelineStatus("Idle", "good");
+
+  renderPipelineJobs(jobs);
+  elements.pipelineJobsEmpty.textContent = "No photos are processing.";
+  renderLastBatch(record(pipeline.last_batch), !active);
+  renderPerformance(record(pipeline.performance), rolling);
+  return active;
+}
+
+function renderPipelineUnavailable() {
+  setPipelineStatus("Unavailable", "bad");
+  for (const element of [
+    elements.pipelineWorkers,
+    elements.pipelineQueued,
+    elements.pipelineCompleted,
+    elements.pipelinePublished,
+    elements.pipelineQuarantined,
+    elements.pipelineRate,
+    elements.pipelineThroughput,
+  ]) element.textContent = "—";
+  renderPipelineJobs([]);
+  elements.pipelineJobsEmpty.textContent = "Job details are unavailable.";
+  renderLastBatch(null, true);
+  renderPerformance(null, null);
+}
+
+function setPipelineStatus(label, tone) {
+  const className = `status-pill ${tone}`;
+  if (elements.pipelineStatus.textContent !== label) elements.pipelineStatus.textContent = label;
+  if (elements.pipelineStatus.className !== className) elements.pipelineStatus.className = className;
+}
+
+function renderPipelineJobs(jobs) {
+  elements.pipelineJobs.replaceChildren(...jobs.map((job) => {
+    const row = document.createElement("div");
+    row.className = "pipeline-job";
+    const filename = document.createElement("span");
+    filename.className = "pipeline-job-name";
+    filename.textContent = job?.filename || "Photo";
+    const stage = document.createElement("strong");
+    stage.className = "pipeline-job-stage";
+    stage.textContent = stageLabel(job?.stage);
+    const elapsed = document.createElement("time");
+    elapsed.className = "pipeline-job-elapsed";
+    elapsed.textContent = formatDuration(jobElapsedMs(job));
+    row.append(filename, stage, elapsed);
+    return row;
+  }));
+  elements.pipelineJobsCount.textContent = `${jobs.length} active`;
+  elements.pipelineJobsEmpty.hidden = jobs.length > 0;
+}
+
+function renderLastBatch(batch, idle) {
+  elements.pipelineLastBatch.hidden = !idle || !batch;
+  if (!idle || !batch) return;
+  const completed = wholeNumber(batch.completed);
+  const lastIngestAt = batch.last_ingest_at || batch.completed_at;
+  elements.pipelineLastBatchTitle.textContent = lastIngestAt
+    ? `${completed} completed · ${formatDate(lastIngestAt)}`
+    : `${completed} completed`;
+  const detail = [
+    `${wholeNumber(batch.published)} published`,
+    `${wholeNumber(batch.quarantined)} quarantined`,
+    formatDuration(batch.duration_ms),
+    `${formatNumber(batch.images_per_second)} img/s`,
+    `${formatNumber(batch.mib_per_second)} MiB/s`,
+  ];
+  if (numberOrNull(batch.bytes) !== null) detail.splice(3, 0, formatBytes(batch.bytes));
+  elements.pipelineLastBatchDetail.textContent = detail.join(" · ");
+}
+
+function renderPerformance(performance, rolling) {
+  const sampleSize = wholeNumber(performance?.sample_size);
+  const windowSeconds = numberOrNull(rolling?.window_seconds);
+  const rollingSummary = rolling
+    ? `${windowSeconds ? `${formatNumber(windowSeconds)}s ` : ""}rolling: ${formatNumber(rolling.images_per_second)} img/s · ${formatNumber(rolling.mib_per_second)} MiB/s`
+    : "";
+  elements.pipelinePerformanceSamples.textContent = [
+    sampleSize ? `${sampleSize} timing sample${sampleSize === 1 ? "" : "s"}` : "No timing samples yet.",
+    rollingSummary,
+  ].filter(Boolean).join(" · ");
+  if (!sampleSize) {
+    elements.pipelinePerformanceRows.replaceChildren();
+    return;
+  }
+  const stages = record(performance?.stages) || record(performance?.stages_ms) || {};
+  const timings = [
+    ["Queue wait", performance?.queue_wait_ms],
+    ["Total processing", performance?.processing_ms],
+    ...Object.entries(stages).map(([name, timing]) => [stageLabel(name.replace(/_ms$/, "")), timing]),
+    ["Publish lock wait", performance?.publish_lock_wait_ms],
+    ["Publish lock hold", performance?.publish_lock_hold_ms],
+  ].filter(([, timing]) => record(timing));
+  elements.pipelinePerformanceRows.replaceChildren(...timings.map(([label, timing]) => timingRow(label, timing)));
+}
+
+function timingRow(label, timing) {
+  const row = document.createElement("tr");
+  const heading = document.createElement("th");
+  heading.scope = "row";
+  heading.textContent = label;
+  row.append(heading);
+  for (const key of ["avg", "p50", "p95"]) {
+    const cell = document.createElement("td");
+    cell.textContent = formatTiming(timing?.[`${key}_ms`] ?? timing?.[key]);
+    row.append(cell);
+  }
+  return row;
+}
+
+function jobElapsedMs(job) {
+  return numberOrNull(job?.elapsed_ms) ?? 0;
+}
+
+function stageLabel(value) {
+  const words = String(value || "processing").replace(/[_-]+/g, " ").trim();
+  return words ? words[0].toUpperCase() + words.slice(1) : "Processing";
 }
 
 function publicUrl(path) {
@@ -213,6 +388,43 @@ function durationLabel(ms) {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return hours ? `${hours}h ${minutes}m` : `${minutes} min`;
+}
+
+function formatDuration(value) {
+  const ms = numberOrNull(value) ?? 0;
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  if (ms < 60_000) return `${formatNumber(ms / 1000)} s`;
+  const minutes = Math.floor(ms / 60_000);
+  return `${minutes}m ${Math.round((ms % 60_000) / 1000)}s`;
+}
+
+function formatTiming(value) {
+  const ms = numberOrNull(value);
+  if (ms === null) return "—";
+  return ms < 1000 ? `${formatNumber(ms)} ms` : `${formatNumber(ms / 1000)} s`;
+}
+
+function formatBytes(value) {
+  return `${formatNumber((numberOrNull(value) ?? 0) / 1024 ** 2)} MiB`;
+}
+
+function formatNumber(value) {
+  return (numberOrNull(value) ?? 0).toLocaleString([], { maximumFractionDigits: 2 });
+}
+
+function wholeNumber(value, fallback = 0) {
+  const number = numberOrNull(value);
+  return number === null ? fallback : Math.max(0, Math.floor(number));
+}
+
+function numberOrNull(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? number : null;
+}
+
+function record(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
 function formatDate(value) {

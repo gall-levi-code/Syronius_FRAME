@@ -10,6 +10,8 @@ export function createApp(
   publicDir: string,
   auth: BasicAuthConfig,
   publicBaseUrl = "http://localhost",
+  photoPipelineUrl = "",
+  pipelineFetch: typeof fetch = fetch,
 ): Express {
   const app = express();
   app.disable("x-powered-by");
@@ -61,6 +63,23 @@ export function createApp(
       response.json({ ...(await store.dashboardSummary()), public_base_url: publicBaseUrl });
     } catch (error) {
       next(error);
+    }
+  });
+  app.get("/today/api/pipeline", requireBasicAuth(auth), async (_request, response) => {
+    response.setHeader("Cache-Control", "no-store");
+    if (!photoPipelineUrl) {
+      response.status(503).json({ available: false, error: "Photo Pipeline is not configured." });
+      return;
+    }
+    try {
+      const upstream = await pipelineFetch(
+        `${photoPipelineUrl.replace(/\/+$/, "")}/api/internal/photo-pipeline/status`,
+        { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(2_000) },
+      );
+      if (!upstream.ok) throw new Error(`Photo Pipeline returned ${upstream.status}.`);
+      response.json({ ...await upstream.json() as Record<string, unknown>, available: true });
+    } catch {
+      response.status(502).json({ available: false, error: "Photo Pipeline is unavailable." });
     }
   });
   app.post("/today/api/command", requireBasicAuth(auth), (request, response, next) => {

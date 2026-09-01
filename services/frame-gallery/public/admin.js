@@ -6,7 +6,7 @@ const elements = Object.fromEntries([
   "summary", "status", "content-management-tab", "gallery-styling-tab", "socials-tab", "support-tab", "published-tab",
   "trash-tab", "published-count", "trash-count", "content-management-view", "gallery-styling-view", "socials-view", "support-view",
   "published-view", "trash-view", "albums", "album-detail", "album-title", "album-summary", "manage-explore", "trash-album",
-  "cover-management-panel", "cover-management-status", "cover-action", "photos", "trash-albums", "empty-trash", "empty",
+  "cover-management-panel", "cover-management-status", "cover-action", "photo-sort", "photo-sort-status", "photos", "trash-albums", "empty-trash", "empty",
   "branding-summary", "save-branding", "discard-branding", "settings-action-bar", "settings-action-message", "branding-form",
   "brand-name-input", "gallery-title-input", "downloads-disabled", "downloads-enabled", "logo-trigger", "logo-preview", "logo-input",
   "remove-logo", "admin-brand-logo", "admin-brand-name", "confirm-dialog", "confirm-eyebrow", "confirm-title",
@@ -37,6 +37,8 @@ const state = {
   section: "content",
   contentView: "published",
   busy: false,
+  albumLoadId: 0,
+  gallerySettings: null,
   branding: null,
   socials: [],
   supports: [],
@@ -88,6 +90,7 @@ elements.trash_tab.addEventListener("click", () => setContentView("trash"));
 elements.trash_album.addEventListener("click", () => manage("trash-album", state.selectedDate, null, `Move every photo from ${state.selectedDate} to trash?`));
 elements.empty_trash.addEventListener("click", () => manage("empty-trash", null, null, "Permanently delete every trashed published gallery copy and its .ready receipt? Queued StreamerBot actions will no longer be able to read those published paths. Archived sources follow the separate retention policy."));
 elements.cover_action.addEventListener("click", handleCoverAction);
+elements.photo_sort.addEventListener("change", savePhotoSort);
 elements.save_branding.addEventListener("click", () => saveBranding());
 elements.discard_branding.addEventListener("click", discardBrandingChanges);
 elements.branding_form.addEventListener("submit", (event) => { event.preventDefault(); void saveBranding(); });
@@ -189,10 +192,13 @@ async function refresh() {
     state.supports = [...(state.branding.supports || [])];
     state.selectedProfileId = state.branding.profile_id;
     if (state.selectedDate && state.dates.some((date) => date.date_folder === state.selectedDate)) {
-      state.photos = (await requestJson(`/gallery/api/photos?date=${encodeURIComponent(state.selectedDate)}`)).photos;
+      const album = await loadSelectedAlbum(state.selectedDate);
+      state.photos = album.photos;
+      state.gallerySettings = album.settings;
     } else {
       state.selectedDate = null;
       state.photos = [];
+      state.gallerySettings = null;
     }
     render();
     setStatus("Ready", "ready");
@@ -316,6 +322,7 @@ function renderAlbums() {
   elements.manage_explore.textContent = selected.has_explore ? "Manage Explore" : "Add GPS route";
   elements.cover_action.textContent = selected.cover_is_custom ? "Clear cover image" : "Select cover image";
   elements.cover_action.className = selected.cover_is_custom ? "danger-button" : "secondary-button";
+  elements.photo_sort.value = state.gallerySettings?.photo_sort || "newest";
   renderCoverManagementStatus(selected);
   elements.photos.replaceChildren(...state.photos.map((photo) => {
     const card = templates.photo.content.firstElementChild.cloneNode(true);
@@ -453,16 +460,32 @@ function layoutCoverPicker() {
 
 async function openAlbum(dateFolder) {
   if (state.busy) return;
-  state.selectedDate = dateFolder;
+  const loadId = ++state.albumLoadId;
   setStatus("Loading album", "working");
+  setPhotoSortStatus("Loading saved photo order", "working");
   try {
-    state.photos = (await requestJson(`/gallery/api/photos?date=${encodeURIComponent(dateFolder)}`)).photos;
+    const album = await loadSelectedAlbum(dateFolder);
+    if (loadId !== state.albumLoadId) return;
+    state.selectedDate = dateFolder;
+    state.photos = album.photos;
+    state.gallerySettings = album.settings;
     renderAlbums();
     elements.album_detail.scrollIntoView({ behavior: "smooth", block: "start" });
+    setPhotoSortStatus("This order is used by the public gallery.", "ready");
     setStatus("Ready", "ready");
   } catch (error) {
+    if (loadId !== state.albumLoadId) return;
+    setPhotoSortStatus("Saved photo order could not be loaded.", "error");
     setStatus(error.message || "Album failed to load", "error");
   }
+}
+
+async function loadSelectedAlbum(dateFolder) {
+  const [photos, settings] = await Promise.all([
+    requestJson(`/gallery/api/photos?date=${encodeURIComponent(dateFolder)}`),
+    requestJson(`/gallery/admin/api/galleries/${encodeURIComponent(dateFolder)}/settings`),
+  ]);
+  return { photos: photos.photos, settings: settings.settings };
 }
 
 function renderTrash() {
@@ -745,34 +768,62 @@ async function selectSocialGraphic(input, social) {
 
 async function saveGallerySettings(changes, messages) {
   if (state.busy || !state.selectedDate) return false;
+  const dateFolder = state.selectedDate;
+  state.albumLoadId += 1;
   state.busy = true;
   if (elements.cover_picker.open) setCoverPickerStatus(messages.saving, "working");
   setControlsDisabled(true);
   setStatus(messages.saving, "working");
   try {
-    await requestJson(`/gallery/admin/api/galleries/${encodeURIComponent(state.selectedDate)}/settings`, {
-      method: "PUT",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(changes),
-    });
-    await refreshAfterManagement();
-    setCoverManagementStatus(messages.saved, "ready");
-    if (elements.cover_picker.open) setCoverPickerStatus(messages.saved, "ready");
-    else restoreCoverManagementFocus(changes);
-    setStatus(messages.saved, "ready");
+    let result;
+    try {
+      result = await requestJson(`/gallery/admin/api/galleries/${encodeURIComponent(dateFolder)}/settings`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(changes),
+      });
+    } catch (error) {
+      renderAlbums();
+      const message = error.message || "Gallery settings could not be saved";
+      if (Object.hasOwn(changes, "cover_base")) setCoverManagementStatus(message, "error");
+      if (Object.hasOwn(changes, "photo_sort")) setPhotoSortStatus(message, "error");
+      if (elements.cover_picker.open) setCoverPickerStatus(message, "error");
+      else requestAnimationFrame(() => restoreCoverManagementFocus(changes));
+      setStatus(message, "error");
+      return false;
+    }
+
+    state.gallerySettings = result.settings;
+    let refreshError = null;
+    try {
+      await refreshAfterManagement();
+    } catch (error) {
+      refreshError = error;
+      renderAlbums();
+    }
+    const message = refreshError
+      ? `${messages.saved}. Album refresh failed: ${refreshError.message || "try refreshing again"}`
+      : messages.saved;
+    const kind = refreshError ? "error" : "ready";
+    if (Object.hasOwn(changes, "cover_base")) setCoverManagementStatus(message, kind);
+    if (Object.hasOwn(changes, "photo_sort")) setPhotoSortStatus(message, kind);
+    if (elements.cover_picker.open) setCoverPickerStatus(message, kind);
+    else requestAnimationFrame(() => restoreCoverManagementFocus(changes));
+    setStatus(message, kind);
     return true;
-  } catch (error) {
-    renderAlbums();
-    const message = error.message || "Gallery settings could not be saved";
-    setCoverManagementStatus(message, "error");
-    if (elements.cover_picker.open) setCoverPickerStatus(message, "error");
-    else restoreCoverManagementFocus(changes);
-    setStatus(message, "error");
-    return false;
   } finally {
     state.busy = false;
     setControlsDisabled(false);
   }
+}
+
+async function savePhotoSort() {
+  const photoSort = elements.photo_sort.value;
+  if (photoSort === (state.gallerySettings?.photo_sort || "newest")) return;
+  await saveGallerySettings(
+    { photo_sort: photoSort },
+    { saving: "Saving photo order", saved: "Photo order updated" },
+  );
 }
 
 function renderCoverManagementStatus(date) {
@@ -790,7 +841,16 @@ function setCoverManagementStatus(message, kind) {
   elements.cover_management_status.dataset.kind = kind;
 }
 
+function setPhotoSortStatus(message, kind) {
+  elements.photo_sort_status.textContent = message;
+  elements.photo_sort_status.dataset.kind = kind;
+}
+
 function restoreCoverManagementFocus(changes) {
+  if (Object.hasOwn(changes, "photo_sort")) {
+    elements.photo_sort.focus();
+    return;
+  }
   if (Object.hasOwn(changes, "cover_base")) {
     if (typeof changes.cover_base === "string") {
       [...elements.photos.children].find((card) => card.dataset.photoBase === changes.cover_base)?.focus();
@@ -1674,10 +1734,13 @@ async function refreshAfterManagement() {
   state.dates = dates.dates;
   state.trash = trash.trash;
   if (state.selectedDate && state.dates.some((date) => date.date_folder === state.selectedDate)) {
-    state.photos = (await requestJson(`/gallery/api/photos?date=${encodeURIComponent(state.selectedDate)}`)).photos;
+    const album = await loadSelectedAlbum(state.selectedDate);
+    state.photos = album.photos;
+    state.gallerySettings = album.settings;
   } else {
     state.selectedDate = null;
     state.photos = [];
+    state.gallerySettings = null;
   }
   render();
 }

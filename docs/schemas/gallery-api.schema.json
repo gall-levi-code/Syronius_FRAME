@@ -2,6 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Syronius FRAME Gallery API (V1)",
   "$defs": {
+    "photoSort": {
+      "type": "string",
+      "enum": ["newest", "oldest", "filename_asc", "filename_desc", "captured_asc", "captured_desc"]
+    },
     "date": {
       "type": "object",
       "additionalProperties": false,
@@ -43,6 +47,17 @@
         "processed_at": { "type": "string", "format": "date-time" },
         "capture_clock": { "type": ["string", "null"] },
         "camera_text": { "type": "string" }
+      }
+    },
+    "gallerySettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "cover_base", "photo_sort", "updated_at"],
+      "properties": {
+        "schema_version": { "const": 1 },
+        "cover_base": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9_-]+$" },
+        "photo_sort": { "$ref": "#/$defs/photoSort" },
+        "updated_at": { "type": "string", "format": "date-time" }
       }
     },
     "palette": {
@@ -223,13 +238,22 @@
     {
       "type": "object",
       "additionalProperties": false,
-      "required": ["date_folder", "photos", "total", "next_cursor", "revision"],
+      "required": ["date_folder", "photos", "total", "next_cursor", "revision", "photo_sort"],
       "properties": {
         "date_folder": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
         "photos": { "type": "array", "items": { "$ref": "#/$defs/photo" } },
         "total": { "type": "integer", "minimum": 0 },
         "next_cursor": { "type": ["string", "null"], "pattern": "^[A-Za-z0-9_-]+$" },
-        "revision": { "type": "integer", "minimum": 0 }
+        "revision": { "type": "integer", "minimum": 0 },
+        "photo_sort": { "$ref": "#/$defs/photoSort" }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["settings"],
+      "properties": {
+        "settings": { "$ref": "#/$defs/gallerySettings" }
       }
     },
     {

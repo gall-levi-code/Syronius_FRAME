@@ -59,6 +59,13 @@ Open the dashboard:
 http://localhost/today/dashboard
 ```
 
+The **Pipeline Activity** panel shows the current worker and queue state, batch image and data
+throughput, and each active photo's named processing stage. Stage names are used instead of estimated
+percentages. When the pipeline becomes idle, the panel keeps the most recent ingest summary visible.
+
+Open **Performance details** for the 60-second rolling rate and recent average, p50, and p95 queue,
+processing, per-stage, and publish-lock timings. This section stays collapsed by default.
+
 Copy the OBS viewer URL:
 
 ```text
@@ -110,6 +117,10 @@ Optional connections:
 | Camera FTP uploads | FRAME Photo FTP |
 | Public gallery access | FRAME Tunnel or configured public FRAME access |
 | OBS presentation | OBS Browser Source |
+
+Photo Stage reads live processing telemetry from `PHOTO_PIPELINE_URL`, which defaults to
+`http://frame-pipeline-photos:3735` inside the FRAME stack. Set it only when running Photo Stage
+outside the generated Compose network.
 
 ## Notes For Operators
 

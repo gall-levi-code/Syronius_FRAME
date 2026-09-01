@@ -33,6 +33,57 @@ const MAX_EXPLORE_POINTS = 50_000;
 const MAX_EXPLORE_PLACEMENTS = 10_000;
 const STORAGE_CHECK_INTERVAL_MS = 30_000;
 const RETENTION_SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const ROLLING_WINDOW_MS = 60_000;
+const PERFORMANCE_SAMPLE_LIMIT = 100;
+const LOCK_SAMPLE_LIMIT = 500;
+
+export type PipelineStage =
+  | "integrity"
+  | "validation"
+  | "decode"
+  | "allocation"
+  | "encode"
+  | "metadata"
+  | "publish"
+  | "archive"
+  | "quarantine";
+
+const PIPELINE_STAGES: PipelineStage[] = [
+  "integrity", "validation", "decode", "allocation", "encode", "metadata", "publish", "archive", "quarantine",
+];
+
+export interface TimingSummary {
+  avg_ms: number;
+  p50_ms: number;
+  p95_ms: number;
+}
+
+export interface ActiveJobStatus {
+  job_id: string;
+  journey_id: string | null;
+  filename: string;
+  stage: PipelineStage;
+  started_at: string;
+  stage_started_at: string;
+  elapsed_ms: number;
+  stage_elapsed_ms: number;
+  queue_wait_ms: number;
+  size_bytes: number;
+}
+
+export interface PipelineBatchStatus {
+  started_at: string;
+  completed_at: string | null;
+  last_ingest_at: string | null;
+  total: number;
+  completed: number;
+  published: number;
+  quarantined: number;
+  bytes: number;
+  duration_ms: number;
+  images_per_second: number;
+  mib_per_second: number;
+}
 
 export type ExplorePoint = [number, number, number];
 
@@ -51,9 +102,12 @@ export interface GalleryExplore {
 }
 
 export interface PipelineStatus {
+  observed_at: string;
   running: boolean;
   queue_depth: number;
   processing: number;
+  concurrency: number;
+  workers: { active: number; configured: number };
   published: number;
   quarantined: number;
   last_publish_at: string | null;
@@ -72,16 +126,87 @@ export interface PipelineStatus {
   };
   archives_pruned: number;
   trash_purged: number;
+  active_jobs: ActiveJobStatus[];
+  rolling: {
+    window_seconds: number;
+    completed: number;
+    images_per_second: number;
+    mib_per_second: number;
+  };
+  performance: {
+    sample_size: number;
+    queue_wait_ms: TimingSummary;
+    processing_ms: TimingSummary;
+    stages: Partial<Record<PipelineStage, TimingSummary>>;
+    publish_lock_wait_ms: TimingSummary;
+    publish_lock_hold_ms: TimingSummary;
+  };
+  current_batch: PipelineBatchStatus | null;
+  last_batch: PipelineBatchStatus | null;
+  last_ingest_at: string | null;
 }
 
-interface Claim {
+interface PendingClaim {
   jobId: string;
   originalName: string;
   directory: string;
   source: string;
+  receivedAt: string | null;
+  journeyId: string | null;
+  declaredBytes: number;
+  legacyOriginalName: string;
+}
+
+interface Claim extends PendingClaim {
   journey: VerifiedPhotoJourney;
   integrityError?: string;
+  declaredContentSha256?: string;
+  sourceSize: number;
 }
+
+interface ActiveJob {
+  jobId: string;
+  journeyId: string | null;
+  filename: string;
+  stage: PipelineStage;
+  startedMs: number;
+  stageStartedMs: number;
+  queueWaitMs: number;
+  inputBytes: number;
+  stagesMs: Partial<Record<PipelineStage, number>>;
+  publishLockWaitMs: number;
+  publishLockHoldMs: number;
+  publication: string | null;
+  recovered: boolean;
+}
+
+interface CompletedJobMetric {
+  completedAtMs: number;
+  startedAtMs: number;
+  inputBytes: number;
+  queueWaitMs: number;
+  processingMs: number;
+  stagesMs: Partial<Record<PipelineStage, number>>;
+}
+
+interface LockMetric {
+  waitMs: number;
+  holdMs: number;
+}
+
+interface BatchTracker {
+  startedMs: number;
+  lastIngestAt: string | null;
+  total: number;
+  jobs: Set<string>;
+  sizedJobs: Set<string>;
+  completed: number;
+  published: number;
+  quarantined: number;
+  inputBytes: number;
+}
+
+type JobOutcome = "published" | "quarantined" | "skipped" | "deferred";
 
 interface Publication {
   dateFolder: string;
@@ -112,6 +237,9 @@ export interface JourneyProgress extends PhotoJourney {
   state: "received" | "processing" | "published" | "failed";
   updated_at: string;
   job_id: string;
+  integrity_verified?: false;
+  integrity_expected_sha256?: string;
+  integrity_scan_id?: string;
   date_folder?: string;
   base?: string;
   error?: string;
@@ -164,6 +292,7 @@ export class PhotoPipeline {
   private timer: NodeJS.Timeout | null = null;
   private processing = new Set<string>();
   private scanning = false;
+  private queueRefreshing = false;
   private publishLock: Promise<void> = Promise.resolve();
   private heicLock: Promise<void> = Promise.resolve();
   private recentJourneyReceipts = new Map<string, JourneyProgress>();
@@ -171,6 +300,13 @@ export class PhotoPipeline {
   private nextStorageCheckAt = 0;
   private nextRetentionSweepAt = 0;
   private lastStorageNotice: string | null = null;
+  private activeJobs = new Map<string, ActiveJob>();
+  private completedMetrics: CompletedJobMetric[] = [];
+  private rollingMetrics: CompletedJobMetric[] = [];
+  private lockMetrics: LockMetric[] = [];
+  private currentBatch: BatchTracker | null = null;
+  private lastBatch: PipelineBatchStatus | null = null;
+  private lastIngestAt: string | null = null;
 
   constructor(readonly config: PipelineConfig) {
     this.directories = Object.fromEntries(
@@ -180,9 +316,12 @@ export class PhotoPipeline {
       ]),
     );
     this.status = {
+      observed_at: new Date().toISOString(),
       running: false,
       queue_depth: 0,
       processing: 0,
+      concurrency: config.concurrency,
+      workers: { active: 0, configured: config.concurrency },
       published: 0,
       quarantined: 0,
       last_publish_at: null,
@@ -201,6 +340,19 @@ export class PhotoPipeline {
       },
       archives_pruned: 0,
       trash_purged: 0,
+      active_jobs: [],
+      rolling: { window_seconds: ROLLING_WINDOW_MS / 1_000, completed: 0, images_per_second: 0, mib_per_second: 0 },
+      performance: {
+        sample_size: 0,
+        queue_wait_ms: emptyTimingSummary(),
+        processing_ms: emptyTimingSummary(),
+        stages: {},
+        publish_lock_wait_ms: emptyTimingSummary(),
+        publish_lock_hold_ms: emptyTimingSummary(),
+      },
+      current_batch: null,
+      last_batch: null,
+      last_ingest_at: null,
     };
     this.settings = normalizeSettings(config.defaultSettings, config.defaultSettings);
   }
@@ -231,8 +383,60 @@ export class PhotoPipeline {
     this.status.running = false;
   }
 
+  statusSnapshot(now = Date.now()): PipelineStatus {
+    const stagesMs: Partial<Record<PipelineStage, TimingSummary>> = {};
+    for (const stage of PIPELINE_STAGES) {
+      const values = this.completedMetrics.flatMap((sample) => sample.stagesMs[stage] === undefined ? [] : [sample.stagesMs[stage]]);
+      if (values.length) stagesMs[stage] = summarizeTimings(values);
+    }
+    return {
+      ...this.status,
+      observed_at: new Date(now).toISOString(),
+      processing: this.processing.size,
+      concurrency: this.config.concurrency,
+      workers: { active: this.processing.size, configured: this.config.concurrency },
+      active_jobs: [...this.activeJobs.values()]
+        .sort((left, right) => left.startedMs - right.startedMs)
+        .map((job) => ({
+          job_id: job.jobId,
+          journey_id: job.journeyId,
+          filename: job.filename,
+          stage: job.stage,
+          started_at: new Date(job.startedMs).toISOString(),
+          stage_started_at: new Date(job.stageStartedMs).toISOString(),
+          elapsed_ms: Math.max(0, now - job.startedMs),
+          stage_elapsed_ms: Math.max(0, now - job.stageStartedMs),
+          queue_wait_ms: job.queueWaitMs,
+          size_bytes: job.inputBytes,
+        })),
+      rolling: this.rollingSnapshot(now),
+      performance: {
+        sample_size: this.completedMetrics.length,
+        queue_wait_ms: summarizeTimings(this.completedMetrics.map((sample) => sample.queueWaitMs)),
+        processing_ms: summarizeTimings(this.completedMetrics.map((sample) => sample.processingMs)),
+        stages: stagesMs,
+        publish_lock_wait_ms: summarizeTimings(this.lockMetrics.map((sample) => sample.waitMs)),
+        publish_lock_hold_ms: summarizeTimings(this.lockMetrics.map((sample) => sample.holdMs)),
+      },
+      current_batch: this.currentBatch ? this.batchSnapshot(this.currentBatch, now, null) : null,
+      last_batch: this.lastBatch ? { ...this.lastBatch } : null,
+      last_ingest_at: this.lastIngestAt,
+    };
+  }
+
   async processOnce(): Promise<void> {
-    if (this.scanning) return;
+    if (this.scanning) {
+      if (this.queueRefreshing) return;
+      this.queueRefreshing = true;
+      try {
+        this.status.queue_depth = await this.queuedCount();
+      } catch (error) {
+        this.status.last_error ??= errorMessage(error);
+      } finally {
+        this.queueRefreshing = false;
+      }
+      return;
+    }
     this.scanning = true;
     try {
       await this.ensureCurrentGallery();
@@ -240,26 +444,32 @@ export class PhotoPipeline {
       if (this.status.processing_paused) return;
       await this.claimStagedFiles();
       const claims = await this.readClaims();
-      for (const claim of claims) {
-        if (!claim.integrityError) await this.recordJourneyReceived(claim);
-      }
+      const reservedBases = await this.reservedBases(claims);
+      const scanId = randomUUID();
+      this.registerBatchClaims(claims);
       this.status.queue_depth = claims.length;
       const available = claims.filter((claim) => !this.processing.has(claim.jobId));
       await runPool(available, this.config.concurrency, async (claim) => {
+        this.status.queue_depth = Math.max(0, this.status.queue_depth - 1);
         this.processing.add(claim.jobId);
         this.status.processing = this.processing.size;
         try {
-          await this.processClaim(claim);
+          await this.processPendingClaim(claim, scanId, reservedBases);
         } finally {
           this.processing.delete(claim.jobId);
           this.status.processing = this.processing.size;
         }
       });
-      this.status.queue_depth = (await this.readClaims()).length;
     } catch (error) {
       this.status.last_error = errorMessage(error);
       console.error(`[photo-pipeline] scan failed: ${this.status.last_error}`);
     } finally {
+      try {
+        this.status.queue_depth = await this.queuedCount();
+      } catch (error) {
+        this.status.last_error ??= errorMessage(error);
+      }
+      if (this.status.queue_depth === 0 && this.processing.size === 0) this.completeBatch();
       this.scanning = false;
     }
   }
@@ -523,14 +733,32 @@ export class PhotoPipeline {
           await rename(staged, path.join(this.directories.processing, jobId));
         } catch (error) {
           if ((error as NodeJS.ErrnoException).code === "ENOENT") continue;
-          await this.quarantineUnreadableClaim(
-            staged,
-            path.join(staged, "source"),
-            journey?.original_name ?? `${entry.name.slice(0, -12)}.bin`,
+          const source = path.join(staged, "source");
+          let sourceInfo: Awaited<ReturnType<typeof stat>> | null = null;
+          try {
+            sourceInfo = await stat(source);
+          } catch {
+            // The quarantine path reports and cleans up a missing source.
+          }
+          const pending: PendingClaim = {
             jobId,
-            errorMessage(error),
-            journey?.journey_id,
-          );
+            originalName: journey?.original_name ?? `${entry.name.slice(0, -12)}.bin`,
+            directory: staged,
+            source,
+            receivedAt: journey?.received_at ?? sourceInfo?.mtime.toISOString() ?? null,
+            journeyId: journey?.journey_id ?? null,
+            declaredBytes: sourceInfo?.size ?? journey?.ingest.bytes_received ?? 0,
+            legacyOriginalName: "",
+          };
+          this.registerBatchClaims([pending]);
+          const job = this.startActiveJob(pending);
+          let outcome: JobOutcome = "deferred";
+          try {
+            await this.quarantineUnreadablePending(pending, job, errorMessage(error));
+            outcome = "quarantined";
+          } finally {
+            this.finishActiveJob(job, outcome);
+          }
         }
         continue;
       }
@@ -555,9 +783,9 @@ export class PhotoPipeline {
     }
   }
 
-  private async readClaims(): Promise<Claim[]> {
+  private async readClaims(): Promise<PendingClaim[]> {
     const entries = await readdir(this.directories.processing, { withFileTypes: true });
-    const claims: Claim[] = [];
+    const claims: PendingClaim[] = [];
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const separator = entry.name.indexOf("--");
@@ -573,17 +801,25 @@ export class PhotoPipeline {
           console.warn(`[photo-pipeline] removed orphan claim ${entry.name} without a source file`);
           continue;
         }
-        const { journey, integrityError } = await this.readOrCreateJourney(directory, source, legacyOriginalName, jobId);
-        claims.push({ jobId, originalName: journey.original_name, directory, source, journey, integrityError });
-      } catch (error) {
-        console.warn(`[photo-pipeline] quarantined invalid claim ${entry.name}: ${errorMessage(error)}`);
-        await this.quarantineUnreadableClaim(
+        let journey: PhotoJourney | null = null;
+        try {
+          const stored = await readJsonOrNull<unknown>(path.join(directory, "journey.json"));
+          if (stored !== null) journey = parseJourney(stored);
+        } catch {
+          // Integrity workers own malformed journey handling so discovery stays cheap and concurrent.
+        }
+        claims.push({
+          jobId,
+          originalName: journey?.original_name || legacyOriginalName || `${entry.name}.bin`,
           directory,
           source,
-          legacyOriginalName || `${entry.name}.bin`,
-          jobId,
-          errorMessage(error),
-        );
+          receivedAt: journey?.received_at ?? null,
+          journeyId: journey?.journey_id ?? null,
+          declaredBytes: journey?.ingest.bytes_received ?? 0,
+          legacyOriginalName,
+        });
+      } catch (error) {
+        console.warn(`[photo-pipeline] ignored unreadable claim ${entry.name}: ${errorMessage(error)}`);
       }
     }
     return claims;
@@ -592,6 +828,8 @@ export class PhotoPipeline {
   private async readOrCreateJourney(directory: string, source: string, originalName: string, jobId: string): Promise<{
     journey: VerifiedPhotoJourney;
     integrityError?: string;
+    declaredContentSha256?: string;
+    sourceSize: number;
   }> {
     const file = path.join(directory, "journey.json");
     const sourceInfo = await stat(source);
@@ -603,6 +841,8 @@ export class PhotoPipeline {
       if (!parsed.content_sha256) await atomicWriteJson(file, journey);
       return {
         journey,
+        sourceSize: sourceInfo.size,
+        ...(parsed.content_sha256 ? { declaredContentSha256: parsed.content_sha256 } : {}),
         ...(parsed.ingest.bytes_received !== sourceInfo.size
           ? { integrityError: `Declared byte count does not match the staged source for journey ${parsed.journey_id}.` }
           : parsed.content_sha256 && parsed.content_sha256 !== contentSha256
@@ -620,7 +860,7 @@ export class PhotoPipeline {
       ingest: { adapter: "legacy_staging", transfer_id: jobId, bytes_received: sourceInfo.size },
     };
     await atomicWriteJson(file, journey);
-    return { journey };
+    return { journey, sourceSize: sourceInfo.size };
   }
 
   private journeyReceiptDirectory(): string {
@@ -653,10 +893,17 @@ export class PhotoPipeline {
     };
   }
 
-  private async recordJourneyReceived(claim: Claim): Promise<void> {
+  private async recordJourneyReceived(claim: Claim, scanId: string): Promise<void> {
     await this.withPublishLock(async () => {
       const existing = await this.readJourneyReceipt(claim.journey.journey_id);
       if (existing) {
+        if (existing.integrity_verified === false
+          && (existing.content_sha256 === claim.journey.content_sha256
+            || existing.integrity_expected_sha256 === claim.journey.content_sha256
+            || existing.integrity_scan_id === scanId)) {
+          await this.writeJourneyReceipt(this.receiptForClaim(claim, "received"));
+          return;
+        }
         if (!validContentSha256(existing.content_sha256) && existing.job_id === claim.jobId) {
           await this.writeJourneyReceipt({
             ...existing,
@@ -666,7 +913,7 @@ export class PhotoPipeline {
         return;
       }
       await this.writeJourneyReceipt(this.receiptForClaim(claim, "received"));
-    });
+    }, claim.jobId);
   }
 
   private async beginJourney(claim: Claim): Promise<"wait" | "duplicate" | "conflict" | null> {
@@ -677,7 +924,7 @@ export class PhotoPipeline {
       if (existing && existing.job_id !== claim.jobId && await this.processingClaimExists(existing.job_id)) return "wait";
       await this.writeJourneyReceipt(this.receiptForClaim(claim, "processing"));
       return null;
-    });
+    }, claim.jobId);
   }
 
   private async processingClaimExists(jobId: string): Promise<boolean> {
@@ -705,42 +952,348 @@ export class PhotoPipeline {
         ...this.receiptForClaim(claim, "failed"),
         error,
       });
+    }, claim.jobId);
+  }
+
+  private async markJourneyIntegrityFailed(claim: Claim, error: string, scanId: string): Promise<void> {
+    await this.withPublishLock(async () => {
+      if (await this.readJourneyReceipt(claim.journey.journey_id)) return;
+      await this.writeJourneyReceipt({
+        ...this.receiptForClaim(claim, "failed"),
+        integrity_verified: false,
+        integrity_scan_id: scanId,
+        ...(claim.declaredContentSha256 && claim.declaredContentSha256 !== claim.journey.content_sha256
+          ? { integrity_expected_sha256: claim.declaredContentSha256 }
+          : {}),
+        error,
+      });
+    }, claim.jobId);
+  }
+
+  private async processPendingClaim(
+    pending: PendingClaim,
+    scanId: string,
+    reservedBases: Map<string, Set<string>>,
+  ): Promise<void> {
+    const job = this.startActiveJob(pending);
+    let outcome: JobOutcome = "deferred";
+    try {
+      let verified: Awaited<ReturnType<PhotoPipeline["readOrCreateJourney"]>>;
+      try {
+        verified = await this.readOrCreateJourney(
+          pending.directory,
+          pending.source,
+          pending.legacyOriginalName,
+          pending.jobId,
+        );
+      } catch (error) {
+        await this.quarantineUnreadablePending(pending, job, errorMessage(error));
+        outcome = "quarantined";
+        return;
+      }
+
+      const claim: Claim = {
+        ...pending,
+        originalName: verified.journey.original_name,
+        receivedAt: verified.journey.received_at,
+        journeyId: verified.journey.journey_id,
+        declaredBytes: verified.journey.ingest.bytes_received,
+        journey: verified.journey,
+        sourceSize: verified.sourceSize,
+        ...(verified.declaredContentSha256 ? { declaredContentSha256: verified.declaredContentSha256 } : {}),
+        ...(verified.integrityError ? { integrityError: verified.integrityError } : {}),
+      };
+      job.filename = claim.originalName;
+      job.journeyId = claim.journey.journey_id;
+      job.inputBytes = claim.sourceSize;
+      job.queueWaitMs = queueWaitMs(claim.journey.received_at, job.startedMs);
+      this.recordBatchSize(claim.jobId, claim.sourceSize);
+      this.setActiveStage(claim.jobId, "validation");
+      if (!claim.integrityError) await this.recordJourneyReceived(claim, scanId);
+      outcome = await this.processClaim(claim, scanId, reservedBases);
+    } catch (error) {
+      this.status.last_error = errorMessage(error);
+      console.error(`[photo-pipeline] deferred ${pending.originalName}: ${this.status.last_error}`);
+    } finally {
+      this.finishActiveJob(job, outcome);
+    }
+  }
+
+  private startActiveJob(claim: PendingClaim): ActiveJob {
+    const now = Date.now();
+    const job: ActiveJob = {
+      jobId: claim.jobId,
+      journeyId: claim.journeyId,
+      filename: claim.originalName,
+      stage: "integrity",
+      startedMs: now,
+      stageStartedMs: now,
+      queueWaitMs: claim.receivedAt ? queueWaitMs(claim.receivedAt, now) : 0,
+      inputBytes: claim.declaredBytes,
+      stagesMs: {},
+      publishLockWaitMs: 0,
+      publishLockHoldMs: 0,
+      publication: null,
+      recovered: false,
+    };
+    this.activeJobs.set(job.jobId, job);
+    this.log("info", "photo_job_started", {
+      job_id: job.jobId,
+      journey_id: job.journeyId,
+      filename: job.filename,
+      stage: job.stage,
+      queue_wait_ms: job.queueWaitMs,
+      size_bytes: job.inputBytes,
+      queue_depth: this.status.queue_depth,
+      workers_active: this.processing.size,
+      workers_configured: this.config.concurrency,
+    });
+    return job;
+  }
+
+  private setActiveStage(jobId: string, stage: PipelineStage): void {
+    const job = this.activeJobs.get(jobId);
+    if (!job || job.stage === stage) return;
+    const now = Date.now();
+    this.closeActiveStage(job, now);
+    job.stage = stage;
+    job.stageStartedMs = now;
+  }
+
+  private recordActivePublication(jobId: string, dateFolder: string, base: string, recovered = false): void {
+    const job = this.activeJobs.get(jobId);
+    if (!job) return;
+    job.publication = `${dateFolder}/${base}`;
+    job.recovered = recovered;
+  }
+
+  private closeActiveStage(job: ActiveJob, now: number): void {
+    const durationMs = Math.max(0, now - job.stageStartedMs);
+    job.stagesMs[job.stage] = (job.stagesMs[job.stage] ?? 0) + durationMs;
+    this.log("debug", "photo_job_stage", {
+      job_id: job.jobId,
+      journey_id: job.journeyId,
+      filename: job.filename,
+      stage: job.stage,
+      duration_ms: durationMs,
     });
   }
 
-  private async processClaim(claim: Claim): Promise<void> {
+  private finishActiveJob(job: ActiveJob, outcome: JobOutcome): void {
+    const now = Date.now();
+    this.closeActiveStage(job, now);
+    this.activeJobs.delete(job.jobId);
+    if (outcome !== "deferred") this.recordBatchCompletion(job.jobId, outcome);
+    if (outcome === "published" || outcome === "quarantined") {
+      this.completedMetrics.push({
+        completedAtMs: now,
+        startedAtMs: job.startedMs,
+        inputBytes: job.inputBytes,
+        queueWaitMs: job.queueWaitMs,
+        processingMs: Math.max(0, now - job.startedMs),
+        stagesMs: { ...job.stagesMs },
+      });
+      this.rollingMetrics.push({
+        completedAtMs: now,
+        startedAtMs: job.startedMs,
+        inputBytes: job.inputBytes,
+        queueWaitMs: job.queueWaitMs,
+        processingMs: Math.max(0, now - job.startedMs),
+        stagesMs: { ...job.stagesMs },
+      });
+      if (this.completedMetrics.length > PERFORMANCE_SAMPLE_LIMIT) this.completedMetrics.shift();
+      this.rollingMetrics = this.rollingMetrics.filter((sample) => sample.completedAtMs >= now - ROLLING_WINDOW_MS);
+    }
+    const rolling = this.rollingSnapshot(now);
+    this.log("info", "photo_job_completed", {
+      job_id: job.jobId,
+      journey_id: job.journeyId,
+      filename: job.filename,
+      outcome,
+      queue_wait_ms: job.queueWaitMs,
+      processing_ms: Math.max(0, now - job.startedMs),
+      size_bytes: job.inputBytes,
+      stages_ms: job.stagesMs,
+      publish_lock_wait_ms: job.publishLockWaitMs,
+      publish_lock_hold_ms: job.publishLockHoldMs,
+      publication: job.publication,
+      recovered: job.recovered,
+      queue_depth: this.status.queue_depth,
+      workers_active: Math.max(0, this.processing.size - 1),
+      workers_configured: this.config.concurrency,
+      rolling_images_per_second: rolling.images_per_second,
+      rolling_mib_per_second: rolling.mib_per_second,
+    });
+  }
+
+  private async quarantineUnreadablePending(pending: PendingClaim, job: ActiveJob, detail: string): Promise<void> {
+    this.setActiveStage(pending.jobId, "quarantine");
+    try {
+      job.inputBytes = (await stat(pending.source)).size;
+    } catch {
+      // The quarantine path handles a source that disappeared after discovery.
+    }
+    this.recordBatchSize(pending.jobId, job.inputBytes);
+    console.warn(`[photo-pipeline] quarantined invalid claim ${path.basename(pending.directory)}: ${detail}`);
+    await this.quarantineUnreadableClaim(
+      pending.directory,
+      pending.source,
+      pending.originalName,
+      pending.jobId,
+      detail,
+      pending.journeyId ?? undefined,
+    );
+  }
+
+  private registerBatchClaims(claims: PendingClaim[]): void {
+    if (!claims.length) return;
+    let started = false;
+    if (!this.currentBatch) {
+      started = true;
+      this.currentBatch = {
+        startedMs: Date.now(),
+        lastIngestAt: null,
+        total: 0,
+        jobs: new Set(),
+        sizedJobs: new Set(),
+        completed: 0,
+        published: 0,
+        quarantined: 0,
+        inputBytes: 0,
+      };
+    }
+    for (const claim of claims) {
+      if (!this.currentBatch.jobs.has(claim.jobId)) {
+        this.currentBatch.jobs.add(claim.jobId);
+        this.currentBatch.total += 1;
+      }
+      if (claim.receivedAt && (!this.currentBatch.lastIngestAt || Date.parse(claim.receivedAt) > Date.parse(this.currentBatch.lastIngestAt))) {
+        this.currentBatch.lastIngestAt = claim.receivedAt;
+      }
+    }
+    if (this.currentBatch.lastIngestAt
+      && (!this.lastIngestAt || Date.parse(this.currentBatch.lastIngestAt) > Date.parse(this.lastIngestAt))) {
+      this.lastIngestAt = this.currentBatch.lastIngestAt;
+    }
+    if (started) {
+      this.log("info", "photo_batch_started", {
+        started_at: new Date(this.currentBatch.startedMs).toISOString(),
+        last_ingest_at: this.currentBatch.lastIngestAt,
+        total: this.currentBatch.total,
+        queue_depth: claims.length,
+        workers_configured: this.config.concurrency,
+      });
+    }
+  }
+
+  private rollingSnapshot(now: number): PipelineStatus["rolling"] {
+    const rolling = this.rollingMetrics.filter((sample) => sample.completedAtMs >= now - ROLLING_WINDOW_MS);
+    const elapsedMs = rolling.length
+      ? Math.min(ROLLING_WINDOW_MS, Math.max(1_000, now - Math.min(...rolling.map((sample) => sample.startedAtMs))))
+      : ROLLING_WINDOW_MS;
+    const seconds = elapsedMs / 1_000;
+    return {
+      window_seconds: ROLLING_WINDOW_MS / 1_000,
+      completed: rolling.length,
+      images_per_second: roundMetric(rolling.length / seconds),
+      mib_per_second: roundMetric(rolling.reduce((sum, sample) => sum + sample.inputBytes, 0) / 1024 ** 2 / seconds),
+    };
+  }
+
+  private recordBatchSize(jobId: string, sizeBytes: number): void {
+    if (!this.currentBatch || this.currentBatch.sizedJobs.has(jobId)) return;
+    this.currentBatch.sizedJobs.add(jobId);
+    this.currentBatch.inputBytes += sizeBytes;
+  }
+
+  private recordBatchCompletion(jobId: string, outcome: JobOutcome): void {
+    if (!this.currentBatch || !this.currentBatch.jobs.delete(jobId)) return;
+    this.currentBatch.sizedJobs.delete(jobId);
+    this.currentBatch.completed += 1;
+    if (outcome === "published") this.currentBatch.published += 1;
+    if (outcome === "quarantined") this.currentBatch.quarantined += 1;
+  }
+
+  private completeBatch(): void {
+    if (!this.currentBatch) return;
+    const completedAt = Date.now();
+    this.lastBatch = this.batchSnapshot(this.currentBatch, completedAt, new Date(completedAt).toISOString());
+    this.log("info", "photo_batch_completed", this.lastBatch as unknown as Record<string, unknown>);
+    this.currentBatch = null;
+  }
+
+  private batchSnapshot(batch: BatchTracker, now: number, completedAt: string | null): PipelineBatchStatus {
+    const durationMs = Math.max(0, now - batch.startedMs);
+    const durationSeconds = Math.max(0.001, durationMs / 1_000);
+    return {
+      started_at: new Date(batch.startedMs).toISOString(),
+      completed_at: completedAt,
+      last_ingest_at: batch.lastIngestAt,
+      total: batch.total,
+      completed: batch.completed,
+      published: batch.published,
+      quarantined: batch.quarantined,
+      bytes: batch.inputBytes,
+      duration_ms: durationMs,
+      images_per_second: roundMetric(batch.completed / durationSeconds),
+      mib_per_second: roundMetric(batch.inputBytes / 1024 ** 2 / durationSeconds),
+    };
+  }
+
+  private async queuedCount(): Promise<number> {
+    const claims = await this.readClaims();
+    const processingQueued = claims.filter((claim) => !this.processing.has(claim.jobId)).length;
+    const staged = await readdir(this.directories.staging, { withFileTypes: true });
+    const stagingQueued = staged.filter((entry) => !entry.name.startsWith(".")
+      && !entry.name.endsWith(".uploading")
+      && (entry.isFile() || entry.isDirectory() && entry.name.endsWith(".frame-photo"))).length;
+    return processingQueued + stagingQueued;
+  }
+
+  private log(level: "info" | "debug", event: string, fields: Record<string, unknown>): void {
+    if (level === "debug" && this.config.logLevel !== "debug") return;
+    console.log(JSON.stringify({ timestamp: new Date().toISOString(), level: level.toUpperCase(), event, ...fields }));
+  }
+
+  private async processClaim(
+    claim: Claim,
+    scanId: string,
+    reservedBases: Map<string, Set<string>>,
+  ): Promise<JobOutcome> {
     let detectedMime = "application/octet-stream";
     let attempts = 0;
     let releaseHeic: (() => void) | null = null;
     try {
       if (claim.integrityError) {
-        const preserveReceipt = Boolean(await this.readJourneyReceipt(claim.journey.journey_id));
+        this.setActiveStage(claim.jobId, "quarantine");
         await this.quarantine(
           claim,
           failureReason("PPL-06", "FILE_ACCESS_ERROR", claim.integrityError),
-          !preserveReceipt,
+          false,
         );
+        await this.markJourneyIntegrityFailed(claim, claim.integrityError, scanId);
         this.status.quarantined += 1;
         this.status.last_quarantine_at = new Date().toISOString();
         this.status.last_quarantine_file = claim.originalName;
         this.status.last_error = claim.integrityError;
-        return;
+        return "quarantined";
       }
-      if (await this.recoverPublishedClaim(claim)) return;
+      if (await this.recoverPublishedClaim(claim)) return "published";
       const journeyDisposition = await this.beginJourney(claim);
-      if (journeyDisposition === "wait") return;
+      if (journeyDisposition === "wait") return "deferred";
       if (journeyDisposition === "duplicate") {
         await rm(claim.directory, { recursive: true, force: true });
-        return;
+        return "skipped";
       }
       if (journeyDisposition === "conflict") {
+        this.setActiveStage(claim.jobId, "quarantine");
         const detail = `Journey ${claim.journey.journey_id} was reused with different photo content.`;
         await this.quarantine(claim, failureReason("PPL-06", "FILE_ACCESS_ERROR", detail), false);
         this.status.quarantined += 1;
         this.status.last_quarantine_at = new Date().toISOString();
         this.status.last_quarantine_file = claim.originalName;
         this.status.last_error = detail;
-        return;
+        return "quarantined";
       }
       const sourceStat = await stat(claim.source);
       if (sourceStat.size > this.config.maxInputBytes) {
@@ -759,6 +1312,7 @@ export class PhotoPipeline {
       }
       const isHeic = detected?.ext === "heic" || detected?.ext === "heif" || sourceExtension === ".heic" || sourceExtension === ".heif";
 
+      this.setActiveStage(claim.jobId, "decode");
       let sourceMetadata: Metadata;
       let imageSource: string | RawImage = claim.source;
       try {
@@ -794,12 +1348,14 @@ export class PhotoPipeline {
         throw failure("PPL-04", "DECODE_FAILED", `Decoded image exceeds ${this.config.maxPixels} pixels.`, detectedMime);
       }
 
-      const publication = await this.getOrCreatePublication(claim);
+      this.setActiveStage(claim.jobId, "allocation");
+      const publication = await this.getOrCreatePublication(claim, reservedBases);
       const { dateFolder, base } = publication;
       const targetDirectory = path.join(this.directories.galleries, dateFolder);
       const files = outputFiles(targetDirectory, base);
       await cleanupPartialPublication(files);
 
+      this.setActiveStage(claim.jobId, "encode");
       let finalMetadata: Metadata | null = null;
       let outputQuality = this.settings.jpeg_quality;
       let outputSizeBytes = 0;
@@ -823,9 +1379,11 @@ export class PhotoPipeline {
         throw failure("PPL-04", "DECODE_FAILED", "Final JPG dimensions are unavailable.", detectedMime, attempts);
       }
 
+      this.setActiveStage(claim.jobId, "metadata");
       const orientation = finalMetadata.height > finalMetadata.width ? 1 : 0;
       const processedAt = new Date().toISOString();
       const exif = readExif(sourceMetadata.exif);
+      const capture = captureMetadata(exif);
       const sidecar = {
         schema_version: 1,
         journey_id: claim.journey.journey_id,
@@ -842,6 +1400,7 @@ export class PhotoPipeline {
         max_output_mb: this.settings.max_output_mb,
         processed_at: processedAt,
         date_folder: dateFolder,
+        ...(capture ?? {}),
         exif,
         warnings: Object.keys(exif).length ? [] : ["EXIF metadata was not present or could not be decoded."],
       };
@@ -850,23 +1409,50 @@ export class PhotoPipeline {
       await atomicWriteJson(files.json, sidecar);
       await atomicWrite(files.txt, `${cameraText}\n`);
       await atomicWrite(files.orientation, `${orientation}\n`);
-      await atomicWrite(
-        files.ready,
-        `${hostJoin(this.config.hostDataRoot, "galleries", dateFolder, `${base}.jpg`)}\n` +
-          `${hostJoin(this.config.hostDataRoot, "galleries", dateFolder, `${base}.txt`)}\n${orientation}\n`,
-      );
+      this.setActiveStage(claim.jobId, "publish");
       await this.withPublishLock(async () => {
-        await this.recalculateLatest(processedAt);
+        await atomicWrite(
+          files.ready,
+          `${hostJoin(this.config.hostDataRoot, "galleries", dateFolder, `${base}.jpg`)}\n` +
+            `${hostJoin(this.config.hostDataRoot, "galleries", dateFolder, `${base}.txt`)}\n${orientation}\n`,
+        );
+        const readyInfo = await stat(files.ready);
+        const current = localParts(new Date(), this.config.timezone);
+        const latest = await readJsonOrNull<{ date_folder?: unknown; count_today?: unknown }>(
+          path.join(this.directories.state, "latest.json"),
+        );
+        let countToday: number | null = null;
+        if (!latest || typeof latest.date_folder === "string" && isDateFolder(latest.date_folder) && latest.date_folder < dateFolder) {
+          countToday = 1;
+        } else if (latest.date_folder === dateFolder && Number.isSafeInteger(latest.count_today) && Number(latest.count_today) >= 0) {
+          countToday = Number(latest.count_today) + 1;
+        }
+        if (dateFolder === `${current.year}-${current.month}-${current.day}`
+          && countToday !== null
+          && !(await exists(path.join(targetDirectory, `${base}.trashed.json`)))) {
+          await this.writeLatest(
+            dateFolder,
+            base,
+            await this.nextRevisionTimestamp(processedAt),
+            readyInfo.mtime.toISOString(),
+            countToday,
+          );
+        } else {
+          await this.recalculateLatest(processedAt);
+        }
         await this.markJourneyPublished(claim, publication, processedAt);
-      });
+      }, claim.jobId);
+      this.setActiveStage(claim.jobId, "archive");
       await this.finishClaim(claim, publication);
       this.status.published += 1;
       this.status.last_publish_at = processedAt;
       this.status.last_publish_file = claim.originalName;
       this.status.last_error = null;
-      console.log(`[photo-pipeline] published ${claim.originalName} as ${dateFolder}/${base}`);
+      this.recordActivePublication(claim.jobId, dateFolder, base);
+      return "published";
     } catch (error) {
-      if (await this.recoverPublishedClaim(claim)) return;
+      if (await this.recoverPublishedClaim(claim)) return "published";
+      this.setActiveStage(claim.jobId, "quarantine");
       const reason = error instanceof PipelineFailure
         ? error.reason
         : failureReason("PPL-07", "PIPELINE_INTERNAL_ERROR", errorMessage(error), detectedMime, attempts);
@@ -880,12 +1466,13 @@ export class PhotoPipeline {
       this.status.last_quarantine_file = claim.originalName;
       this.status.last_error = reason.detail;
       console.error(`[photo-pipeline] quarantined ${claim.originalName}: ${reason.code} ${reason.detail}`);
+      return "quarantined";
     } finally {
       releaseHeic?.();
     }
   }
 
-  private async getOrCreatePublication(claim: Claim): Promise<Publication> {
+  private async getOrCreatePublication(claim: Claim, reservedBases: Map<string, Set<string>>): Promise<Publication> {
     const existing = await this.readPublication(claim);
     if (existing) return existing;
     return this.withPublishLock(async () => {
@@ -898,22 +1485,32 @@ export class PhotoPipeline {
       await mkdir(targetDirectory, { recursive: true });
       const stem = sanitizeBase(path.parse(claim.originalName).name);
       const requestedBase = `${stem}_${dateFolder}_${local.hour}_${local.minute}_${local.second}`;
+      const reserved = reservedBases.get(dateFolder) ?? new Set<string>();
+      reservedBases.set(dateFolder, reserved);
       const publication = {
         dateFolder,
-        base: await allocateBase(targetDirectory, requestedBase, await this.reservedBases(dateFolder)),
+        base: await allocateBase(targetDirectory, requestedBase, reserved),
         journeyId: claim.journey.journey_id,
       };
       await atomicWriteJson(path.join(claim.directory, "publication.json"), publication);
+      reserved.add(publication.base);
       return publication;
-    });
+    }, claim.jobId);
   }
 
-  private async reservedBases(dateFolder: string): Promise<Set<string>> {
-    const reserved = new Set<string>();
-    for (const claim of await this.readClaims()) {
-      const publication = await this.readPublication(claim);
-      if (publication?.dateFolder === dateFolder) reserved.add(publication.base);
-    }
+  private async reservedBases(claims: PendingClaim[]): Promise<Map<string, Set<string>>> {
+    const reserved = new Map<string, Set<string>>();
+    await runPool(claims, this.config.concurrency, async (claim) => {
+      try {
+        const publication = await this.readPublication(claim);
+        if (!publication) return;
+        const bases = reserved.get(publication.dateFolder) ?? new Set<string>();
+        bases.add(publication.base);
+        reserved.set(publication.dateFolder, bases);
+      } catch (error) {
+        console.warn(`[photo-pipeline] ignored unreadable publication reservation ${claim.jobId}: ${errorMessage(error)}`);
+      }
+    });
     return reserved;
   }
 
@@ -922,24 +1519,26 @@ export class PhotoPipeline {
     if (!publication) return false;
     const ready = path.join(this.directories.galleries, publication.dateFolder, `${publication.base}.ready`);
     if (!(await exists(ready))) return false;
+    this.setActiveStage(claim.jobId, "publish");
     await this.withPublishLock(async () => {
       await this.recalculateLatest(new Date().toISOString());
       await this.markJourneyPublished(claim, publication, new Date().toISOString());
+      this.setActiveStage(claim.jobId, "archive");
       await this.finishClaim(claim, publication);
-    });
+    }, claim.jobId);
     this.status.published += 1;
     this.status.last_publish_at = new Date().toISOString();
     this.status.last_publish_file = claim.originalName;
     this.status.last_error = null;
-    console.log(`[photo-pipeline] recovered completed publish ${publication.dateFolder}/${publication.base}`);
+    this.recordActivePublication(claim.jobId, publication.dateFolder, publication.base, true);
     return true;
   }
 
-  private async readPublication(claim: Claim): Promise<Publication | null> {
+  private async readPublication(claim: PendingClaim): Promise<Publication | null> {
     try {
       const value = JSON.parse(await readFile(path.join(claim.directory, "publication.json"), "utf8")) as Partial<Publication>;
       return typeof value.dateFolder === "string" && typeof value.base === "string"
-        ? { dateFolder: value.dateFolder, base: value.base, journeyId: typeof value.journeyId === "string" ? value.journeyId : claim.journey.journey_id }
+        ? { dateFolder: value.dateFolder, base: value.base, journeyId: typeof value.journeyId === "string" ? value.journeyId : claim.journeyId ?? "" }
         : null;
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
@@ -1014,19 +1613,26 @@ export class PhotoPipeline {
     this.status.last_error = detail;
   }
 
-  private async writeLatest(dateFolder: string, base: string | null, updatedAt: string, latestPhotoAt?: string | null): Promise<{
+  private async writeLatest(
+    dateFolder: string,
+    base: string | null,
+    updatedAt: string,
+    latestPhotoAt?: string | null,
+    knownCountToday?: number,
+  ): Promise<{
     updated_at: string;
     date_folder: string;
     latest_base: string | null;
     count_today: number;
     latest_photo_at: string | null;
   }> {
-    const entries = await readdir(path.join(this.directories.galleries, dateFolder));
+    const countToday = knownCountToday
+      ?? visibleBases(await readdir(path.join(this.directories.galleries, dateFolder))).length;
     const latest = {
       updated_at: updatedAt,
       date_folder: dateFolder,
       latest_base: base,
-      count_today: entries.filter((entry) => entry.endsWith(".ready") && !entries.includes(`${entry.slice(0, -6)}.trashed.json`)).length,
+      count_today: countToday,
       latest_photo_at: latestPhotoAt ?? null,
     };
     await atomicWriteJson(path.join(this.directories.state, "latest.json"), latest);
@@ -1189,15 +1795,31 @@ export class PhotoPipeline {
     return dateFolder;
   }
 
-  private async withPublishLock<T>(operation: () => Promise<T>): Promise<T> {
+  private async withPublishLock<T>(operation: () => Promise<T>, jobId?: string): Promise<T> {
+    const queuedAt = Date.now();
     const previous = this.publishLock;
     let release: () => void = () => undefined;
     this.publishLock = new Promise<void>((resolve) => { release = resolve; });
     await previous;
+    const acquiredAt = Date.now();
     try {
       return await operation();
     } finally {
+      const releasedAt = Date.now();
       release();
+      const metric = { waitMs: Math.max(0, acquiredAt - queuedAt), holdMs: Math.max(0, releasedAt - acquiredAt) };
+      this.lockMetrics.push(metric);
+      if (this.lockMetrics.length > LOCK_SAMPLE_LIMIT) this.lockMetrics.shift();
+      const job = jobId ? this.activeJobs.get(jobId) : undefined;
+      if (job) {
+        job.publishLockWaitMs += metric.waitMs;
+        job.publishLockHoldMs += metric.holdMs;
+      }
+      this.log("debug", "publish_lock", {
+        job_id: jobId ?? null,
+        wait_ms: metric.waitMs,
+        hold_ms: metric.holdMs,
+      });
     }
   }
 
@@ -1607,7 +2229,8 @@ function readExif(buffer: Buffer | undefined): Record<string, unknown> {
       "ApertureValue",
       "ISO",
       "ISOSpeedRatings",
-      "DateTimeOriginal",
+      "OffsetTimeOriginal",
+      "SubSecTimeOriginal",
       "FocalLength",
       "FocalLength35efl",
       "FocalLengthIn35mmFormat",
@@ -1621,6 +2244,8 @@ function readExif(buffer: Buffer | undefined): Record<string, unknown> {
       "Flash",
       "WhiteBalance",
     ]);
+    const captureClock = readOriginalCaptureClock(buffer);
+    if (captureClock) photo.DateTimeOriginal = `${captureClock}.000Z`;
     return {
       ...(Object.keys(image).length ? { Image: image } : {}),
       ...(Object.keys(photo).length ? { Photo: photo } : {}),
@@ -1628,6 +2253,77 @@ function readExif(buffer: Buffer | undefined): Record<string, unknown> {
   } catch {
     return {};
   }
+}
+
+function readOriginalCaptureClock(buffer: Buffer): string | null {
+  const value = readExifAsciiTag(buffer, 0x9003);
+  const match = value?.match(/^(\d{4}):(\d{2}):(\d{2}) (\d{2}):(\d{2}):(\d{2})$/);
+  if (!match) return null;
+  const [year, month, day, hour, minute, second] = match.slice(1).map(Number);
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (year < 1 || month < 1 || month > 12 || day < 1 || day > days[month - 1]
+    || hour > 23 || minute > 59 || second > 59) return null;
+  return `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${match[6]}`;
+}
+
+function readExifAsciiTag(buffer: Buffer, wantedTag: number): string | null {
+  try {
+    const tiff = buffer.subarray(0, 6).equals(Buffer.from("Exif\0\0", "binary")) ? 6 : 0;
+    const byteOrder = buffer.toString("ascii", tiff, tiff + 2);
+    if (byteOrder !== "II" && byteOrder !== "MM") return null;
+    const littleEndian = byteOrder === "II";
+    const uint16 = (offset: number): number => {
+      if (offset < 0 || offset + 2 > buffer.length) throw new Error("EXIF offset is out of range");
+      return littleEndian ? buffer.readUInt16LE(offset) : buffer.readUInt16BE(offset);
+    };
+    const uint32 = (offset: number): number => {
+      if (offset < 0 || offset + 4 > buffer.length) throw new Error("EXIF offset is out of range");
+      return littleEndian ? buffer.readUInt32LE(offset) : buffer.readUInt32BE(offset);
+    };
+    if (uint16(tiff + 2) !== 42) return null;
+    const ifd0 = tiff + uint32(tiff + 4);
+    const ifd0Entries = uint16(ifd0);
+    let exifIfd: number | null = null;
+    for (let index = 0; index < ifd0Entries; index += 1) {
+      const entry = ifd0 + 2 + index * 12;
+      if (uint16(entry) === 0x8769 && uint16(entry + 2) === 4 && uint32(entry + 4) === 1) {
+        exifIfd = tiff + uint32(entry + 8);
+        break;
+      }
+    }
+    if (exifIfd === null) return null;
+    const entries = uint16(exifIfd);
+    for (let index = 0; index < entries; index += 1) {
+      const entry = exifIfd + 2 + index * 12;
+      if (uint16(entry) !== wantedTag || uint16(entry + 2) !== 2) continue;
+      const length = uint32(entry + 4);
+      if (length < 1 || length > 128) return null;
+      const start = length <= 4 ? entry + 8 : tiff + uint32(entry + 8);
+      if (start < 0 || start + length > buffer.length) return null;
+      return buffer.subarray(start, start + length).toString("ascii").split("\0", 1)[0].trim();
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function captureMetadata(exif: Record<string, unknown>): { capture_clock: string; captured_at?: string } | null {
+  const photo = childRecord(exif, "Photo");
+  const original = valueText(photo.DateTimeOriginal);
+  const match = original.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d+)?Z$/);
+  if (!match) return null;
+  const fraction = valueText(photo.SubSecTimeOriginal);
+  const captureClock = `${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}:${match[6]}`
+    + (/^\d{1,9}$/.test(fraction) ? `.${fraction}` : "");
+  const offset = valueText(photo.OffsetTimeOriginal);
+  if (!/^[+-](?:0\d|1[0-3]):[0-5]\d$|^[+-]14:00$/.test(offset)) return { capture_clock: captureClock };
+  const capturedAtMs = Date.parse(`${captureClock}${offset}`);
+  return {
+    capture_clock: captureClock,
+    ...(Number.isFinite(capturedAtMs) ? { captured_at: new Date(capturedAtMs).toISOString() } : {}),
+  };
 }
 
 function formatCameraText(exif: Record<string, unknown>): string {
@@ -1756,6 +2452,33 @@ async function runPool<T>(items: T[], concurrency: number, operation: (item: T) 
       if (item !== undefined) await operation(item);
     }
   }));
+}
+
+function emptyTimingSummary(): TimingSummary {
+  return { avg_ms: 0, p50_ms: 0, p95_ms: 0 };
+}
+
+function summarizeTimings(values: number[]): TimingSummary {
+  if (!values.length) return emptyTimingSummary();
+  const sorted = [...values].sort((left, right) => left - right);
+  return {
+    avg_ms: roundMetric(values.reduce((sum, value) => sum + value, 0) / values.length),
+    p50_ms: percentile(sorted, 0.5),
+    p95_ms: percentile(sorted, 0.95),
+  };
+}
+
+function percentile(sorted: number[], fraction: number): number {
+  return roundMetric(sorted[Math.max(0, Math.ceil(sorted.length * fraction) - 1)] ?? 0);
+}
+
+function roundMetric(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
+function queueWaitMs(receivedAt: string, startedMs: number): number {
+  const receivedMs = Date.parse(receivedAt);
+  return Number.isFinite(receivedMs) ? Math.max(0, startedMs - receivedMs) : 0;
 }
 
 function errorMessage(error: unknown): string {

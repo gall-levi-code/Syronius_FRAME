@@ -8,6 +8,7 @@ export interface PipelineConfig {
   timezone: string;
   pollMs: number;
   concurrency: number;
+  logLevel: "info" | "debug";
   maxInputBytes: number;
   maxPixels: number;
   conversionAttempts: number;
@@ -34,6 +35,7 @@ export function loadConfig(): PipelineConfig {
     timezone: process.env.TIMEZONE?.trim() || "America/Chicago",
     pollMs: integer("PIPELINE_POLL_MS", 1000, 100, 60000),
     concurrency: integer("PIPELINE_CONCURRENCY", 2, 1, 10),
+    logLevel: logLevel("PIPELINE_LOG_LEVEL", "info"),
     maxInputBytes: integer("PHOTO_MAX_INPUT_MB", 50, 1, 2048) * 1024 * 1024,
     maxPixels: integer("PHOTO_MAX_MEGAPIXELS", 80, 1, 1000) * 1_000_000,
     conversionAttempts: integer("PHOTO_CONVERSION_ATTEMPTS", 3, 1, 10),
@@ -49,6 +51,12 @@ export function loadConfig(): PipelineConfig {
       max_output_mb: decimal("PHOTO_MAX_OUTPUT_MB", 0, 0, 500),
     },
   };
+}
+
+function logLevel(name: string, fallback: "info" | "debug"): "info" | "debug" {
+  const value = process.env[name]?.trim().toLowerCase() || fallback;
+  if (value === "info" || value === "debug") return value;
+  throw new Error(`${name} must be info or debug.`);
 }
 
 function integer(name: string, fallback: number, minimum: number, maximum: number): number {

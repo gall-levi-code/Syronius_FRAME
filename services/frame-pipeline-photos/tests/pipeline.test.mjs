@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import { watch } from "node:fs";
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -27,6 +27,18 @@ test("publishes a valid staged image with ready last and latest state", async ()
   const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-pipeline-"));
   const pipeline = new PhotoPipeline(config(root));
   await pipeline.init();
+  const recalculateLatest = pipeline.recalculateLatest.bind(pipeline);
+  let fullRecalculations = 0;
+  pipeline.recalculateLatest = async (...args) => {
+    fullRecalculations += 1;
+    return recalculateLatest(...args);
+  };
+  const writeLatest = pipeline.writeLatest.bind(pipeline);
+  const knownCounts = [];
+  pipeline.writeLatest = async (...args) => {
+    knownCounts.push(args[4]);
+    return writeLatest(...args);
+  };
   await sharp({ create: { width: 320, height: 640, channels: 3, background: "#2cb4fb" } })
     .png()
     .toFile(path.join(root, "staging", "Phone Photo.png"));
@@ -40,6 +52,7 @@ test("publishes a valid staged image with ready last and latest state", async ()
   }
   assert.equal(await readFile(path.join(root, "galleries", latest.date_folder, `${latest.latest_base}.orientation`), "utf8"), "1\n");
   assert.equal(latest.count_today, 1);
+  assert.ok(Number.isFinite(Date.parse(latest.latest_photo_at)));
   assert.equal((await readdir(path.join(root, "archive", latest.date_folder))).length, 1);
   assert.equal((await readdir(root)).includes("today"), false);
   const manifest = (await readFile(path.join(root, "galleries", latest.date_folder, `${latest.latest_base}.ready`), "utf8")).trimEnd().split("\n");
@@ -56,6 +69,8 @@ test("publishes a valid staged image with ready last and latest state", async ()
   const receipt = JSON.parse(await readFile(path.join(root, "state", "photo-journeys", `${sidecar.journey_id}.json`), "utf8"));
   assert.equal(receipt.state, "published");
   assert.match(receipt.content_sha256, /^[a-f0-9]{64}$/);
+  assert.equal(fullRecalculations, 0);
+  assert.deepEqual(knownCounts, [1]);
 
   await pipeline.processOnce();
   assert.equal((await readdir(path.join(root, "galleries", latest.date_folder))).filter((name) => name.endsWith(".ready")).length, 1);
@@ -93,6 +108,8 @@ test("extracts camera EXIF into the reusable camera information sidecar", async 
         FocalLength: "35",
         LensModel: "Test Lens\0\0",
         DateTimeOriginal: "2026:07:12 20:00:30",
+        OffsetTimeOriginal: "-05:00",
+        SubSecTimeOriginal: "123",
       },
     })
     .toFile(path.join(root, "staging", "Camera Photo.jpg"));
@@ -106,7 +123,32 @@ test("extracts camera EXIF into the reusable camera information sidecar", async 
   assert.equal(cameraText, "Shot on Test Camera with the Test Lens @ 35mm\n1/125s • f/2.8 • ISO 200\n");
   assert.equal(JSON.stringify(sidecar.exif).includes("\\u0000"), false);
   assert.equal(sidecar.exif.Photo.DateTimeOriginal, "2026-07-12T20:00:30.000Z");
+  assert.equal(sidecar.exif.Photo.OffsetTimeOriginal, "-05:00");
+  assert.equal(sidecar.exif.Photo.SubSecTimeOriginal, "123");
+  assert.equal(sidecar.capture_clock, "2026-07-12T20:00:30.123");
+  assert.equal(sidecar.captured_at, "2026-07-13T01:00:30.123Z");
   assert.ok(Object.keys(sidecar.exif).length > 0);
+});
+
+test("does not promote a malformed EXIF camera date into capture ordering metadata", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-pipeline-"));
+  const pipeline = new PhotoPipeline(config(root));
+  await pipeline.init();
+  await sharp({ create: { width: 320, height: 180, channels: 3, background: "#2cb4fb" } })
+    .jpeg()
+    .withExif({ IFD2: { DateTimeOriginal: "2026:02:30 20:00:30", OffsetTimeOriginal: "-05:00" } })
+    .toFile(path.join(root, "staging", "Bad Camera Clock.jpg"));
+
+  await pipeline.processOnce();
+
+  const latest = JSON.parse(await readFile(path.join(root, "state", "latest.json"), "utf8"));
+  const sidecar = JSON.parse(await readFile(
+    path.join(root, "galleries", latest.date_folder, `${latest.latest_base}.json`),
+    "utf8",
+  ));
+  assert.equal(sidecar.exif.Photo?.DateTimeOriginal, undefined);
+  assert.equal(sidecar.capture_clock, undefined);
+  assert.equal(sidecar.captured_at, undefined);
 });
 
 test("quarantines non-images without updating latest state", async () => {
@@ -154,6 +196,12 @@ test("recovers a ready publication without publishing the claimed source twice",
     date_folder: dateFolder,
     base,
   }));
+  const recalculateLatest = pipeline.recalculateLatest.bind(pipeline);
+  let fullRecalculations = 0;
+  pipeline.recalculateLatest = async (...args) => {
+    fullRecalculations += 1;
+    return recalculateLatest(...args);
+  };
 
   await pipeline.processOnce();
 
@@ -161,6 +209,7 @@ test("recovers a ready publication without publishing the claimed source twice",
   assert.equal(JSON.parse(await readFile(path.join(root, "state", "latest.json"), "utf8")).latest_base, base);
   assert.equal((await readdir(path.join(root, "archive", dateFolder))).length, 1);
   assert.equal(JSON.parse(await readFile(path.join(root, "state", "photo-journeys", `${journeyId}.json`), "utf8")).state, "published");
+  assert.equal(fullRecalculations, 1);
 });
 
 test("publishes one photo for duplicate journey envelopes", async () => {
@@ -260,6 +309,53 @@ test("backfills a missing digest and rejects a mismatched declared digest", asyn
   const failed = JSON.parse(await readFile(path.join(root, "state", "photo-journeys", "journey-bad-digest.json"), "utf8"));
   assert.equal(failed.state, "failed");
   assert.equal(failed.content_sha256, sha256(invalidSource));
+  assert.equal(failed.integrity_verified, false);
+  assert.equal(failed.integrity_expected_sha256, "0".repeat(64));
+
+  const receiptPath = path.join(root, "state", "photo-journeys", "journey-bad-digest.json");
+  const canonicalFailure = await readFile(receiptPath, "utf8");
+  const restarted = new PhotoPipeline(config(root));
+  await restarted.init();
+  await stageEnvelope(root, "journey-bad-digest", "Different.jpg", await testJpeg("#75ffb1"));
+  await restarted.processOnce();
+  assert.equal(await readFile(receiptPath, "utf8"), canonicalFailure);
+});
+
+test("an unverified retry cannot poison a concurrently valid journey", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-integrity-race-"));
+  const pipeline = new PhotoPipeline({ ...config(root), concurrency: 2 });
+  await pipeline.init();
+  const journeyId = "journey-integrity-race";
+  const validSource = await testJpeg("#2cb4fb");
+  const declaredDigest = sha256(validSource);
+  for (const [jobId, source] of [["job-valid", validSource], ["job-bad", Buffer.from("bad")]]) {
+    const directory = path.join(root, "processing", jobId);
+    await mkdir(directory);
+    await writeFile(path.join(directory, "source"), source);
+    const metadata = journey(
+      journeyId,
+      `${jobId}.jpg`,
+      source,
+      sha256(source),
+    );
+    if (jobId === "job-bad") metadata.ingest.bytes_received += 1;
+    await writeFile(path.join(directory, "journey.json"), JSON.stringify(metadata));
+  }
+  const verify = pipeline.readOrCreateJourney.bind(pipeline);
+  pipeline.readOrCreateJourney = async (directory, ...args) => {
+    if (path.basename(directory) === "job-valid") await new Promise((resolve) => setTimeout(resolve, 50));
+    return verify(directory, ...args);
+  };
+
+  await pipeline.processOnce();
+
+  const receipt = JSON.parse(await readFile(path.join(root, "state", "photo-journeys", `${journeyId}.json`), "utf8"));
+  assert.equal(receipt.state, "published");
+  assert.equal(receipt.content_sha256, declaredDigest);
+  const latest = JSON.parse(await readFile(path.join(root, "state", "latest.json"), "utf8"));
+  assert.equal((await readdir(path.join(root, "galleries", latest.date_folder))).filter((name) => name.endsWith(".ready")).length, 1);
+  assert.equal((await readdir(path.join(root, "quarantine"))).filter((name) => name.endsWith(".error.json")).length, 1);
+  assert.equal(pipeline.statusSnapshot().last_batch.published, 1);
 });
 
 test("uses bounded processing paths for long original names", async () => {
@@ -321,6 +417,11 @@ test("quarantines a malformed envelope without blocking the next photo", async (
   const descriptor = JSON.parse(await readFile(path.join(root, "quarantine", quarantine.find((name) => name.endsWith(".error.json"))), "utf8"));
   assert.equal(descriptor.journey_id, undefined);
   assert.deepEqual(await readdir(path.join(root, "staging")), []);
+  const status = pipeline.statusSnapshot();
+  assert.equal(status.last_batch.total, 2);
+  assert.equal(status.last_batch.completed, 2);
+  assert.equal(status.last_batch.published, 1);
+  assert.equal(status.last_batch.quarantined, 1);
 });
 
 test("journey progress polling uses the bounded in-memory receipt view", async () => {
@@ -342,6 +443,18 @@ test("concurrent claims reserve distinct publication bases", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-pipeline-"));
   const pipeline = new PhotoPipeline(config(root));
   await pipeline.init();
+  const readClaims = pipeline.readClaims.bind(pipeline);
+  let claimReads = 0;
+  pipeline.readClaims = async (...args) => {
+    claimReads += 1;
+    return readClaims(...args);
+  };
+  const writeLatest = pipeline.writeLatest.bind(pipeline);
+  const knownCounts = [];
+  pipeline.writeLatest = async (...args) => {
+    knownCounts.push(args[4]);
+    return writeLatest(...args);
+  };
   const originalName = "Same Name.png";
   for (const job of ["job-one", "job-two"]) {
     const claim = path.join(root, "processing", `${job}--${Buffer.from(originalName).toString("base64url")}`);
@@ -355,6 +468,186 @@ test("concurrent claims reserve distinct publication bases", async () => {
   const ready = (await readdir(path.join(root, "galleries", latest.date_folder))).filter((name) => name.endsWith(".ready"));
   assert.equal(ready.length, 2);
   assert.equal(new Set(ready).size, 2);
+  assert.equal(latest.count_today, 2);
+  assert.equal(claimReads, 2);
+  assert.deepEqual(knownCounts, [1, 2]);
+  const gallery = path.join(root, "galleries", latest.date_folder);
+  const latestMtime = (await stat(path.join(gallery, `${latest.latest_base}.ready`))).mtimeMs;
+  assert.ok((await Promise.all(ready.map((name) => stat(path.join(gallery, name))))).every((info) => info.mtimeMs <= latestMtime));
+});
+
+test("an incompatible latest count falls back to an authoritative gallery scan", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-latest-fallback-"));
+  const pipeline = new PhotoPipeline(config(root));
+  await pipeline.init();
+  await writeFile(path.join(root, "state", "latest.json"), JSON.stringify({
+    updated_at: new Date().toISOString(),
+    date_folder: currentDateFolder(),
+    latest_base: null,
+    count_today: "invalid",
+  }));
+  let fullRecalculations = 0;
+  const recalculateLatest = pipeline.recalculateLatest.bind(pipeline);
+  pipeline.recalculateLatest = async (...args) => {
+    fullRecalculations += 1;
+    return recalculateLatest(...args);
+  };
+  await stageEnvelope(root, "journey-latest-fallback", "Fallback.jpg", await testJpeg("#2cb4fb"));
+
+  await pipeline.processOnce();
+
+  assert.equal(fullRecalculations, 1);
+  assert.equal(JSON.parse(await readFile(path.join(root, "state", "latest.json"), "utf8")).count_today, 1);
+});
+
+test("status snapshot exposes worker stages, a true pending queue, rolling performance, and the drained batch", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-telemetry-"));
+  const configured = { ...config(root), concurrency: 1 };
+  const pipeline = new PhotoPipeline(configured);
+  await pipeline.init();
+  await stageEnvelope(root, "journey-telemetry-one", "Telemetry One.jpg", await testJpeg("#2cb4fb"));
+  await stageEnvelope(root, "journey-telemetry-two", "Telemetry Two.jpg", await testJpeg("#75ffb1"));
+
+  const verify = pipeline.readOrCreateJourney.bind(pipeline);
+  let releaseIntegrity;
+  let reportIntegrity;
+  const integrityStarted = new Promise((resolve) => { reportIntegrity = resolve; });
+  const integrityBlocked = new Promise((resolve) => { releaseIntegrity = resolve; });
+  let blockFirst = true;
+  pipeline.readOrCreateJourney = async (...args) => {
+    if (blockFirst) {
+      blockFirst = false;
+      reportIntegrity();
+      await integrityBlocked;
+    }
+    return verify(...args);
+  };
+
+  const processing = pipeline.processOnce();
+  await integrityStarted;
+  const active = pipeline.statusSnapshot();
+  assert.deepEqual(active.workers, { active: 1, configured: 1 });
+  assert.equal(active.processing, 1);
+  assert.equal(active.queue_depth, 1);
+  assert.equal(active.active_jobs.length, 1);
+  assert.equal(active.active_jobs[0].stage, "integrity");
+  assert.ok(["Telemetry One.jpg", "Telemetry Two.jpg"].includes(active.active_jobs[0].filename));
+  assert.ok(active.active_jobs[0].size_bytes > 0);
+  assert.ok(active.active_jobs[0].elapsed_ms >= 0);
+  assert.ok(active.active_jobs[0].stage_elapsed_ms >= 0);
+  assert.ok(active.current_batch);
+  assert.equal(active.current_batch.total, 2);
+
+  releaseIntegrity();
+  await processing;
+
+  const completed = pipeline.statusSnapshot();
+  assert.deepEqual(completed.workers, { active: 0, configured: 1 });
+  assert.equal(completed.queue_depth, 0);
+  assert.deepEqual(completed.active_jobs, []);
+  assert.equal(completed.current_batch, null);
+  assert.equal(completed.last_batch.total, 2);
+  assert.equal(completed.last_batch.completed, 2);
+  assert.equal(completed.last_batch.published, 2);
+  assert.equal(completed.last_batch.quarantined, 0);
+  assert.ok(completed.last_batch.bytes > 0);
+  assert.ok(completed.last_batch.last_ingest_at);
+  assert.equal(completed.rolling.window_seconds, 60);
+  assert.equal(completed.rolling.completed, 2);
+  assert.ok(completed.rolling.images_per_second > 0);
+  assert.ok(completed.rolling.mib_per_second > 0);
+  assert.equal(completed.performance.sample_size, 2);
+  assert.ok(completed.performance.stages.integrity.avg_ms >= 0);
+  assert.ok(completed.performance.stages.publish.p95_ms >= 0);
+  assert.ok(completed.performance.publish_lock_hold_ms.avg_ms >= 0);
+});
+
+test("an overlapping scan refreshes queue depth for newly staged work", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-live-queue-"));
+  const pipeline = new PhotoPipeline({ ...config(root), concurrency: 1 });
+  await pipeline.init();
+  await stageEnvelope(root, "journey-live-queue-one", "First.jpg", await testJpeg("#2cb4fb"));
+
+  const verify = pipeline.readOrCreateJourney.bind(pipeline);
+  let releaseIntegrity;
+  let reportIntegrity;
+  const integrityStarted = new Promise((resolve) => { reportIntegrity = resolve; });
+  const integrityBlocked = new Promise((resolve) => { releaseIntegrity = resolve; });
+  pipeline.readOrCreateJourney = async (...args) => {
+    reportIntegrity();
+    await integrityBlocked;
+    return verify(...args);
+  };
+  const running = pipeline.processOnce();
+  await integrityStarted;
+  await stageEnvelope(root, "journey-live-queue-two", "Second.jpg", await testJpeg("#75ffb1"));
+
+  await pipeline.processOnce();
+  const queuedDuringFirstJob = pipeline.statusSnapshot().queue_depth;
+  releaseIntegrity();
+  await running;
+  assert.equal(queuedDuringFirstJob, 1);
+  pipeline.readOrCreateJourney = verify;
+  await pipeline.processOnce();
+  assert.equal(pipeline.statusSnapshot().queue_depth, 0);
+});
+
+test("structured DEBUG logs are gated by PIPELINE_LOG_LEVEL", async () => {
+  const captured = [];
+  const originalLog = console.log;
+  console.log = (line) => captured.push(String(line));
+  try {
+    const info = new PhotoPipeline(config("info-log-root"));
+    info.log("info", "visible_info", { value: 1 });
+    await info.withPublishLock(async () => undefined);
+
+    const debug = new PhotoPipeline({ ...config("debug-log-root"), logLevel: "debug" });
+    await debug.withPublishLock(async () => undefined);
+  } finally {
+    console.log = originalLog;
+  }
+
+  const entries = captured.map((line) => JSON.parse(line));
+  assert.equal(entries.find((entry) => entry.event === "visible_info").level, "INFO");
+  assert.equal(entries.filter((entry) => entry.level === "DEBUG").length, 1);
+  assert.equal(entries.find((entry) => entry.level === "DEBUG").event, "publish_lock");
+});
+
+test("a sustained batch retains IDs only for unfinished jobs", () => {
+  const pipeline = new PhotoPipeline(config("batch-memory-root"));
+  const claims = Array.from({ length: 20 }, (_, index) => ({
+    jobId: `job-${index}`,
+    receivedAt: null,
+  }));
+  pipeline.registerBatchClaims(claims);
+  for (const claim of claims.slice(0, -1)) {
+    pipeline.recordBatchSize(claim.jobId, 10);
+    pipeline.recordBatchCompletion(claim.jobId, "published");
+  }
+
+  const status = pipeline.statusSnapshot();
+  assert.equal(status.current_batch.total, 20);
+  assert.equal(status.current_batch.completed, 19);
+  assert.equal(pipeline.currentBatch.jobs.size, 1);
+  assert.equal(pipeline.currentBatch.sizedJobs.size, 0);
+});
+
+test("invalid claim telemetry retains its source bytes in the drained batch", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-invalid-telemetry-"));
+  const pipeline = new PhotoPipeline(config(root));
+  await pipeline.init();
+  const source = Buffer.from("invalid claim source");
+  const claim = path.join(root, "staging", "invalid-telemetry.frame-photo");
+  await mkdir(claim);
+  await writeFile(path.join(claim, "source"), source);
+  await writeFile(path.join(claim, "journey.json"), "{");
+
+  await pipeline.processOnce();
+
+  const status = pipeline.statusSnapshot();
+  assert.equal(status.last_batch.quarantined, 1);
+  assert.equal(status.last_batch.bytes, source.length);
+  assert.equal(status.rolling.completed, 1);
 });
 
 test("pipeline settings resize output and enforce maximum published size", async () => {
@@ -699,6 +992,7 @@ function config(dataRoot) {
     timezone: "America/Chicago",
     pollMs: 1000,
     concurrency: 2,
+    logLevel: "info",
     maxInputBytes: 50 * 1024 * 1024,
     maxPixels: 80_000_000,
     conversionAttempts: 3,

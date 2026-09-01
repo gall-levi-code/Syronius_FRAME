@@ -97,6 +97,7 @@ const PAN_SETTLE_THRESHOLD = 0.75;
 const FULL_IMAGE_RETRY_INITIAL_MS = 15_000;
 const FULL_IMAGE_RETRY_MAX_MS = 120_000;
 const PHOTO_PAGE_SIZE = 60;
+const PHOTO_SORTS = new Set(["newest", "oldest", "filename_asc", "filename_desc", "captured_asc", "captured_desc"]);
 const route = parseRoute();
 const initialUrlState = readUrlState();
 const state = {
@@ -105,6 +106,7 @@ const state = {
   photoTotal: 0,
   photoNextCursor: null,
   photoRevision: 0,
+  photoSort: "newest",
   photosComplete: false,
   photosLoading: false,
   renderedPhotoCount: 0,
@@ -580,17 +582,22 @@ async function refresh(forceRender) {
       state.dates = datesResult.dates;
       const previousRevision = state.photoRevision;
       const previousRenderedCount = state.renderedPhotoCount;
+      const previousLoadedCount = state.photos.length;
       let photosResult = firstPhotoResult;
+      const sortChanged = normalizePhotoSort(firstPhotoResult.photo_sort) !== state.photoSort;
       const incomingTotal = Number(firstPhotoResult.total);
       const known = new Set(state.photos.map((photo) => photo.base));
       const additions = firstPhotoResult.photos.filter((photo) => !known.has(photo.base));
-      const appendOnly = incomingTotal > state.photoTotal && additions.length === incomingTotal - state.photoTotal;
+      const appendOnly = !sortChanged && incomingTotal > state.photoTotal && additions.length === incomingTotal - state.photoTotal;
       const reconcileLoadedPhotos = !forceRender
+        && !sortChanged
         && state.photos.length > 0
         && Number(firstPhotoResult.revision) !== state.photoRevision
         && !appendOnly;
-      if (reconcileLoadedPhotos && firstPhotoResult.next_cursor) photosResult = await requestJson(photoApiUrl(true));
-      applyPhotoRefresh(photosResult, { reset: forceRender || requestAllPhotos || reconcileLoadedPhotos });
+      if (reconcileLoadedPhotos && firstPhotoResult.next_cursor) {
+        photosResult = await loadPhotoPrefix(firstPhotoResult, Math.max(PHOTO_PAGE_SIZE, previousLoadedCount));
+      }
+      applyPhotoRefresh(photosResult, { reset: sortChanged || forceRender || requestAllPhotos || reconcileLoadedPhotos });
       if (reconcileLoadedPhotos) {
         state.renderedPhotoCount = Math.min(state.photos.length, Math.max(previousRenderedCount, PHOTO_PAGE_SIZE));
       }
@@ -637,6 +644,7 @@ function gallerySignature() {
     state.photos.map((photo) => [photo.base, photo.processed_at, photo.capture_clock, photo.thumbnail_url, photo.width, photo.height]),
     state.photoTotal,
     state.photoRevision,
+    state.photoSort,
     state.explore && [
       state.explore.updated_at,
       state.explore.routes?.map((item) => [item.id, item.segments?.length, item.segments?.reduce((sum, segment) => sum + segment.length, 0)]),
@@ -645,20 +653,37 @@ function gallerySignature() {
   ]);
 }
 
-function photoApiUrl(all = false, cursor = null) {
+function photoApiUrl(all = false, cursor = null, limit = PHOTO_PAGE_SIZE) {
   const query = new URLSearchParams({ date: route.date });
-  if (!all) query.set("limit", String(PHOTO_PAGE_SIZE));
+  if (!all) query.set("limit", String(limit));
   if (cursor) query.set("cursor", cursor);
   return `/gallery/api/photos?${query}`;
+}
+
+async function loadPhotoPrefix(firstPage, targetCount) {
+  const photos = [...firstPage.photos];
+  let page = firstPage;
+  const revision = Number(firstPage.revision);
+  const photoSort = normalizePhotoSort(firstPage.photo_sort);
+  while (page.next_cursor && photos.length < targetCount) {
+    page = await requestJson(photoApiUrl(false, page.next_cursor, Math.min(PHOTO_PAGE_SIZE, targetCount - photos.length)));
+    if (Number(page.revision) !== revision || normalizePhotoSort(page.photo_sort) !== photoSort) return firstPage;
+    photos.push(...page.photos);
+    if (!page.photos.length) break;
+  }
+  return { ...firstPage, ...page, photos };
 }
 
 function applyPhotoRefresh(result, { reset = false } = {}) {
   const incoming = Array.isArray(result.photos) ? result.photos : [];
   const total = Number.isInteger(Number(result.total)) ? Number(result.total) : incoming.length;
   const revision = Number.isInteger(Number(result.revision)) ? Number(result.revision) : 0;
+  const photoSort = normalizePhotoSort(result.photo_sort);
+  const sortChanged = photoSort !== state.photoSort;
   const complete = !result.next_cursor;
-  if (reset || !state.photos.length) {
-    state.photos = incoming;
+  state.photoSort = photoSort;
+  if (reset || sortChanged || !state.photos.length) {
+    state.photos = [...incoming];
     state.photoTotal = total;
     state.photoNextCursor = result.next_cursor || null;
     state.photoRevision = revision;
@@ -670,10 +695,11 @@ function applyPhotoRefresh(result, { reset = false } = {}) {
   const known = new Set(state.photos.map((photo) => photo.base));
   const additions = incoming.filter((photo) => !known.has(photo.base));
   if (total > state.photoTotal && additions.length === total - state.photoTotal) {
-    state.photos = sortPhotos([...additions, ...state.photos]);
+    const incomingBases = new Set(incoming.map((photo) => photo.base));
+    state.photos = [...incoming, ...state.photos.filter((photo) => !incomingBases.has(photo.base))];
     state.renderedPhotoCount = Math.min(state.photos.length, state.renderedPhotoCount + additions.length);
   } else {
-    state.photos = incoming;
+    state.photos = [...incoming];
     state.photoNextCursor = result.next_cursor || null;
     state.photosComplete = complete;
     state.renderedPhotoCount = Math.min(PHOTO_PAGE_SIZE, incoming.length);
@@ -682,8 +708,8 @@ function applyPhotoRefresh(result, { reset = false } = {}) {
   state.photoRevision = revision;
 }
 
-function sortPhotos(photos) {
-  return photos.sort((left, right) => right.processed_at.localeCompare(left.processed_at) || right.base.localeCompare(left.base));
+function normalizePhotoSort(value) {
+  return PHOTO_SORTS.has(value) ? value : "newest";
 }
 
 function renderDates() {
@@ -804,16 +830,21 @@ async function loadMorePhotos() {
   }
   const cursor = state.photoNextCursor;
   const revision = state.photoRevision;
+  const photoSort = state.photoSort;
   if (!cursor) return;
   state.photosLoading = true;
   updatePhotoLoadMore();
   let failed = false;
   try {
     const result = await requestJson(photoApiUrl(false, cursor));
-    if (state.photoNextCursor !== cursor || state.photoRevision !== revision || Number(result.revision) !== revision) return;
+    if (normalizePhotoSort(result.photo_sort) !== photoSort) {
+      await refresh(true);
+      return;
+    }
+    if (state.photoNextCursor !== cursor || state.photoRevision !== revision || Number(result.revision) !== revision || state.photoSort !== photoSort) return;
     const startIndex = state.renderedPhotoCount;
     const known = new Set(state.photos.map((photo) => photo.base));
-    state.photos = sortPhotos([...state.photos, ...result.photos.filter((photo) => !known.has(photo.base))]);
+    state.photos = [...state.photos, ...result.photos.filter((photo) => !known.has(photo.base))];
     state.photoTotal = Number(result.total ?? state.photoTotal);
     state.photoNextCursor = result.next_cursor || null;
     state.photosComplete = !state.photoNextCursor;
@@ -822,6 +853,12 @@ async function loadMorePhotos() {
     state.signature = gallerySignature();
     appendPhotoCards(startIndex);
   } catch (error) {
+    if (error.status === 400 && error.message === "Photo cursor is invalid.") {
+      if (cursor === state.photoNextCursor && revision === state.photoRevision && photoSort === state.photoSort) {
+        await refresh(true);
+      }
+      return;
+    }
     failed = true;
     elements.refreshState.textContent = error.message || "More photos could not be loaded";
   } finally {
@@ -1946,7 +1983,11 @@ function writeUrlState(mode) {
 async function requestJson(url, options = {}) {
   const response = await fetch(url, { cache: "no-cache", ...options });
   const body = await response.json();
-  if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`);
+  if (!response.ok) {
+    const error = new Error(body.error || `Request failed (${response.status})`);
+    error.status = response.status;
+    throw error;
+  }
   return body;
 }
 

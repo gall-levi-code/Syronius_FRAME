@@ -4,10 +4,23 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import sharp from "sharp";
 import { createApp } from "../dist/app.js";
 import { GalleryStore } from "../dist/store.js";
+
+const PUBLIC_PHOTO_KEYS = [
+  "base",
+  "camera_text",
+  "capture_clock",
+  "date_folder",
+  "height",
+  "orientation",
+  "processed_at",
+  "thumbnail_url",
+  "width",
+];
 
 test("lists and serves only ready publications", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "frame-gallery-"));
@@ -59,6 +72,40 @@ test("lists and serves only ready publications", async () => {
   store.close();
 });
 
+test("generates one share preview for concurrent requests and rejects unpublished photos", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-gallery-preview-"));
+  const date = "2026-06-13";
+  const gallery = path.join(root, "galleries", date);
+  await mkdir(gallery, { recursive: true });
+  await publish(gallery, "visible", true, "2026-06-13T12:00:00.000Z", 1600, 900);
+  await publish(gallery, "hidden", false);
+  await publish(gallery, "trashed", true);
+  await writeFile(path.join(gallery, "trashed.trashed.json"), JSON.stringify({ trashed_at: new Date().toISOString() }));
+  const store = new GalleryStore(root, 320, 80);
+  await store.init();
+
+  const generatePreview = store.generateSharePreview.bind(store);
+  let generationCount = 0;
+  store.generateSharePreview = async (...args) => {
+    generationCount += 1;
+    return generatePreview(...args);
+  };
+  const [preview, duplicate] = await Promise.all([
+    store.requireSharePreview(date, "visible"),
+    store.requireSharePreview(date, "visible"),
+  ]);
+
+  assert.equal(duplicate, preview);
+  assert.equal(generationCount, 1);
+  assert.deepEqual(
+    await sharp(preview).metadata().then(({ format, width, height }) => ({ format, width, height })),
+    { format: "jpeg", width: 1200, height: 630 },
+  );
+  await assert.rejects(store.requireSharePreview(date, "hidden"));
+  await assert.rejects(store.requireSharePreview(date, "trashed"), (error) => error.status === 404);
+  store.close();
+});
+
 test("rebuilds its disposable catalog while preserving gallery settings", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "frame-gallery-catalog-"));
   const date = "2026-06-13";
@@ -68,7 +115,7 @@ test("rebuilds its disposable catalog while preserving gallery settings", async 
   await publish(gallery, "newest", true, "2026-06-13T13:00:00.000Z");
   const store = new GalleryStore(root, 320, 80);
   await store.init();
-  await store.updateGallerySettings(date, { cover_base: "newest" });
+  await store.updateGallerySettings(date, { cover_base: "newest", photo_sort: "oldest" });
   assert.equal((await store.listDates())[0].count, 2);
   assert.ok((await readFile(store.catalogFile)).length > 0);
   store.close();
@@ -79,6 +126,7 @@ test("rebuilds its disposable catalog while preserving gallery settings", async 
   assert.equal(summary.count, 2);
   assert.equal(summary.cover_base, "newest");
   assert.equal(summary.cover_is_custom, true);
+  assert.equal((await recovered.getGallerySettings(date)).photo_sort, "oldest");
 
   const trashMarker = path.join(gallery, "newest.trashed.json");
   await writeFile(trashMarker, JSON.stringify({ trashed_at: new Date().toISOString() }));
@@ -100,6 +148,31 @@ test("rebuilds its disposable catalog while preserving gallery settings", async 
   assert.equal(summary.cover_is_custom, false);
   assert.deepEqual((await recovered.listPhotos(date)).map((photo) => photo.base), ["oldest"]);
   recovered.close();
+});
+
+test("adds the descending capture index to an existing version-three catalog", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-gallery-index-"));
+  const store = new GalleryStore(root, 320, 80);
+  await store.init();
+  store.close();
+
+  const existing = new DatabaseSync(store.catalogFile);
+  assert.equal(existing.prepare("PRAGMA user_version").get().user_version, 3);
+  existing.exec("DROP INDEX gallery_photos_visible_capture_desc");
+  existing.close();
+
+  const reopened = new GalleryStore(root, 320, 80);
+  await reopened.init();
+  reopened.close();
+  const verified = new DatabaseSync(reopened.catalogFile);
+  const index = verified.prepare(`
+    SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'gallery_photos_visible_capture_desc'
+  `).get();
+  assert.match(
+    index.sql,
+    /capture_missing ASC, capture_sort_ms DESC, processed_at DESC, base DESC/,
+  );
+  verified.close();
 });
 
 test("normalizes catalog timestamps, deep-scans equal mtimes, and coalesces warm reads", async () => {
@@ -263,6 +336,12 @@ test("persists per-gallery covers with a safe fallback and ignores retired downl
   assert.equal(selected.cover_fallback_active, false);
   assert.equal(selected.cover_is_custom, false);
 
+  assert.equal((await store.getGallerySettings(date)).photo_sort, "newest");
+  let gallerySettings = await store.updateGallerySettings(date, { photo_sort: "filename_asc" });
+  assert.equal(gallerySettings.cover_base, null);
+  gallerySettings = await store.updateGallerySettings(date, { cover_base: "newest" });
+  assert.equal(gallerySettings.photo_sort, "filename_asc");
+
   await store.updateGallerySettings(date, { cover_base: "newest", show_download_button: true });
   dates = await new GalleryStore(root, 320, 80).listDates();
   selected = dates.find((item) => item.date_folder === date);
@@ -323,6 +402,138 @@ test("persists per-gallery covers with a safe fallback and ignores retired downl
   selected = (await store.listDates()).find((item) => item.date_folder === date);
   assert.equal(selected.cover_base, "reborn");
   assert.equal(selected.cover_is_custom, false);
+});
+
+test("applies owner-selected photo ordering with stable capture and filename fallbacks", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-gallery-sorting-"));
+  const date = "2026-06-13";
+  const gallery = path.join(root, "galleries", date);
+  await mkdir(gallery, { recursive: true });
+  await publish(gallery, "zulu", true, "2026-06-13T12:00:00.000Z", 120, 80, {
+    originalName: "Bravo.JPG",
+    captureClock: "2026-06-13T10:00:00.125",
+  });
+  await publish(gallery, "alpha", true, "2026-06-13T14:00:00.000Z", 120, 80, {
+    originalName: "Zulu.jpg",
+    captureClock: "2026-06-13T20:00:00.000",
+    capturedAt: "2026-06-13T08:00:00.000Z",
+  });
+  await publish(gallery, "bravo", true, "2026-06-13T11:00:00.000Z", 120, 80, {
+    originalName: "alpha.jpg",
+    legacyCaptureClock: "2026:06:13 09:00:00",
+  });
+  await publish(gallery, "missing", true, "2026-06-13T13:00:00.000Z", 120, 80, {
+    originalName: "Missing.jpg",
+    captureClock: null,
+    legacyCaptureClock: null,
+  });
+  const store = new GalleryStore(root, 320, 80);
+  await store.init();
+
+  assert.equal((await store.getGallerySettings(date)).photo_sort, "newest");
+  const expected = {
+    newest: ["alpha", "missing", "zulu", "bravo"],
+    oldest: ["bravo", "zulu", "missing", "alpha"],
+    filename_asc: ["bravo", "zulu", "missing", "alpha"],
+    filename_desc: ["alpha", "missing", "zulu", "bravo"],
+    captured_asc: ["alpha", "bravo", "zulu", "missing"],
+    captured_desc: ["zulu", "bravo", "alpha", "missing"],
+  };
+  const initialRevision = await store.galleryRevision(date);
+  for (const [photoSort, bases] of Object.entries(expected)) {
+    const settings = await store.updateGallerySettings(date, { photo_sort: photoSort });
+    assert.equal(settings.photo_sort, photoSort);
+    assert.deepEqual((await store.listPhotos(date)).map((photo) => photo.base), bases);
+
+    const paged = [];
+    let cursor;
+    do {
+      const page = await store.listPhotoPage(date, 2, cursor);
+      assert.equal(page.photo_sort, photoSort);
+      paged.push(...page.photos.map((photo) => photo.base));
+      cursor = page.next_cursor || undefined;
+    } while (cursor);
+    assert.deepEqual(paged, bases);
+  }
+  assert.ok(await store.galleryRevision(date) > initialRevision);
+
+  await store.updateGallerySettings(date, { photo_sort: "newest" });
+  const staleCursor = (await store.listPhotoPage(date, 2)).next_cursor;
+  await store.updateGallerySettings(date, { photo_sort: "oldest" });
+  await assert.rejects(store.listPhotoPage(date, 2, staleCursor), (error) => error.status === 400);
+  await assert.rejects(store.updateGallerySettings(date, { photo_sort: "random" }), (error) => error.status === 400);
+
+  const alpha = (await store.listPhotos(date)).find((photo) => photo.base === "alpha");
+  const missing = (await store.listPhotos(date)).find((photo) => photo.base === "missing");
+  assert.equal(alpha.original_name, "Zulu.jpg");
+  assert.equal(alpha.capture_clock, "2026-06-13T20:00:00.000");
+  assert.equal(alpha.captured_at, "2026-06-13T08:00:00.000Z");
+  assert.equal(missing.capture_clock, null);
+  assert.equal(missing.captured_at, null);
+  store.close();
+});
+
+test("returns a coherent full-photo snapshot while an owner order update is queued", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-gallery-snapshot-"));
+  const date = "2026-06-13";
+  const gallery = path.join(root, "galleries", date);
+  await mkdir(gallery, { recursive: true });
+  await publish(gallery, "oldest", true, "2026-06-13T12:00:00.000Z");
+  await publish(gallery, "newest", true, "2026-06-13T13:00:00.000Z");
+  const store = new GalleryStore(root, 320, 80);
+  await store.init();
+  const initialRevision = await store.galleryRevision(date);
+
+  const readSettings = store.readGallerySettings.bind(store);
+  let reportRead;
+  let releaseRead;
+  const readStarted = new Promise((resolve) => { reportRead = resolve; });
+  const readBlocked = new Promise((resolve) => { releaseRead = resolve; });
+  let blockFirstRead = true;
+  store.readGallerySettings = async (...args) => {
+    const settings = await readSettings(...args);
+    if (blockFirstRead) {
+      blockFirstRead = false;
+      reportRead();
+      await readBlocked;
+    }
+    return settings;
+  };
+
+  const serializeSettings = store.mutateGallerySettings.bind(store);
+  const entered = [];
+  let serializedCalls = 0;
+  store.mutateGallerySettings = (operation) => {
+    const call = ++serializedCalls;
+    return serializeSettings(async () => {
+      entered.push(call);
+      return operation();
+    });
+  };
+
+  const snapshotPromise = store.listPhotoSnapshot(date);
+  await readStarted;
+  assert.deepEqual(entered, [1]);
+  const updatePromise = store.updateGallerySettings(date, { photo_sort: "oldest" });
+  assert.equal(serializedCalls, 2);
+  await Promise.resolve();
+  assert.deepEqual(entered, [1]);
+  releaseRead();
+
+  const snapshot = await snapshotPromise;
+  const updated = await updatePromise;
+  assert.equal(snapshot.photo_sort, "newest");
+  assert.deepEqual(snapshot.photos.map((photo) => photo.base), ["newest", "oldest"]);
+  assert.equal(snapshot.total, 2);
+  assert.equal(snapshot.next_cursor, null);
+  assert.equal(snapshot.revision, initialRevision);
+  assert.equal(updated.photo_sort, "oldest");
+
+  const next = await store.listPhotoSnapshot(date);
+  assert.equal(next.photo_sort, "oldest");
+  assert.deepEqual(next.photos.map((photo) => photo.base), ["oldest", "newest"]);
+  assert.ok(next.revision > snapshot.revision);
+  store.close();
 });
 
 test("persists branding settings and constrains uploaded logos", async () => {
@@ -426,14 +637,33 @@ test("persists branding settings and constrains uploaded logos", async () => {
   assert.equal(svgMetadata.hasAlpha, true);
   const { data } = await svgOutput.ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   assert.equal(data[3], 0);
+  const eagerIcon = await store.requireLogoIcon();
+  await rm(eagerIcon);
+  const [icon, duplicateIcon] = await Promise.all([store.requireLogoIcon(), store.requireLogoIcon()]);
+  assert.equal(duplicateIcon, icon);
+  const iconImage = sharp(await readFile(icon));
+  assert.deepEqual(
+    await iconImage.metadata().then(({ format, width, height, hasAlpha }) => ({ format, width, height, hasAlpha })),
+    { format: "png", width: 512, height: 512, hasAlpha: true },
+  );
+  assert.equal((await iconImage.ensureAlpha().raw().toBuffer({ resolveWithObject: true })).data[3], 0);
 
   const tooWide = await pngBuffer(1200, 80, "#2cb4fb");
   await assert.rejects(
     store.saveLogo({ data_url: `data:image/png;base64,${tooWide.toString("base64")}` }),
     /too wide or tall/,
   );
+  const savedIcon = await store.requireLogoIcon();
   assert.equal((await store.deleteLogo()).logo, null);
   await assert.rejects(store.requireLogo());
+  await assert.rejects(store.requireLogoIcon());
+  await assert.rejects(readFile(savedIcon), (error) => error.code === "ENOENT");
+  await Promise.all([
+    writeFile(store.logoFile, "stale logo"),
+    writeFile(store.logoIconFile, "stale icon"),
+  ]);
+  await assert.rejects(store.requireLogo(), (error) => error.status === 404);
+  await assert.rejects(store.requireLogoIcon(), (error) => error.status === 404);
 });
 
 test("gallery HTTP API switches between protected tiles and the globally enabled inline image", async () => {
@@ -465,7 +695,11 @@ test("gallery HTTP API switches between protected tiles and the globally enabled
   try {
     const photos = await fetch(`${origin}/gallery/api/photos?date=${date}`).then((response) => response.json());
     assert.deepEqual(photos.photos.map((photo) => photo.base), ["visible"]);
+    assert.equal(photos.photo_sort, "newest");
+    assert.deepEqual(Object.keys(photos.photos[0]).sort(), PUBLIC_PHOTO_KEYS);
+    assert.equal(Object.hasOwn(photos.photos[0], "original_name"), false);
     assert.equal(photos.photos[0].capture_clock, "2026-06-13T17:00:00.000Z");
+    assert.equal(Object.hasOwn(photos.photos[0], "captured_at"), false);
     assert.equal(photos.photos[0].thumbnail_url, `/gallery/thumb/${date}/visible.webp`);
     assert.equal(Object.hasOwn(photos.photos[0], "image_url"), false);
     const disabledImage = await fetch(imageUrl, { headers: imageHeaders });
@@ -658,10 +892,12 @@ test("paginates large gallery metadata with stable cursors", async () => {
     assert.equal(firstResponse.status, 200);
     assert.equal(firstResponse.headers.get("cache-control"), "private, no-cache");
     const first = await firstResponse.json();
-    const photoResponseKeys = ["date_folder", "next_cursor", "photos", "revision", "total"];
+    const photoResponseKeys = ["date_folder", "next_cursor", "photo_sort", "photos", "revision", "total"];
     assert.deepEqual(Object.keys(first).sort(), photoResponseKeys);
+    assert.equal(first.photo_sort, "newest");
     assert.equal(first.total, 4);
     assert.deepEqual(first.photos.map((photo) => photo.base), ["charlie", "bravo"]);
+    assert.deepEqual(Object.keys(first.photos[0]).sort(), PUBLIC_PHOTO_KEYS);
     assert.ok(first.next_cursor);
 
     await publish(gallery, "newest", true, "2026-06-13T14:00:00.000Z");
@@ -689,10 +925,13 @@ test("paginates large gallery metadata with stable cursors", async () => {
     assert.deepEqual(Object.keys(legacy).sort(), photoResponseKeys);
     assert.deepEqual(legacy.photos.map((photo) => photo.base), allPages);
     assert.equal(legacy.next_cursor, null);
+    assert.deepEqual(Object.keys(legacy.photos[0]).sort(), PUBLIC_PHOTO_KEYS);
     const schema = JSON.parse(await readFile(path.resolve("../../docs/schemas/gallery-api.schema.json"), "utf8"));
     const photoResponseSchema = schema.oneOf.find((branch) => branch.properties?.photos);
     assert.deepEqual([...photoResponseSchema.required].sort(), photoResponseKeys);
     assert.deepEqual(Object.keys(photoResponseSchema.properties).sort(), photoResponseKeys);
+    assert.deepEqual([...schema.$defs.photo.required].sort(), PUBLIC_PHOTO_KEYS);
+    assert.deepEqual(Object.keys(schema.$defs.photo.properties).sort(), PUBLIC_PHOTO_KEYS);
     assert.equal((await fetch(`${origin}/gallery/api/photos?date=${date}&limit=0`)).status, 400);
     assert.equal((await fetch(`${origin}/gallery/api/photos?date=${date}&limit=2&cursor=bad`)).status, 400);
     const capped = await fetch(`${origin}/gallery/api/photos?date=${date}&limit=999`).then((response) => response.json());
@@ -833,6 +1072,9 @@ test("gallery admin is protected and proxies management through the internal ser
     await publish(gallery, "hero", true, "2026-06-13T19:00:00.000Z");
     expireCatalog(store);
     const settingsUrl = `${base}/gallery/admin/api/galleries/${date}/settings`;
+    assert.equal((await fetch(settingsUrl)).status, 401);
+    const defaultGallerySettings = await fetch(settingsUrl, { headers: { authorization } }).then((response) => response.json());
+    assert.equal(defaultGallerySettings.settings.photo_sort, "newest");
     assert.equal((await fetch(settingsUrl, {
       method: "PUT",
       headers: { "content-type": "application/json" },
@@ -841,10 +1083,18 @@ test("gallery admin is protected and proxies management through the internal ser
     const settings = await fetch(settingsUrl, {
       method: "PUT",
       headers: { authorization, "content-type": "application/json" },
-      body: JSON.stringify({ cover_base: "hero", show_download_button: false }),
+      body: JSON.stringify({ cover_base: "hero", photo_sort: "filename_desc", show_download_button: false }),
     }).then((response) => response.json());
     assert.equal(settings.settings.cover_base, "hero");
+    assert.equal(settings.settings.photo_sort, "filename_desc");
     assert.equal(Object.hasOwn(settings.settings, "show_download_button"), false);
+    const publicOrder = await fetch(`${base}/gallery/api/photos?date=${date}&photo_sort=newest`).then((response) => response.json());
+    assert.equal(publicOrder.photo_sort, "filename_desc");
+    assert.equal((await fetch(settingsUrl, {
+      method: "PUT",
+      headers: { authorization, "content-type": "application/json" },
+      body: JSON.stringify({ photo_sort: "visitor_choice" }),
+    })).status, 400);
     const dateSettings = (await fetch(`${base}/gallery/api/dates`).then((response) => response.json())).dates
       .find((item) => item.date_folder === date);
     assert.equal(dateSettings.cover_base, "hero");
@@ -896,6 +1146,12 @@ test("wires cover selection, global downloads, flowing photos, and viewer modes 
   assert.match(adminHtml, /id="cover-action"/);
   assert.match(adminHtml, /id="cover-picker"[^>]+role="dialog"[^>]+aria-modal="true"/);
   assert.match(adminHtml, /id="cancel-cover-picker"/);
+  assert.match(adminHtml, /id="photo-sort"[^>]+aria-describedby="photo-sort-status"/);
+  for (const photoSort of ["newest", "oldest", "filename_asc", "filename_desc", "captured_asc", "captured_desc"]) {
+    assert.match(adminHtml, new RegExp(`<option value="${photoSort}">`));
+  }
+  assert.match(adminHtml, /<option value="newest">Processed — newest first \(default\)<\/option>/);
+  assert.match(adminHtml, /<option value="oldest">Processed — oldest first<\/option>/);
   assert.doesNotMatch(adminHtml, /id="confirm-filename"/);
   assert.match(adminHtml, /id="downloads-disabled"[^>]+aria-pressed="true"/);
   assert.match(adminHtml, /id="downloads-enabled"[^>]+aria-pressed="false"/);
@@ -905,11 +1161,16 @@ test("wires cover selection, global downloads, flowing photos, and viewer modes 
   assert.match(adminHtml, /class="photo-details">\s*<span><strong><\/strong><small><\/small><\/span>\s*<button class="trash-photo-button icon-danger-button"/);
   assert.doesNotMatch(adminHtml, /class="photo-actions"/);
   assert.match(adminHtml, /class="cover-star"[^>]+role="img"[^>]+aria-label="Current gallery cover"[^>]*>\s*<svg[^>]+viewBox="0 0 24 24"/);
-  assert.match(adminHtml, /admin\.css\?v=gallery-owner-settings-10/);
-  assert.match(adminHtml, /admin\.js\?v=gallery-owner-settings-11/);
+  assert.match(adminHtml, /admin\.css\?v=gallery-photo-sort-1/);
+  assert.match(adminHtml, /admin\.js\?v=gallery-photo-sort-1/);
   assert.match(adminHtml, /id="support-tab"[^>]+aria-controls="support-view"/);
   assert.match(adminHtml, /FRAME will usually identify it automatically/);
   assert.match(adminScript, /cover_base: photo\.base/);
+  assert.match(adminScript, /requestJson\(`\/gallery\/admin\/api\/galleries\/\$\{encodeURIComponent\(dateFolder\)\}\/settings`\)/);
+  assert.match(adminScript, /\{ photo_sort: photoSort \}/);
+  assert.match(adminScript, /const loadId = \+\+state\.albumLoadId;[\s\S]*const album = await loadSelectedAlbum\(dateFolder\);[\s\S]*if \(loadId !== state\.albumLoadId\) return;[\s\S]*state\.selectedDate = dateFolder/);
+  assert.match(adminScript, /return \{ photos: photos\.photos, settings: settings\.settings \}/);
+  assert.match(adminScript, /result = await requestJson\(`[\s\S]*method: "PUT"[\s\S]*state\.gallerySettings = result\.settings;[\s\S]*Album refresh failed/);
   assert.match(adminScript, /card\.querySelector\("img"\)\.alt = ""/);
   assert.match(adminScript, /trash: `<svg class="trash-icon"[^>]+><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 11v6M14 11v6"\/><\/svg>`/);
   assert.match(adminScript, /class="icon-danger-button social-remove"[^>]+aria-label="Remove social link"[^>]*>\$\{icons\.trash\}<\/button>/);
@@ -967,12 +1228,16 @@ test("wires cover selection, global downloads, flowing photos, and viewer modes 
   assert.match(galleryStyles, /\.is-photo-grid main\s*\{[^}]*width:\s*100%/);
   assert.match(galleryStyles, /\.photo-load-more\s*\{[^}]*margin:\s*18px auto 0/);
   assert.match(galleryScript, /const PHOTO_PAGE_SIZE = 60/);
+  assert.match(galleryScript, /const PHOTO_SORTS = new Set\(\["newest", "oldest", "filename_asc", "filename_desc", "captured_asc", "captured_desc"\]\)/);
+  assert.doesNotMatch(galleryScript, /original_name|captured_at|function sortPhotos|function comparePhotos/);
+  assert.match(galleryScript, /async function loadPhotoPrefix\(firstPage, targetCount\)/);
+  assert.match(galleryScript, /photoApiUrl\(false, page\.next_cursor, Math\.min\(PHOTO_PAGE_SIZE, targetCount - photos\.length\)\)/);
   assert.match(galleryScript, /new IntersectionObserver/);
   assert.match(galleryScript, /requestJson\(photoApiUrl\(requestAllPhotos\)\)/);
   assert.match(galleryScript, /if \(state\.refreshing\) return;[\s\S]*state\.refreshing = true/);
   assert.match(galleryScript, /finally\s*\{\s*state\.refreshing = false/);
   assert.match(galleryScript, /const reconcileLoadedPhotos = !forceRender[\s\S]*&& !appendOnly/);
-  assert.match(galleryScript, /reconcileLoadedPhotos && firstPhotoResult\.next_cursor[\s\S]*photoApiUrl\(true\)/);
+  assert.match(galleryScript, /reconcileLoadedPhotos && firstPhotoResult\.next_cursor[\s\S]*loadPhotoPrefix\(firstPhotoResult, Math\.max\(PHOTO_PAGE_SIZE, previousLoadedCount\)\)/);
   assert.match(galleryScript, /state\.renderedPhotoCount = Math\.min\(state\.photos\.length, Math\.max\(previousRenderedCount, PHOTO_PAGE_SIZE\)\)/);
   assert.match(galleryScript, /if \(total > state\.photoTotal && additions\.length === total - state\.photoTotal\)/);
   assert.match(galleryScript, /async function loadMorePhotos\(\)/);
@@ -984,7 +1249,11 @@ test("wires cover selection, global downloads, flowing photos, and viewer modes 
   assert.doesNotMatch(loadMoreSource, /state\.photoRevision\s*=/);
   assert.match(loadMoreSource, /const cursor = state\.photoNextCursor/);
   assert.match(loadMoreSource, /const revision = state\.photoRevision/);
+  assert.match(loadMoreSource, /normalizePhotoSort\(result\.photo_sort\) !== photoSort/);
   assert.match(loadMoreSource, /state\.photoNextCursor !== cursor \|\| state\.photoRevision !== revision \|\| Number\(result\.revision\) !== revision/);
+  assert.match(loadMoreSource, /error\.status === 400 && error\.message === "Photo cursor is invalid\."[\s\S]*await refresh\(true\)/);
+  assert.match(loadMoreSource, /state\.photos = \[\.\.\.state\.photos, \.\.\.result\.photos\.filter/);
+  assert.doesNotMatch(loadMoreSource, /sortPhotos|\.sort\(/);
   assert.match(loadMoreSource, /finally\s*\{[\s\S]*state\.photosLoading = false;[\s\S]*updatePhotoLoadMore\(\)/);
   assert.match(loadMoreSource, /\bappendPhotoCards\s*\(/);
   const appendStart = galleryScript.indexOf("function appendPhotoCards");
@@ -994,6 +1263,7 @@ test("wires cover selection, global downloads, flowing photos, and viewer modes 
   assert.match(appendSource, /elements\.photoGallery\.append\(/);
   assert.doesNotMatch(appendSource, /elements\.photoGallery\.replaceChildren/);
   assert.match(galleryScript, /async function ensureAllPhotos/);
+  assert.match(galleryScript, /async function ensureAllPhotos[\s\S]*requestJson\(photoApiUrl\(true\)\)/);
   assert.match(galleryScript, /async function ensureAllPhotos[\s\S]*const revision = state\.photoRevision[\s\S]*if \(state\.photoRevision !== revision\) return false/);
   assert.match(galleryScript, /async function selectExplorePhoto[\s\S]*state\.view !== "explore" && !\(await ensureAllPhotos\(\)\)/);
   assert.match(galleryScript, /card\.dataset\.base = photo\.base/);
@@ -1047,7 +1317,8 @@ test("wires cover selection, global downloads, flowing photos, and viewer modes 
   assert.match(galleryStyles, /html:has\(\.lightbox\[open\]\)\s*\{[^}]*overflow:\s*hidden/);
   assert.match(galleryStyles, /\.topbar\s*\{[^}]*position:\s*sticky[^}]*z-index:\s*1100[^}]*top:\s*0/);
   assert.match(galleryHtml, /styles\.css\?v=gallery-lightbox-scroll-1/);
-  assert.match(galleryHtml, /gallery\.js\?v=gallery-clipboard-2/);
+  assert.match(galleryHtml, /gallery\.js\?v=gallery-photo-sort-1/);
+  assert.match(galleryScript, /error\.status = response\.status/);
   assert.match(galleryScript, /Automatic copy was blocked\. Press and hold the link to copy it\./);
   assert.match(galleryHtml, /<script[^>]*id="leaflet-script"[^>]*defer[^>]*src="https:\/\/unpkg\.com\/leaflet/);
   assert.match(galleryHtml, /<script defer src="https:\/\/unpkg\.com\/qrcodejs/);
@@ -1151,17 +1422,24 @@ async function publish(
   processedAt = "2026-06-13T12:00:00.000Z",
   width = 120,
   height = 80,
+  details = {},
 ) {
   await sharp({ create: { width, height, channels: 3, background: "#2cb4fb" } })
     .jpeg()
     .toFile(path.join(directory, `${base}.jpg`));
-  await writeFile(path.join(directory, `${base}.json`), JSON.stringify({
+  const sidecar = {
+    original_name: details.originalName ?? `${base}.jpg`,
     width,
     height,
     orientation: 0,
     processed_at: processedAt,
-    exif: { Photo: { DateTimeOriginal: "2026-06-13T17:00:00.000Z" } },
-  }));
+    ...("captureClock" in details ? details.captureClock === null ? {} : { capture_clock: details.captureClock } : {}),
+    ...("capturedAt" in details ? details.capturedAt === null ? {} : { captured_at: details.capturedAt } : {}),
+    exif: details.legacyCaptureClock === null
+      ? {}
+      : { Photo: { DateTimeOriginal: details.legacyCaptureClock ?? "2026-06-13T17:00:00.000Z" } },
+  };
+  await writeFile(path.join(directory, `${base}.json`), JSON.stringify(sidecar));
   await writeFile(path.join(directory, `${base}.txt`), "Camera: FRAME Test\n");
   if (ready) await writeFile(path.join(directory, `${base}.ready`), "ready\n");
 }

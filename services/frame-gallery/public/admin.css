@@ -133,6 +133,7 @@ h1, h2 { margin: 2px 0; }
 .cover-management-panel p[data-kind="error"] { color: var(--danger); }
 .cover-management-panel:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .cover-management-panel > button { flex: none; }
+.photo-sort-control { width: min(100%, 360px); flex: none; }
 .section-heading { margin-bottom: 12px; }
 .section-actions { display: flex; justify-content: end; gap: 8px; }
 .section-actions a { display: inline-flex; align-items: center; text-decoration: none; }
