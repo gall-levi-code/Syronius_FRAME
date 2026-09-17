@@ -77,7 +77,7 @@ Windows also has `apps/frame-setup/scripts/build-windows.ps1`, which installs lo
 and builds the NSIS installer. Outputs go to `apps/frame-setup/release/`:
 
 - `FRAME-Setup-<version>-win-x64.exe`
-- `FRAME-Setup-<version>-linux-x64.AppImage`
+- `FRAME-Setup-<version>-linux-x86_64.AppImage`
 
 The Linux AppImage needs executable permission (`chmod +x FRAME-Setup-*.AppImage`). Release signing
 credentials are supplied by the release environment; a local build without them is unsigned. The

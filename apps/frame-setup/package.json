@@ -44,6 +44,7 @@
     "nsis": { "oneClick": false, "perMachine": false, "allowToChangeInstallationDirectory": true },
     "linux": {
       "target": [{ "target": "AppImage", "arch": ["x64"] }],
+      "executableName": "frame-setup",
       "category": "Utility",
       "icon": "public/frame-logo-square.png"
     }
