@@ -190,3 +190,31 @@ Control links are sensitive. Only share them with trusted operators.
 Multiple streamers can use the same Discord voice session with separate OBS mixes.
 
 If Audio Bridge is exposed through a tunnel or public hostname, make sure WebSockets are supported.
+
+Each audio listener has a 96,000-byte WebSocket send-buffer limit, equivalent to 500 ms of the
+48 kHz stereo 16-bit PCM stream. Before sending another complete 20 ms frame, the bridge disconnects
+only listeners that would exceed that limit. Their browser sources reconnect automatically; other
+listeners continue uninterrupted. This bounds the bridge's application send queue, separate from
+the intentional audio delay and buffering in the network or browser.
+
+## Mix Configuration Benchmark
+
+Run from this service directory:
+
+```text
+npm run build
+node tests/mix-inputs.bench.mjs
+```
+
+The benchmark uses the real JSON store and session mix-input derivation, with five warmed batches
+of 2,000 calls per case. File setup is outside the measurement. On September 8, 2026, Node 24.17.0
+on Windows with a Ryzen 7 5800X produced these per-call medians:
+
+| Profiles / users | Config size | Config clone | Full mix-input derivation | CPU at 50 calls/sec |
+| --- | --- | --- | --- | --- |
+| 1 / 8 | 1.4 KB | 0.0076 ms | 0.0098 ms | 0.04% of one core |
+| 8 / 64 | 33.3 KB | 0.1904 ms | 0.2825 ms | 1.33% of one core |
+
+The full path includes the clone. It stays below 0.3 ms of the 20 ms mixer interval in these cases,
+so derived-settings caching is deferred. Rerun on the deployment hardware before changing that
+decision; larger guild configurations or many simultaneous guilds can change the cost.

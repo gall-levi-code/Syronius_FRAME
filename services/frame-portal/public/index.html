@@ -199,10 +199,14 @@
               <span>MB</span>
             </span>
           </label>
+          <label>Original backup retention (days)
+            <input id="pipeline-archive-retention" type="number" min="0" max="36500" step="1" value="14" required aria-describedby="pipeline-retention-help">
+          </label>
           <div class="pipeline-actions">
             <button id="pipeline-save" class="text-button primary-text-button" type="submit">Save</button>
           </div>
         </form>
+        <p id="pipeline-retention-help">Original backups expire after this many days from when the backup was created. Set 0 to keep them indefinitely. Gallery photos and trash are never deleted automatically.</p>
       </section>
 
       <footer class="portal-footer">

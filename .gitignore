@@ -1,11 +1,16 @@
 /.env
 /docker-compose.yml
+/frame-release.json
+/frame-source-commit
+/docker-compose.release.json
+/.frame-deployment-backup/
 /data/
 /cf_token.txt
 /graphify-out/
 /.codex-remote-attachments/
 /apps/*/node_modules/
 /apps/*/dist/
+/apps/*/release/
 /apps/*/src-tauri/target/
 /services/*/node_modules/
 /services/*/dist/

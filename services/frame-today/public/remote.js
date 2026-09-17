@@ -23,14 +23,36 @@ const elements = {
   message: document.querySelector("#remote-message"),
   themeToggle: document.querySelector("#theme-toggle"),
   headerCollapse: document.querySelector("#header-collapse"),
+  playbackState: document.querySelector("#playback-state"),
+  remaining: document.querySelector("#playback-remaining"),
+  followLatest: document.querySelector("#follow-latest"),
+  newPhotos: document.querySelector("#new-photo-count"),
+  viewerFeedback: document.querySelector("#viewer-feedback"),
+  thumbnailsNewest: document.querySelector("#thumbnails-newest"),
+  settings: document.querySelector("#viewer-settings"),
+  settingsToggle: document.querySelector("#viewer-settings-toggle"),
+  settingsClose: document.querySelector("#viewer-settings-close"),
+  settingsMessage: document.querySelector("#settings-message"),
+  overlayMode: document.querySelector("#overlay-mode"),
+  overlayCorner: document.querySelector("#overlay-corner"),
+  overlayAutoHide: document.querySelector("#overlay-auto-hide"),
+  cleanOutput: document.querySelector("#clean-output"),
+  keepAwake: document.querySelector("#keep-awake"),
+  wakeLockStatus: document.querySelector("#wake-lock-status"),
 };
 
 let socket;
 let state = null;
 let thumbnailsVisible = false;
+let thumbnailKey = "";
 let previewAnimation = null;
 let presentationKey = "";
 let stateReceivedAt = 0;
+let viewerStatus = null;
+let wakeLock = null;
+let wakeLockWanted = false;
+let wakeLockRequest = null;
+let wakeLockError = "";
 const durationSteps = [1, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30, 45, 60, 90, 120];
 
 initializeTheme();
@@ -61,8 +83,9 @@ elements.thumbnailsToggle.addEventListener("click", () => {
   setThumbnailsVisible(!thumbnailsVisible);
 });
 elements.thumbnailsClose.addEventListener("click", () => setThumbnailsVisible(false));
-document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && thumbnailsVisible) setThumbnailsVisible(false);
+elements.thumbnailSection.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  setThumbnailsVisible(false);
 });
 elements.backgroundToggle.addEventListener("click", () => send({
   type: "SET_SHOW_BACKGROUND",
@@ -78,6 +101,38 @@ elements.interval.addEventListener("change", () => send({
   interval_ms: durationSteps[Number(elements.interval.value)] * 1000,
 }));
 elements.image.addEventListener("load", syncPresentation);
+elements.followLatest.addEventListener("click", () => send({ type: "FOLLOW_LATEST" }));
+elements.thumbnailsNewest.addEventListener("click", () => {
+  elements.thumbnails.scrollTop = 0;
+});
+elements.settingsToggle.addEventListener("click", () => {
+  elements.settings.showModal();
+  elements.settingsClose.focus();
+});
+elements.settingsClose.addEventListener("click", () => elements.settings.close());
+elements.settings.addEventListener("close", () => elements.settingsToggle.focus());
+for (const input of [elements.overlayMode, elements.overlayCorner, elements.overlayAutoHide]) {
+  input.addEventListener("change", () => send({
+    type: "SET_OVERLAY",
+    mode: elements.overlayMode.value,
+    corner: elements.overlayCorner.value,
+    auto_hide: elements.overlayAutoHide.checked,
+  }));
+}
+elements.cleanOutput.addEventListener("change", () => send({ type: "SET_CLEAN_OUTPUT", clean_output: elements.cleanOutput.checked }));
+elements.keepAwake.addEventListener("change", () => {
+  wakeLockWanted = elements.keepAwake.checked;
+  wakeLockError = "";
+  if (wakeLockWanted) void requestWakeLock();
+  else void releaseWakeLock();
+  renderWakeLock();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") void requestWakeLock();
+  else void releaseWakeLock();
+});
+window.addEventListener("pagehide", () => void releaseWakeLock());
+renderWakeLock();
 
 connect();
 requestAnimationFrame(renderProgress);
@@ -139,10 +194,16 @@ function connect() {
       elements.message.textContent = "";
     } else if (message.type === "ERROR") {
       elements.message.textContent = message.error;
+      elements.settingsMessage.textContent = message.error;
+    } else if (message.type === "VIEWER_STATUS") {
+      viewerStatus = message;
+      renderViewerStatus();
     }
   });
   socket.addEventListener("close", () => {
+    viewerStatus = null;
     setConnection("Reconnecting", "error");
+    renderViewerStatus();
     setTimeout(connect, 1200);
   });
   socket.addEventListener("error", () => socket.close());
@@ -151,8 +212,10 @@ function connect() {
 function send(command) {
   if (socket?.readyState !== WebSocket.OPEN) {
     elements.message.textContent = "Remote is reconnecting. Try again in a moment.";
+    elements.settingsMessage.textContent = elements.message.textContent;
     return;
   }
+  elements.settingsMessage.textContent = "";
   socket.send(JSON.stringify(command));
 }
 
@@ -181,28 +244,78 @@ function render() {
   elements.interval.setAttribute("aria-valuetext", durationLabel(state.interval_ms));
   elements.exif.setAttribute("aria-pressed", String(state.show_exif));
   elements.backgroundToggle.setAttribute("aria-pressed", String(state.show_background));
-  elements.count.textContent = `${state.count_today} photo${state.count_today === 1 ? "" : "s"}`;
-  elements.thumbnails.replaceChildren(...state.photos.map((item, index) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `thumbnail-button${index === state.current_index ? " active" : ""}`;
-    button.title = friendlyBase(item.base);
-    button.innerHTML = `<img src="${item.thumbnail_url}" alt="">`;
-    button.addEventListener("click", () => {
-      send({ type: "GOTO_INDEX", index });
-      setThumbnailsVisible(false);
-    });
-    return button;
-  }));
+  elements.playbackState.textContent = state.following_latest ? "Following latest" : state.playback_state === "playing" ? "Playing" : "Paused";
+  elements.followLatest.hidden = Boolean(state.following_latest);
+  const newCount = state.new_photos_count || 0;
+  elements.newPhotos.hidden = !newCount;
+  elements.newPhotos.textContent = `${newCount} new`;
+  elements.newPhotos.setAttribute("aria-label", `${newCount} new photo${newCount === 1 ? "" : "s"}`);
+  elements.overlayMode.value = state.overlay_mode || (state.show_exif ? "full" : "hidden");
+  elements.overlayCorner.value = state.overlay_corner || "bottom-left";
+  elements.overlayAutoHide.checked = Boolean(state.overlay_auto_hide);
+  elements.cleanOutput.checked = Boolean(state.clean_output);
+  renderViewerStatus();
+  renderThumbnails();
   syncPresentation();
+}
+
+function renderThumbnails() {
+  const recent = state.photos.slice(-60).reverse();
+  elements.count.textContent = `Latest ${recent.length} of ${state.count_today} photos · Newest first`;
+  const key = JSON.stringify([state.date_folder, recent.map((photo) => [photo.base, photo.thumbnail_url])]);
+  if (key !== thumbnailKey) {
+    const scrollTop = elements.thumbnails.scrollTop;
+    const focusedBase = elements.thumbnails.contains(document.activeElement) ? document.activeElement.dataset.base : null;
+    elements.thumbnails.replaceChildren(...recent.map((item) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "thumbnail-button";
+      button.dataset.base = item.base;
+      button.title = friendlyBase(item.base);
+      button.setAttribute("aria-label", `Show ${friendlyBase(item.base)}`);
+      const image = document.createElement("img");
+      image.src = item.thumbnail_url;
+      image.alt = "";
+      image.loading = "lazy";
+      image.decoding = "async";
+      button.append(image);
+      const badge = document.createElement("span");
+      badge.className = "thumbnail-current";
+      badge.textContent = "Current";
+      badge.setAttribute("aria-hidden", "true");
+      button.append(badge);
+      button.addEventListener("click", () => {
+        const index = state.photos.findIndex((photo) => photo.base === item.base);
+        if (index < 0) return;
+        send({ type: "GOTO_INDEX", index });
+        setThumbnailsVisible(false);
+      });
+      return button;
+    }));
+    thumbnailKey = key;
+    elements.thumbnails.scrollTop = scrollTop;
+    if (focusedBase) {
+      ([...elements.thumbnails.children].find((button) => button.dataset.base === focusedBase) || elements.thumbnailsClose).focus({ preventScroll: true });
+    }
+  }
+  for (const button of elements.thumbnails.children) {
+    const active = button.dataset.base === state.current_base;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  }
 }
 
 function setThumbnailsVisible(visible) {
   thumbnailsVisible = visible;
   elements.thumbnailsToggle.setAttribute("aria-pressed", String(visible));
-  elements.thumbnailSection.hidden = !visible;
-  if (visible) elements.thumbnailsClose.focus();
-  else elements.thumbnailsToggle.focus();
+  if (visible) {
+    if (!elements.thumbnailSection.open) elements.thumbnailSection.showModal();
+    elements.thumbnails.scrollTop = 0;
+    elements.thumbnailsClose.focus();
+  } else {
+    elements.thumbnailSection.close();
+    elements.thumbnailsToggle.focus();
+  }
 }
 
 function syncPresentation() {
@@ -240,6 +353,10 @@ function renderProgress() {
   elements.progress.hidden = !visible;
   const progress = visible ? Math.max(0, Math.min(1, elapsedSince(state.interval_started_at) / (end - start))) : 0;
   elements.progress.style.transform = `scaleX(${progress})`;
+  elements.remaining.hidden = !visible;
+  const remaining = visible ? Math.max(0, Math.ceil((end - start - elapsedSince(state.interval_started_at)) / 1000)) : 0;
+  const remainingText = `${remaining}s remaining`;
+  if (elements.remaining.textContent !== remainingText) elements.remaining.textContent = remainingText;
   requestAnimationFrame(renderProgress);
 }
 
@@ -258,6 +375,79 @@ function setConnection(text, className) {
 function durationLabel(ms) {
   const seconds = Math.round(ms / 1000);
   return `${seconds} second${seconds === 1 ? "" : "s"}`;
+}
+
+function renderViewerStatus() {
+  const key = state?.current_photo ? `${state.date_folder}/${state.current_base}` : null;
+  let text = "Checking viewer…";
+  let level = "waiting";
+  if (socket?.readyState !== WebSocket.OPEN) {
+    text = "Remote reconnecting · viewer status unavailable";
+  } else if (viewerStatus?.photo_key === key) {
+    const { viewers, displayed, failed } = viewerStatus;
+    if (!viewers) text = "No viewer connected";
+    else if (!key) text = "Viewer connected · waiting for a photo";
+    else if (failed) {
+      text = `Image unavailable on ${failed} of ${viewers} viewer${viewers === 1 ? "" : "s"}`;
+      level = "error";
+    } else if (displayed === viewers) {
+      text = viewers === 1 ? "Photo displayed" : `Photo displayed on ${viewers} viewers`;
+      level = "ready";
+    } else text = `Loading photo${displayed ? ` · ${displayed}/${viewers} ready` : "…"}`;
+  }
+  elements.viewerFeedback.textContent = text;
+  elements.viewerFeedback.dataset.level = level;
+}
+
+async function requestWakeLock() {
+  if (!wakeLockWanted || document.visibilityState !== "visible" || wakeLock || wakeLockRequest || !window.isSecureContext || !navigator.wakeLock) return;
+  wakeLockError = "";
+  let releasedBeforeUse = false;
+  try {
+    wakeLockRequest = navigator.wakeLock.request("screen");
+    renderWakeLock();
+    const lock = await wakeLockRequest;
+    if (!wakeLockWanted || document.visibilityState !== "visible") {
+      releasedBeforeUse = true;
+      await lock.release();
+      return;
+    }
+    wakeLock = lock;
+    lock.addEventListener("release", () => {
+      if (wakeLock === lock) {
+        wakeLock = null;
+        renderWakeLock();
+      }
+    });
+  } catch {
+    wakeLockError = "Not active — your browser or battery settings prevented keeping the screen awake.";
+  } finally {
+    wakeLockRequest = null;
+    renderWakeLock();
+    if (releasedBeforeUse && wakeLockWanted && document.visibilityState === "visible") void requestWakeLock();
+  }
+}
+
+async function releaseWakeLock() {
+  const lock = wakeLock;
+  wakeLock = null;
+  if (lock && !lock.released) {
+    try { await lock.release(); } catch {}
+  }
+  renderWakeLock();
+}
+
+function renderWakeLock() {
+  const supported = window.isSecureContext && Boolean(navigator.wakeLock);
+  elements.keepAwake.disabled = !supported;
+  elements.keepAwake.checked = wakeLockWanted;
+  elements.wakeLockStatus.textContent = !window.isSecureContext ? "Requires a secure HTTPS connection."
+    : !supported ? "This browser does not support keeping the screen awake."
+    : !wakeLockWanted ? "Screen may sleep"
+    : document.visibilityState !== "visible" ? "Paused while this remote is in the background"
+    : wakeLock && !wakeLock.released ? "Active — screen will stay awake"
+    : wakeLockRequest ? "Requesting screen wake lock…"
+    : wakeLockError || "Not active — toggle off and on to retry.";
 }
 
 function nearestDurationIndex(ms) {

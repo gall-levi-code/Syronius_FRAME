@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted
+Superseded for the desktop implementation by [ADR 0012](0012-electron-online-installer.md).
+The original Tauri prototype remains in the repository as migration reference.
 
 ## Context
 

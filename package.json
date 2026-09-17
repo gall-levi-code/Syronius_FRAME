@@ -4,7 +4,7 @@
   "private": true,
   "description": "Verification tooling for the Syronius FRAME service stack.",
   "scripts": {
-    "test": "node --test tests/frame-contract.test.mjs",
+    "test": "node --test tests/*.test.mjs",
     "verify": "node scripts/verify.mjs",
     "setup:dev": "npm --prefix apps/frame-setup run dev",
     "graphify:update": "graphify update . --force"

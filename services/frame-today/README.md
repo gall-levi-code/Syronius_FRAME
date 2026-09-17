@@ -84,13 +84,36 @@ Use the remote to:
 
 - Play, pause, or stop the slideshow.
 - Move backward or forward through photos.
+- Choose from the latest 60 photos in the current gallery, newest first, using the thumbnail picker.
 - Change the slideshow timing.
 - Show or hide camera details.
 - Show or hide the viewer background.
 - Scroll the current image once.
 
-Stop returns the viewer to the newest published photo. Scroll image once works when playback is
-paused or stopped.
+Pausing or selecting a photo holds that photo while uploads continue, including across midnight.
+The remote shows how many new photos arrived. **Follow latest** returns to the newest published
+photo and follows subsequent uploads; Stop also returns to this mode. Playing starts a slideshow
+in the active gallery, and new uploads do not reset its countdown. Scroll image once works when
+playback is paused or stopped.
+
+The thumbnail picker stays inside the screen with a fixed heading and close button. Its larger,
+uncropped previews scroll independently and keep their position as slideshow playback advances.
+The current photo has a **Current** badge, and **Back to newest** returns to the top of the picker.
+
+The remote displays the playback mode, seconds remaining, and feedback from connected viewers:
+loading, photo displayed, or image unavailable. Multiple viewers are counted separately. This
+confirms image rendering in viewer browsers; it does not indicate whether an OBS scene is on air.
+The viewer prepares the next slideshow image in advance and changes camera details with the image.
+
+Open **Viewer settings** beside the playback status to choose compact, full, or hidden camera
+information, select its corner, or fade it out after five seconds. **Clean OBS output** keeps
+connection and loading messages off the viewer and on the remote. The camera-information button
+still toggles visibility and remembers the last visible style.
+
+**Keep screen awake** is optional and applies to that remote tab. Its status reports whether a
+screen wake lock is actually active. It requires a supported browser in a secure context (HTTPS,
+or localhost during development); battery settings can prevent it. The lock is released in the
+background and requested again when the remote becomes visible.
 
 The public gallery is available at:
 
@@ -128,6 +151,10 @@ Photo Stage reads published photo data. It does not upload, delete, hide, restor
 photos.
 
 Gallery management stays in FRAME Photo Gallery Admin.
+
+Dashboard library summaries are reused until the pipeline publication revision changes, with a
+one-minute reconciliation for manual file edits. Concurrent dashboard requests share one scan.
+Library and pipeline polling pause in hidden tabs and resume when the dashboard becomes visible.
 
 Photo Stage shows useful camera and exposure details, but it does not persist or display
 GPS/location metadata.

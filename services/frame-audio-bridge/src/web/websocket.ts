@@ -14,6 +14,8 @@ import type { VoiceManager } from "../voice/voiceManager";
 
 type ClientKind = "audio" | "overlay" | "control";
 const CLIENT_STATS_INTERVAL_MS = 15_000;
+// 500 ms of 48 kHz stereo int16 PCM; disconnect stale listeners so they can rejoin live.
+const MAX_AUDIO_BUFFER_BYTES = 48_000 * 2 * 2 / 2;
 
 export interface ClientCounts {
   audio: number;
@@ -312,6 +314,11 @@ export class BridgeWebSocketServer {
       }
 
       if (client.ws.readyState === WebSocket.OPEN) {
+        if (client.ws.bufferedAmount + chunk.pcm.length > MAX_AUDIO_BUFFER_BYTES) {
+          console.warn(`[audio] disconnecting slow listener for ${client.guildKey}`);
+          client.ws.terminate();
+          continue;
+        }
         client.ws.send(chunk.pcm, { binary: true });
       }
     }

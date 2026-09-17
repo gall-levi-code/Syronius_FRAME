@@ -29,7 +29,7 @@
       })();
     </script>
     <script src="/assets/frame-theme.js?v=global-theme-v1"></script>
-    <link rel="stylesheet" href="/today/assets/today.css?v=collapsible-remote-header-1">
+    <link rel="stylesheet" href="/today/assets/today.css?v=stage-controls-1">
   </head>
   <body class="tool-page remote-page">
     <header class="topbar remote-topbar">
@@ -46,7 +46,7 @@
         <a class="icon-button" href="/today/dashboard">Dashboard</a>
       </div>
       <button id="header-collapse" class="header-collapse" type="button" aria-label="Collapse header" aria-expanded="true" title="Collapse header">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 14 5-5 5 5"/></svg>
+        <svg viewBox="0 0 48 20" aria-hidden="true"><path d="m6 9 18-6 18 6M6 17l18-6 18 6"/></svg>
       </button>
     </header>
     <main class="remote-main">
@@ -66,13 +66,20 @@
       </section>
 
       <section class="control-panel">
+        <div class="remote-context">
+          <strong id="playback-state" role="status">Following latest</strong>
+          <span id="playback-remaining" hidden></span>
+          <button id="follow-latest" class="context-button" type="button">Follow latest <span id="new-photo-count" hidden></span></button>
+          <button id="viewer-settings-toggle" class="context-button settings-toggle" type="button" aria-label="Viewer settings" title="Viewer settings" aria-haspopup="dialog" aria-controls="viewer-settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16M8 4v6M16 14v6"/></svg></button>
+        </div>
+        <div id="viewer-feedback" class="viewer-feedback" role="status">Checking viewer…</div>
         <div class="action-controls" role="group" aria-label="Stage controls">
           <button id="play" class="action-button play" type="button" aria-label="Play slideshow" title="Play slideshow"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7Z"/></svg></button>
           <button id="pause" class="action-button pause" type="button" aria-label="Pause slideshow" title="Pause slideshow"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h4v14H7zM14 5h4v14h-4z"/></svg></button>
           <button id="stop" class="action-button stop" type="button" aria-label="Stop slideshow" title="Stop slideshow"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h12v12H6z"/></svg></button>
           <button id="auto-scroll" class="action-button" type="button" aria-label="Scroll image once" title="Scroll image once"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="10" height="18" rx="1"/><path d="m18 7 2-2 2 2M20 5v14m-2-2 2 2 2-2"/></svg></button>
           <button id="exif-toggle" class="action-button" type="button" aria-label="Toggle camera information" title="Camera information" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h4l2-3h4l2 3h4v11H4Z"/><circle cx="12" cy="13" r="3"/></svg></button>
-          <button id="thumbnails-toggle" class="action-button" type="button" aria-label="Choose from thumbnails" title="Thumbnails" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg></button>
+          <button id="thumbnails-toggle" class="action-button" type="button" aria-label="Choose from thumbnails" title="Thumbnails" aria-pressed="false" aria-haspopup="dialog" aria-controls="thumbnail-section"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z"/></svg></button>
           <button id="background-toggle" class="action-button" type="button" aria-label="Toggle viewer background" title="Viewer background" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 15 8 10l4 4 3-3 6 6"/></svg></button>
         </div>
         <label class="slider-row" for="interval">
@@ -81,15 +88,31 @@
         </label>
       </section>
 
-      <section id="thumbnail-section" class="thumbnail-section" role="dialog" aria-label="Choose a stage photo" hidden>
+      <dialog id="thumbnail-section" class="thumbnail-section" aria-labelledby="thumbnail-heading">
         <div class="section-heading">
-          <div><strong>Stage photos</strong><span id="photo-count">0 photos</span></div>
+          <div><strong id="thumbnail-heading">Recent stage photos</strong><span id="photo-count">0 photos</span><button id="thumbnails-newest" class="context-button" type="button">Back to newest</button></div>
           <button id="thumbnails-close" class="drawer-close" type="button" aria-label="Close thumbnails">&times;</button>
         </div>
         <div id="thumbnails" class="thumbnail-list"></div>
-      </section>
+      </dialog>
+      <dialog id="viewer-settings" class="viewer-settings" aria-labelledby="viewer-settings-heading">
+        <div class="section-heading">
+          <strong id="viewer-settings-heading">Viewer settings</strong>
+          <button id="viewer-settings-close" class="drawer-close" type="button" aria-label="Close viewer settings">&times;</button>
+        </div>
+        <div class="settings-body">
+          <label for="overlay-mode">Camera information<select id="overlay-mode"><option value="compact">Compact</option><option value="full" selected>Full details</option><option value="hidden">Hidden</option></select></label>
+          <label for="overlay-corner">Overlay position<select id="overlay-corner"><option value="bottom-left" selected>Bottom left</option><option value="bottom-right">Bottom right</option><option value="top-left">Top left</option><option value="top-right">Top right</option></select></label>
+          <label class="settings-check"><input id="overlay-auto-hide" type="checkbox"> Fade camera information after five seconds</label>
+          <label class="settings-check"><input id="clean-output" type="checkbox"> Clean OBS output</label>
+          <p class="settings-help">Clean output keeps connection and loading messages on this remote.</p>
+          <label class="settings-check"><input id="keep-awake" type="checkbox" aria-describedby="wake-lock-status"> Keep screen awake</label>
+          <p id="wake-lock-status" class="settings-help" role="status">Screen may sleep</p>
+          <p id="settings-message" class="settings-help" role="status"></p>
+        </div>
+      </dialog>
       <p id="remote-message" class="remote-message" role="status"></p>
     </main>
-    <script type="module" src="/today/assets/remote.js?v=collapsible-remote-header-1"></script>
+    <script type="module" src="/today/assets/remote.js?v=stage-controls-1"></script>
   </body>
 </html>

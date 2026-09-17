@@ -59,8 +59,40 @@ Use Photo Gallery Admin to hide, restore, permanently delete, or empty trashed g
 albums. Photo Pipeline recalculates the authoritative latest-photo state after those changes so
 Photo Stage does not point at a hidden or deleted image.
 
-Open `/pipeline` from FRAME Portal to set the published JPG long edge, quality, and maximum output
-file size. These settings apply to new photos only.
+Gallery Admin can also move selected photos to another gallery date, including a new date. This
+corrects a batch split across midnight without reuploading. Moves preserve filenames, capture and
+processing timestamps, metadata, and tracked originals; a conflicting destination filename rejects
+the batch. Photos still finishing publication or in trash must finish or be restored first.
+
+Gallery Admin receives live step progress while moves wait for the publication lock, check photos,
+prepare and move files, finalize the publication, and clean up. Failed moves announce recovery before
+reporting the error. Immutable JPEG, text and orientation payloads use hard links during preparation;
+the move does not copy or re-encode the full images. Metadata, file checks, cache cleanup and catalog
+refresh still take time, especially with large albums or many cached tiles.
+
+The existing management endpoint returns JSON by default. A `move-photos` request with
+`Accept: application/x-ndjson` receives progress records followed by a result or error record.
+Progress counts reset for each step. A disconnected progress observer does not cancel an accepted move.
+
+`trash-photos` accepts a `date_folder` and a `bases` array of 1–1000 photos. It validates the entire
+selection before creating recoverable trash markers, then refreshes latest state once for the batch.
+Published files and archived originals remain intact; repeating a request safely skips existing markers.
+
+When both galleries have Explore maps, explicit photo placements move into the destination map;
+each gallery keeps its own routes. If the destination has no map, the source retains its placements
+so moving the photos back restores them. Moving a photo writes a new `.ready` manifest with the new
+paths, which host-side watchers may treat as a new photo event.
+
+Normal move failures roll back for retry. A durable move record also recovers interrupted moves on
+restart: unfinished moves restore the source gallery, while committed moves finish removing old
+source files. Recovery runs before retention and latest-photo reconciliation and preserves foreign
+replacement files. Source photo bytes stay backed up until the move commits and cleanup completes.
+
+Open `/pipeline` from FRAME Portal to set the published JPG long edge, quality, maximum output
+file size, and **Original backup retention (days)**. Image processing settings apply to new photos
+only. Backup retention applies to existing and new original backups; the default is 14 days from
+when each backup was created. Set it to `0` to keep original backups indefinitely. Gallery photos,
+albums, and trash remain until you delete them manually in Gallery Admin.
 
 For StreamerBot or other host-side watchers, watch:
 
@@ -145,7 +177,7 @@ Browser uploads and camera FTP uploads both feed the same pipeline.
 | `/data/galleries/YYYY-MM-DD` | Published photos and sidecars. This is what Gallery and Photo Stage read. |
 | `/data/state/latest.json` | Current latest-photo state for Photo Stage and other tools. |
 | `/data/state/photo-journeys` | Durable receipt for each photo journey, used for progress and retry safety. |
-| `/data/archive/YYYY-MM-DD/<journey_id>` | Original uploaded file after successful publish, when archiving is enabled. Journey folders let FRAME prove which publication still protects an expiring archive. |
+| `/data/archive/YYYY-MM-DD/<journey_id>` | Original uploaded backup after successful publish, when archiving is enabled. Backup age is tracked separately from the gallery date. |
 | `/data/quarantine` | Rejected files and their error reports. |
 
 Browser uploads build a hidden temporary envelope and atomically rename it into staging after the
@@ -194,17 +226,29 @@ PIPELINE_LOG_LEVEL=info
 The default is `info`. Named stages are used instead of percentage progress because image stages do
 not have equal cost. Telemetry is in memory and resets when the service restarts.
 
-Automatic retention is opt-in:
+## Original Backup Retention
+
+Original upload backups expire after **14 days** by default. Change **Original backup retention
+(days)** on `/pipeline` to any whole number from `0` to `36500`; `0` keeps backups indefinitely.
+The timer starts when the original is archived, not when the photo was captured or the gallery
+folder was created. Changing the setting also applies to backups already on disk.
 
 | Setting | Default | Behavior |
 | --- | ---: | --- |
-| `PHOTO_ARCHIVE_RETENTION_DAYS` | `0` | When greater than zero, removes an expired tracked original only while its published receipt, SHA-256, matching gallery sidecar journey, `.jpg`, and `.ready` files all verify. |
-| `PHOTO_TRASH_RETENTION_DAYS` | `0` | When greater than zero, permanently purges expired trash only while its matching archived original verifies against the published journey receipt and SHA-256. |
+| `PHOTO_ARCHIVE_RETENTION_DAYS` | `14` | Initial original-backup retention in days. The owner can save a different value on the Pipeline page; `0` disables expiry. |
 
-`0` disables each retention policy. FRAME never applies these policies to legacy flat archive files,
-unmatched files, malformed records, hash-mismatched archives, or published gallery photos that are not already in trash. If a
-gallery publication becomes the only known copy, its archived source is retained; if an archived
-source is unavailable, the trashed publication is retained.
+Only original backups under `/data/archive` expire automatically. Their expiry is independent of
+whether the published gallery photo exists or is in trash. FRAME never automatically deletes a
+gallery, published photo, or trash entry. Use Gallery Admin for those decisions.
+
+FRAME records each new backup's creation time in `.frame-archive.json`, mapping its actual filename
+to an ISO timestamp. Older backups use their filesystem creation time, with modified time as the
+fallback when creation time is unavailable. Cleanup removes only recognized original files; it does
+not recursively delete user folders or unknown files.
+
+The settings API exposes this value as `archive_retention_days` in the existing `GET` and `PUT`
+`/pipeline/api/settings` response. Saving processing settings keeps the retention value alongside
+`long_edge_px`, `jpeg_quality`, and `max_output_mb`.
 
 ## Quarantine And `.error.json`
 

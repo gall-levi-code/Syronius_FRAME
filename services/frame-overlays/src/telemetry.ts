@@ -26,7 +26,7 @@ interface StreamState {
   streamProfileId: string;
   sequence: number;
   snapshot: TelemetrySnapshot | null;
-  listeners: Set<TelemetryListener>;
+  listeners: Set<{ listener: TelemetryListener; pollMs: number }>;
   pollMs: number;
   timer?: NodeJS.Timeout;
   inflight?: Promise<TelemetrySnapshot>;
@@ -43,27 +43,29 @@ export class TelemetryHub {
 
   subscribe(streamProfileId: string, pollMs: number, listener: TelemetryListener): () => void {
     const state = this.stateFor(streamProfileId);
-    state.listeners.add(listener);
-    state.pollMs = Math.min(state.pollMs, clampPollMs(pollMs));
+    const subscription = { listener, pollMs: clampPollMs(pollMs) };
+    state.listeners.add(subscription);
+    this.updatePolling(state);
     state.stopped = false;
     if (state.snapshot) listener(this.withCurrentStaleState(state));
     void this.refresh(streamProfileId);
     return () => {
-      state.listeners.delete(listener);
+      state.listeners.delete(subscription);
+      this.updatePolling(state);
       if (state.listeners.size === 0) {
         state.stopped = true;
-        if (state.timer) clearTimeout(state.timer);
-        state.timer = undefined;
       }
+      this.schedule(state);
     };
   }
 
   async snapshot(streamProfileId: string, pollMs: number): Promise<TelemetrySnapshot> {
     const state = this.stateFor(streamProfileId);
-    state.pollMs = Math.min(state.pollMs, clampPollMs(pollMs));
-    const current = state.snapshot && this.withCurrentStaleState(state);
-    if (current && this.now().getTime() - Date.parse(current.observed_at) < state.pollMs) return current;
-    return this.refresh(streamProfileId);
+    const interval = clampPollMs(pollMs);
+    const current = state.snapshot && this.withCurrentStaleState(state, interval);
+    if (current && this.now().getTime() - Date.parse(current.observed_at) < interval) return current;
+    await this.refresh(streamProfileId);
+    return this.withCurrentStaleState(state, interval);
   }
 
   async refresh(streamProfileId: string): Promise<TelemetrySnapshot> {
@@ -80,6 +82,7 @@ export class TelemetryHub {
     for (const state of this.streams.values()) {
       state.stopped = true;
       if (state.timer) clearTimeout(state.timer);
+      state.timer = undefined;
     }
   }
 
@@ -110,23 +113,32 @@ export class TelemetryHub {
       };
     }
     const snapshot = this.withCurrentStaleState(state);
-    for (const listener of state.listeners) listener(snapshot);
+    for (const { listener } of state.listeners) listener(snapshot);
     return snapshot;
   }
 
+  private updatePolling(state: StreamState): void {
+    const pollMs = Math.min(2000, ...Array.from(state.listeners, (subscription) => subscription.pollMs));
+    if (state.pollMs !== pollMs || state.listeners.size === 0) {
+      if (state.timer) clearTimeout(state.timer);
+      state.timer = undefined;
+    }
+    state.pollMs = pollMs;
+  }
+
   private schedule(state: StreamState): void {
-    if (state.stopped || state.listeners.size === 0 || state.timer) return;
+    if (state.stopped || state.listeners.size === 0 || state.timer || state.inflight) return;
     state.timer = setTimeout(() => {
       state.timer = undefined;
       void this.refresh(state.streamProfileId);
     }, state.pollMs);
   }
 
-  private withCurrentStaleState(state: StreamState): TelemetrySnapshot {
+  private withCurrentStaleState(state: StreamState, pollMs = state.pollMs): TelemetrySnapshot {
     const snapshot = state.snapshot!;
     return {
       ...snapshot,
-      stale: snapshot.stale || isStale(snapshot.received_at, state.pollMs, this.now()),
+      stale: snapshot.stale || isStale(snapshot.received_at, pollMs, this.now()),
     };
   }
 

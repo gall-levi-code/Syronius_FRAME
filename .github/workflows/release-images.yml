@@ -1,0 +1,161 @@
+name: Publish FRAME release images
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: frame-release-images-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    if: github.repository == 'gall-levi-code/Syronius_FRAME' && (github.event_name == 'release' || github.ref == 'refs/heads/main')
+    uses: ./.github/workflows/build-images.yml
+    with:
+      save-images: true
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        service: ${{ fromJSON(needs.build.outputs.services) }}
+    env:
+      SERVICE: ${{ matrix.service }}
+      SOURCE_COMMIT: ${{ needs.build.outputs.commit }}
+      IMAGE_PREFIX: ${{ needs.build.outputs.prefix }}
+      IMAGE: ${{ needs.build.outputs.prefix }}/${{ matrix.service }}:${{ needs.build.outputs.commit }}
+      VERSION_TAG: ${{ github.event.release.tag_name || '' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.build.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/download-artifact@v4
+        with:
+          name: frame-image-${{ matrix.service }}
+          path: image-artifact
+      - name: Load and verify the already tested image
+        run: |
+          docker image load --input image-artifact/image.tar.gz
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { readFileSync } from "node:fs";
+          import { execFileSync } from "node:child_process";
+          const metadata = JSON.parse(readFileSync("image-artifact/metadata.json", "utf8"));
+          assert.equal(metadata.commit, process.env.SOURCE_COMMIT);
+          assert.equal(metadata.service, process.env.SERVICE);
+          assert.equal(metadata.image, process.env.IMAGE);
+          const [image] = JSON.parse(execFileSync("docker", ["image", "inspect", process.env.IMAGE], { encoding: "utf8" }));
+          assert.equal(image.Id, metadata.image_id);
+          assert.equal(`${image.Os}/${image.Architecture}`, "linux/amd64");
+          if (process.env.VERSION_TAG && !/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(process.env.VERSION_TAG)) {
+            throw new Error("Release tag is not a valid container tag.");
+          }
+          NODE
+      - name: Sign in to GHCR
+        env:
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_USER: ${{ github.actor }}
+        run: printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GHCR_USER" --password-stdin
+      - name: Push the verified image and record the registry digest
+        run: |
+          docker push "$IMAGE"
+          if [[ -n "$VERSION_TAG" ]]; then
+            docker tag "$IMAGE" "$IMAGE_PREFIX/$SERVICE:$VERSION_TAG"
+            docker push "$IMAGE_PREFIX/$SERVICE:$VERSION_TAG"
+          fi
+          mkdir -p digests
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from "node:fs";
+          import { execFileSync } from "node:child_process";
+          const [image] = JSON.parse(execFileSync("docker", ["image", "inspect", process.env.IMAGE], { encoding: "utf8" }));
+          const repository = `${process.env.IMAGE_PREFIX}/${process.env.SERVICE}`;
+          const digestPrefix = `${repository}@sha256:`;
+          const reference = image.RepoDigests.find((value) => value.startsWith(digestPrefix) && /^[a-f0-9]{64}$/.test(value.slice(digestPrefix.length)));
+          if (!reference) throw new Error("Pushed image has no registry digest.");
+          writeFileSync(`digests/${process.env.SERVICE}.json`, JSON.stringify({
+            commit: process.env.SOURCE_COMMIT, service: process.env.SERVICE, image: reference,
+          }));
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frame-digest-${{ matrix.service }}
+          path: digests/${{ matrix.service }}.json
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: true
+      - name: Sign out of GHCR
+        if: always()
+        run: docker logout ghcr.io
+
+  manifest:
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      SOURCE_COMMIT: ${{ needs.build.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.build.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: frame-digest-*
+          path: digests
+          merge-multiple: true
+      - name: Create the complete digest-pinned release manifest
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from "node:assert/strict";
+          import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+          import { FRAME_IMAGE_SERVICES, validateReleaseManifest } from "./installer/frame-release.mjs";
+          const records = readdirSync("digests").filter((file) => file.endsWith(".json"))
+            .map((file) => JSON.parse(readFileSync(`digests/${file}`, "utf8")));
+          assert.equal(records.length, FRAME_IMAGE_SERVICES.length);
+          assert.equal(new Set(records.map((record) => record.service)).size, FRAME_IMAGE_SERVICES.length);
+          for (const record of records) assert.equal(record.commit, process.env.SOURCE_COMMIT);
+          const manifest = validateReleaseManifest({
+            schema_version: 1,
+            commit: process.env.SOURCE_COMMIT,
+            platform: "linux/amd64",
+            images: Object.fromEntries(records.map((record) => [record.service, record.image])),
+          });
+          writeFileSync("frame-images.json", `${JSON.stringify(manifest, null, 2)}\n`);
+          NODE
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frame-images-${{ needs.build.outputs.commit }}
+          path: frame-images.json
+          if-no-files-found: error
+          retention-days: 90
+          overwrite: true
+      - name: Attach the manifest to the published GitHub release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$RELEASE_TAG" frame-images.json --repo "$GITHUB_REPOSITORY" --clobber

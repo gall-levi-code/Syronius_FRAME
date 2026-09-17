@@ -4,11 +4,14 @@ import { spawnSync } from "node:child_process";
 
 const root = path.resolve(import.meta.dirname, "..");
 
-run(process.execPath, ["--test", "tests/frame-contract.test.mjs"], "contract and behavior tests");
+run(process.execPath, ["--test", "tests/*.test.mjs"], "contract and behavior tests");
 
 const syntaxFiles = [
   "installer/frame-installer.mjs",
+  "installer/frame-env.mjs",
+  "installer/frame-preflight.mjs",
   "installer/frame-updater.mjs",
+  "installer/frame-release.mjs",
   "installer/frame-contract.mjs",
   ...(await findJavaScriptFiles(path.join(root, "services"))),
   ...(await findJavaScriptFiles(path.join(root, "apps"))),
@@ -23,11 +26,11 @@ console.log(`FRAME verification passed: tests plus ${syntaxFiles.length} JavaScr
 async function findJavaScriptFiles(directory) {
   const files = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
-    if (entry.name === "node_modules" || entry.name === "dist" || entry.name === "target") continue;
+    if (["node_modules", "dist", "target", "release"].includes(entry.name)) continue;
     const fullPath = path.join(directory, entry.name);
     if (entry.isDirectory()) {
       files.push(...(await findJavaScriptFiles(fullPath)));
-    } else if (entry.name.endsWith(".js") || entry.name.endsWith(".mjs")) {
+    } else if (/\.(?:js|mjs|cjs)$/.test(entry.name)) {
       files.push(fullPath);
     }
   }

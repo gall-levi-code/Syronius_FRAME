@@ -29,9 +29,9 @@
       })();
     </script>
     <script src="/assets/frame-theme.js?v=global-theme-v1"></script>
-    <link rel="stylesheet" href="/gallery/assets/admin.css?v=gallery-photo-sort-1">
+    <link rel="stylesheet" href="/gallery/assets/admin.css?v=gallery-trash-selected-1">
   </head>
-  <body>
+  <body class="gallery-admin-page">
     <header class="topbar">
       <a class="brand" href="/today/gallery" aria-label="Open FRAME Photo Gallery">
         <img id="admin-brand-logo" src="/gallery/assets/frame-logo-square.svg" alt="">
@@ -47,38 +47,35 @@
     </header>
 
     <main>
-      <section class="page-heading">
-        <div>
-          <p>Protected gallery admin</p>
-          <h1>Gallery Admin</h1>
-          <span id="summary">Loading photo library...</span>
-        </div>
+      <h1 class="sr-only">Gallery Admin</h1>
+      <div class="library-status">
+        <span id="summary">Loading photo library...</span>
         <span id="status" class="status" role="status" aria-live="polite">Connecting</span>
-      </section>
+      </div>
 
       <nav class="section-tabs" role="tablist" aria-label="Gallery admin sections">
-        <button id="content-management-tab" type="button" role="tab" aria-selected="true" aria-controls="content-management-view">Content management</button>
-        <button id="gallery-styling-tab" type="button" role="tab" aria-selected="false" aria-controls="gallery-styling-view" tabindex="-1">Gallery Settings</button>
-        <button id="socials-tab" type="button" role="tab" aria-selected="false" aria-controls="socials-view" tabindex="-1">Socials</button>
-        <button id="support-tab" type="button" role="tab" aria-selected="false" aria-controls="support-view" tabindex="-1">Support</button>
+        <button id="published-tab" type="button" role="tab" aria-selected="true" aria-controls="published-view">Galleries <span id="published-count" class="tab-count">0</span></button>
+        <button id="trash-tab" type="button" role="tab" aria-selected="false" aria-controls="trash-view" tabindex="-1">Trash <span id="trash-count" class="tab-count">0</span></button>
+        <button id="site-settings-tab" type="button" role="tab" aria-selected="false" aria-controls="site-settings-view" tabindex="-1">Site settings</button>
       </nav>
 
-      <section id="content-management-view" role="tabpanel" aria-labelledby="content-management-tab">
-        <nav class="subtabs" aria-label="Content management views">
-          <button id="published-tab" type="button" aria-pressed="true">Published <strong id="published-count">0</strong></button>
-          <button id="trash-tab" type="button" aria-pressed="false">Trash <strong id="trash-count">0</strong></button>
-        </nav>
-
-        <section id="published-view">
+        <section id="published-view" role="tabpanel" aria-labelledby="published-tab">
           <div id="albums" class="album-list"></div>
           <section id="album-detail" class="album-detail" hidden>
-            <div class="section-heading">
-              <div><p>Published album</p><h2 id="album-title"></h2><span id="album-summary"></span></div>
-              <div class="section-actions">
-                <a id="manage-explore" class="restore-button" href="/gallery/admin/explore">Manage Explore</a>
-                <button id="trash-album" class="icon-danger-button" type="button" aria-label="Move album to trash" title="Move album to trash"><svg class="trash-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 11v6M14 11v6"/></svg></button>
+            <nav class="album-navigation" aria-label="Gallery navigation">
+              <button id="back-to-galleries" class="secondary-button" type="button">‹ Back to galleries</button>
+              <div>
+                <button id="previous-gallery" class="secondary-button" type="button" disabled>‹ Previous gallery</button>
+                <button id="next-gallery" class="secondary-button" type="button" disabled>Next gallery ›</button>
               </div>
+            </nav>
+            <div class="section-heading album-heading">
+              <div><h2 id="album-title" tabindex="-1"></h2><span id="album-summary"></span></div>
+              <a id="view-gallery" class="gallery-button" href="/today/gallery">View gallery</a>
             </div>
+            <details id="album-settings" class="album-settings">
+              <summary>Album settings</summary>
+              <div class="album-settings-content">
             <section id="cover-management-panel" class="cover-management-panel" aria-labelledby="cover-management-title" tabindex="-1">
               <div>
                 <strong id="cover-management-title">Cover image</strong>
@@ -88,10 +85,10 @@
             </section>
             <section class="cover-management-panel" aria-labelledby="photo-sort-title">
               <div>
-                <strong id="photo-sort-title">Photo order</strong>
+                <strong id="photo-sort-title">Public photo order</strong>
                 <p id="photo-sort-status" role="status" aria-live="polite">This order is used by the public gallery.</p>
               </div>
-              <label class="sr-only" for="photo-sort">Photo order</label>
+              <label class="sr-only" for="photo-sort">Public photo order</label>
               <span class="select-shell photo-sort-control">
                 <select id="photo-sort" aria-describedby="photo-sort-status">
                   <option value="newest">Processed — newest first (default)</option>
@@ -103,13 +100,26 @@
                 </select>
               </span>
             </section>
+                <div class="album-settings-actions">
+                  <a id="manage-explore" class="secondary-button" href="/gallery/admin/explore">Manage Explore</a>
+                  <button id="trash-album" class="danger-button" type="button">Move entire gallery to trash</button>
+                </div>
+              </div>
+            </details>
+            <div class="photo-selection-toolbar" role="region" aria-label="Photo selection">
+              <label class="photo-select-all"><input id="select-all-photos" type="checkbox"> Select all</label>
+              <span id="photo-selection-count" role="status" aria-live="polite">0 selected</span>
+              <button id="clear-selection" class="secondary-button" type="button" disabled>Clear selection</button>
+              <button id="move-selected" class="restore-button" type="button" disabled>Move photos…</button>
+              <button id="trash-selected" class="danger-button" type="button" disabled>Trash selected</button>
+            </div>
             <div id="photos" class="photo-grid"></div>
           </section>
         </section>
 
-        <section id="trash-view" hidden>
+        <section id="trash-view" role="tabpanel" aria-labelledby="trash-tab" hidden>
           <div class="section-heading">
-            <div><p>Recoverable publications</p><h2>Trash</h2><span>Restore keeps .ready untouched. Permanent deletion removes the published files and .ready receipt, so queued StreamerBot paths stop resolving. Archived sources follow retention policy.</span></div>
+            <div><h2>Trash</h2><span>Restore photos to their galleries, or permanently delete the published copies.</span></div>
             <button id="empty-trash" class="danger-button" type="button">Empty trash</button>
           </div>
           <div id="trash-albums" class="trash-list"></div>
@@ -119,11 +129,18 @@
           <strong>Nothing here</strong>
           <span>This view has no photos to manage.</span>
         </section>
-      </section>
-
+      <section id="site-settings-view" role="tabpanel" aria-labelledby="site-settings-tab" hidden>
+        <div class="section-heading">
+          <div><h2>Site settings</h2><span>Applies to all galleries.</span></div>
+        </div>
+        <nav class="section-tabs settings-tabs" role="tablist" aria-label="Site settings sections">
+          <button id="gallery-styling-tab" type="button" role="tab" aria-selected="true" aria-controls="gallery-styling-view">General</button>
+          <button id="socials-tab" type="button" role="tab" aria-selected="false" aria-controls="socials-view" tabindex="-1">Socials</button>
+          <button id="support-tab" type="button" role="tab" aria-selected="false" aria-controls="support-view" tabindex="-1">Support</button>
+        </nav>
       <section id="gallery-styling-view" role="tabpanel" aria-labelledby="gallery-styling-tab" hidden>
         <div class="section-heading">
-          <div><p>Public gallery preferences</p><h2>Gallery Settings</h2><span id="branding-summary">Loading gallery settings...</span></div>
+          <div><span id="branding-summary">Loading site settings...</span></div>
         </div>
         <form id="branding-form" class="branding-form">
           <section class="branding-panel settings-section" aria-labelledby="visitor-controls-title">
@@ -131,7 +148,7 @@
               <div><strong id="visitor-controls-title">Visitor Controls</strong><small>Choose the actions available to everyone viewing your galleries.</small></div>
             </div>
             <div class="visitor-control-row">
-              <div><strong>Downloads</strong><small>Disabled uses page-bound image tiles. Enabled displays and offers the full gallery JPEG; camera originals remain private.</small></div>
+              <div><strong>Downloads</strong><small>Allow visitors to download published photos. Camera originals remain private.</small></div>
               <div class="segmented-control" role="group" aria-label="Downloads">
                 <button id="downloads-disabled" type="button" aria-pressed="true">Disabled</button>
                 <button id="downloads-enabled" type="button" aria-pressed="false">Enabled</button>
@@ -214,7 +231,9 @@
         </section>
       </section>
 
-      <div id="settings-action-bar" class="settings-action-bar" role="region" aria-label="Unsaved gallery settings" hidden>
+      </section>
+
+      <div id="settings-action-bar" class="settings-action-bar" role="region" aria-label="Unsaved site settings" hidden>
         <span id="settings-action-message" role="status" aria-live="polite">You have unsaved changes.</span>
         <div>
           <button id="discard-branding" class="secondary-button" type="button">Discard</button>
@@ -280,6 +299,35 @@
       </div>
     </dialog>
 
+    <dialog id="move-dialog" class="preset-dialog confirm-dialog" aria-labelledby="move-title" aria-describedby="move-copy">
+      <form id="move-form" class="dialog-panel">
+        <div class="dialog-heading"><p>Organize photos</p><h2 id="move-title">Move selected photos</h2></div>
+        <p id="move-copy" class="dialog-copy"></p>
+        <div class="move-fields field-grid">
+          <label>Destination gallery
+            <span class="select-shell"><select id="move-gallery" required></select></span>
+          </label>
+          <label id="move-date-field" hidden>Gallery date
+            <input id="move-date" type="date" min="0001-01-01" max="9999-12-31">
+          </label>
+        </div>
+        <p class="dialog-copy">Photos keep their filenames and capture details. You can move them back later.</p>
+        <div id="move-progress-panel" hidden>
+          <progress id="move-progress" aria-label="Photo move progress"></progress>
+          <div class="move-progress-details">
+            <span id="move-phase" role="status" aria-live="polite"></span>
+            <span id="move-elapsed"></span>
+          </div>
+          <p class="dialog-copy">Progress is shown for each step. Keep this page open until the move finishes.</p>
+        </div>
+        <p id="move-status" class="dialog-copy" role="status" aria-live="polite"></p>
+        <div class="dialog-actions">
+          <button id="cancel-move" class="secondary-button" type="button">Cancel</button>
+          <button id="submit-move" class="restore-button" type="submit">Move photos</button>
+        </div>
+      </form>
+    </dialog>
+
     <dialog id="cover-picker" class="cover-picker" role="dialog" aria-modal="true" aria-labelledby="cover-picker-title">
       <h2 id="cover-picker-title" class="sr-only">Select cover image</h2>
       <div class="cover-picker-toolbar">
@@ -290,26 +338,31 @@
     </dialog>
 
     <template id="album-template">
-      <article class="album-card">
+      <article class="album-card gallery-cover-card">
         <button class="album-open" type="button">
           <img alt="" loading="lazy">
-          <span><strong></strong><small></small></span>
+          <span class="album-overlay"><span class="album-meta"><strong><time></time><span class="gallery-year"></span></strong><small></small></span></span>
         </button>
-        <div class="album-actions">
-          <a class="album-explore restore-button" href="/gallery/admin/explore">Add GPS route</a>
-          <button class="album-trash icon-danger-button" type="button" aria-label="Move album to trash" title="Move album to trash"><svg class="trash-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 11v6M14 11v6"/></svg></button>
-        </div>
       </article>
     </template>
 
     <template id="photo-template">
       <article class="photo-card">
         <img alt="" loading="lazy">
+        <label class="photo-select"><input class="select-photo" type="checkbox"><span class="sr-only">Select photo</span></label>
         <span class="cover-star" role="img" aria-label="Current gallery cover" title="Current gallery cover" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 14.9 8.4 21.4 9.3 16.7 13.9 17.8 20.4 12 17.3 6.2 20.4 7.3 13.9 2.6 9.3 9.1 8.4Z"/></svg></span>
         <div class="photo-details">
           <span><strong></strong><small></small></span>
           <button class="trash-photo-button icon-danger-button" type="button" aria-label="Move photo to trash" title="Move photo to trash"><svg class="trash-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 11v6M14 11v6"/></svg></button>
         </div>
+        <details class="photo-metadata">
+          <summary>Photo details</summary>
+          <dl>
+            <dt>Published filename</dt><dd class="photo-filename"></dd>
+            <dt>Processed</dt><dd class="photo-processed"></dd>
+            <dt>Captured (camera clock)</dt><dd class="photo-captured"></dd>
+          </dl>
+        </details>
       </article>
     </template>
 
@@ -337,6 +390,6 @@
       </article>
     </template>
 
-    <script type="module" src="/gallery/assets/admin.js?v=gallery-photo-sort-1"></script>
+    <script type="module" src="/gallery/assets/admin.js?v=gallery-trash-selected-1"></script>
   </body>
 </html>

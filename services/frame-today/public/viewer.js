@@ -21,6 +21,12 @@ let transitionTimer = null;
 let presentationKey = "";
 let stateReceivedAt = 0;
 let loadRevision = 0;
+let displayedPhoto = null;
+let displayedAt = 0;
+let activeLoad = null;
+let preload = null;
+let overlayTimer = null;
+let viewerReport = { type: "VIEWER_REPORT", photo_key: null, status: "empty" };
 
 window.addEventListener("resize", () => {
   clearPresentation();
@@ -31,7 +37,10 @@ connect();
 
 function connect() {
   socket = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/today/ws/viewer`);
-  socket.addEventListener("open", () => setStatus("Connected", true));
+  socket.addEventListener("open", () => {
+    setStatus(viewerReport.status === "error" ? "Image unavailable" : "Connected", viewerReport.status !== "error");
+    reportViewer(viewerReport.photo_key, viewerReport.status, true);
+  });
   socket.addEventListener("message", (event) => {
     const message = JSON.parse(event.data);
     if (message.type === "STATE") {
@@ -51,45 +60,73 @@ function render(state) {
   document.documentElement.classList.toggle("viewer-transparent", !state.show_background);
   document.body.classList.toggle("viewer-transparent", !state.show_background);
   const photo = state.current_photo;
-  elements.empty.hidden = Boolean(photo);
+  elements.empty.hidden = Boolean(photo) || Boolean(state.clean_output);
   elements.stage.hidden = !photo;
-  elements.exif.hidden = !photo || !state.show_exif || state.presentation_mode === "auto-scroll";
+  elements.status.hidden = Boolean(state.clean_output);
   if (!photo) {
     loadRevision += 1;
     currentPhotoKey = null;
+    displayedPhoto = null;
+    activeLoad?.cancel();
+    activeLoad = null;
+    preload?.cancel();
+    preload = null;
     clearPresentation();
     clearLayers();
+    syncOverlay();
+    reportViewer(null, "empty");
     return;
   }
 
   const photoKey = `${photo.date_folder}/${photo.base}`;
-  const accessibleName = friendlyBase(photo.base);
-  elements.name.textContent = accessibleName;
-  elements.camera.textContent = photo.camera_text || cameraSummary(photo.exif);
-  elements.details.textContent = [
-    photo.width && photo.height ? `${photo.width} x ${photo.height}` : "",
-    new Date(photo.processed_at).toLocaleString(),
-    `${state.current_index + 1} of ${state.count_today}`,
-  ].filter(Boolean).join("  |  ");
+  syncOverlay();
   if (photoKey === currentPhotoKey) {
-    if (currentLayer.dataset.photoKey === photoKey) syncPresentation();
+    if (currentLayer.dataset.photoKey === photoKey) {
+      syncPresentation();
+      preloadNext();
+    }
     return;
   }
 
   clearPresentation();
   clearTransition();
+  syncOverlay();
+  activeLoad?.cancel();
+  activeLoad = null;
   currentPhotoKey = photoKey;
-  elements.stage.setAttribute("aria-busy", "true");
   const revision = ++loadRevision;
-  void stagePhoto(photo, photoKey, accessibleName, revision);
+  if (currentLayer.dataset.photoKey === photoKey) {
+    elements.stage.setAttribute("aria-busy", "false");
+    syncPresentation();
+    reportViewer(photoKey, "displayed");
+    if (socket?.readyState === WebSocket.OPEN) setStatus("Connected", true);
+    preloadNext();
+    return;
+  }
+  elements.stage.setAttribute("aria-busy", "true");
+  setStatus("Loading photo", true);
+  reportViewer(photoKey, "loading");
+  activeLoad = preload?.key === photoKey ? preload : loadPhoto(photo);
+  if (preload !== activeLoad) preload?.cancel();
+  preload = null;
+  void stagePhoto(photo, photoKey, revision, activeLoad);
 }
 
-async function stagePhoto(photo, photoKey, accessibleName, revision) {
+async function stagePhoto(photo, photoKey, revision, loading) {
   try {
-    await fillLayer(nextLayer, photo, photoKey);
+    const image = await loading.promise;
     if (revision !== loadRevision || currentPhotoKey !== photoKey) return;
-
+    activeLoad = null;
+    const frame = document.createElement("div");
+    frame.className = "photo-frame";
+    frame.setAttribute("aria-hidden", "true");
+    frame.append(image);
+    nextLayer.replaceChildren(frame);
+    Object.assign(nextLayer.dataset, {
+      photoKey, width: String(image.naturalWidth), height: String(image.naturalHeight),
+    });
     layoutLayer(nextLayer, "default");
+    currentLayer.classList.remove("current");
     nextLayer.classList.add("reveal");
     transitionTimer = setTimeout(() => {
       if (revision !== loadRevision || currentPhotoKey !== photoKey) return;
@@ -104,19 +141,34 @@ async function stagePhoto(photo, photoKey, accessibleName, revision) {
       delete nextLayer.dataset.photoKey;
       transitionTimer = null;
       layoutLayer(currentLayer, "default");
-      elements.stage.setAttribute("aria-label", `Photo: ${accessibleName}`);
+      elements.stage.setAttribute("aria-label", `Photo: ${friendlyBase(photo.base)}`);
       elements.stage.setAttribute("aria-busy", "false");
+      displayedPhoto = photo;
+      displayedAt = performance.now();
+      elements.name.textContent = friendlyBase(photo.base);
+      elements.details.textContent = [
+        photo.width && photo.height ? `${photo.width} x ${photo.height}` : "",
+        new Date(photo.processed_at).toLocaleString(),
+        `${latestState.current_index + 1} of ${latestState.count_today}`,
+      ].filter(Boolean).join("  |  ");
+      syncOverlay();
       presentationKey = "";
       syncPresentation();
+      reportViewer(photoKey, "displayed");
+      preloadNext();
       if (socket?.readyState === WebSocket.OPEN) setStatus("Connected", true);
     }, 440);
+    syncOverlay();
   } catch (error) {
     if (revision !== loadRevision || currentPhotoKey !== photoKey) return;
+    activeLoad = null;
     currentPhotoKey = null;
     elements.stage.setAttribute("aria-busy", "false");
     nextLayer.classList.remove("reveal");
     nextLayer.replaceChildren();
+    syncOverlay();
     setStatus("Image unavailable", false);
+    reportViewer(photoKey, "error");
     setTimeout(() => {
       const current = latestState?.current_photo;
       if (current && `${current.date_folder}/${current.base}` === photoKey && currentPhotoKey === null) render(latestState);
@@ -124,29 +176,68 @@ async function stagePhoto(photo, photoKey, accessibleName, revision) {
   }
 }
 
-async function fillLayer(layer, photo, photoKey) {
-  const frame = document.createElement("div");
+function loadPhoto(photo) {
   const image = new Image();
-  frame.className = "photo-frame";
-  frame.setAttribute("aria-hidden", "true");
   image.className = "photo-image";
   image.alt = "";
   image.draggable = false;
   image.decoding = "async";
-  frame.append(image);
-  layer.replaceChildren(frame);
-  await new Promise((resolve, reject) => {
+  let cancel;
+  const promise = new Promise((resolve, reject) => {
     image.onload = resolve;
     image.onerror = () => reject(new Error("Photo could not be loaded."));
+    cancel = () => {
+      image.onload = null;
+      image.onerror = null;
+      image.removeAttribute("src");
+      reject(new Error("Photo load was replaced."));
+    };
     image.src = `/today/image/${photo.date_folder}/${photo.base}.jpg`;
+  }).then(async () => {
+    image.onload = null;
+    image.onerror = null;
+    if (image.decode) await image.decode();
+    return image;
   });
-  image.onload = null;
-  image.onerror = null;
-  Object.assign(layer.dataset, {
-    photoKey,
-    width: String(image.naturalWidth),
-    height: String(image.naturalHeight),
-  });
+  // A speculative preload can fail before it is selected; selecting it uses the normal retry path.
+  void promise.catch(() => {});
+  return { key: `${photo.date_folder}/${photo.base}`, promise, cancel };
+}
+
+function preloadNext() {
+  const photos = latestState.photos;
+  const next = latestState.slideshow_running && photos.length > 1
+    ? photos[(latestState.current_index + 1) % photos.length]
+    : null;
+  const key = next ? `${latestState.date_folder}/${next.base}` : null;
+  if (preload?.key === key) return;
+  preload?.cancel();
+  preload = next ? loadPhoto({ ...next, date_folder: latestState.date_folder }) : null;
+}
+
+function syncOverlay() {
+  if (overlayTimer !== null) clearTimeout(overlayTimer);
+  overlayTimer = null;
+  const mode = latestState.overlay_mode || "full";
+  elements.exif.dataset.mode = mode;
+  elements.exif.dataset.corner = latestState.overlay_corner || "bottom-left";
+  elements.exif.hidden = !displayedPhoto || transitionTimer !== null || !latestState.show_exif || mode === "hidden" || latestState.presentation_mode === "auto-scroll";
+  const text = displayedPhoto?.camera_text || cameraSummary(displayedPhoto?.exif);
+  elements.camera.textContent = mode === "compact" ? text.trim().split(/\r?\n/).filter(Boolean).at(-1) || "" : text;
+  const remaining = 5000 - (performance.now() - displayedAt);
+  elements.exif.classList.toggle("faded", Boolean(latestState.overlay_auto_hide) && remaining <= 0);
+  if (!elements.exif.hidden && latestState.overlay_auto_hide && remaining > 0) {
+    overlayTimer = setTimeout(() => {
+      overlayTimer = null;
+      elements.exif.classList.add("faded");
+    }, remaining);
+  }
+}
+
+function reportViewer(photoKey, status, force = false) {
+  if (!force && viewerReport.photo_key === photoKey && viewerReport.status === status) return;
+  viewerReport = { type: "VIEWER_REPORT", photo_key: photoKey, status };
+  if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(viewerReport));
 }
 
 function layoutLayer(layer, mode) {
@@ -170,6 +261,7 @@ function layoutLayer(layer, mode) {
 }
 
 function syncPresentation() {
+  if (currentLayer.dataset.photoKey !== currentPhotoKey) return;
   const key = latestState?.presentation_mode === "auto-scroll"
     ? `${latestState.current_base}:${latestState.presentation_started_at}`
     : "";
@@ -219,6 +311,7 @@ function clearPresentation() {
 function clearTransition() {
   if (transitionTimer) clearTimeout(transitionTimer);
   transitionTimer = null;
+  currentLayer.classList.add("current");
   nextLayer.classList.remove("reveal");
   nextLayer.replaceChildren();
 }

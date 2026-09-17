@@ -59,7 +59,6 @@ PHOTO_MAX_MEGAPIXELS
 PHOTO_CONVERSION_ATTEMPTS
 PHOTO_ARCHIVE_ORIGINALS
 PHOTO_ARCHIVE_RETENTION_DAYS
-PHOTO_TRASH_RETENTION_DAYS
 GALLERY_THUMB_WIDTH
 GALLERY_THUMB_QUALITY
 TODAY_DEFAULT_INTERVAL_MS
@@ -106,6 +105,7 @@ assert_docker() {
 }
 
 runtime() {
+  if [ "${1:-}" = install ]; then save_deployment_snapshot || return $?; fi
   data_root=$(runtime_data_root "$@")
   if is_absolute_path "$data_root"; then
     mkdir -p "$data_root"
@@ -138,8 +138,55 @@ compose() {
     echo "The generated docker-compose.yml is missing. Run ./stack.sh install first." >&2
     exit 1
   fi
+  if [ -f "$ROOT_DIR/docker-compose.release.json" ]; then
+    set -- -f "$ROOT_DIR/docker-compose.release.json" "$@"
+  fi
   docker compose --project-directory "$ROOT_DIR" --env-file "$ROOT_DIR/.env" \
     -f "$ROOT_DIR/docker-compose.yml" "$@"
+}
+
+host_preflight() {
+  if [ -z "${FRAME_PREFLIGHT_NODE:-}" ] && [ -z "${FRAME_PREFLIGHT_SCRIPT:-}" ]; then return 0; fi
+  if [ -z "${FRAME_PREFLIGHT_NODE:-}" ] || [ -z "${FRAME_PREFLIGHT_SCRIPT:-}" ]; then
+    echo "Both FRAME_PREFLIGHT_NODE and FRAME_PREFLIGHT_SCRIPT are required for host port validation." >&2
+    return 1
+  fi
+  ELECTRON_RUN_AS_NODE=1 "$FRAME_PREFLIGHT_NODE" "$FRAME_PREFLIGHT_SCRIPT" "$ROOT_DIR"
+}
+
+save_deployment_snapshot() {
+  snapshot_file="$ROOT_DIR/.frame-deployment-backup/snapshot.json"
+  if [ -f "$snapshot_file" ] && grep -q '"pending"[[:space:]]*:[[:space:]]*true' "$snapshot_file"; then return 0; fi
+  snapshot_compose='{"name":"syronius-frame","services":{}}'
+  if [ -f "$ROOT_DIR/docker-compose.yml" ]; then
+    snapshot_compose=$(compose --profile '*' config --format json) || return $?
+  fi
+  snapshot_containers=$(docker ps -q --filter label=com.docker.compose.project=syronius-frame) || return $?
+  snapshot_images=
+  if [ -n "$snapshot_containers" ]; then
+    # Container IDs come from Docker; splitting this list preserves each ID as an argument.
+    snapshot_images=$(docker inspect --format '{{json (index .Config.Labels "com.docker.compose.service")}}:{{json .Image}},' $snapshot_containers) || return $?
+    snapshot_images=${snapshot_images%,}
+  fi
+  printf '{"compose":%s,"images":{%s}}\n' "$snapshot_compose" "$snapshot_images" | runtime deployment-snapshot
+}
+
+restore_deployment() {
+  recovery_attempted=${1:-true}
+  recovery_compose="$ROOT_DIR/.frame-deployment-backup/compose.json"
+  if [ ! -f "$ROOT_DIR/.frame-deployment-backup/snapshot.json" ]; then
+    echo "No FRAME deployment backup was found." >&2
+    return 1
+  fi
+  if [ "$recovery_attempted" = true ] && [ ! -f "$recovery_compose" ]; then
+    compose stop || return $?
+  fi
+  runtime deployment-restore || return $?
+  if [ "$recovery_attempted" = true ] && [ -f "$recovery_compose" ]; then
+    docker compose --project-directory "$ROOT_DIR" -f "$recovery_compose" up -d --force-recreate --no-build --pull never --remove-orphans --wait --wait-timeout 120 || return $?
+  fi
+  runtime deployment-complete || return $?
+  echo "The previous FRAME deployment configuration was restored."
 }
 
 read_default() {
@@ -318,8 +365,9 @@ pause_menu() {
 env_value() {
   key=$1
   default=$2
-  if [ -f "$ROOT_DIR/.env" ]; then
-    value=$(sed -n "s/^${key}=//p" "$ROOT_DIR/.env" | tail -n 1)
+  environment_file=${3:-"$ROOT_DIR/.env"}
+  if [ -f "$environment_file" ]; then
+    value=$(sed -n "s/^${key}=//p" "$environment_file" | tail -n 1)
     value=${value#\"}
     value=${value%\"}
     [ -n "$value" ] && {
@@ -361,7 +409,9 @@ host_data_path() {
 
 runtime_data_root() {
   data_root=$(argument_value --data-root "$@")
-  [ -n "$data_root" ] || data_root=$(env_value FRAME_DATA_ROOT ./data)
+  environment_file="$ROOT_DIR/.env"
+  if [ "${1:-}" = deployment-restore ]; then environment_file="$ROOT_DIR/.frame-deployment-backup/.env"; fi
+  [ -n "$data_root" ] || data_root=$(env_value FRAME_DATA_ROOT ./data "$environment_file")
   printf "%s" "$data_root"
 }
 
@@ -378,26 +428,51 @@ run_install() {
   compose config --quiet
 }
 
-start_stack() {
+start_stack_attempt() {
   echo "Reconciling configuration..."
-  runtime install
-  compose config --quiet
+  runtime install || return $?
+  compose config --quiet || return $?
   echo "Validating startup requirements..."
-  runtime validate --for-start
-  compose up -d --build --remove-orphans --wait --wait-timeout 120
-  if [ "$(env_value FRAME_MODE LAN)" = "HYBRID" ]; then
-    compose up -d --force-recreate --no-deps --wait --wait-timeout 60 frame-public-gateway
+  runtime validate --for-start || return $?
+  host_preflight || return $?
+  set -- --build
+  if [ -f "$ROOT_DIR/docker-compose.release.json" ]; then
+    compose pull --policy always || return $?
+    set -- --no-build --pull never
   fi
-  start_frame_discovery
-  echo "FRAME stack reconciliation completed."
+  host_preflight || return $?
+  up_attempted=true
+  compose up -d "$@" --remove-orphans --wait --wait-timeout 120 || return $?
+  if [ "$(env_value FRAME_MODE LAN)" = "HYBRID" ]; then
+    compose up -d --force-recreate --no-deps --no-build --pull never --wait --wait-timeout 60 frame-public-gateway || return $?
+  fi
+}
+
+start_stack() {
+  save_deployment_snapshot || return $?
+  up_attempted=false
+  if start_stack_attempt; then
+    runtime deployment-complete || return $?
+    start_frame_discovery
+    echo "FRAME stack reconciliation completed."
+  else
+    start_failure=$?
+    restore_deployment "$up_attempted" || echo "FRAME recovery could not complete; the deployment backup was retained." >&2
+    return "$start_failure"
+  fi
 }
 
 source_update() {
+  save_deployment_snapshot || return $?
   echo "Downloading and applying the FRAME source update..."
-  runtime source-update "$@"
+  if runtime source-update "$@"; then :; else
+    update_failure=$?
+    restore_deployment false || echo "FRAME recovery could not complete; the deployment backup was retained." >&2
+    return "$update_failure"
+  fi
   echo "Starting FRAME with the downloaded files..."
-  sh "$ROOT_DIR/stack.sh" start
-  sh "$ROOT_DIR/stack.sh" finalize-source-update
+  sh "$ROOT_DIR/stack.sh" start || return $?
+  sh "$ROOT_DIR/stack.sh" finalize-source-update || return $?
   echo "FRAME source update completed."
 }
 
@@ -816,6 +891,9 @@ case "$COMMAND" in
     ;;
   start)
     start_stack
+    ;;
+  recover)
+    restore_deployment
     ;;
   update)
     source_update "$@"

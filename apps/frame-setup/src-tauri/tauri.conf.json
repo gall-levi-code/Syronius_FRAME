@@ -31,11 +31,18 @@
       "icons/icon.ico"
     ],
     "resources": {
+      "../../../stack.cmd": "frame-stack/stack.cmd",
+      "../../../stack.sh": "frame-stack/stack.sh",
       "../../../services/": "frame-stack/services",
       "../../../config/": "frame-stack/config",
       "../../../installer/templates/docker-compose.yml": "frame-stack/installer/templates/docker-compose.yml",
       "../../../installer/stack.ps1": "frame-stack/installer/stack.ps1",
-      "../../../installer/stack.sh": "frame-stack/installer/stack.sh"
+      "../../../installer/stack.sh": "frame-stack/installer/stack.sh",
+      "../../../installer/frame-installer.mjs": "frame-stack/installer/frame-installer.mjs",
+      "../../../installer/frame-env.mjs": "frame-stack/installer/frame-env.mjs",
+      "../../../installer/frame-contract.mjs": "frame-stack/installer/frame-contract.mjs",
+      "../../../installer/frame-updater.mjs": "frame-stack/installer/frame-updater.mjs",
+      "../../../installer/frame-release.mjs": "frame-stack/installer/frame-release.mjs"
     }
   }
 }

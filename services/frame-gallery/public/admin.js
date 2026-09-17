@@ -1,10 +1,11 @@
 import { SOCIAL_PLATFORMS, buildSocialUrl, createSocialId, resolveSocialPlatform, socialIcon } from "./socials.js?v=gallery-socials-6";
 import { SUPPORT_PLATFORMS, buildSupportUrl, createSupportId, resolveSupportPlatform, supportIcon } from "./support.js?v=gallery-support-1";
-import { layoutJustifiedRows } from "./justified-rows.js?v=gallery-justified-1";
+import { layoutJustifiedRows, observeCoverGallery } from "./justified-rows.js?v=gallery-justified-4";
+import { readMoveResponse } from "./move-progress.js?v=gallery-move-progress-1";
 
 const elements = Object.fromEntries([
-  "summary", "status", "content-management-tab", "gallery-styling-tab", "socials-tab", "support-tab", "published-tab",
-  "trash-tab", "published-count", "trash-count", "content-management-view", "gallery-styling-view", "socials-view", "support-view",
+  "summary", "status", "site-settings-tab", "gallery-styling-tab", "socials-tab", "support-tab", "published-tab",
+  "trash-tab", "published-count", "trash-count", "site-settings-view", "gallery-styling-view", "socials-view", "support-view",
   "published-view", "trash-view", "albums", "album-detail", "album-title", "album-summary", "manage-explore", "trash-album",
   "cover-management-panel", "cover-management-status", "cover-action", "photo-sort", "photo-sort-status", "photos", "trash-albums", "empty-trash", "empty",
   "branding-summary", "save-branding", "discard-branding", "settings-action-bar", "settings-action-message", "branding-form",
@@ -21,6 +22,10 @@ const elements = Object.fromEntries([
   "support-summary", "save-support", "support-form", "support-value-input", "support-platform-select",
   "support-label-input", "add-support", "support-form-error", "support-admin-list", "support-empty",
   "cover-picker", "cover-picker-grid", "cover-picker-status", "cancel-cover-picker",
+  "select-all-photos", "photo-selection-count", "move-selected", "trash-selected", "move-dialog", "move-form", "move-copy",
+  "move-gallery", "move-date-field", "move-date", "move-status", "cancel-move", "submit-move",
+  "move-progress-panel", "move-progress", "move-phase", "move-elapsed",
+  "back-to-galleries", "previous-gallery", "next-gallery", "view-gallery", "album-settings", "clear-selection",
 ].map((id) => [id.replaceAll("-", "_"), document.getElementById(id)]));
 
 const templates = {
@@ -31,12 +36,15 @@ const templates = {
 };
 const state = {
   dates: [],
+  renderedDates: null,
   photos: [],
+  selectedPhotos: new Set(),
   trash: [],
   selectedDate: new URLSearchParams(location.search).get("date"),
-  section: "content",
-  contentView: "published",
+  section: "published",
+  settingsSection: "style",
   busy: false,
+  moveInProgress: false,
   albumLoadId: 0,
   gallerySettings: null,
   branding: null,
@@ -55,7 +63,11 @@ const state = {
   coverPickerWidth: 0,
 };
 const sections = [
-  { name: "content", tab: elements.content_management_tab, view: elements.content_management_view },
+  { name: "published", tab: elements.published_tab, view: elements.published_view },
+  { name: "trash", tab: elements.trash_tab, view: elements.trash_view },
+  { name: "settings", tab: elements.site_settings_tab, view: elements.site_settings_view },
+];
+const settingsSections = [
   { name: "style", tab: elements.gallery_styling_tab, view: elements.gallery_styling_view },
   { name: "socials", tab: elements.socials_tab, view: elements.socials_view },
   { name: "support", tab: elements.support_tab, view: elements.support_view },
@@ -79,18 +91,42 @@ const LOGO_ALLOWED_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "im
 const LOGO_ASPECTS = { wide: 2, square: 1 };
 const LOGO_FRAME_MIN_SIZE = 64;
 const LOGO_EDGE_SNAP_PX = 12;
+const scheduleAlbumGalleryLayout = observeCoverGallery(elements.albums);
 
 for (const section of sections) {
   section.tab.addEventListener("click", () => void requestSectionChange(section.name));
   section.tab.addEventListener("keydown", handleSectionTabKeydown);
 }
+for (const section of settingsSections) {
+  section.tab.addEventListener("click", () => void requestSettingsSectionChange(section.name));
+  section.tab.addEventListener("keydown", handleSectionTabKeydown);
+}
 elements.admin_theme_toggle.addEventListener("click", toggleAdminTheme);
-elements.published_tab.addEventListener("click", () => setContentView("published"));
-elements.trash_tab.addEventListener("click", () => setContentView("trash"));
+elements.back_to_galleries.addEventListener("click", backToGalleries);
+elements.previous_gallery.addEventListener("click", () => openAlbum(elements.previous_gallery.dataset.date));
+elements.next_gallery.addEventListener("click", () => openAlbum(elements.next_gallery.dataset.date));
 elements.trash_album.addEventListener("click", () => manage("trash-album", state.selectedDate, null, `Move every photo from ${state.selectedDate} to trash?`));
 elements.empty_trash.addEventListener("click", () => manage("empty-trash", null, null, "Permanently delete every trashed published gallery copy and its .ready receipt? Queued StreamerBot actions will no longer be able to read those published paths. Archived sources follow the separate retention policy."));
 elements.cover_action.addEventListener("click", handleCoverAction);
 elements.photo_sort.addEventListener("change", savePhotoSort);
+elements.select_all_photos.addEventListener("change", () => {
+  state.selectedPhotos = new Set(elements.select_all_photos.checked ? state.photos.map((photo) => photo.base) : []);
+  elements.photos.querySelectorAll(".select-photo").forEach((checkbox) => { checkbox.checked = elements.select_all_photos.checked; });
+  updatePhotoSelection();
+});
+elements.move_selected.addEventListener("click", openMoveDialog);
+elements.trash_selected.addEventListener("click", trashSelectedPhotos);
+elements.clear_selection.addEventListener("click", () => {
+  if (state.busy) return;
+  state.selectedPhotos.clear();
+  elements.photos.querySelectorAll(".select-photo").forEach((checkbox) => { checkbox.checked = false; });
+  updatePhotoSelection();
+});
+elements.move_gallery.addEventListener("change", updateMoveDestination);
+elements.move_date.addEventListener("input", () => elements.move_date.setCustomValidity(""));
+elements.cancel_move.addEventListener("click", () => elements.move_dialog.close());
+elements.move_dialog.addEventListener("cancel", (event) => { if (state.busy) event.preventDefault(); });
+elements.move_form.addEventListener("submit", moveSelectedPhotos);
 elements.save_branding.addEventListener("click", () => saveBranding());
 elements.discard_branding.addEventListener("click", discardBrandingChanges);
 elements.branding_form.addEventListener("submit", (event) => { event.preventDefault(); void saveBranding(); });
@@ -155,8 +191,11 @@ new ResizeObserver(([entry]) => {
   state.coverPickerWidth = width;
   requestAnimationFrame(layoutCoverPicker);
 }).observe(elements.cover_picker_grid);
+new ResizeObserver(([entry]) => {
+  document.documentElement.style.setProperty("--admin-topbar-height", `${entry.target.getBoundingClientRect().height}px`);
+}).observe(document.querySelector(".topbar"));
 window.addEventListener("beforeunload", (event) => {
-  if (!state.settingsDirty) return;
+  if (!state.settingsDirty && !state.moveInProgress) return;
   event.preventDefault();
   event.returnValue = "";
 });
@@ -216,39 +255,64 @@ function setSection(section) {
     tab.tabIndex = selected ? 0 : -1;
     view.hidden = !selected;
   }
+  setSettingsSection(state.settingsSection);
   renderEmpty();
 }
 
 async function requestSectionChange(section) {
-  if (section === state.section) return;
+  if (state.busy || section === state.section) return;
   const currentTab = sections.find((entry) => entry.name === state.section)?.tab;
-  if (state.settingsDirty) {
-    const confirmed = await confirmDiscardSettings("Switch sections?", "Your unsaved Gallery Settings changes will be discarded.");
-    if (!confirmed) {
-      currentTab?.focus();
-      return;
-    }
-    discardBrandingChanges({ focus: false });
-  }
+  if (!await canLeaveSettings(currentTab)) return;
+  state.albumLoadId += 1;
   setSection(section);
   sections.find((entry) => entry.name === section)?.tab.focus();
 }
 
+function setSettingsSection(section) {
+  state.settingsSection = section;
+  for (const { name, tab, view } of settingsSections) {
+    const selected = name === section;
+    tab.setAttribute("aria-selected", String(selected));
+    tab.tabIndex = selected ? 0 : -1;
+    view.hidden = !selected;
+  }
+}
+
+async function requestSettingsSectionChange(section) {
+  if (state.busy || section === state.settingsSection) return;
+  const currentTab = settingsSections.find((entry) => entry.name === state.settingsSection)?.tab;
+  if (!await canLeaveSettings(currentTab)) return;
+  setSettingsSection(section);
+  settingsSections.find((entry) => entry.name === section)?.tab.focus();
+}
+
+async function canLeaveSettings(currentTab) {
+  if (!state.settingsDirty) return true;
+  const confirmed = await confirmDiscardSettings("Switch sections?", "Your unsaved General settings changes will be discarded.");
+  if (!confirmed) {
+    currentTab?.focus();
+    return false;
+  }
+  discardBrandingChanges({ focus: false });
+  return true;
+}
+
 function handleSectionTabKeydown(event) {
-  const index = sections.findIndex((entry) => entry.tab === event.currentTarget);
+  const tabs = [...event.currentTarget.closest('[role="tablist"]').querySelectorAll('[role="tab"]')];
+  const index = tabs.indexOf(event.currentTarget);
   if (index < 0) return;
   let target = null;
-  if (event.key === "ArrowRight") target = (index + 1) % sections.length;
-  else if (event.key === "ArrowLeft") target = (index - 1 + sections.length) % sections.length;
+  if (event.key === "ArrowRight") target = (index + 1) % tabs.length;
+  else if (event.key === "ArrowLeft") target = (index - 1 + tabs.length) % tabs.length;
   else if (event.key === "Home") target = 0;
-  else if (event.key === "End") target = sections.length - 1;
+  else if (event.key === "End") target = tabs.length - 1;
   if (target === null) return;
   event.preventDefault();
-  void requestSectionChange(sections[target].name);
+  tabs[target].click();
 }
 
 async function handleDirtyLinkNavigation(event) {
-  if (!state.settingsDirty || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  if ((!state.settingsDirty && !state.moveInProgress) || event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
   const link = event.target.closest?.("a[href]");
   if (!link || link.hasAttribute("download") || (link.target && link.target !== "_self")) return;
   const destination = new URL(link.href, location.href);
@@ -259,7 +323,7 @@ async function handleDirtyLinkNavigation(event) {
     setStatus("Wait for the current change to finish", "working");
     return;
   }
-  const confirmed = await confirmDiscardSettings("Leave this page?", "Your unsaved Gallery Settings changes will be discarded.");
+  const confirmed = await confirmDiscardSettings("Leave this page?", "Your unsaved General settings changes will be discarded.");
   if (!confirmed) return;
   discardBrandingChanges({ announce: false, focus: false });
   location.assign(destination.href);
@@ -267,7 +331,7 @@ async function handleDirtyLinkNavigation(event) {
 
 function confirmDiscardSettings(title, copy) {
   return showConfirm({
-    eyebrow: "Unsaved gallery settings",
+    eyebrow: "Unsaved site settings",
     title,
     copy,
     actionLabel: "Discard and continue",
@@ -275,49 +339,54 @@ function confirmDiscardSettings(title, copy) {
   });
 }
 
-function setContentView(view) {
-  state.contentView = view;
-  elements.published_tab.setAttribute("aria-pressed", String(view === "published"));
-  elements.trash_tab.setAttribute("aria-pressed", String(view === "trash"));
-  elements.published_view.hidden = view !== "published";
-  elements.trash_view.hidden = view !== "trash";
-  renderEmpty();
-}
-
 function render() {
   const publishedCount = state.dates.reduce((sum, date) => sum + date.count, 0);
-  elements.published_count.textContent = publishedCount;
+  elements.published_count.textContent = state.dates.length;
   elements.trash_count.textContent = state.trash.length;
   elements.summary.textContent = `${publishedCount} published photo${publishedCount === 1 ? "" : "s"} - ${state.trash.length} recoverable`;
   renderAlbums();
   renderTrash();
   renderBranding();
   setSection(state.section);
-  setContentView(state.contentView);
 }
 
 function renderAlbums() {
-  elements.albums.replaceChildren(...state.dates.map((date) => {
-    const card = templates.album.content.firstElementChild.cloneNode(true);
-    card.querySelector("img").src = date.cover_thumbnail_url || "/gallery/assets/frame-logo-square.svg";
-    card.querySelector("img").alt = `Album cover for ${date.date_folder}`;
-    card.querySelector("strong").textContent = formatDate(date.date_folder);
-    card.querySelector("small").textContent = `${photoLabel(date.count)} - ${durationLabel(date.duration_ms)}`;
-    card.querySelector(".album-open").addEventListener("click", () => openAlbum(date.date_folder));
-    const exploreLabel = date.has_explore ? "Manage Explore" : "Add GPS route";
-    const exploreLink = card.querySelector(".album-explore");
-    exploreLink.href = `/gallery/admin/explore?date=${encodeURIComponent(date.date_folder)}`;
-    exploreLink.textContent = exploreLabel;
-    exploreLink.setAttribute("aria-label", `${exploreLabel} for ${formatDate(date.date_folder)}`);
-    card.querySelector(".album-trash").addEventListener("click", () => manage("trash-album", date.date_folder, null, `Move every photo from ${formatDate(date.date_folder)} to trash?`));
-    card.classList.toggle("selected", date.date_folder === state.selectedDate);
-    return card;
-  }));
+  const available = new Set(state.photos.map((photo) => photo.base));
+  state.selectedPhotos = new Set([...state.selectedPhotos].filter((base) => available.has(base)));
+  updatePhotoSelection();
+  if (state.renderedDates !== state.dates) {
+    elements.albums.replaceChildren(...state.dates.map((date) => {
+      const card = templates.album.content.firstElementChild.cloneNode(true);
+      card.querySelector("img").src = date.cover_thumbnail_url || "/gallery/assets/frame-logo-square.svg";
+      card.querySelector("img").alt = "";
+      const coverDate = new Date(`${date.date_folder}T12:00:00`);
+      card.querySelector("time").dateTime = date.date_folder;
+      card.querySelector("time").textContent = coverDate.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+      card.querySelector(".gallery-year").textContent = coverDate.toLocaleDateString([], { year: "numeric" });
+      card.querySelector("small").textContent = `${photoLabel(date.count)} - ${durationLabel(date.duration_ms)}`;
+      card.querySelector("small").id = `album-stats-${date.date_folder}`;
+      const button = card.querySelector(".album-open");
+      button.setAttribute("aria-label", `Open gallery for ${formatDate(date.date_folder)}`);
+      button.setAttribute("aria-describedby", card.querySelector("small").id);
+      button.addEventListener("click", () => openAlbum(date.date_folder));
+      button.dataset.date = date.date_folder;
+      return card;
+    }));
+    state.renderedDates = state.dates;
+  }
   const selected = state.dates.find((date) => date.date_folder === state.selectedDate);
   elements.album_detail.hidden = !selected;
+  elements.albums.hidden = Boolean(selected);
+  scheduleAlbumGalleryLayout();
+  updateAlbumNavigation();
+  const url = new URL(location.href);
+  if (selected) url.searchParams.set("date", selected.date_folder);
+  else url.searchParams.delete("date");
+  history.replaceState({}, "", url);
   if (!selected) return;
   elements.album_title.textContent = formatDate(selected.date_folder);
   elements.album_summary.textContent = `${photoLabel(selected.count)} - ${durationLabel(selected.duration_ms)}`;
+  elements.view_gallery.href = `/today/gallery/${encodeURIComponent(selected.date_folder)}`;
   elements.manage_explore.href = `/gallery/admin/explore?date=${encodeURIComponent(selected.date_folder)}`;
   elements.manage_explore.textContent = selected.has_explore ? "Manage Explore" : "Add GPS route";
   elements.cover_action.textContent = selected.cover_is_custom ? "Clear cover image" : "Select cover image";
@@ -332,7 +401,19 @@ function renderAlbums() {
     card.querySelector("img").src = photo.thumbnail_url;
     card.querySelector("img").alt = "";
     card.querySelector("strong").textContent = photoName;
-    card.querySelector("small").textContent = formatTime(photo.processed_at);
+    card.querySelector("small").textContent = `Processed ${formatTime(photo.processed_at)}`;
+    card.querySelector(".photo-filename").textContent = `${photo.base}.jpg`;
+    card.querySelector(".photo-processed").textContent = new Date(photo.processed_at).toLocaleString([], { timeZoneName: "short" });
+    card.querySelector(".photo-captured").textContent = photo.capture_clock ? photo.capture_clock.replace("T", " ") : "Not available";
+    card.querySelector(".photo-metadata summary").setAttribute("aria-label", `Photo details for ${photoName}`);
+    const checkbox = card.querySelector(".select-photo");
+    checkbox.checked = state.selectedPhotos.has(photo.base);
+    card.querySelector(".photo-select .sr-only").textContent = `Select ${photoName}`;
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) state.selectedPhotos.add(photo.base);
+      else state.selectedPhotos.delete(photo.base);
+      updatePhotoSelection();
+    });
     const isCover = photo.base === selected.cover_base;
     card.querySelector(".cover-star").hidden = !(selected.cover_is_custom && !selected.cover_fallback_active && isCover);
     const trashButton = card.querySelector(".trash-photo-button");
@@ -459,24 +540,63 @@ function layoutCoverPicker() {
 }
 
 async function openAlbum(dateFolder) {
-  if (state.busy) return;
+  if (state.busy || !dateFolder || !state.dates.some((date) => date.date_folder === dateFolder)) return;
   const loadId = ++state.albumLoadId;
   setStatus("Loading album", "working");
   setPhotoSortStatus("Loading saved photo order", "working");
   try {
     const album = await loadSelectedAlbum(dateFolder);
     if (loadId !== state.albumLoadId) return;
+    state.selectedPhotos.clear();
     state.selectedDate = dateFolder;
     state.photos = album.photos;
     state.gallerySettings = album.settings;
+    elements.album_settings.open = false;
     renderAlbums();
-    elements.album_detail.scrollIntoView({ behavior: "smooth", block: "start" });
+    renderEmpty();
+    elements.album_title.focus({ preventScroll: true });
+    window.scrollTo({ top: 0, behavior: "instant" });
     setPhotoSortStatus("This order is used by the public gallery.", "ready");
     setStatus("Ready", "ready");
   } catch (error) {
     if (loadId !== state.albumLoadId) return;
     setPhotoSortStatus("Saved photo order could not be loaded.", "error");
     setStatus(error.message || "Album failed to load", "error");
+  }
+}
+
+function backToGalleries() {
+  if (state.busy) return;
+  const previousDate = state.selectedDate;
+  state.albumLoadId += 1;
+  state.selectedDate = null;
+  state.photos = [];
+  state.gallerySettings = null;
+  state.selectedPhotos.clear();
+  elements.album_settings.open = false;
+  renderAlbums();
+  renderEmpty();
+  const previousCard = [...elements.albums.querySelectorAll(".album-open")].find((card) => card.dataset.date === previousDate);
+  requestAnimationFrame(() => {
+    if (state.section !== "published" || state.selectedDate) return;
+    const target = previousCard || elements.published_tab;
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({ block: "nearest", behavior: "instant" });
+  });
+  setStatus("Ready", "ready");
+}
+
+function updateAlbumNavigation() {
+  const dates = state.dates.map((date) => date.date_folder).sort();
+  const index = dates.indexOf(state.selectedDate);
+  for (const [button, date, label] of [
+    [elements.previous_gallery, index > 0 ? dates[index - 1] : null, "Previous gallery"],
+    [elements.next_gallery, index >= 0 ? dates[index + 1] : null, "Next gallery"],
+  ]) {
+    button.disabled = state.busy || !date;
+    button.dataset.date = date || "";
+    button.title = date ? `${label}: ${formatDate(date)}` : `No ${label.toLowerCase()}`;
+    button.setAttribute("aria-label", button.title);
   }
 }
 
@@ -561,8 +681,11 @@ function updateSettingsDirty() {
   elements.settings_action_bar.hidden = !state.settingsDirty;
   document.body.classList.toggle("settings-dirty", state.settingsDirty);
   elements.gallery_styling_tab.dataset.dirty = String(state.settingsDirty);
-  if (state.settingsDirty) elements.gallery_styling_tab.setAttribute("aria-label", "Gallery Settings, unsaved changes");
+  elements.site_settings_tab.dataset.dirty = String(state.settingsDirty);
+  if (state.settingsDirty) elements.gallery_styling_tab.setAttribute("aria-label", "General, unsaved changes");
   else elements.gallery_styling_tab.removeAttribute("aria-label");
+  if (state.settingsDirty) elements.site_settings_tab.setAttribute("aria-label", "Site settings, unsaved changes");
+  else elements.site_settings_tab.removeAttribute("aria-label");
   setSettingsActionMessage("You have unsaved changes.");
 }
 
@@ -575,8 +698,8 @@ function discardBrandingChanges(options = {}) {
   const { announce = true, focus = true } = options;
   state.settingsDirty = false;
   renderBranding({ preserveDraft: false });
-  if (announce) setStatus("Gallery setting changes discarded", "ready");
-  if (focus) (state.section === "style" ? elements.brand_name_input : elements.gallery_styling_tab).focus();
+  if (announce) setStatus("General setting changes discarded", "ready");
+  if (focus) (state.section === "settings" && state.settingsSection === "style" ? elements.brand_name_input : elements.site_settings_tab).focus();
 }
 
 function renderSocials() {
@@ -847,6 +970,7 @@ function setPhotoSortStatus(message, kind) {
 }
 
 function restoreCoverManagementFocus(changes) {
+  elements.album_settings.open = true;
   if (Object.hasOwn(changes, "photo_sort")) {
     elements.photo_sort.focus();
     return;
@@ -1698,8 +1822,153 @@ async function removeLogo() {
   }
 }
 
-async function manage(action, dateFolder, base, confirmation) {
+function updatePhotoSelection() {
+  const count = state.selectedPhotos.size;
+  elements.photo_selection_count.textContent = `${count} selected`;
+  elements.select_all_photos.checked = count > 0 && count === state.photos.length;
+  elements.select_all_photos.indeterminate = count > 0 && count < state.photos.length;
+  elements.select_all_photos.disabled = state.busy || !state.photos.length;
+  elements.move_selected.disabled = state.busy || !count;
+  elements.move_selected.textContent = count ? `Move ${photoLabel(count)}…` : "Move photos…";
+  elements.trash_selected.disabled = state.busy || !count;
+  elements.clear_selection.disabled = state.busy || !count;
+}
+
+function trashSelectedPhotos() {
+  if (state.busy || !state.selectedDate || !state.selectedPhotos.size) return;
+  const bases = [...state.selectedPhotos];
+  if (bases.length > 1000) {
+    setStatus("Select up to 1000 photos at a time to move to Trash.", "error");
+    return;
+  }
+  return manage("trash-photos", state.selectedDate, null,
+    `Move ${photoLabel(bases.length)} from ${formatDate(state.selectedDate)} to Trash? You can restore them from the Trash tab.`, bases);
+}
+
+function openMoveDialog() {
+  if (state.busy || !state.selectedDate || !state.selectedPhotos.size) return;
+  state.albumLoadId += 1;
+  const previous = new Date(`${state.selectedDate}T12:00:00Z`);
+  previous.setUTCDate(previous.getUTCDate() - 1);
+  const previousDate = previous.toISOString().slice(0, 10);
+  const dates = state.dates.filter((date) => date.date_folder !== state.selectedDate);
+  elements.move_gallery.replaceChildren(...dates.map((date) => new Option(`${formatDate(date.date_folder)} · ${photoLabel(date.count)}`, date.date_folder)), new Option("Choose another date…", "custom"));
+  elements.move_gallery.value = dates.some((date) => date.date_folder === previousDate) ? previousDate : "custom";
+  elements.move_date.value = previousDate;
+  elements.move_copy.textContent = `Move ${photoLabel(state.selectedPhotos.size)} from ${formatDate(state.selectedDate)} to the gallery below.`;
+  elements.submit_move.textContent = `Move ${photoLabel(state.selectedPhotos.size)}`;
+  elements.move_status.textContent = "";
+  elements.move_progress_panel.hidden = true;
+  delete elements.move_status.dataset.kind;
+  updateMoveDestination();
+  elements.move_dialog.showModal();
+}
+
+function updateMoveDestination() {
+  const custom = elements.move_gallery.value === "custom";
+  elements.move_date_field.hidden = !custom;
+  elements.move_date.required = custom;
+  elements.move_date.disabled = !custom;
+  elements.move_date.setCustomValidity("");
+}
+
+function renderMoveProgress(progress) {
+  const labels = {
+    waiting: "Waiting for other photo work",
+    checking: "Checking photos",
+    preparing: "Preparing photos",
+    moving: "Moving photos",
+    finalizing: "Finishing the move",
+    cleanup: "Cleaning up",
+    recovering: "Restoring photos after a problem",
+    refreshing: "Refreshing galleries",
+  };
+  const label = labels[progress.phase] || "Moving photos";
+  const determinate = ["checking", "preparing", "moving", "cleanup"].includes(progress.phase)
+    && Number.isInteger(progress.completed) && Number.isInteger(progress.total) && progress.total > 0;
+  if (determinate) {
+    const completed = Math.min(progress.total, Math.max(0, progress.completed));
+    elements.move_progress.max = progress.total;
+    elements.move_progress.value = completed;
+    elements.move_phase.textContent = `${label} — ${completed} of ${progress.total} (${Math.round(completed / progress.total * 100)}%)`;
+  } else {
+    elements.move_progress.removeAttribute("value");
+    elements.move_phase.textContent = `${label}…`;
+  }
+  elements.move_progress.setAttribute("aria-label", label);
+  setStatus(label, "working");
+}
+
+async function moveSelectedPhotos(event) {
+  event.preventDefault();
+  if (state.busy || !state.selectedPhotos.size || !state.selectedDate) return;
+  const targetDate = elements.move_gallery.value === "custom" ? elements.move_date.value : elements.move_gallery.value;
+  if (targetDate === state.selectedDate) {
+    elements.move_date.setCustomValidity("Choose a different gallery date.");
+    elements.move_date.reportValidity();
+    return;
+  }
+  if (!elements.move_form.reportValidity()) return;
+  const payload = { action: "move-photos", date_folder: state.selectedDate, target_date_folder: targetDate, bases: [...state.selectedPhotos] };
+  state.busy = true;
+  state.moveInProgress = true;
+  setControlsDisabled(true);
+  elements.move_status.textContent = "";
+  delete elements.move_status.dataset.kind;
+  elements.move_progress_panel.hidden = false;
+  renderMoveProgress({ phase: "waiting" });
+  const startedAt = Date.now();
+  const showElapsed = () => {
+    const seconds = Math.floor((Date.now() - startedAt) / 1000);
+    elements.move_elapsed.textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")} elapsed`;
+  };
+  showElapsed();
+  const timer = setInterval(showElapsed, 1000);
+  let moved = false;
+  try {
+    const response = await fetch("/gallery/admin/api/manage", {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/x-ndjson" },
+      body: JSON.stringify(payload),
+    }).catch(() => { throw new Error("Move progress disconnected. The move may still be running; refresh the gallery before retrying."); });
+    const result = await readMoveResponse(response, renderMoveProgress);
+    moved = true;
+    state.selectedPhotos.clear();
+    state.selectedDate = targetDate;
+    state.photos = [];
+    state.gallerySettings = null;
+    elements.album_settings.open = false;
+    const url = new URL(location.href);
+    url.searchParams.set("date", targetDate);
+    history.replaceState({}, "", url);
+    renderMoveProgress({ phase: "refreshing" });
+    const message = `Moved ${photoLabel(result.affected)} to ${formatDate(targetDate)}`;
+    try {
+      await refreshAfterManagement(false);
+      setStatus(message, "ready");
+      window.scrollTo({ top: 0, behavior: "instant" });
+    } catch (error) {
+      renderAlbums();
+      setStatus(`${message}. Album refresh failed: ${error.message || "reload the page"}`, "error");
+    }
+  } catch (error) {
+    elements.move_progress_panel.hidden = true;
+    elements.move_status.textContent = error.message || "Photos could not be moved. Please try again.";
+    elements.move_status.dataset.kind = "error";
+    setStatus("Move needs attention", "error");
+  } finally {
+    clearInterval(timer);
+    state.moveInProgress = false;
+    state.busy = false;
+    setControlsDisabled(false);
+    if (moved) elements.move_dialog.close();
+    if (!elements.move_dialog.open) (state.photos.length ? elements.select_all_photos : elements.published_tab).focus({ preventScroll: true });
+  }
+}
+
+async function manage(action, dateFolder, base, confirmation, bases) {
   if (state.busy) return;
+  state.albumLoadId += 1;
   if (confirmation) {
     const confirmed = await showConfirm({
       eyebrow: "Confirm gallery change",
@@ -1708,29 +1977,40 @@ async function manage(action, dateFolder, base, confirmation) {
       actionLabel: confirmActionLabel(action),
       danger: true,
     });
-    if (!confirmed) return;
+    if (!confirmed || state.busy) return;
   }
   state.busy = true;
   setControlsDisabled(true);
-  setStatus("Applying change", "working");
+  setStatus(action === "trash-photos" ? `Moving ${photoLabel(bases.length)} to Trash…` : "Applying change", "working");
+  if (action === "trash-photos") elements.trash_selected.textContent = "Moving to Trash…";
   try {
     const result = await requestJson("/gallery/admin/api/manage", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action, date_folder: dateFolder, base }),
+      body: JSON.stringify({ action, date_folder: dateFolder, base, bases }),
     });
     setStatus(`${actionLabel(action)} - ${result.affected} photo${result.affected === 1 ? "" : "s"}`, "ready");
     await refreshAfterManagement();
   } catch (error) {
+    if (action === "trash-photos") {
+      try { await refreshAfterManagement(); } catch { /* Keep the original error and selection available for retry. */ }
+    }
     setStatus(error.message || "Change failed", "error");
   } finally {
     state.busy = false;
     setControlsDisabled(false);
+    if (action === "trash-photos") {
+      elements.trash_selected.textContent = "Trash selected";
+      (state.selectedDate ? elements.select_all_photos : elements.published_tab).focus({ preventScroll: true });
+    }
   }
 }
 
-async function refreshAfterManagement() {
-  const [dates, trash] = await Promise.all([requestJson("/gallery/api/dates"), requestJson("/gallery/admin/api/trash")]);
+async function refreshAfterManagement(includeTrash = true) {
+  const [dates, trash] = await Promise.all([
+    requestJson("/gallery/api/dates"),
+    includeTrash ? requestJson("/gallery/admin/api/trash") : { trash: state.trash },
+  ]);
   state.dates = dates.dates;
   state.trash = trash.trash;
   if (state.selectedDate && state.dates.some((date) => date.date_folder === state.selectedDate)) {
@@ -1844,6 +2124,10 @@ function setControlsDisabled(disabled) {
     control.disabled = control.dataset.busyDisabledState === "disabled";
     delete control.dataset.busyDisabledState;
   });
+  if (!disabled) {
+    updatePhotoSelection();
+    updateAlbumNavigation();
+  }
 }
 
 async function confirmRemoveLogo() {
@@ -1889,6 +2173,7 @@ function resolveConfirm(confirmed) {
 function confirmTitleForAction(action) {
   return ({
     "trash-photo": "Move photo to trash?",
+    "trash-photos": "Move selected photos to Trash?",
     "restore-photo": "Restore photo?",
     "purge-photo": "Delete published copy?",
     "trash-album": "Move album to trash?",
@@ -1901,6 +2186,7 @@ function confirmTitleForAction(action) {
 function confirmActionLabel(action) {
   return ({
     "trash-photo": "Move to trash",
+    "trash-photos": "Trash selected",
     "restore-photo": "Restore",
     "purge-photo": "Delete copy",
     "trash-album": "Move album",
@@ -1911,8 +2197,8 @@ function confirmActionLabel(action) {
 }
 
 function renderEmpty() {
-  elements.empty.hidden = state.section !== "content"
-    || (state.contentView === "published" ? state.dates.length > 0 : state.trash.length > 0);
+  elements.empty.hidden = state.section === "settings"
+    || (state.section === "published" ? state.dates.length > 0 : state.trash.length > 0);
 }
 
 function setStatus(message, kind) {
@@ -1928,7 +2214,7 @@ async function requestJson(url, options) {
 }
 
 function actionLabel(action) {
-  return ({ "trash-photo": "Moved to trash", "restore-photo": "Restored", "purge-photo": "Published copy deleted", "trash-album": "Album moved to trash", "restore-album": "Album restored", "purge-album": "Published album copies deleted", "empty-trash": "Trash emptied" })[action] || "Updated";
+  return ({ "trash-photo": "Moved to trash", "trash-photos": "Moved to Trash", "restore-photo": "Restored", "purge-photo": "Published copy deleted", "trash-album": "Album moved to trash", "restore-album": "Album restored", "purge-album": "Published album copies deleted", "empty-trash": "Trash emptied" })[action] || "Updated";
 }
 
 function formatDate(date) {

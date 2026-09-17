@@ -4,7 +4,7 @@ use std::os::windows::process::CommandExt;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Write},
     net::{TcpListener, TcpStream, UdpSocket},
     path::{Path, PathBuf},
     process::{Command, Stdio},
@@ -18,6 +18,15 @@ use tauri::{AppHandle, Emitter, Manager};
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 const TUNNEL_TOKEN_PLACEHOLDER: &str = "paste_cloudflare_tunnel_token_here";
+const INSTALLER_RUNTIME_IMAGE: &str =
+    "node:22-alpine@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920";
+const INSTALLER_HELPERS: &[&str] = &[
+    "frame-installer.mjs",
+    "frame-env.mjs",
+    "frame-contract.mjs",
+    "frame-updater.mjs",
+    "frame-release.mjs",
+];
 const CAPABILITY_KEYS: &[&str] = &[
     "frame-video-relay",
     "frame-audio-relay",
@@ -240,19 +249,19 @@ fn load_install_plan(install_root: String) -> Result<InstallPlan, String> {
 #[tauri::command]
 fn apply_install_plan(app: AppHandle, plan: InstallPlan) -> Result<ApplyResult, String> {
     let mut logs = Vec::new();
-    let saved = save_install_plan_inner(&plan)?;
+    validate_install_plan(&plan)?;
     let data_root = storage_root(&plan)?;
     let stack_workspace = data_root.clone();
     let stack_source = find_stack_source(&app)?;
-    push_install_log(
-        &app,
-        &mut logs,
-        format!(
-            "Preparing stack workspace at {}.",
-            stack_workspace.display()
-        ),
-    );
-    prepare_stack_workspace(&app, &stack_source, &stack_workspace, &mut logs)?;
+    let active_release = stack_workspace.join("frame-release.json").exists();
+    if active_release {
+        validate_installed_release_resources(&stack_workspace)?;
+    }
+    let config_source = if active_release {
+        &stack_workspace
+    } else {
+        &stack_source
+    };
     let mode = normalize_mode(&plan.deployment_mode)?;
     let mut capabilities = capabilities_from_plan(&plan)?;
     let dependency_warnings = enforce_apply_dependencies(&mut capabilities);
@@ -262,82 +271,141 @@ fn apply_install_plan(app: AppHandle, plan: InstallPlan) -> Result<ApplyResult, 
     let config = stack_config(&mode, &capabilities);
     let effective_prefixes = compute_effective_public_prefixes(&mode, &capabilities);
 
-    push_install_log(&app, &mut logs, "Creating FRAME data folders.");
-    ensure_apply_data_directories(&data_root)?;
-    write_json_file(&data_root.join("state").join("stack-config.json"), &config)?;
-    write_json_file(
-        &data_root
-            .join("state")
-            .join("effective-public-prefixes.json"),
-        &serde_json::json!({
-            "mode": mode,
-            "prefixes": effective_prefixes,
-            "generated_at": plan.created_at
-        }),
-    )?;
-    fs::write(
-        data_root.join("state").join("cloudflared-ingress.yml"),
-        generate_cloudflared_ingress(&env, &effective_prefixes),
-    )
-    .map_err(|error| format!("Could not write Cloudflare ingress reference: {error}"))?;
-    fs::write(
-        data_root.join("state").join("public-routes.yml"),
-        generate_public_routes(&effective_prefixes),
-    )
-    .map_err(|error| format!("Could not write public routes: {error}"))?;
-    ensure_tunnel_token_file(&data_root)?;
+    fs::create_dir_all(&stack_workspace)
+        .map_err(|error| format!("Could not create install workspace: {error}"))?;
+    snapshot_native_deployment(&app, &stack_source, &stack_workspace, &mut logs)?;
+    let mut up_attempted = false;
+    let applied = (|| -> Result<SaveResult, String> {
+        if active_release {
+            // Validate the active source/image pairing before rewriting any generated configuration.
+            run_installer_helper(&stack_source, &stack_workspace, "release-config", None)?;
+            push_install_log(
+                &app,
+                &mut logs,
+                "Preserving the installed release's source, template and installer helpers.",
+            );
+        }
+        let saved = save_install_plan_inner(&plan)?;
+        if !active_release {
+            prepare_stack_workspace(&app, &stack_source, &stack_workspace, &mut logs)?;
+        }
+        ensure_native_launchers(&stack_source, &stack_workspace)?;
 
-    let compose_template = stack_workspace
-        .join("installer")
-        .join("templates")
-        .join("docker-compose.yml");
-    let compose_target = stack_workspace.join("docker-compose.yml");
-    fs::copy(&compose_template, &compose_target)
-        .map_err(|error| format!("Could not write docker-compose.yml from template: {error}"))?;
-    fs::write(stack_workspace.join(".env"), serialize_env(&env))
-        .map_err(|error| format!("Could not write .env: {error}"))?;
+        push_install_log(&app, &mut logs, "Creating FRAME data folders.");
+        ensure_apply_data_directories(&data_root)?;
+        write_json_file(&data_root.join("state").join("stack-config.json"), &config)?;
+        write_json_file(
+            &data_root
+                .join("state")
+                .join("effective-public-prefixes.json"),
+            &serde_json::json!({
+                "mode": mode,
+                "prefixes": effective_prefixes,
+                "generated_at": plan.created_at
+            }),
+        )?;
+        fs::write(
+            data_root.join("state").join("cloudflared-ingress.yml"),
+            generate_cloudflared_ingress(&env, &effective_prefixes),
+        )
+        .map_err(|error| format!("Could not write Cloudflare ingress reference: {error}"))?;
+        fs::write(
+            data_root.join("state").join("public-routes.yml"),
+            generate_public_routes(&effective_prefixes),
+        )
+        .map_err(|error| format!("Could not write public routes: {error}"))?;
+        ensure_tunnel_token_file(&data_root)?;
 
-    push_install_log(
-        &app,
-        &mut logs,
-        format!("FRAME configuration installed at {}.", data_root.display()),
-    );
-    push_install_log(
-        &app,
-        &mut logs,
-        format!("Compose profiles: {}", profiles.join(",")),
-    );
-    for warning in dependency_warnings {
-        push_install_log(&app, &mut logs, format!("Warning: {warning}"));
-    }
-    if capabilities
-        .get("frame-discord-audio-bridge")
-        .copied()
-        .unwrap_or(false)
-    {
-        push_install_log(&app, &mut logs, "Discord Audio Bridge was enabled. Add Discord credentials in localhost/setup before using the bot.");
-    }
-    if capabilities
-        .get("frame-belabox-manager")
-        .copied()
-        .unwrap_or(false)
-    {
-        push_install_log(&app, &mut logs, "Belabox Manager was enabled. Device control uses an authenticated outbound WebSocket; SSH settings are optional for maintenance checks.");
-    }
-    if capabilities
-        .get("frame-photo-ftp")
-        .copied()
-        .unwrap_or(false)
-    {
-        push_install_log(&app, &mut logs, "Photo FTP was enabled. Set the passive host to this machine's LAN IP in localhost/setup before camera testing.");
-    }
-    if mode == "HYBRID" {
-        push_install_log(&app, &mut logs, "Hybrid mode was enabled. Add the Cloudflare tunnel token in localhost/setup before exposing public routes.");
-    }
+        let compose_template = stack_workspace
+            .join("installer")
+            .join("templates")
+            .join("docker-compose.yml");
+        let compose_target = stack_workspace.join("docker-compose.yml");
+        fs::copy(&compose_template, &compose_target).map_err(|error| {
+            format!("Could not write docker-compose.yml from template: {error}")
+        })?;
+        fs::write(stack_workspace.join(".env"), serialize_env(&env))
+            .map_err(|error| format!("Could not write .env: {error}"))?;
 
-    run_compose_config(&app, &stack_workspace, &mut logs)?;
-    run_compose_up(&app, &stack_workspace, &mut logs, mode == "HYBRID")?;
-    wait_for_web_setup(&app, &mut logs, plan.ports.edge)?;
+        push_install_log(
+            &app,
+            &mut logs,
+            format!("FRAME configuration installed at {}.", data_root.display()),
+        );
+        push_install_log(
+            &app,
+            &mut logs,
+            format!("Compose profiles: {}", profiles.join(",")),
+        );
+        for warning in dependency_warnings {
+            push_install_log(&app, &mut logs, format!("Warning: {warning}"));
+        }
+        if capabilities
+            .get("frame-discord-audio-bridge")
+            .copied()
+            .unwrap_or(false)
+        {
+            push_install_log(&app, &mut logs, "Discord Audio Bridge was enabled. Add Discord credentials in localhost/setup before using the bot.");
+        }
+        if capabilities
+            .get("frame-belabox-manager")
+            .copied()
+            .unwrap_or(false)
+        {
+            push_install_log(&app, &mut logs, "Belabox Manager was enabled. Device control uses an authenticated outbound WebSocket; SSH settings are optional for maintenance checks.");
+        }
+        if capabilities
+            .get("frame-photo-ftp")
+            .copied()
+            .unwrap_or(false)
+        {
+            push_install_log(&app, &mut logs, "Photo FTP was enabled. Set the passive host to this machine's LAN IP in localhost/setup before camera testing.");
+        }
+        if mode == "HYBRID" {
+            push_install_log(&app, &mut logs, "Hybrid mode was enabled. Add the Cloudflare tunnel token in localhost/setup before exposing public routes.");
+        }
+
+        run_installer_helper(config_source, &stack_workspace, "release-config", None)?;
+        run_compose_config(&app, &stack_workspace, &mut logs)?;
+        if stack_workspace
+            .join("docker-compose.release.json")
+            .is_file()
+        {
+            run_native_compose(&app, &stack_workspace, &mut logs, &["pull"], false)?;
+        }
+        run_compose_up(
+            &app,
+            &stack_workspace,
+            &mut logs,
+            mode == "HYBRID",
+            &env,
+            &mut up_attempted,
+        )?;
+        wait_for_web_setup(&app, &mut logs, plan.ports.edge)?;
+        run_installer_helper(&stack_source, &stack_workspace, "deployment-complete", None)?;
+        Ok(saved)
+    })();
+    let saved = match applied {
+        Ok(saved) => saved,
+        Err(original) => {
+            push_install_log(
+                &app,
+                &mut logs,
+                "Deployment failed; restoring the saved configuration and runtime images.",
+            );
+            let recovery = restore_native_deployment(
+                &app,
+                &stack_source,
+                &stack_workspace,
+                &mut logs,
+                up_attempted,
+            );
+            return Err(match recovery {
+                Ok(()) => format!("{original} Previous deployment configuration{} restored. Source files and user data were not rolled back.", if up_attempted { " and runtime" } else { "" }),
+                Err(error) => format!("{original} Recovery also failed: {error} The deployment backup was retained for recovery."),
+            });
+        }
+    };
     match start_frame_discovery(&app, &stack_workspace, &mut logs) {
         Ok(()) => push_install_log(
             &app,
@@ -404,6 +472,42 @@ fn prepare_stack_workspace(
         &source.join("installer").join("stack.sh"),
         &workspace.join("installer").join("stack.sh"),
     )?;
+    for helper in INSTALLER_HELPERS {
+        copy_file(
+            &source.join("installer").join(helper),
+            &workspace.join("installer").join(helper),
+        )?;
+    }
+    Ok(())
+}
+
+fn validate_installed_release_resources(workspace: &Path) -> Result<(), String> {
+    let mut required = INSTALLER_HELPERS
+        .iter()
+        .map(|file| workspace.join("installer").join(file))
+        .collect::<Vec<_>>();
+    required.push(workspace.join("installer/templates/docker-compose.yml"));
+    if required.iter().any(|file| !file.is_file())
+        || ["services", "config"]
+            .iter()
+            .any(|name| !workspace.join(name).is_dir())
+    {
+        return Err("The active FRAME release is missing installed source/template/helper files. Restore or update the matching release with stack.cmd or stack.sh before using native reconfiguration.".to_string());
+    }
+    Ok(())
+}
+
+fn ensure_native_launchers(source: &Path, workspace: &Path) -> Result<(), String> {
+    for launcher in ["stack.cmd", "stack.sh"] {
+        let target = workspace.join(launcher);
+        match fs::symlink_metadata(&target) {
+            Ok(_) => {} // Bootstrap launchers are preserved, including during release reconfiguration.
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                copy_file(&source.join(launcher), &target)?
+            }
+            Err(error) => return Err(format!("Could not inspect {launcher}: {error}")),
+        }
+    }
     Ok(())
 }
 
@@ -893,8 +997,17 @@ fn read_install_plan_at_root(root: &Path) -> Result<InstallPlan, String> {
     let path = install_plan_path(root);
     let contents = fs::read_to_string(&path)
         .map_err(|error| format!("Could not read install plan at {}: {error}", path.display()))?;
-    serde_json::from_str::<InstallPlan>(&contents)
-        .map_err(|error| format!("Install plan contains invalid JSON: {error}"))
+    let mut plan = serde_json::from_str::<InstallPlan>(&contents)
+        .map_err(|error| format!("Install plan contains invalid JSON: {error}"))?;
+    let existing = load_env_file(&root.join(".env"))?;
+    if let Some(value) = existing
+        .get("PHOTO_ARCHIVE_RETENTION_DAYS")
+        .filter(|value| !value.trim().is_empty())
+    {
+        plan.advanced_settings
+            .insert("PHOTO_ARCHIVE_RETENTION_DAYS".to_string(), value.clone());
+    }
+    Ok(plan)
 }
 
 fn install_plan_path(root: &Path) -> PathBuf {
@@ -1465,6 +1578,26 @@ fn build_apply_environment(
         existing_or(existing, "TIMEZONE", "America/Chicago"),
     );
     env.insert("COMPOSE_PROFILES".to_string(), profiles.join(","));
+    for (key, fallback, minimum, label) in [
+        (
+            "FRAME_CONTROL_MEMORY_MB",
+            "512",
+            128,
+            "FRAME control memory MB",
+        ),
+        (
+            "FRAME_BELABOX_MEMORY_MB",
+            "1024",
+            128,
+            "FRAME Belabox memory MB",
+        ),
+        ("FRAME_CONTROL_PIDS", "256", 64, "FRAME control PIDs"),
+    ] {
+        env.insert(
+            key.to_string(),
+            advanced_setting_or(plan, existing, key, fallback, minimum, 65536, label)?,
+        );
+    }
     env.insert("EDGE_HTTP_PORT".to_string(), edge_port);
     env.insert(
         "EDGE_PUBLIC_BASE_URL".to_string(),
@@ -1636,22 +1769,10 @@ fn build_apply_environment(
             plan,
             existing,
             "PHOTO_ARCHIVE_RETENTION_DAYS",
-            "0",
+            "14",
             0,
             36500,
-            "Photo archive retention days",
-        )?,
-    );
-    env.insert(
-        "PHOTO_TRASH_RETENTION_DAYS".to_string(),
-        advanced_setting_or(
-            plan,
-            existing,
-            "PHOTO_TRASH_RETENTION_DAYS",
-            "0",
-            0,
-            36500,
-            "Photo trash retention days",
+            "Photo original backup retention days",
         )?,
     );
     env.insert(
@@ -1750,6 +1871,18 @@ fn build_apply_environment(
     env.insert(
         "BELABOX_CHUNK_SIZE_BYTES".to_string(),
         existing_or(existing, "BELABOX_CHUNK_SIZE_BYTES", "4194304"),
+    );
+    env.insert(
+        "BELABOX_CHUNK_STAGE_TIMEOUT_MS".to_string(),
+        advanced_setting_or(
+            plan,
+            existing,
+            "BELABOX_CHUNK_STAGE_TIMEOUT_MS",
+            "120000",
+            1000,
+            3600000,
+            "Belabox chunk stage timeout",
+        )?,
     );
     env.insert(
         "FRAME_AUTH_SESSION_SECRET".to_string(),
@@ -1951,18 +2084,22 @@ fn preserve_secret(
     key: &str,
     minimum_length: usize,
 ) -> String {
-    let placeholder_values = [
-        "",
-        "your_bot_token_here",
-        "your_discord_application_client_id_here",
-        "replace_with_a_long_random_value",
-    ];
     if let Some(value) = existing.get(key) {
-        if value.len() >= minimum_length && !placeholder_values.contains(&value.as_str()) {
+        if value.len() >= minimum_length && !credential_placeholder(value) {
             return value.clone();
         }
     }
     pseudo_secret(key, minimum_length.max(32))
+}
+
+fn credential_placeholder(value: &str) -> bool {
+    [
+        "",
+        "your_bot_token_here",
+        "your_discord_application_client_id_here",
+        "replace_with_a_long_random_value",
+    ]
+    .contains(&value.trim())
 }
 
 fn pseudo_secret(label: &str, length: usize) -> String {
@@ -2049,6 +2186,14 @@ fn serialize_env(env: &BTreeMap<String, String>) -> String {
             ],
         ),
         (
+            "Container resources",
+            &[
+                "FRAME_CONTROL_MEMORY_MB",
+                "FRAME_BELABOX_MEMORY_MB",
+                "FRAME_CONTROL_PIDS",
+            ],
+        ),
+        (
             "FRAME Edge",
             &[
                 "EDGE_HTTP_PORT",
@@ -2101,6 +2246,7 @@ fn serialize_env(env: &BTreeMap<String, String>) -> String {
                 "BELABOX_TELEMETRY_INTERVAL_MS",
                 "BELABOX_CHUNK_UPLOAD_URL",
                 "BELABOX_CHUNK_SIZE_BYTES",
+                "BELABOX_CHUNK_STAGE_TIMEOUT_MS",
             ],
         ),
         (
@@ -2127,7 +2273,6 @@ fn serialize_env(env: &BTreeMap<String, String>) -> String {
                 "PHOTO_CONVERSION_ATTEMPTS",
                 "PHOTO_ARCHIVE_ORIGINALS",
                 "PHOTO_ARCHIVE_RETENTION_DAYS",
-                "PHOTO_TRASH_RETENTION_DAYS",
                 "GALLERY_THUMB_WIDTH",
                 "GALLERY_THUMB_QUALITY",
                 "TODAY_DEFAULT_INTERVAL_MS",
@@ -2263,21 +2408,7 @@ fn run_compose_config(
     repo_root: &Path,
     logs: &mut Vec<String>,
 ) -> Result<(), String> {
-    run_logged_command(
-        app,
-        repo_root,
-        logs,
-        "docker",
-        &[
-            "compose",
-            "--env-file",
-            ".env",
-            "-f",
-            "docker-compose.yml",
-            "config",
-            "--quiet",
-        ],
-    )
+    run_native_compose(app, repo_root, logs, &["config", "--quiet"], false)
 }
 
 fn run_compose_up(
@@ -2285,45 +2416,376 @@ fn run_compose_up(
     repo_root: &Path,
     logs: &mut Vec<String>,
     recreate_public_gateway: bool,
+    env: &BTreeMap<String, String>,
+    up_attempted: &mut bool,
 ) -> Result<(), String> {
-    run_logged_command(
-        app,
-        repo_root,
-        logs,
-        "docker",
-        &[
-            "compose",
-            "--env-file",
-            ".env",
-            "-f",
-            "docker-compose.yml",
-            "up",
-            "-d",
-            "--build",
-            "--remove-orphans",
-        ],
-    )?;
+    let release = repo_root.join("docker-compose.release.json").is_file();
+    let token =
+        fs::read_to_string(repo_root.join("state/cloudflare-tunnel-token")).map_err(|error| {
+            format!("Could not read the tunnel token for startup selection: {error}")
+        })?;
+    let deferred = deferred_native_services(env, &token);
+    let mut up = native_up_args(release, false);
+    let enabled;
+    if !deferred.is_empty() {
+        let mut args = native_compose_args(repo_root, release, false);
+        args.extend(["config", "--services"].map(str::to_string));
+        enabled = private_docker_output(repo_root, &args, None)?;
+        up.extend(
+            enabled
+                .lines()
+                .filter(|service| !deferred.contains(service)),
+        );
+        for service in deferred {
+            push_install_log(app, logs, format!("Deferred {service}: add its {} credentials in localhost/setup, then apply the setup to start it. The capability remains selected.", if service == "frame-tunnel" { "Cloudflare tunnel" } else { "Discord bot" }));
+        }
+    }
+    *up_attempted = true;
+    run_native_compose(app, repo_root, logs, &up, false)?;
     if !recreate_public_gateway {
         return Ok(());
     }
-    run_logged_command(
+    run_native_compose(
         app,
         repo_root,
         logs,
-        "docker",
         &[
-            "compose",
-            "--env-file",
-            ".env",
-            "-f",
-            "docker-compose.yml",
             "up",
             "-d",
             "--force-recreate",
             "--no-deps",
+            "--no-build",
+            "--pull",
+            "never",
+            "--wait",
+            "--wait-timeout",
+            "120",
             "frame-public-gateway",
         ],
+        false,
     )
+}
+
+fn deferred_native_services(
+    env: &BTreeMap<String, String>,
+    tunnel_token: &str,
+) -> Vec<&'static str> {
+    let profiles = env
+        .get("COMPOSE_PROFILES")
+        .map(String::as_str)
+        .unwrap_or("");
+    let enabled = |profile| profiles.split(',').any(|value| value.trim() == profile);
+    let mut deferred = Vec::new();
+    if enabled("audio-bridge")
+        && ["DISCORD_TOKEN", "DISCORD_CLIENT_ID"]
+            .iter()
+            .any(|key| credential_placeholder(env.get(*key).map(String::as_str).unwrap_or("")))
+    {
+        deferred.push("frame-audio-bridge");
+    }
+    if enabled("hybrid")
+        && (tunnel_token.trim().is_empty() || tunnel_token.trim() == TUNNEL_TOKEN_PLACEHOLDER)
+    {
+        deferred.push("frame-tunnel");
+    }
+    deferred
+}
+
+fn native_up_args(release: bool, recovery: bool) -> Vec<&'static str> {
+    let mut args = vec![
+        "up",
+        "-d",
+        "--remove-orphans",
+        "--wait",
+        "--wait-timeout",
+        "120",
+    ];
+    if release || recovery {
+        args.extend(["--no-build", "--pull", "never"]);
+    } else {
+        args.push("--build");
+    }
+    if recovery {
+        args.push("--force-recreate");
+    }
+    args
+}
+
+fn native_compose_args(workspace: &Path, release: bool, recovery: bool) -> Vec<String> {
+    let prefix = if recovery {
+        ".frame-deployment-backup/"
+    } else {
+        ""
+    };
+    let mut args = vec![
+        "compose".into(),
+        "--project-name".into(),
+        "syronius-frame".into(),
+        "--project-directory".into(),
+        workspace.display().to_string(),
+        "--env-file".into(),
+        workspace
+            .join(format!("{prefix}.env"))
+            .display()
+            .to_string(),
+        "-f".into(),
+        workspace
+            .join(if recovery {
+                ".frame-deployment-backup/compose.json"
+            } else {
+                "docker-compose.yml"
+            })
+            .display()
+            .to_string(),
+    ];
+    if release && !recovery {
+        args.extend([
+            "-f".into(),
+            workspace
+                .join("docker-compose.release.json")
+                .display()
+                .to_string(),
+        ]);
+    }
+    args
+}
+
+fn run_native_compose(
+    app: &AppHandle,
+    workspace: &Path,
+    logs: &mut Vec<String>,
+    command: &[&str],
+    recovery: bool,
+) -> Result<(), String> {
+    let mut args = native_compose_args(
+        workspace,
+        workspace.join("docker-compose.release.json").is_file(),
+        recovery,
+    );
+    args.extend(command.iter().map(|arg| (*arg).to_string()));
+    run_logged_command(
+        app,
+        workspace,
+        logs,
+        "docker",
+        &args.iter().map(String::as_str).collect::<Vec<_>>(),
+    )
+}
+
+// Resolved Compose and snapshot stdin contain credentials. Never send their contents to install logs.
+fn private_docker_output(
+    workspace: &Path,
+    args: &[String],
+    input: Option<&str>,
+) -> Result<String, String> {
+    let mut child = hidden_command("docker")
+        .args(args)
+        .current_dir(workspace)
+        .stdin(if input.is_some() {
+            Stdio::piped()
+        } else {
+            Stdio::null()
+        })
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| format!("Could not run Docker deployment helper: {error}"))?;
+    if let Some(input) = input {
+        if let Err(error) = child
+            .stdin
+            .take()
+            .expect("piped stdin")
+            .write_all(input.as_bytes())
+        {
+            let _ = child.kill();
+            let _ = child.wait();
+            return Err(format!(
+                "Could not send the deployment snapshot to Docker: {error}"
+            ));
+        }
+    }
+    let output = child
+        .wait_with_output()
+        .map_err(|error| format!("Could not wait for Docker deployment helper: {error}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "Docker deployment {} failed with {}. Credential-bearing output was withheld.",
+            args.first().map(String::as_str).unwrap_or("command"),
+            output.status
+        ));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+fn run_installer_helper(
+    source: &Path,
+    workspace: &Path,
+    command: &str,
+    input: Option<&str>,
+) -> Result<(), String> {
+    let source = fs::canonicalize(source)
+        .map_err(|error| format!("Could not locate installer source: {error}"))?;
+    let workspace = fs::canonicalize(workspace)
+        .map_err(|error| format!("Could not locate installer workspace: {error}"))?;
+    let mut args = vec![
+        "run".into(),
+        "--rm".into(),
+        "--interactive".into(),
+        "--pull".into(),
+        "never".into(),
+        "--network".into(),
+        "none".into(),
+        "--mount".into(),
+        format!(
+            "type=bind,source={},target=/workspace",
+            docker_mount_path(&workspace)
+        ),
+        "--mount".into(),
+        format!(
+            "type=bind,source={},target=/frame-data",
+            docker_mount_path(&workspace)
+        ),
+        "--mount".into(),
+        format!(
+            "type=bind,source={},target=/frame-source,readonly",
+            docker_mount_path(&source)
+        ),
+        "--workdir".into(),
+        "/workspace".into(),
+        "--env".into(),
+        "FRAME_INSTALLER_DATA_ROOT=/frame-data".into(),
+        INSTALLER_RUNTIME_IMAGE.into(),
+        "node".into(),
+        "/frame-source/installer/frame-installer.mjs".into(),
+        command.into(),
+    ];
+    if cfg!(unix) {
+        // Keep 0700/0600 backups readable by the native installer on Linux/macOS hosts.
+        let uid =
+            command_output("id", &["-u"]).ok_or("Could not determine the installer user ID.")?;
+        let gid =
+            command_output("id", &["-g"]).ok_or("Could not determine the installer group ID.")?;
+        args.splice(1..1, ["--user".into(), format!("{uid}:{gid}")]);
+    }
+    private_docker_output(&workspace, &args, input)
+        .map(|_| ())
+        .map_err(|error| format!("Installer {command}: {error}"))
+}
+
+fn docker_mount_path(path: &Path) -> String {
+    // Windows canonicalize adds an extended-length prefix that Docker does not accept.
+    path.display()
+        .to_string()
+        .trim_start_matches(r"\\?\")
+        .replace('\\', "/")
+}
+
+fn snapshot_native_deployment(
+    app: &AppHandle,
+    source: &Path,
+    workspace: &Path,
+    logs: &mut Vec<String>,
+) -> Result<(), String> {
+    if !command_success(
+        "docker",
+        &["image", "inspect", INSTALLER_RUNTIME_IMAGE],
+        Duration::from_secs(10),
+    ) {
+        run_logged_command(
+            app,
+            workspace,
+            logs,
+            "docker",
+            &["pull", INSTALLER_RUNTIME_IMAGE],
+        )?;
+    }
+    let snapshot = workspace.join(".frame-deployment-backup/snapshot.json");
+    if snapshot.is_file() {
+        let saved: serde_json::Value =
+            serde_json::from_slice(&fs::read(snapshot).map_err(|error| error.to_string())?)
+                .map_err(|error| error.to_string())?;
+        if saved.get("pending").and_then(serde_json::Value::as_bool) == Some(true) {
+            return run_installer_helper(
+                source,
+                workspace,
+                "deployment-snapshot",
+                Some(r#"{"compose":{"name":"syronius-frame","services":{}},"images":{}}"#),
+            );
+        }
+    }
+    let mut compose = serde_json::json!({ "name": "syronius-frame", "services": {} });
+    if workspace.join("docker-compose.yml").is_file() {
+        let mut args = native_compose_args(
+            workspace,
+            workspace.join("docker-compose.release.json").is_file(),
+            false,
+        );
+        args.extend(["--profile", "*", "config", "--format", "json"].map(str::to_string));
+        compose = serde_json::from_str(&private_docker_output(workspace, &args, None)?)
+            .map_err(|_| "Could not parse the previous Compose configuration.".to_string())?;
+    }
+    let containers = private_docker_output(
+        workspace,
+        &[
+            "ps",
+            "-q",
+            "--filter",
+            "label=com.docker.compose.project=syronius-frame",
+        ]
+        .map(str::to_string),
+        None,
+    )?;
+    let mut images = BTreeMap::new();
+    for container in containers.split_whitespace() {
+        let record = private_docker_output(
+            workspace,
+            &[
+                "inspect",
+                "--format",
+                "{{index .Config.Labels \"com.docker.compose.service\"}} {{.Image}}",
+                container,
+            ]
+            .map(str::to_string),
+            None,
+        )?;
+        let (service, image) = record
+            .split_once(' ')
+            .ok_or("Could not read the previous FRAME service/image identity.")?;
+        if images
+            .insert(service.to_string(), image.to_string())
+            .is_some()
+        {
+            return Err(format!("Multiple running containers found for {service}; deployment snapshot was not changed."));
+        }
+    }
+    let input = serde_json::json!({ "compose": compose, "images": images }).to_string();
+    run_installer_helper(source, workspace, "deployment-snapshot", Some(&input))?;
+    push_install_log(
+        app,
+        logs,
+        "Saved the previous configuration and exact running image IDs for recovery.",
+    );
+    Ok(())
+}
+
+fn restore_native_deployment(
+    app: &AppHandle,
+    source: &Path,
+    workspace: &Path,
+    logs: &mut Vec<String>,
+    up_attempted: bool,
+) -> Result<(), String> {
+    let previous_runtime = workspace
+        .join(".frame-deployment-backup/compose.json")
+        .is_file();
+    if up_attempted && !previous_runtime {
+        run_native_compose(app, workspace, logs, &["stop"], false)?;
+    }
+    run_installer_helper(source, workspace, "deployment-restore", None)?;
+    if up_attempted && previous_runtime {
+        run_native_compose(app, workspace, logs, &native_up_args(false, true), true)?;
+    }
+    run_installer_helper(source, workspace, "deployment-complete", None)
 }
 
 fn run_logged_command(
@@ -2399,6 +2861,143 @@ mod tests {
     use super::*;
 
     #[test]
+    fn deployment_arguments_keep_release_and_recovery_images_immutable() {
+        let root = Path::new("FRAME workspace with spaces");
+        let source = native_compose_args(root, false, false);
+        assert!(!source
+            .iter()
+            .any(|arg| arg.ends_with("docker-compose.release.json")));
+        let release = native_compose_args(root, true, false);
+        assert_eq!(&release[..source.len()], &source);
+        assert_eq!(
+            release.last().unwrap(),
+            &root
+                .join("docker-compose.release.json")
+                .display()
+                .to_string()
+        );
+        let recovery = native_compose_args(root, true, true);
+        assert!(!recovery
+            .iter()
+            .any(|arg| arg.ends_with("docker-compose.release.json")));
+        assert!(recovery.contains(
+            &root
+                .join(".frame-deployment-backup/compose.json")
+                .display()
+                .to_string()
+        ));
+        assert!(recovery.contains(
+            &root
+                .join(".frame-deployment-backup/.env")
+                .display()
+                .to_string()
+        ));
+        assert!(recovery.contains(&"syronius-frame".to_string()));
+        for (release, recovery) in [(false, false), (true, false), (false, true), (true, true)] {
+            let up = native_up_args(release, recovery);
+            assert!(up.contains(&"--wait"));
+            assert!(up.contains(&"--wait-timeout"));
+            assert_eq!(up.contains(&"--build"), !release && !recovery);
+            assert_eq!(up.contains(&"--no-build"), release || recovery);
+            assert_eq!(
+                up.windows(2).any(|pair| pair == ["--pull", "never"]),
+                release || recovery
+            );
+            assert_eq!(up.contains(&"--force-recreate"), recovery);
+        }
+        assert_eq!(
+            docker_mount_path(Path::new(r"\\?\C:\FRAME workspace")),
+            "C:/FRAME workspace"
+        );
+    }
+
+    #[test]
+    fn bootstrap_defers_only_selected_services_with_missing_external_credentials() {
+        let mut env = BTreeMap::from([
+            (
+                "COMPOSE_PROFILES".to_string(),
+                "hybrid,audio-bridge,photo-pipeline".to_string(),
+            ),
+            (
+                "DISCORD_TOKEN".to_string(),
+                "your_bot_token_here".to_string(),
+            ),
+            (
+                "DISCORD_CLIENT_ID".to_string(),
+                "123456789012345678".to_string(),
+            ),
+        ]);
+        assert_eq!(
+            deferred_native_services(&env, TUNNEL_TOKEN_PLACEHOLDER),
+            ["frame-audio-bridge", "frame-tunnel"]
+        );
+        env.insert(
+            "DISCORD_TOKEN".to_string(),
+            "configured-discord-token".to_string(),
+        );
+        assert_eq!(deferred_native_services(&env, ""), ["frame-tunnel"]);
+        assert!(deferred_native_services(&env, "configured-tunnel-token").is_empty());
+        env.remove("DISCORD_CLIENT_ID");
+        assert_eq!(
+            deferred_native_services(&env, "configured-tunnel-token"),
+            ["frame-audio-bridge"]
+        );
+        env.insert("COMPOSE_PROFILES".to_string(), "photo-pipeline".to_string());
+        assert!(deferred_native_services(&env, TUNNEL_TOKEN_PLACEHOLDER).is_empty());
+        assert_eq!(env.get("COMPOSE_PROFILES").unwrap(), "photo-pipeline");
+    }
+
+    #[test]
+    fn release_resources_are_required_and_existing_bootstrap_launchers_are_preserved() {
+        let temporary = std::env::temp_dir();
+        let root = temporary.join(format!(
+            "frame-native-release-test-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir(&root).unwrap();
+        let source = root.join("source");
+        let workspace = root.join("workspace");
+        fs::create_dir(&source).unwrap();
+        fs::create_dir(&workspace).unwrap();
+        assert!(validate_installed_release_resources(&workspace).is_err());
+        fs::create_dir_all(workspace.join("installer/templates")).unwrap();
+        for helper in INSTALLER_HELPERS {
+            fs::write(workspace.join("installer").join(helper), "installed helper").unwrap();
+        }
+        fs::write(
+            workspace.join("installer/templates/docker-compose.yml"),
+            "installed template",
+        )
+        .unwrap();
+        for directory in ["config", "services"] {
+            fs::create_dir(workspace.join(directory)).unwrap();
+        }
+        validate_installed_release_resources(&workspace).unwrap();
+        for launcher in ["stack.cmd", "stack.sh"] {
+            fs::write(source.join(launcher), "bundled launcher").unwrap();
+        }
+        fs::write(workspace.join("stack.cmd"), "existing launcher").unwrap();
+        ensure_native_launchers(&source, &workspace).unwrap();
+        assert_eq!(
+            fs::read_to_string(workspace.join("stack.cmd")).unwrap(),
+            "existing launcher"
+        );
+        assert_eq!(
+            fs::read_to_string(workspace.join("stack.sh")).unwrap(),
+            "bundled launcher"
+        );
+        assert_eq!(
+            fs::canonicalize(&root).unwrap().parent(),
+            Some(fs::canonicalize(temporary).unwrap().as_path())
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
     fn belabox_manager_requires_hybrid_mode() {
         let mut plan = InstallPlan {
             mode: "advanced".to_string(),
@@ -2430,7 +3029,7 @@ mod tests {
     #[test]
     fn reconfigure_preserves_credentials_and_rejects_invalid_pipeline_log_level() {
         let key = "existing-credential-key-0123456789abcdef";
-        let plan = InstallPlan {
+        let mut plan = InstallPlan {
             mode: "advanced".to_string(),
             deployment_mode: "HYBRID".to_string(),
             public_hostname: "frame.example.com".to_string(),
@@ -2462,6 +3061,164 @@ mod tests {
             Some(key)
         );
         assert!(serialize_env(&env).contains(&format!("BELABOX_SSH_CREDENTIAL_KEY={key}\n")));
+        let archive_key = "PHOTO_ARCHIVE_RETENTION_DAYS";
+        let trash_key = "PHOTO_TRASH_RETENTION_DAYS";
+        assert_eq!(env.get(archive_key).map(String::as_str), Some("14"));
+        for use_advanced in [false, true] {
+            for value in ["0", "30", "36500", "-1", "36501", "14.5", "not-a-number"] {
+                let mut settings = existing.clone();
+                settings.insert(trash_key.to_string(), "1".to_string());
+                plan.advanced_settings.clear();
+                plan.advanced_settings
+                    .insert(trash_key.to_string(), "2".to_string());
+                if use_advanced {
+                    settings.insert(archive_key.to_string(), "14".to_string());
+                    plan.advanced_settings
+                        .insert(archive_key.to_string(), value.to_string());
+                } else {
+                    settings.insert(archive_key.to_string(), value.to_string());
+                }
+                let result =
+                    build_apply_environment(&plan, "HYBRID", &capabilities, &profiles, &settings);
+                if ["0", "30", "36500"].contains(&value) {
+                    let retained = result.unwrap();
+                    assert_eq!(retained.get(archive_key).map(String::as_str), Some(value));
+                    assert!(!retained.contains_key(trash_key));
+                    assert!(!serialize_env(&retained).contains(trash_key));
+                } else {
+                    assert!(result
+                        .unwrap_err()
+                        .contains("Photo original backup retention days"));
+                }
+            }
+        }
+        plan.advanced_settings.clear();
+
+        let root = std::env::temp_dir().join(format!(
+            "frame-native-retention-test-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(root.join("state")).unwrap();
+        fs::write(
+            install_plan_path(&root),
+            serde_json::to_string(&plan).unwrap(),
+        )
+        .unwrap();
+        for value in ["0", "30"] {
+            fs::write(root.join(".env"), format!("{archive_key}={value}\n")).unwrap();
+            let loaded = read_install_plan_at_root(&root).unwrap();
+            assert_eq!(
+                loaded
+                    .advanced_settings
+                    .get(archive_key)
+                    .map(String::as_str),
+                Some(value)
+            );
+        }
+        plan.advanced_settings
+            .insert(archive_key.to_string(), "0".to_string());
+        fs::write(
+            install_plan_path(&root),
+            serde_json::to_string(&plan).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            read_install_plan_at_root(&root)
+                .unwrap()
+                .advanced_settings
+                .get(archive_key)
+                .map(String::as_str),
+            Some("30")
+        );
+        fs::remove_dir_all(&root).unwrap();
+        plan.advanced_settings.clear();
+
+        let timeout_key = "BELABOX_CHUNK_STAGE_TIMEOUT_MS";
+        assert_eq!(env.get(timeout_key).map(String::as_str), Some("120000"));
+        for timeout in [
+            "1000",
+            "240000",
+            "3600000",
+            "999",
+            "3600001",
+            "not-a-number",
+        ] {
+            let mut settings = existing.clone();
+            settings.insert(timeout_key.to_string(), timeout.to_string());
+            let result =
+                build_apply_environment(&plan, "HYBRID", &capabilities, &profiles, &settings);
+            if ["1000", "240000", "3600000"].contains(&timeout) {
+                assert!(
+                    serialize_env(&result.unwrap()).contains(&format!("{timeout_key}={timeout}\n"))
+                );
+            } else {
+                assert!(result.unwrap_err().contains("Belabox chunk stage timeout"));
+            }
+        }
+
+        for (resource_key, fallback, minimum, label) in [
+            (
+                "FRAME_CONTROL_MEMORY_MB",
+                "512",
+                128,
+                "FRAME control memory MB",
+            ),
+            (
+                "FRAME_BELABOX_MEMORY_MB",
+                "1024",
+                128,
+                "FRAME Belabox memory MB",
+            ),
+            ("FRAME_CONTROL_PIDS", "256", 64, "FRAME control PIDs"),
+        ] {
+            assert_eq!(env.get(resource_key).map(String::as_str), Some(fallback));
+            assert!(serialize_env(&env).contains(&format!("{resource_key}={fallback}\n")));
+            for use_advanced in [false, true] {
+                for value in [
+                    minimum.to_string(),
+                    "65536".to_string(),
+                    "768".to_string(),
+                    (minimum - 1).to_string(),
+                    "65537".to_string(),
+                    "512.5".to_string(),
+                    "not-a-number".to_string(),
+                ] {
+                    let mut settings = existing.clone();
+                    plan.advanced_settings.clear();
+                    if use_advanced {
+                        settings.insert(
+                            resource_key.to_string(),
+                            "invalid-overridden-value".to_string(),
+                        );
+                        plan.advanced_settings
+                            .insert(resource_key.to_string(), value.clone());
+                    } else {
+                        settings.insert(resource_key.to_string(), value.clone());
+                    }
+                    let result = build_apply_environment(
+                        &plan,
+                        "HYBRID",
+                        &capabilities,
+                        &profiles,
+                        &settings,
+                    );
+                    if value
+                        .parse::<u32>()
+                        .is_ok_and(|parsed| (minimum..=65536).contains(&parsed))
+                    {
+                        assert!(serialize_env(&result.unwrap())
+                            .contains(&format!("{resource_key}={value}\n")));
+                    } else {
+                        assert!(result.unwrap_err().contains(label));
+                    }
+                }
+            }
+        }
+        plan.advanced_settings.clear();
 
         let invalid = BTreeMap::from([
             ("BELABOX_SSH_CREDENTIAL_KEY".to_string(), key.to_string()),

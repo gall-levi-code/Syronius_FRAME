@@ -20,6 +20,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { activateRelease, clearRelease, readReleaseManifest, recordSourceCommit, RELEASE_MANIFEST_FILE, RELEASE_COMPOSE_FILE, SOURCE_COMMIT_FILE, DEPLOYMENT_BACKUP } from "./frame-release.mjs";
 
 const execFileAsync = promisify(execFile);
 const REPOSITORY = "gall-levi-code/Syronius_FRAME";
@@ -36,11 +37,13 @@ const WRAPPER_NEXT_FILES = new Map([
   ["installer/stack.ps1", "installer/stack.ps1.next"],
   ["installer/stack.sh", "installer/stack.sh.next"],
 ]);
-const ALWAYS_PROTECTED = [".env", "docker-compose.yml", "cf_token.txt", ".git"];
+const ALWAYS_PROTECTED = [".env", "docker-compose.yml", "cf_token.txt", ".git", RELEASE_MANIFEST_FILE, RELEASE_COMPOSE_FILE, SOURCE_COMMIT_FILE, DEPLOYMENT_BACKUP];
 const REQUIRED_FILES = [
   "package.json",
   "installer/frame-installer.mjs",
+  "installer/frame-env.mjs",
   "installer/frame-updater.mjs",
+  "installer/frame-release.mjs",
   "installer/frame-contract.mjs",
   "installer/stack.ps1",
   "installer/stack.sh",
@@ -54,9 +57,14 @@ const WRAPPER_CONTRACTS = new Map([
   ["installer/stack.sh", ["update)", "start)", "finalize-source-update)"]],
 ]);
 
-export async function sourceUpdate({ workspace = "/workspace" } = {}) {
+export async function sourceUpdate({ workspace = "/workspace", imageManifest, source = false } = {}) {
   workspace = path.resolve(workspace);
   await requireInstalledWorkspace(workspace);
+  if (imageManifest && source) throw new Error("Choose --image-manifest or --source, not both.");
+  const release = imageManifest ? await readReleaseManifest(path.resolve(workspace, imageManifest)) : null;
+  if (!release && !source && await lstat(path.join(workspace, RELEASE_MANIFEST_FILE)).catch((error) => { if (error.code === "ENOENT") return null; throw error; })) {
+    throw new Error("This installation uses release images. Supply --image-manifest FILE for the next release, or --source to switch to main source builds.");
+  }
   const envText = await readFile(path.join(workspace, ".env"), "utf8");
   const dataRootValue = readEnvValue(envText, "FRAME_DATA_ROOT") || "./data";
   const relativeDataRoot = relativeDataRootOrNull(dataRootValue);
@@ -65,12 +73,12 @@ export async function sourceUpdate({ workspace = "/workspace" } = {}) {
   const temporaryRoot = await mkdtemp(path.join(os.tmpdir(), "frame-update-"));
 
   try {
-    const buildId = await resolveCurrentBuild();
+    const buildId = release?.commit ?? await resolveCurrentBuild();
     const archiveFile = path.join(temporaryRoot, "frame-update.tar.gz");
     const extractedRoot = path.join(temporaryRoot, "payload");
     const archiveUrl = `https://github.com/${REPOSITORY}/archive/${buildId}.tar.gz`;
 
-    console.log(`[update] current ${BRANCH} build: ${buildId}`);
+    console.log(`[update] ${release ? "release" : BRANCH} build: ${buildId}`);
     console.log("[update] downloading official FRAME source...");
     await downloadArchive(archiveUrl, archiveFile);
 
@@ -86,7 +94,12 @@ export async function sourceUpdate({ workspace = "/workspace" } = {}) {
     await verifyStagedPayload(extractedRoot, staged.files);
 
     console.log("[update] installing verified FRAME source...");
+    // A failed overlay must never claim that all source files still match a release.
+    await rm(path.join(workspace, SOURCE_COMMIT_FILE), { force: true });
     await applyStagedUpdate({ workspace, stagedRoot: extractedRoot, files: staged.files, protectedPaths });
+    await recordSourceCommit(workspace, buildId);
+    if (release) await activateRelease(workspace, release);
+    else await clearRelease(workspace);
     await atomicWriteJson(path.join(stateRoot, "state", "pending-source-update.json"), {
       schema_version: 1,
       build_id: buildId,
@@ -417,8 +430,14 @@ function resolveStateRoot(workspace, value) {
   const normalized = String(value).trim().replaceAll("\\", "/").replace(/\/+$/, "");
   if (isAbsoluteDataRoot(normalized)) {
     const mounted = String(process.env.FRAME_INSTALLER_DATA_ROOT ?? "").trim();
-    if (!mounted) throw new Error("The configured external FRAME_DATA_ROOT is not mounted into the installer runtime.");
-    return path.resolve(mounted);
+    if (mounted) return path.resolve(mounted);
+    if (process.env.FRAME_WORKSPACE && path.isAbsolute(process.env.FRAME_WORKSPACE)) {
+      if (/^[A-Za-z]:\//.test(normalized) && process.platform !== "win32") {
+        throw new Error("FRAME_DATA_ROOT uses a Windows host path. Run through stack.cmd so the installer can mount it.");
+      }
+      return path.resolve(normalized);
+    }
+    throw new Error("The configured external FRAME_DATA_ROOT is not mounted into the installer runtime.");
   }
   const relative = relativeDataRootOrNull(normalized);
   return path.resolve(workspace, ...relative.split("/"));

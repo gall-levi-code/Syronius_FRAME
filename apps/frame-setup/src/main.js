@@ -15,7 +15,7 @@ const SETUP_MODES = [
     id: "quick",
     label: "Quick Start",
     eyebrow: "Recommended stack",
-    summary: "Install the core FRAME tools that work without external credentials, then finish details in the web setup page.",
+    summary: "Install the core FRAME tools, create your operator login, then finish details in the web setup page.",
   },
   {
     id: "guided",
@@ -51,7 +51,7 @@ const SERVICES = [
     guided: {
       what: "Builds browser-source overlays for OBS using FRAME styling and live telemetry from the relay tools.",
       why: "Use this when you want clean on-stream status panels for bitrate, RTT, buffer health, uptime, or custom stream labels without designing each overlay by hand.",
-      ports: "Does not expose its own host port. It is served through the main FRAME web edge.",
+      ports: "Uses FRAME Edge and currently publishes direct Overlay and Stream Manager TCP ports, shown in the Ports step.",
       setup: "In localhost/setup you will create overlay presets, choose which stats appear, copy OBS browser-source URLs, and adjust layout/visibility for each scene.",
     },
     defaultEnabled: true,
@@ -63,7 +63,7 @@ const SERVICES = [
     guided: {
       what: "Captures a local audio source in the browser and creates listener pages so trusted people can monitor the feed remotely.",
       why: "Use this when you need a quick audio confidence monitor for a stream mix, especially when someone off-site is helping watch audio quality.",
-      ports: "Does not expose a separate host port. Admin and capture pages stay local through FRAME Edge; listener routes can be exposed later if you choose Hybrid access.",
+      ports: "Uses FRAME Edge and currently publishes a direct Audio Monitor TCP port. Listener routes can be exposed later with Hybrid access.",
       setup: "In localhost/setup you will pick the capture device/page, create listener links, tune quality settings, and decide which routes are safe to publish.",
     },
     defaultEnabled: true,
@@ -75,7 +75,7 @@ const SERVICES = [
     guided: {
       what: "Runs the Discord voice bridge service that can mix selected Discord voice users into stable OBS browser-source URLs.",
       why: "Use this when streamers need Discord voice audio and speaker overlays without changing OBS URLs for every session.",
-      ports: "Served through FRAME Edge in this stack, but it also requires a Discord bot token and Discord application permissions.",
+      ports: "Uses FRAME Edge and a direct TCP port. Requires a Discord bot token and Discord application permissions.",
       setup: "In localhost/setup you will add Discord bot credentials, configure operator access, invite/setup guild links, and then finish per-guild control from Discord commands.",
     },
     defaultEnabled: false,
@@ -112,7 +112,7 @@ const SERVICES = [
     guided: {
       what: "Adds a protected web upload page for manually sending photos into the same photo pipeline.",
       why: "Use this when you want a simple backup to FTP or a phone-friendly way to upload images during an event.",
-      ports: "Does not expose its own port. It is protected behind the FRAME web edge and portal login.",
+      ports: "Uses FRAME Edge and currently publishes a direct upload TCP port. Uploads require the portal login.",
       setup: "In localhost/setup you will configure upload access, confirm accepted image types, and test multi-file uploads into the pipeline.",
     },
     defaultEnabled: true,
@@ -124,7 +124,7 @@ const SERVICES = [
     guided: {
       what: "Publishes processed photos into dated galleries with thumbnails, album stats, and admin cleanup tools.",
       why: "Use this when you want browseable day-by-day galleries for viewers, staff, or your own post-stream review.",
-      ports: "Does not expose its own port. Public/private access is routed through FRAME Edge based on your setup.",
+      ports: "Uses FRAME Edge and currently publishes a direct Gallery TCP port. Public/private access depends on your setup.",
       setup: "In localhost/setup you will review gallery routes, admin access, deletion/trash behavior, album covers, and public exposure choices.",
     },
     defaultEnabled: true,
@@ -136,7 +136,7 @@ const SERVICES = [
     guided: {
       what: "Adds the live Photo Stage workflow: current-day gallery, OBS viewer, remote controls, latest image metadata, and Streamer.bot-friendly file outputs.",
       why: "Use this when you want photos to appear live during a stream, with a remote page to control what the OBS viewer shows.",
-      ports: "Does not expose its own port. The OBS viewer can be public if you choose, while dashboard/upload/remote pages stay protected.",
+      ports: "Uses FRAME Edge and currently publishes a direct Photo Stage TCP port. The OBS viewer can be public while operator pages stay protected.",
       setup: "In localhost/setup you will copy the OBS viewer URL, configure remote access, verify latest.json, and confirm published-photo ready-file behavior.",
     },
     defaultEnabled: true,
@@ -145,6 +145,15 @@ const SERVICES = [
 
 const EXPOSED_PORTS = [
   { key: "edge", label: "FRAME Web GUI", protocol: "tcp", env: "EDGE_HTTP_PORT", defaultValue: 80, required: true },
+  { key: "portal", label: "Portal direct access", protocol: "tcp", env: "PORTAL_PORT", defaultValue: 3730, required: true },
+  { key: "audioBridge", label: "Discord bridge direct access", protocol: "tcp", env: "AUDIO_BRIDGE_PORT", defaultValue: 3729, service: "frame-discord-audio-bridge" },
+  { key: "audioMonitor", label: "Audio Monitor direct access", protocol: "tcp", env: "AUDIO_MONITOR_PORT", defaultValue: 3734, service: "frame-audio-relay" },
+  { key: "slsStats", label: "Relay statistics", protocol: "tcp", env: "SLS_STATS_PORT", defaultValue: 8080, service: "frame-video-relay" },
+  { key: "photoUpload", label: "Photo Upload direct access", protocol: "tcp", env: "PHOTO_UPLOAD_PORT", defaultValue: 3736, service: "frame-photo-webupload" },
+  { key: "gallery", label: "Gallery direct access", protocol: "tcp", env: "GALLERY_PORT", defaultValue: 3738, service: "frame-photo-gallery" },
+  { key: "today", label: "Photo Stage direct access", protocol: "tcp", env: "TODAY_PORT", defaultValue: 3739, service: "frame-photo-todaytools" },
+  { key: "streams", label: "Stream Manager direct access", protocol: "tcp", env: "STREAMS_PORT", defaultValue: 3732, services: ["frame-video-relay", "frame-overlays"] },
+  { key: "overlays", label: "Overlay direct access", protocol: "tcp", env: "OVERLAYS_PORT", defaultValue: 3733, service: "frame-overlays" },
   { key: "ftp", label: "Photo FTP control", protocol: "tcp", env: "PHOTO_FTP_PORT", defaultValue: 2121, service: "frame-photo-ftp" },
   { key: "ftpPassiveMin", label: "Photo FTP passive min", protocol: "tcp", env: "PHOTO_FTP_PASSIVE_MIN", defaultValue: 30000, service: "frame-photo-ftp" },
   { key: "ftpPassiveMax", label: "Photo FTP passive max", protocol: "tcp", env: "PHOTO_FTP_PASSIVE_MAX", defaultValue: 30019, service: "frame-photo-ftp" },
@@ -166,8 +175,7 @@ const ADVANCED_SETTINGS = [
   ["PHOTO_FTP_VERBOSE_LOG", "Temporary diagnostics switch for FTP command logging. Keep false unless troubleshooting."],
   ["PHOTO_UPLOAD_MAX_FILES", "Maximum files the browser upload page lets users queue at one time."],
   ["PHOTO_UPLOAD_MAX_SESSIONS", "Maximum concurrent browser upload sessions from the upload page/service."],
-  ["PHOTO_ARCHIVE_RETENTION_DAYS", "Days to retain verified archived originals. Zero disables automatic expiry."],
-  ["PHOTO_TRASH_RETENTION_DAYS", "Days to retain safely recoverable trashed publications. Zero disables automatic expiry."],
+  ["PHOTO_ARCHIVE_RETENTION_DAYS", "Days from archive creation before original backups expire. Default 14; 0 keeps them indefinitely. Gallery photos and trash are never automatically deleted."],
   ["SRTLA_PORT", "UDP ingest port for SRTLA callers."],
   ["SRT_PLAYER_PORT", "UDP output port for SRT playback."],
   ["SRT_SENDER_PORT", "UDP sender/control port used by the relay."],
@@ -183,6 +191,13 @@ const ADVANCED_SETTINGS = [
 ];
 
 const ADVANCED_VALUE_FIELDS = [
+  {
+    key: "PHOTO_FTP_PASSIVE_HOST",
+    label: "Photo FTP host address",
+    defaultValue: "",
+    type: "text",
+    placeholder: "192.168.1.10",
+  },
   {
     key: "PUBLIC_RELAY_HOST",
     label: "Advertised SRTLA host",
@@ -227,15 +242,8 @@ const ADVANCED_VALUE_FIELDS = [
   },
   {
     key: "PHOTO_ARCHIVE_RETENTION_DAYS",
-    label: "Archive retention days",
-    defaultValue: "0",
-    min: 0,
-    max: 36500,
-  },
-  {
-    key: "PHOTO_TRASH_RETENTION_DAYS",
-    label: "Trash retention days",
-    defaultValue: "0",
+    label: "Original backup retention days",
+    defaultValue: "14",
     min: 0,
     max: 36500,
   },
@@ -254,6 +262,7 @@ const SERVICE_ADVANCED_FIELDS = {
 };
 
 const SUBFOLDERS = ["photos", "galleries", "today", "inbox", "staging", "archive", "state", "logs"];
+const emptyCredentials = () => ({ portalUsername: "", portalPassword: "", discordClientId: "", discordToken: "", tunnelToken: "" });
 
 const state = {
   stage: 0,
@@ -261,7 +270,9 @@ const state = {
   installRoot: "",
   deploymentMode: "LAN",
   publicHostname: "",
-  autoPorts: true,
+  autoPorts: false,
+  credentials: emptyCredentials(),
+  existingInstall: false,
   selectedServices: Object.fromEntries(SERVICES.map((service) => [service.id, false])),
   guidedServiceIndex: 0,
   guidedReviewedServices: Object.fromEntries(SERVICES.map((service) => [service.id, false])),
@@ -272,6 +283,8 @@ const state = {
   detectedInstallations: [],
   previewMode: false,
   preflight: null,
+  preflightRunning: false,
+  preflightGeneration: 0,
   log: ["Welcome to FRAME Setup."],
   savedPlanPath: "",
   lastSetupUrl: "",
@@ -292,7 +305,7 @@ function render() {
     <div class="setup-shell">
       <aside class="sidebar">
         <div class="brand">
-          <img src="/frame-logo-square.png" alt="" aria-hidden="true" onerror="this.onerror=null;this.src='/frame-logo-square.svg';" />
+          <img src="./frame-logo-square.png" alt="" aria-hidden="true" />
           <div>
             <p class="eyebrow">Syronius FRAME</p>
             <h2>Installer</h2>
@@ -304,6 +317,7 @@ function render() {
       </aside>
       <section class="content">
         <div class="stage-viewport">
+          ${state.previewMode ? '<p class="stage-alert" role="status">Browser preview — host checks are simulated and installation is disabled.</p>' : ""}
           ${renderCurrentStage()}
         </div>
         ${renderFooter()}
@@ -311,6 +325,7 @@ function render() {
     </div>
   `;
   bindEvents();
+  if (state.installing) app.querySelectorAll("button, input, select").forEach((control) => { control.disabled = true; });
   state.animateStage = false;
 }
 
@@ -374,8 +389,8 @@ function renderWelcomeStage() {
         <p class="eyebrow">Welcome to FRAME</p>
         <h1>Set up your IRL streamer toolkit.</h1>
         <p>
-          This setup app prepares the host machine first, then hands you to the local web setup page.
-          We will walk through one decision at a time.
+          This online installer downloads an official FRAME release and its prebuilt container images,
+          then opens the local web setup page. Internet access is required.
         </p>
       </div>
       <div class="hero-card">
@@ -388,7 +403,7 @@ function renderWelcomeStage() {
         <div>
           <p class="eyebrow">Host check</p>
           <h2>Before we begin</h2>
-          <p>Docker is installed by the user. FRAME will stop here until Docker and Docker Compose are available.</p>
+          <p>Install Docker Desktop on Windows or Docker Engine with Compose on Linux first. Docker must run Linux containers on an x64 (linux/amd64) host.</p>
         </div>
         <button class="button" id="refresh-host" type="button">Recheck</button>
       </div>
@@ -441,16 +456,16 @@ function renderStoragePanel() {
         <div>
           <p class="eyebrow">Storage</p>
           <h2>Choose one FRAME storage root.</h2>
-          <p>Everything FRAME writes can live under this one folder. Advanced mode can override subfolders.</p>
+          <p>Choose the installation folder. New installs keep persistent data in its data subfolder; existing release installations retain their configured data root.</p>
         </div>
         <span class="pill ${hasRoot ? "good" : "warn"}" data-storage-status>${hasRoot ? "Selected" : "Required"}</span>
       </div>
       ${renderStageNotice(2)}
       <div class="folder-picker">
         <div>
-          <span>Install and data path</span>
+          <span>Installation folder</span>
           <strong data-storage-path>${escapeHtml(state.installRoot || "No folder selected yet")}</strong>
-          <p>${state.previewMode ? "Browser preview cannot open the native folder picker. The built Windows app will." : "Use the native folder picker to choose where FRAME keeps install state and data."}</p>
+          <p>${state.previewMode ? "Browser preview cannot open the native folder picker. Use the desktop app to install FRAME." : "Use the native folder picker to choose where FRAME keeps install state and data."}</p>
         </div>
         <div class="button-row">
           <button class="button primary" id="choose-folder" type="button">Browse folder</button>
@@ -458,11 +473,12 @@ function renderStoragePanel() {
         </div>
       </div>
       ${state.mode === "advanced" ? `
+        <p>Standard data folders are managed by the shared installer; custom subfolder layouts are not supported here.</p>
         <div class="subfolder-grid">
           ${SUBFOLDERS.map((folder) => `
             <label class="field">
               <span>${folder}</span>
-              <input data-subfolder="${folder}" value="${escapeHtml(state.subfolders[folder])}" />
+              <input value="${escapeHtml(state.subfolders[folder])}" readonly />
             </label>
           `).join("")}
         </div>
@@ -480,7 +496,7 @@ function renderServicesPanel() {
         <div>
           <p class="eyebrow">Services</p>
           <h2>${state.mode === "quick" ? "Quick Start enables the recommended stack." : "Add the tools this install needs."}</h2>
-          <p>FRAME Edge routes the web tools. Only web, FTP, and SRT/SRTLA ports leave Docker.</p>
+          <p>FRAME Edge routes the web tools. Review all published web, FTP, and SRT/SRTLA ports in the next step.</p>
         </div>
         <span class="pill ${selectedServiceCount() ? "good" : "warn"}">${selectedServiceCount()} selected</span>
       </div>
@@ -599,11 +615,13 @@ function renderPortsPanel() {
   const hybrid = state.deploymentMode === "HYBRID";
   const hostnameStatus = publicHostnameValidation();
   const relayHostStatus = publicRelayHostValidation();
+  const ftpHostStatus = photoFtpHostValidation();
   const portStatus = portValidation();
   const stageNotice = validationMessageForVisibleStage(4);
   const showStageNotice = stageNotice &&
     stageNotice !== hostnameStatus.message &&
     stageNotice !== relayHostStatus.message &&
+    stageNotice !== ftpHostStatus.message &&
     stageNotice !== portStatus.message;
   return `
     <section class="panel ${stepPageClass()}">
@@ -611,12 +629,8 @@ function renderPortsPanel() {
         <div>
           <p class="eyebrow">Network</p>
           <h2>Confirm the ports exposed on the host.</h2>
-          <p>FRAME will route internal web apps through the edge container. These are the ports users may need to allow.</p>
+          <p>These are the host ports published by the selected services. If a port is occupied, choose another value and rerun readiness checks.</p>
         </div>
-        <label class="pill warn">
-          <input id="auto-ports" type="checkbox" ${state.autoPorts ? "checked" : ""} />
-          Auto-pick alternatives
-        </label>
       </div>
       <div class="network-controls ${hybrid ? "hybrid" : "lan"}">
         <label class="field">
@@ -643,10 +657,17 @@ function renderPortsPanel() {
             />
           </label>
         ` : ""}
+        ${state.selectedServices["frame-photo-ftp"] ? `
+          <label class="field ${ftpHostStatus.status === "bad" ? "invalid" : ""}">
+            <span>Photo FTP host address</span>
+            <input id="ftp-passive-host" data-advanced-setting="PHOTO_FTP_PASSIVE_HOST" value="${escapeHtml(state.advancedSettings.PHOTO_FTP_PASSIVE_HOST ?? "")}" placeholder="192.168.1.10" />
+          </label>
+        ` : ""}
       </div>
       <div class="network-validation">
         ${hybrid ? `<small class="field-help ${hostnameStatus.status}" data-public-host-status>${hostnameStatus.message}</small>` : ""}
         ${state.selectedServices["frame-video-relay"] ? `<small class="field-help ${relayHostStatus.status}" data-public-relay-host-status>${relayHostStatus.message}</small>` : ""}
+        ${state.selectedServices["frame-photo-ftp"] ? `<small class="field-help ${ftpHostStatus.status}" data-ftp-host-status>${ftpHostStatus.message}</small>` : ""}
         ${showStageNotice ? renderStageNotice(4, "compact") : ""}
         <small class="field-help ${portStatus.status}" data-port-status>${portStatus.message}</small>
       </div>
@@ -667,7 +688,6 @@ function renderPortsPanel() {
                 step="1"
                 inputmode="numeric"
                 value="${escapeHtml(String(state.ports[port.key]))}"
-                ${state.autoPorts && port.key !== "edge" ? "disabled" : ""}
               />
             </label>
           </article>
@@ -696,10 +716,11 @@ function renderReviewPanel() {
         ${renderSummaryCard("Services", `${selectedServiceCount()} selected`)}
         ${renderSummaryCard("Web setup", setupUrl())}
       </div>
+      ${renderCredentialsPanel()}
       ${state.mode === "advanced" ? renderAdvancedPanel() : ""}
       <h3 style="margin-top: 18px;">Readiness results</h3>
-      <div class="check-grid">
-        ${checks.length ? checks.map(renderCheckCard).join("") : "<p class=\"card\">Run readiness checks to unlock Launch.</p>"}
+      <div class="check-grid" data-preflight-results aria-live="polite">
+        ${checks.length ? checks.map(renderCheckCard).join("") : `<p class="card" role="status">${state.preflightRunning ? "Checking Docker, storage, configuration, and host ports..." : "Run readiness checks to unlock Install."}</p>`}
       </div>
       <h3 style="margin-top: 18px;">Previous installations</h3>
       <div class="detected-grid">
@@ -707,6 +728,23 @@ function renderReviewPanel() {
       </div>
     </section>
   `;
+}
+
+function renderCredentialsPanel() {
+  const fields = [
+    ["portalUsername", "Operator username", "text"],
+    ["portalPassword", "Operator password", "password"],
+    ...(state.selectedServices["frame-discord-audio-bridge"] ? [["discordClientId", "Discord application ID", "text"], ["discordToken", "Discord bot token", "password"]] : []),
+    ...(state.deploymentMode === "HYBRID" ? [["tunnelToken", "Cloudflare Tunnel token", "password"]] : []),
+  ];
+  return `
+    <section class="advanced-section">
+      <h3>Installation credentials</h3>
+      <p>${state.existingInstall ? "Leave credential pairs empty to preserve the existing login and integrations. Enter both fields to replace an operator login or Discord configuration." : "Set your operator login. Optional integrations require their credentials before the stack can start."} Credentials are excluded from saved installer plans and used only to prepare and apply this installation.</p>
+      <div class="subfolder-grid">
+        ${fields.map(([key, label, type]) => `<label class="field"><span>${label}</span><input data-credential="${key}" type="${type}" autocomplete="off" value="${escapeHtml(state.credentials[key])}" /></label>`).join("")}
+      </div>
+    </section>`;
 }
 
 function renderSummaryCard(label, value) {
@@ -827,7 +865,7 @@ function renderLaunchPanel() {
         <div>
           <p class="eyebrow">Ready</p>
           <h2>Install FRAME, then continue in setup.</h2>
-          <p>Press Install FRAME once. This commits your configuration, starts Docker Compose, and waits until the local web setup page responds.</p>
+          <p>Press Install FRAME once. This commits your configuration, downloads the release images, and waits for Docker Compose health checks before offering the web setup page.</p>
         </div>
       </div>
       <div class="summary-grid">
@@ -847,7 +885,7 @@ function renderLaunchPanel() {
 
 function renderFooter() {
   const isInstallStage = state.stage === SETUP_STAGES.length - 1;
-  const hardStopNext = state.stage === 0 && !hostReadyForInstall();
+  const hardStopNext = state.preflightRunning || (state.stage === 0 && !hostReadyForInstall());
   return `
     <div class="footer-actions">
       <button class="button ghost" id="previous-stage" type="button" ${state.stage === 0 ? "disabled" : ""}>Previous</button>
@@ -872,7 +910,7 @@ function renderInstallFooterActions() {
   }
 
   return `
-    <button class="button primary get-started install-frame-button" id="apply-install" type="button" ${state.installing ? "disabled" : ""}>
+    <button class="button primary get-started install-frame-button" id="apply-install" type="button" ${state.installing || !readinessPassed() || !isDesktopRuntime() ? "disabled" : ""}>
       ${installButtonLabel()}
     </button>
   `;
@@ -893,15 +931,15 @@ function installStatusTitle() {
 
 function installStatusCopy() {
   if (state.installStatus === "running") {
-    return "Copying stack resources, writing configuration, running Docker Compose, and waiting for the web setup port.";
+    return "Downloading the official release, checking the host, pulling prebuilt images, and waiting for Docker Compose health checks.";
   }
   if (state.installStatus === "failed") {
-    return "The install did not complete. Review the log below, adjust the issue, then retry Install FRAME.";
+    return "The install did not complete. Review the log, correct the issue, then return to Review and rerun readiness checks.";
   }
   if (state.installStatus === "complete") {
-    return "Docker Compose finished and FRAME is reachable. Open FRAME Setup when you are ready, or Finish to close this installer.";
+    return "Docker Compose health checks passed. Open FRAME Setup when you are ready, or Finish to close this installer.";
   }
-  return "The final button writes the selected configuration, starts the FRAME stack, and waits for localhost/setup before showing the setup handoff.";
+  return "The final button writes the selected configuration, starts the FRAME stack, and waits for Compose health checks before showing the setup link.";
 }
 
 function bindEvents() {
@@ -959,12 +997,14 @@ function bindEvents() {
   });
 
   document.querySelector("#previous-stage")?.addEventListener("click", () => {
+    if (state.installing) return;
     clearValidation();
     state.animateStage = true;
     state.stage = Math.max(0, state.stage - 1);
     render();
   });
   document.querySelector("#next-stage")?.addEventListener("click", async () => {
+    if (state.installing || state.preflightRunning) return;
     if (state.stage === SETUP_STAGES.length - 1) return;
     if (state.stage === 5 && !readinessPassed()) {
       await runPreflight();
@@ -1005,13 +1045,6 @@ function bindEvents() {
     invalidatePreflight();
     syncProgressControls();
   });
-  document.querySelector("#auto-ports")?.addEventListener("change", (event) => {
-    state.autoPorts = event.target.checked;
-    clearValidation();
-    invalidatePreflight();
-    render();
-  });
-
   document.querySelectorAll("[data-service]").forEach((checkbox) => {
     checkbox.addEventListener("change", () => {
       state.selectedServices[checkbox.dataset.service] = checkbox.checked;
@@ -1047,9 +1080,9 @@ function bindEvents() {
       syncProgressControls();
     });
   });
-  document.querySelectorAll("[data-subfolder]").forEach((input) => {
+  document.querySelectorAll("[data-credential]").forEach((input) => {
     input.addEventListener("input", () => {
-      state.subfolders[input.dataset.subfolder] = input.value;
+      state.credentials[input.dataset.credential] = input.value;
       clearValidation();
       invalidatePreflight();
       syncProgressControls();
@@ -1067,27 +1100,26 @@ function bindEvents() {
 
 async function chooseFolder() {
   try {
-    const { open } = await import("@tauri-apps/plugin-dialog");
-    const selected = await open({
-      directory: true,
-      multiple: false,
-      title: "Choose FRAME storage folder",
-    });
+    if (!isDesktopRuntime()) throw new Error("Open the desktop installer to choose a folder.");
+    const selected = await window.frameDesktop.pickDirectory({ defaultPath: state.installRoot });
     if (typeof selected === "string") {
       state.installRoot = selected;
+      state.credentials = emptyCredentials();
+      state.existingInstall = state.detectedInstallations.some((install) => install.installRoot === selected);
       clearValidation();
       invalidatePreflight();
       addLog(`Selected storage root: ${selected}`);
     }
   } catch (error) {
-    state.previewMode = true;
-    addLog(`Native folder picker unavailable in browser preview: ${error.message ?? error}`);
+    addLog(`Could not choose folder: ${error.message ?? error}`);
   }
   render();
 }
 
 function usePreviewFolder() {
   state.installRoot = "D:\\FRAME-preview";
+  state.credentials = emptyCredentials();
+  state.existingInstall = false;
   clearValidation();
   invalidatePreflight();
   addLog(`Selected preview storage root: ${state.installRoot}`);
@@ -1095,7 +1127,8 @@ function usePreviewFolder() {
 }
 
 async function reconfigureInstall(installRoot) {
-  if (!installRoot) return;
+  if (!installRoot || state.installing) return;
+  invalidatePreflight();
   try {
     const plan = await invokeCommand("load_install_plan", { installRoot });
     applyLoadedPlan(plan);
@@ -1113,15 +1146,15 @@ function applyLoadedPlan(plan) {
   state.installRoot = plan.installRoot ?? "";
   state.deploymentMode = plan.deploymentMode ?? "LAN";
   state.publicHostname = plan.publicHostname ?? "";
-  state.autoPorts = Boolean(plan.autoPorts);
-  state.subfolders = {
-    ...Object.fromEntries(SUBFOLDERS.map((folder) => [folder, folder])),
-    ...(plan.subfolders ?? {}),
-  };
+  state.autoPorts = false;
+  state.credentials = emptyCredentials();
+  state.existingInstall = true;
+  state.subfolders = Object.fromEntries(SUBFOLDERS.map((folder) => [folder, folder]));
   state.advancedSettings = {
     ...Object.fromEntries(ADVANCED_VALUE_FIELDS.map((field) => [field.key, field.defaultValue])),
     ...(plan.advancedSettings ?? {}),
   };
+  delete state.advancedSettings.PHOTO_TRASH_RETENTION_DAYS;
   state.selectedServices = Object.fromEntries(SERVICES.map((service) => [
     service.id,
     (plan.selectedServices ?? []).includes(service.id),
@@ -1133,6 +1166,7 @@ function applyLoadedPlan(plan) {
   state.guidedReviewedServices = Object.fromEntries(SERVICES.map((service) => [service.id, true]));
   state.ports = {
     ...Object.fromEntries(EXPOSED_PORTS.map((port) => [port.key, port.defaultValue])),
+    ...Object.fromEntries(EXPOSED_PORTS.filter((port) => plan.ports?.[port.key] !== undefined).map((port) => [port.key, plan.ports[port.key]])),
     edge: plan.ports?.edge ?? 80,
     ftp: plan.ports?.photoFtp ?? 2121,
     ...passiveRangeToPorts(plan.ports?.photoFtpPassive),
@@ -1147,6 +1181,9 @@ function applyLoadedPlan(plan) {
 }
 
 async function refreshHostStatus({ quiet } = { quiet: false }) {
+  state.hostStatus = null;
+  invalidatePreflight();
+  render();
   try {
     const status = await invokeCommand("detect_host", {});
     state.hostStatus = status;
@@ -1160,29 +1197,57 @@ async function refreshHostStatus({ quiet } = { quiet: false }) {
 }
 
 async function runPreflight() {
+  if (state.installing || state.preflightRunning) return;
+  invalidatePreflight();
+  const credentialError = credentialsValidation();
+  if (credentialError) {
+    state.validationStage = 5;
+    state.validationMessage = credentialError;
+    render();
+    return;
+  }
+  clearValidation();
+  const generation = state.preflightGeneration;
+  state.preflightRunning = true;
+  render();
   try {
     const preflight = await invokeCommand("run_preflight", {
       request: buildPlan(),
     });
+    if (generation !== state.preflightGeneration) return;
     state.preflight = preflight;
     state.detectedInstallations = preflight.detectedInstallations ?? state.detectedInstallations;
     for (const check of preflight.checks ?? []) {
       addLog(`${check.status.toUpperCase()}: ${check.label} - ${check.detail}`);
     }
   } catch (error) {
-    addLog(`Readiness checks failed: ${error.message ?? error}`);
+    if (generation === state.preflightGeneration) {
+      state.preflight = null;
+      state.validationStage = 5;
+      state.validationMessage = `Readiness checks failed: ${error.message ?? error}`;
+      addLog(state.validationMessage);
+    }
+  } finally {
+    state.preflightRunning = false;
+    render();
   }
-  render();
 }
 
 async function applyInstall() {
+  if (state.installing) return;
+  if (!isDesktopRuntime() || !readinessPassed()) {
+    addLog("Run current readiness checks in the desktop installer before starting installation.");
+    render();
+    return;
+  }
+  const plan = buildPlan();
   state.installing = true;
   state.installStatus = "running";
   addLog("Starting FRAME install/apply.");
   const installLogStream = await startInstallLogListener();
   render();
   try {
-    const result = await invokeCommand("apply_install_plan", { plan: buildPlan() });
+    const result = await invokeCommand("apply_install_plan", { plan });
     state.savedPlanPath = result.path;
     if (!installLogStream.streamed()) {
       for (const line of result.logs ?? []) addLog(line);
@@ -1191,8 +1256,10 @@ async function applyInstall() {
     state.lastSetupUrl = result.setupUrl || setupUrl();
     addLog(`FRAME stack apply completed. Setup is ready at ${state.lastSetupUrl}.`);
     state.installStatus = "complete";
+    state.credentials = emptyCredentials();
   } catch (error) {
     state.installStatus = "failed";
+    invalidatePreflight();
     addLog(`Could not start installation: ${error.message ?? error}`);
   } finally {
     installLogStream.stop();
@@ -1204,10 +1271,9 @@ async function applyInstall() {
 async function startInstallLogListener() {
   let count = 0;
   const empty = { stop: () => undefined, streamed: () => count > 0 };
-  if (!isTauriRuntime()) return empty;
+  if (!isDesktopRuntime()) return empty;
   try {
-    const { listen } = await import("@tauri-apps/api/event");
-    const unlisten = await listen("install-log", (event) => {
+    const unlisten = await window.frameDesktop.listen("install-log", (event) => {
       const message = typeof event.payload === "string" ? event.payload : event.payload?.message;
       if (!message) return;
       count += 1;
@@ -1223,32 +1289,24 @@ async function startInstallLogListener() {
 
 async function openSetup({ renderAfter = true, url = setupUrl() } = {}) {
   try {
-    const { openUrl } = await import("@tauri-apps/plugin-opener");
-    await openUrl(url);
-  } catch {
-    window.open(url, "_blank", "noopener");
+    if (isDesktopRuntime()) await window.frameDesktop.openExternal(url);
+    else window.open(url, "_blank", "noopener");
+    addLog(`Opened ${url}`);
+  } catch (error) {
+    addLog(`Could not open browser: ${error.message ?? error}`);
   }
-  addLog(`Opened ${url}`);
   if (renderAfter) render();
 }
 
 async function finishInstaller() {
-  try {
-    const { getCurrentWindow } = await import("@tauri-apps/api/window");
-    await getCurrentWindow().close();
-  } catch {
-    window.close();
-  }
+  if (state.installing) return;
+  if (isDesktopRuntime()) await window.frameDesktop.closeWindow();
+  else window.close();
 }
 
 async function openDockerGuide() {
   const url = "https://docs.docker.com/get-started/get-docker/";
-  try {
-    const { openUrl } = await import("@tauri-apps/plugin-opener");
-    await openUrl(url);
-  } catch {
-    window.open(url, "_blank", "noopener");
-  }
+  await openSetup({ url });
 }
 
 function buildPlan() {
@@ -1257,34 +1315,31 @@ function buildPlan() {
     deploymentMode: state.deploymentMode,
     publicHostname: state.publicHostname,
     installRoot: state.installRoot,
-    subfolders: state.subfolders,
+    subfolders: { ...state.subfolders },
     selectedServices: Object.entries(state.selectedServices)
       .filter(([, enabled]) => enabled)
       .map(([id]) => id),
     ports: {
-      edge: parsePort(state.ports.edge),
+      ...Object.fromEntries(EXPOSED_PORTS.filter((port) => port.key !== "ftp" && !port.key.startsWith("ftpPassive")).map((port) => [port.key, parsePort(state.ports[port.key])])),
       photoFtp: parsePort(state.ports.ftp),
       photoFtpPassive: `${parsePort(state.ports.ftpPassiveMin)}-${parsePort(state.ports.ftpPassiveMax)}`,
-      srtla: parsePort(state.ports.srtla),
-      srtPlayer: parsePort(state.ports.srtPlayer),
-      srtSender: parsePort(state.ports.srtSender),
     },
-    autoPorts: state.autoPorts,
-    advancedSettings: state.advancedSettings,
+    autoPorts: false,
+    credentials: { ...state.credentials },
+    advancedSettings: { ...state.advancedSettings },
     createdAt: new Date().toISOString(),
   };
 }
 
 async function invokeCommand(command, args) {
-  if (!isTauriRuntime()) {
-    return mockInvoke(command, args, new Error("Tauri runtime is not available."));
+  if (!isDesktopRuntime()) {
+    return mockInvoke(command, args, new Error("Electron desktop runtime is not available."));
   }
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke(command, args);
+  return window.frameDesktop.invoke(command, args);
 }
 
-function isTauriRuntime() {
-  return typeof window !== "undefined" && Boolean(window.__TAURI_INTERNALS__);
+function isDesktopRuntime() {
+  return typeof window !== "undefined" && Boolean(window.frameDesktop);
 }
 
 async function mockInvoke(command, args, originalError) {
@@ -1292,8 +1347,8 @@ async function mockInvoke(command, args, originalError) {
     return {
       previewMode: true,
       checks: [
-        { label: "Tauri host bridge", status: "warn", detail: "Running in browser preview mode; native commands are mocked." },
-        { label: "Docker CLI", status: "warn", detail: "Native Docker detection requires the Tauri shell." },
+        { label: "Desktop host bridge", status: "warn", detail: "Browser preview only: host checks are simulated and installation is disabled." },
+        { label: "Docker CLI", status: "warn", detail: "Native Docker detection requires the Electron app." },
         { label: "FRAME web endpoint", status: "warn", detail: "No native health probe was run." },
       ],
       detectedInstallations: [{
@@ -1311,7 +1366,7 @@ async function mockInvoke(command, args, originalError) {
     return {
       checks: [
         { label: "Storage root", status: args.request.installRoot ? "good" : "bad", detail: args.request.installRoot || "Choose a storage root before install." },
-        { label: "Port plan", status: "good", detail: "Browser preview cannot bind-check host ports, but the plan is well formed." },
+        { label: "Port plan", status: "bad", detail: "Browser preview cannot inspect host ports. Run the desktop installer for real validation." },
         { label: "Docker readiness", status: "warn", detail: "Install Docker Desktop or Docker Engine, then recheck in the native app." },
       ],
       detectedInstallations: state.detectedInstallations,
@@ -1333,21 +1388,13 @@ async function mockInvoke(command, args, originalError) {
         srtPlayer: 4000,
         srtSender: 4001,
       },
-      autoPorts: true,
+      autoPorts: false,
       advancedSettings: Object.fromEntries(ADVANCED_VALUE_FIELDS.map((field) => [field.key, field.defaultValue])),
       createdAt: new Date().toISOString(),
     };
   }
   if (command === "save_install_plan" || command === "apply_install_plan") {
-    return {
-      path: `${args.plan.installRoot || "<storage-root>"}/state/frame-install-plan.json`,
-      setupUrl: args.plan.ports.edge === 80 ? "http://localhost/setup" : `http://localhost:${args.plan.ports.edge}/setup`,
-      logs: [
-        "Preview mode: would write .env and docker-compose.yml.",
-        "Preview mode: would run docker compose config --quiet.",
-        "Preview mode: would run docker compose up -d --build --remove-orphans.",
-      ],
-    };
+    throw new Error("Installation and saving configuration are disabled in browser preview.");
   }
   throw originalError;
 }
@@ -1357,12 +1404,13 @@ function canProceedFromStage(stage) {
   if (stage === 1) return Boolean(state.mode);
   if (stage === 2) return Boolean(state.installRoot.trim());
   if (stage === 3) return servicesStageComplete();
-  if (stage === 4) return portValidation().status === "good" && publicHostnameValidation().status === "good" && publicRelayHostValidation().status === "good";
+  if (stage === 4) return portValidation().status === "good" && publicHostnameValidation().status === "good" && publicRelayHostValidation().status === "good" && photoFtpHostValidation().status === "good";
   if (stage === 5) return readinessPassed();
   return false;
 }
 
 function nextButtonLabel() {
+  if (state.preflightRunning) return "Checking readiness...";
   if (state.stage === 0 && !hostReadyForInstall()) return "Install Docker first";
   if (state.stage === 5 && !readinessPassed()) return "Run readiness checks";
   if (state.stage === 5) return "Continue to install";
@@ -1384,6 +1432,9 @@ function validationMessageForStage(stage) {
     const relayHostStatus = publicRelayHostValidation();
     if (relayHostStatus.status !== "good") return relayHostStatus.message;
 
+    const ftpHostStatus = photoFtpHostValidation();
+    if (ftpHostStatus.status !== "good") return ftpHostStatus.message;
+
     const portStatus = portValidation();
     if (portStatus.status !== "good") return portStatus.message;
 
@@ -1394,7 +1445,9 @@ function validationMessageForStage(stage) {
 }
 
 function exposedPortsForSelection() {
-  return EXPOSED_PORTS.filter((port) => !port.service || state.selectedServices[port.service]);
+  return EXPOSED_PORTS.filter((port) => port.services
+    ? port.services.some((service) => state.selectedServices[service])
+    : !port.service || state.selectedServices[port.service]);
 }
 
 function selectedServiceCount() {
@@ -1423,7 +1476,23 @@ function markCurrentGuidedServiceReviewed() {
 }
 
 function readinessPassed() {
-  return Boolean(state.preflight) && !(state.preflight.checks ?? []).some((check) => check.status === "bad");
+  return isDesktopRuntime() && !state.preflightRunning && !state.previewMode && Boolean(state.preflight?.checks?.length) &&
+    state.preflight.checks.every((check) => ["good", "warn"].includes(check.status)) &&
+    state.preflight.checks.some((check) => check.status === "good") && !credentialsValidation();
+}
+
+function credentialsValidation() {
+  if (state.previewMode) return "";
+  const credentials = state.credentials;
+  if (state.existingInstall) {
+    if (Boolean(credentials.portalUsername.trim()) !== Boolean(credentials.portalPassword)) return "Enter both operator fields to change the login, or leave both empty to keep it.";
+    if (state.selectedServices["frame-discord-audio-bridge"] && Boolean(credentials.discordClientId.trim()) !== Boolean(credentials.discordToken)) return "Enter both Discord fields to change the integration, or leave both empty to keep it.";
+    return "";
+  }
+  if (!credentials.portalUsername.trim() || !credentials.portalPassword) return "Enter an operator username and password before running readiness checks.";
+  if (state.selectedServices["frame-discord-audio-bridge"] && (!credentials.discordClientId.trim() || !credentials.discordToken)) return "Enter the Discord application ID and bot token for Discord Audio Bridge.";
+  if (state.deploymentMode === "HYBRID" && !credentials.tunnelToken) return "Enter the Cloudflare Tunnel token for Hybrid mode.";
+  return "";
 }
 
 function hostReadyForInstall() {
@@ -1455,12 +1524,15 @@ function setupUrl() {
 
 function invalidatePreflight() {
   state.preflight = null;
+  state.preflightGeneration += 1;
+  const results = document.querySelector("[data-preflight-results]");
+  if (results) results.innerHTML = '<p class="card">Run readiness checks for the current settings.</p>';
 }
 
 function syncProgressControls() {
   const next = document.querySelector("#next-stage");
   if (next) {
-    next.disabled = state.stage === 0 && !hostReadyForInstall();
+    next.disabled = state.preflightRunning || (state.stage === 0 && !hostReadyForInstall());
     next.textContent = nextButtonLabel();
   }
 
@@ -1473,7 +1545,26 @@ function syncProgressControls() {
 
   syncPublicHostnameStatus();
   syncPublicRelayHostStatus();
+  syncPhotoFtpHostStatus();
   syncPortStatus();
+}
+
+function syncPhotoFtpHostStatus() {
+  const statusNode = document.querySelector("[data-ftp-host-status]");
+  if (!statusNode) return;
+  const status = photoFtpHostValidation();
+  statusNode.className = `field-help ${status.status}`;
+  statusNode.textContent = status.message;
+  document.querySelector("#ftp-passive-host")?.closest(".field")?.classList.toggle("invalid", status.status === "bad");
+}
+
+function photoFtpHostValidation() {
+  if (!state.selectedServices["frame-photo-ftp"]) return { status: "good", message: "Photo FTP is not selected." };
+  const host = String(state.advancedSettings.PHOTO_FTP_PASSIVE_HOST ?? "").trim();
+  if (!host && state.existingInstall) return { status: "good", message: "Leave empty to preserve the existing FTP host address." };
+  if (!host) return { status: "warn", message: "Enter this machine's LAN IPv4 address or DNS hostname so cameras can connect to Photo FTP." };
+  if (!isValidRelayHost(host) || /^(?:0|127)\./.test(host)) return { status: "bad", message: "Use a reachable LAN IPv4 address or DNS name such as frame.local, without a scheme or port." };
+  return { status: "good", message: "Photo FTP will advertise this address to cameras; reserve it in your router if it is assigned by DHCP." };
 }
 
 function syncPublicHostnameStatus() {
@@ -1562,7 +1653,7 @@ function portValidation() {
       invalidKeys.push(port.key);
     }
     if (!port.key.startsWith("ftpPassive")) {
-      singlePorts.push({ key: port.key, value, label: port.label });
+      singlePorts.push({ key: port.key, value, label: port.label, protocol: port.protocol });
     }
   }
 
@@ -1589,19 +1680,20 @@ function portValidation() {
 
   const seenPorts = new Map();
   for (const port of singlePorts) {
-    if (seenPorts.has(port.value)) {
+    const binding = `${port.protocol}:${port.value}`;
+    if (seenPorts.has(binding)) {
       return {
         status: "bad",
-        message: `${port.label} conflicts with ${seenPorts.get(port.value)} on port ${port.value}.`,
-        invalidKeys: [port.key, singlePorts.find((other) => other.value === port.value && other.key !== port.key)?.key].filter(Boolean),
+        message: `${port.label} conflicts with ${seenPorts.get(binding).label} on ${port.protocol.toUpperCase()} port ${port.value}.`,
+        invalidKeys: [port.key, seenPorts.get(binding).key],
       };
     }
-    seenPorts.set(port.value, port.label);
+    seenPorts.set(binding, port);
   }
 
   if (passiveMinVisible && passiveMaxVisible) {
     for (const port of singlePorts) {
-      if (port.value >= passiveMin && port.value <= passiveMax) {
+      if (port.protocol === "tcp" && port.value >= passiveMin && port.value <= passiveMax) {
         return {
           status: "bad",
           message: `${port.label} conflicts with the Photo FTP passive range.`,
@@ -1665,7 +1757,7 @@ function numericPortInput(value) {
 }
 
 function parsePort(value) {
-  const parsed = Number.parseInt(String(value), 10);
+  const parsed = Number(String(value));
   return Number.isFinite(parsed) ? parsed : 0;
 }
 

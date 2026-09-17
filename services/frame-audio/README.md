@@ -164,6 +164,16 @@ Optional connections:
 
 Only one capture page can publish to a source at a time.
 
+Capture messages are limited to 2 MiB each. While an encoder starts or catches up, FRAME pauses
+the publisher's incoming socket and keeps at most 4 MiB of compressed audio across its pending
+queue and FFmpeg's input buffer, with at most 128 pending messages. Reading resumes when FFmpeg
+drains that backlog. Already-decoded WebSocket messages count toward the same limits.
+
+If the limit is exceeded or startup/backpressure lasts 10 seconds, FRAME disconnects that publisher
+and releases its slot. A rejected capture ends entirely; running captures preserve compressed chunks
+in order. The capture page reports the disconnect; start capture again once the encoder or host has recovered. Always-on
+sources return to silence in the meantime.
+
 Always-on sources keep the listener page available while capture is offline, then reconnect when the
 capture computer comes back.
 

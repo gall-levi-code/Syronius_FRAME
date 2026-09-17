@@ -1,7 +1,8 @@
 import "dotenv/config";
 import { execFile, spawn } from "node:child_process";
 import {
-  appendFileSync,
+  createReadStream,
+  createWriteStream,
   existsSync,
   mkdtempSync,
   mkdirSync,
@@ -10,6 +11,9 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { rename, rm, writeFile } from "node:fs/promises";
+import { Readable } from "node:stream";
+import { finished, pipeline } from "node:stream/promises";
 import {
   createCipheriv,
   createDecipheriv,
@@ -29,6 +33,7 @@ import net from "node:net";
 import { promisify } from "node:util";
 import express from "express";
 import WebSocket, { WebSocketServer } from "ws";
+import { appendAuditRecord, AUDIT_RECENT_RECORDS, readRecentAuditRecords } from "./auditLog";
 
 const execFileAsync = promisify(execFile);
 
@@ -286,6 +291,7 @@ const config = {
     parallelUploads: readInt("BELABOX_CHUNK_PARALLEL_UPLOADS", 1, 1, 4),
     uploadKbps: readInt("BELABOX_CHUNK_UPLOAD_KBPS", 0, 0, 1000000),
     maxFileBytes: readInt("PHOTO_MAX_INPUT_MB", 50, 1, 2048) * 1024 * 1024,
+    stageTimeoutMs: readInt("BELABOX_CHUNK_STAGE_TIMEOUT_MS", 120000, 1000, 3600000),
   },
   diagnostics: {
     uploadBytes: readInt("BELABOX_DIAGNOSTIC_UPLOAD_BYTES", 8 * 1024 * 1024, 64 * 1024, 64 * 1024 * 1024),
@@ -322,7 +328,7 @@ saveProvisionedDevices();
 const ftpConnectors = loadFtpConnectors();
 const sshCredentials = loadSshCredentials();
 const signingKeys = loadSigningKeys();
-const commandAudit = loadAuditLog();
+const commandAudit = readRecentAuditRecords<CommandAuditEntry>(storePaths.audit);
 const devices = new Map<string, DeviceState>();
 const pairJobs = new Map<string, PairJob>();
 const ftpConnectorJobs = new Map<string, PairJob>();
@@ -394,11 +400,11 @@ app.post("/belabox-chunks/api/transfers", (request, response, next) => {
   }
 });
 
-app.put("/belabox-chunks/api/transfers/:transferId/chunks/:index", express.raw({ type: "*/*", limit: config.chunkUpload.chunkSizeBytes + 1024 }), (request, response, next) => {
+app.put("/belabox-chunks/api/transfers/:transferId/chunks/:index", express.raw({ type: "*/*", limit: config.chunkUpload.chunkSizeBytes + 1024 }), async (request, response, next) => {
   try {
     const manifest = loadChunkManifest(request.params.transferId);
     authorizeChunkUpload(request, manifest.device_id);
-    saveChunk(request.params.transferId, request.params.index, request.body, manifest);
+    await saveChunk(request.params.transferId, request.params.index, request.body, manifest);
     response.json({ accepted: true, transfer_id: manifest.transfer_id, journey_id: manifest.journey_id, index: Number(request.params.index) });
   } catch (error) {
     next(error);
@@ -409,6 +415,7 @@ app.post("/belabox-chunks/api/transfers/:transferId/complete", async (request, r
   try {
     const manifest = loadChunkManifest(request.params.transferId);
     authorizeChunkUpload(request, manifest.device_id);
+    request.setTimeout(config.chunkUpload.stageTimeoutMs + 1000);
     const staged = await completeChunkTransfer(manifest);
     response.status(202).json({ accepted: true, transfer_id: manifest.transfer_id, journey_id: manifest.journey_id, staged_name: staged.staged_name });
   } catch (error) {
@@ -2839,9 +2846,9 @@ function loadChunkManifest(transferId: string): ChunkManifest {
   return { ...manifest, journey_id: manifest.journey_id || fallbackJourneyId(manifest.transfer_id) };
 }
 
-function saveChunk(transferId: string, indexValue: string, body: unknown, manifest: ChunkManifest): void {
+async function saveChunk(transferId: string, indexValue: string, body: unknown, manifest: ChunkManifest): Promise<void> {
   if (loadChunkReceipt(transferId)) {
-    cleanupCompletedChunkPayload(transferId);
+    await cleanupCompletedChunkPayload(transferId);
     return;
   }
   const index = safePositiveInt(indexValue, "chunk index", 0, manifest.chunk_count - 1);
@@ -2851,23 +2858,40 @@ function saveChunk(transferId: string, indexValue: string, body: unknown, manife
   if (body.length !== expected.size_bytes) throw new RequestError(400, "Chunk size does not match manifest.");
   if (sha256(body) !== expected.sha256) throw new RequestError(400, "Chunk hash does not match manifest.");
   const target = path.join(chunkTransferDir(transferId), "chunks", `${index}.part`);
-  if (existsSync(target)) {
-    const existing = readFileSync(target);
-    if (existing.length === expected.size_bytes && sha256(existing) === expected.sha256) return;
-    throw new RequestError(409, "Chunk index is already stored with different content.");
-  }
   const temporary = `${target}.${randomUUID()}.tmp`;
   try {
-    writeFileSync(temporary, body, { mode: 0o600 });
-    renameSync(temporary, target);
-  } catch (error) {
     if (existsSync(target)) {
-      const existing = readFileSync(target);
-      if (existing.length === expected.size_bytes && sha256(existing) === expected.sha256) return;
+      if (await storedChunkMatches(target, expected)) return;
+      throw new RequestError(409, "Chunk index is already stored with different content.");
     }
+    await writeFile(temporary, body, { mode: 0o600 });
+    await rename(temporary, target);
+    if (loadChunkReceipt(transferId)) await cleanupCompletedChunkPayload(transferId);
+  } catch (error) {
+    if (loadChunkReceipt(transferId)) {
+      await cleanupCompletedChunkPayload(transferId);
+      return;
+    }
+    if (await storedChunkMatches(target, expected)) return;
     throw error;
   } finally {
-    rmSync(temporary, { force: true });
+    await rm(temporary, { force: true });
+  }
+}
+
+async function storedChunkMatches(file: string, expected: ChunkManifest["chunks"][number]): Promise<boolean> {
+  const hash = createHash("sha256");
+  let size = 0;
+  try {
+    for await (const body of createReadStream(file, { highWaterMark: 64 * 1024 })) {
+      size += body.length;
+      if (size > expected.size_bytes) return false;
+      hash.update(body);
+    }
+    return size === expected.size_bytes && hash.digest("hex") === expected.sha256;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
   }
 }
 
@@ -2882,61 +2906,100 @@ function completeChunkTransfer(manifest: ChunkManifest): Promise<{ staged_name: 
 async function completeChunkTransferOnce(manifest: ChunkManifest): Promise<{ staged_name: string }> {
   const existing = loadChunkReceipt(manifest.transfer_id);
   if (existing) {
-    cleanupCompletedChunkPayload(manifest.transfer_id);
+    await cleanupCompletedChunkPayload(manifest.transfer_id);
     return { staged_name: existing.staged_name };
   }
   if (!config.photoUpload.serviceToken) throw new RequestError(503, "PORTAL_SERVICE_TOKEN is required to stage chunked photos.");
   const directory = chunkTransferDir(manifest.transfer_id);
   const assembled = path.join(directory, "assembled.tmp");
+  const signal = AbortSignal.timeout(config.chunkUpload.stageTimeoutMs);
   try {
-    const hash = createHash("sha256");
-    let total = 0;
-    writeFileSync(assembled, "");
-    for (const chunk of manifest.chunks) {
-      const chunkFile = path.join(directory, "chunks", `${chunk.index}.part`);
-      if (!existsSync(chunkFile)) throw new RequestError(409, `Chunk ${chunk.index} is missing.`);
-      const body = readFileSync(chunkFile);
-      if (body.length !== chunk.size_bytes || sha256(body) !== chunk.sha256) throw new RequestError(409, `Chunk ${chunk.index} failed verification.`);
-      total += body.length;
-      hash.update(body);
-      appendFileSync(assembled, body);
+    await assembleChunkTransfer(manifest, assembled, signal);
+    const body = createReadStream(assembled, { highWaterMark: 64 * 1024, signal });
+    const bodyClosed = finished(body, { cleanup: true }).catch(() => undefined);
+    let stagedName: string;
+    try {
+      const request: RequestInit & { duplex: "half" } = {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${config.photoUpload.serviceToken}`,
+          "content-type": "application/octet-stream",
+          "content-length": String(manifest.size_bytes),
+          "x-frame-filename": manifest.filename,
+          "x-frame-transfer-id": manifest.transfer_id,
+          "x-frame-journey-id": manifest.journey_id,
+          "x-frame-ingest-adapter": "belabox_chunked",
+          "x-frame-file-size": String(manifest.size_bytes),
+          "x-frame-file-sha256": manifest.file_sha256,
+        },
+        body: Readable.toWeb(body, {
+          strategy: { highWaterMark: 64 * 1024, size: (chunk) => chunk.byteLength },
+        }) as ReadableStream<Uint8Array>,
+        duplex: "half",
+        signal,
+      };
+      const response = await fetch(`${config.photoUpload.apiUrl}/api/internal/photo-upload/stage`, request);
+      const payload = objectValue(await response.json());
+      if (!response.ok) throw new RequestError(502, stringValue(payload?.error) || "Photo Upload rejected the assembled file.");
+      stagedName = stringValue(payload?.staged_name) || "";
+      if (!stagedName) throw new RequestError(502, "Photo Upload returned an invalid staging receipt.");
+    } finally {
+      body.destroy();
+      await bodyClosed;
     }
-    if (total !== manifest.size_bytes || hash.digest("hex") !== manifest.file_sha256) {
-      throw new RequestError(409, "Assembled file failed verification.");
-    }
-    const response = await fetch(`${config.photoUpload.apiUrl.replace(/\/+$/, "")}/api/internal/photo-upload/stage`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${config.photoUpload.serviceToken}`,
-        "content-type": "application/octet-stream",
-        "x-frame-filename": manifest.filename,
-        "x-frame-transfer-id": manifest.transfer_id,
-        "x-frame-journey-id": manifest.journey_id,
-        "x-frame-ingest-adapter": "belabox_chunked",
-        "x-frame-file-size": String(manifest.size_bytes),
-      },
-      body: readFileSync(assembled),
-    });
-    const payload = await response.json().catch(() => ({})) as JsonRecord;
-    if (!response.ok) throw new RequestError(502, stringValue(payload.error) || "Photo Upload rejected the assembled file.");
     const receipt: ChunkCompletionReceipt = {
       transfer_id: manifest.transfer_id,
       journey_id: manifest.journey_id,
-      staged_name: stringValue(payload.staged_name) || manifest.filename,
+      staged_name: stagedName,
       completed_at: new Date().toISOString(),
     };
     writeJsonAtomic(path.join(directory, "completed.json"), receipt);
-    cleanupCompletedChunkPayload(manifest.transfer_id);
+    await cleanupCompletedChunkPayload(manifest.transfer_id);
     return { staged_name: receipt.staged_name };
+  } catch (error) {
+    if (signal.aborted) throw new RequestError(504, "Photo staging timed out; retry the same transfer.");
+    throw error;
   } finally {
-    rmSync(assembled, { force: true });
+    await rm(assembled, { force: true });
   }
 }
 
-function cleanupCompletedChunkPayload(transferId: string): void {
+async function assembleChunkTransfer(manifest: ChunkManifest, assembled: string, signal: AbortSignal): Promise<void> {
+  async function* verifiedChunks() {
+    const hash = createHash("sha256");
+    let total = 0;
+    for (const chunk of manifest.chunks) {
+      const chunkHash = createHash("sha256");
+      let size = 0;
+      const file = path.join(chunkTransferDir(manifest.transfer_id), "chunks", `${chunk.index}.part`);
+      try {
+        for await (const body of createReadStream(file, { highWaterMark: 64 * 1024, signal })) {
+          size += body.length;
+          total += body.length;
+          if (size > chunk.size_bytes || total > manifest.size_bytes) throw new RequestError(409, `Chunk ${chunk.index} failed verification.`);
+          chunkHash.update(body);
+          hash.update(body);
+          yield body;
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new RequestError(409, `Chunk ${chunk.index} is missing.`);
+        throw error;
+      }
+      if (size !== chunk.size_bytes || chunkHash.digest("hex") !== chunk.sha256) throw new RequestError(409, `Chunk ${chunk.index} failed verification.`);
+    }
+    if (total !== manifest.size_bytes || hash.digest("hex") !== manifest.file_sha256) throw new RequestError(409, "Assembled file failed verification.");
+  }
+  await pipeline(
+    Readable.from(verifiedChunks(), { objectMode: false }),
+    createWriteStream(assembled, { mode: 0o600 }),
+    { signal },
+  );
+}
+
+async function cleanupCompletedChunkPayload(transferId: string): Promise<void> {
   const directory = chunkTransferDir(transferId);
-  rmSync(path.join(directory, "chunks"), { recursive: true, force: true });
-  rmSync(path.join(directory, "assembled.tmp"), { force: true });
+  await rm(path.join(directory, "chunks"), { recursive: true, force: true });
+  await rm(path.join(directory, "assembled.tmp"), { force: true });
 }
 
 function loadChunkReceipt(transferId: string): ChunkCompletionReceipt | null {
@@ -3850,24 +3913,9 @@ function auditCommandResult(deviceId: string, message: JsonRecord): void {
 }
 
 function appendAudit(entry: CommandAuditEntry): void {
+  appendAuditRecord(storePaths.audit, entry);
   commandAudit.push(entry);
-  if (commandAudit.length > 200) commandAudit.splice(0, commandAudit.length - 200);
-  appendFileSync(storePaths.audit, `${JSON.stringify(entry)}\n`, { mode: 0o600 });
-}
-
-function loadAuditLog(): CommandAuditEntry[] {
-  if (!existsSync(storePaths.audit)) return [];
-  return readFileSync(storePaths.audit, "utf8")
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .slice(-200)
-    .flatMap((line) => {
-      try {
-        return [JSON.parse(line) as CommandAuditEntry];
-      } catch {
-        return [];
-      }
-    });
+  if (commandAudit.length > AUDIT_RECENT_RECORDS) commandAudit.splice(0, commandAudit.length - AUDIT_RECENT_RECORDS);
 }
 
 function redactDevice(device: ProvisionedDevice) {

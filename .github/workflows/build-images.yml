@@ -1,0 +1,111 @@
+name: Build and smoke FRAME images
+
+on:
+  workflow_call:
+    inputs:
+      save-images:
+        description: Save the verified images for the release publishing jobs.
+        type: boolean
+        default: false
+    outputs:
+      commit:
+        value: ${{ jobs.plan.outputs.commit }}
+      services:
+        value: ${{ jobs.plan.outputs.services }}
+      prefix:
+        value: ${{ jobs.plan.outputs.prefix }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      commit: ${{ steps.metadata.outputs.commit }}
+      services: ${{ steps.metadata.outputs.services }}
+      prefix: ${{ steps.metadata.outputs.prefix }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'release' && format('refs/tags/{0}', github.event.release.tag_name) || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - id: metadata
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || '' }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync } from "node:fs";
+          import { execFileSync } from "node:child_process";
+          import { FRAME_IMAGE_SERVICES, RELEASE_IMAGE_PREFIX } from "./installer/frame-release.mjs";
+          const commit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+          if (!/^[a-f0-9]{40}$/.test(commit)) throw new Error("Expected a full source commit.");
+          if (process.env.RELEASE_TAG) {
+            if (!/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(process.env.RELEASE_TAG)) throw new Error("Release tag is not a valid container tag.");
+            const target = execFileSync("git", ["rev-parse", "--verify", `refs/tags/${process.env.RELEASE_TAG}^{commit}`], { encoding: "utf8" }).trim();
+            if (target !== commit) throw new Error("Checkout does not match the published release tag.");
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `commit=${commit}\nservices=${JSON.stringify(FRAME_IMAGE_SERVICES)}\nprefix=${RELEASE_IMAGE_PREFIX}\n`);
+          NODE
+
+  images:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        service: ${{ fromJSON(needs.plan.outputs.services) }}
+    env:
+      SERVICE: ${{ matrix.service }}
+      SOURCE_COMMIT: ${{ needs.plan.outputs.commit }}
+      IMAGE: ${{ needs.plan.outputs.prefix }}/${{ matrix.service }}:${{ needs.plan.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build the Linux AMD64 runtime image
+        run: |
+          mkdir -p image-artifact
+          docker build --platform linux/amd64 --iidfile image-artifact/image-id \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$SOURCE_COMMIT" \
+            --tag "$IMAGE" "services/$SERVICE"
+      - name: Smoke the exact image that will be published
+        run: node scripts/smoke-images.mjs --service "$SERVICE" --image "$IMAGE"
+      - name: Save the verified image and its immutable local ID
+        if: inputs.save-images
+        run: |
+          docker image save "$IMAGE" | gzip -1 > image-artifact/image.tar.gz
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+          writeFileSync("image-artifact/metadata.json", JSON.stringify({
+            commit: process.env.SOURCE_COMMIT,
+            service: process.env.SERVICE,
+            image: process.env.IMAGE,
+            image_id: readFileSync("image-artifact/image-id", "utf8").trim(),
+          }));
+          NODE
+      - uses: actions/upload-artifact@v4
+        if: inputs.save-images
+        with:
+          name: frame-image-${{ matrix.service }}
+          path: |
+            image-artifact/image.tar.gz
+            image-artifact/metadata.json
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+          overwrite: true

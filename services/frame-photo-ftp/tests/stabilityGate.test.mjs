@@ -6,6 +6,45 @@ import path from "node:path";
 import test from "node:test";
 import { StabilityGate } from "../dist/stabilityGate.js";
 
+test("shares overlapping scans and resumes after scan failures", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-ftp-overlap-"));
+  const inbox = path.join(root, "inbox");
+  const staging = path.join(root, "staging");
+  const gate = new StabilityGate(inbox, staging, 1000);
+  const failed = gate.runOnce(0);
+  assert.equal(gate.runOnce(1000), failed);
+  await failed;
+  assert.match(gate.status.last_error, /ENOENT/);
+
+  await gate.init();
+  await writeFile(path.join(inbox, "photo.jpg"), "photo");
+  const observed = gate.runOnce(2000);
+  assert.notEqual(observed, failed);
+  assert.equal(gate.runOnce(3000), observed);
+  await observed;
+  assert.equal(gate.status.last_error, null);
+  assert.equal(gate.status.observed, 1);
+  assert.equal(gate.status.staged, 0);
+
+  const staged = gate.runOnce(4000);
+  assert.equal(gate.runOnce(5000), staged);
+  await staged;
+  assert.equal(gate.status.staged, 1);
+  assert.equal(gate.status.last_staged_at, new Date(4000).toISOString());
+  const [envelope] = await readdir(staging);
+  const journey = JSON.parse(await readFile(path.join(staging, envelope, "journey.json"), "utf8"));
+  assert.equal(journey.content_sha256, createHash("sha256").update("photo").digest("hex"));
+  assert.equal(await readFile(path.join(staging, envelope, "source"), "utf8"), "photo");
+  assert.deepEqual(await readdir(inbox), []);
+
+  const next = gate.runOnce(6000);
+  assert.notEqual(next, staged);
+  await next;
+  assert.equal(gate.status.last_error, null);
+  assert.equal(gate.status.staged, 1);
+  assert.deepEqual(await readdir(staging), [envelope]);
+});
+
 test("moves a file only after its size and mtime remain stable", async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), "frame-photo-ftp-"));
   const inbox = path.join(root, "inbox");

@@ -94,7 +94,7 @@ removed.
 
 - Add `/stage/*` Photo Stage routes while preserving `/today/*` compatibility aliases.
 - Build the Discord delivery outbox after Photo Stage stabilizes.
-- [x] Add opt-in archive/trash retention controls and pipeline disk-pressure warning/pause safeguards.
+- [x] Add owner-configurable original-backup retention (14 days by default), manual-only gallery/trash deletion, and pipeline disk-pressure warning/pause safeguards.
 - [x] Add reliable HEIC/HEIF decoding independent of the production Sharp runtime.
 - Add camera and long-running FTP soak tests.
 - [x] Freeze V1 processing, recovery, sidecar, and quarantine contracts.

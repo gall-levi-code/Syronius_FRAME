@@ -1,0 +1,81 @@
+{
+  "measuredAt": "2026-09-08T08:46:49.174Z",
+  "bindSource": "E:\\FRAME_DATA",
+  "image": "node:22.23.2-alpine",
+  "imageId": "sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32",
+  "docker": "Docker Desktop",
+  "backends": {
+    "windowsBind": {
+      "node": "v22.23.2",
+      "platform": "linux",
+      "photos": 1000,
+      "metadataFiles": 3000,
+      "readConcurrency": 32,
+      "copyBytes": 52428800,
+      "renames": 500,
+      "syncWrites": 32,
+      "runs": [
+        {
+          "galleryScan": 982.6623779999991,
+          "copyHash": 578.4026119999999,
+          "atomicRename": 888.3483129999986,
+          "fsyncWrite": 112.23291199999949
+        },
+        {
+          "galleryScan": 966.3486499999999,
+          "copyHash": 551.9072940000005,
+          "atomicRename": 916.2035620000006,
+          "fsyncWrite": 119.4802069999987
+        },
+        {
+          "galleryScan": 982.421902,
+          "copyHash": 562.4495420000003,
+          "atomicRename": 907.3993780000001,
+          "fsyncWrite": 133.97116900000037
+        }
+      ],
+      "medianMs": {
+        "galleryScan": 982.421902,
+        "copyHash": 562.4495420000003,
+        "atomicRename": 907.3993780000001,
+        "fsyncWrite": 119.4802069999987
+      }
+    },
+    "namedVolume": {
+      "node": "v22.23.2",
+      "platform": "linux",
+      "photos": 1000,
+      "metadataFiles": 3000,
+      "readConcurrency": 32,
+      "copyBytes": 52428800,
+      "renames": 500,
+      "syncWrites": 32,
+      "runs": [
+        {
+          "galleryScan": 368.50912300000005,
+          "copyHash": 164.9025610000001,
+          "atomicRename": 50.78752499999996,
+          "fsyncWrite": 261.3969440000001
+        },
+        {
+          "galleryScan": 340.3739730000002,
+          "copyHash": 157.64131700000007,
+          "atomicRename": 49.116919999999936,
+          "fsyncWrite": 275.27505599999995
+        },
+        {
+          "galleryScan": 356.27172900000005,
+          "copyHash": 151.827538,
+          "atomicRename": 45.90416400000004,
+          "fsyncWrite": 235.75065200000017
+        }
+      ],
+      "medianMs": {
+        "galleryScan": 356.27172900000005,
+        "copyHash": 157.64131700000007,
+        "atomicRename": 49.116919999999936,
+        "fsyncWrite": 261.3969440000001
+      }
+    }
+  }
+}

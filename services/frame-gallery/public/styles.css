@@ -132,33 +132,37 @@ main { width: min(1500px, 100%); margin: 0 auto; padding: 18px clamp(12px, 3vw, 
 .view-switch button[aria-pressed="true"] { background: var(--accent); color: var(--background); font-weight: 800; }
 
 .date-grid, .gallery-grid { width: 100%; min-width: 0; }
-.date-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 12px; }
+.date-grid { display: grid; align-content: start; gap: 16px; padding-top: 8px; }
 .gallery-grid { display: grid; align-content: start; gap: 5px; }
 .photo-load-more { display: block; margin: 18px auto 0; }
-.gallery-photo-row { min-width: 0; display: flex; flex-wrap: nowrap; align-items: start; gap: 5px; }
+.gallery-photo-row, .gallery-cover-row { min-width: 0; display: flex; flex-wrap: nowrap; align-items: start; gap: 5px; }
 .date-card {
-  position: relative; min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--surface);
-  transition: border-color 120ms ease, transform 120ms ease;
+  position: relative; min-width: 0; aspect-ratio: 4 / 3; overflow: hidden; border-radius: 2px; background: var(--surface-strong);
+  box-shadow: 0 -3px 0 -1px var(--background), 0 -5px 0 -1px var(--border), 0 -7px 0 -2px var(--background), 0 -9px 0 -2px var(--border);
 }
-.date-card:hover { border-color: var(--accent); box-shadow: 0 0 0 1px var(--secondary); transform: translateY(-1px); }
-.date-open { min-width: 0; display: grid; width: 100%; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; text-decoration: none; cursor: pointer; }
-.date-card img { width: 100%; aspect-ratio: 4 / 3; display: block; object-fit: cover; background: var(--surface-strong); }
-.date-card-meta { min-width: 0; display: grid; gap: 3px; padding: 10px 58px 12px 12px; }
-.date-card.has-map-action .date-card-meta { padding-right: 102px; }
-.date-card-meta strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.date-card-stats { color: var(--muted); font-size: 12px; }
+.date-open { position: absolute; inset: 0; min-width: 0; width: 100%; height: 100%; padding: 0; border: 0; background: transparent; color: inherit; text-decoration: none; cursor: pointer; }
+.date-card img { width: 100%; height: 100%; display: block; object-fit: contain; background: var(--surface-strong); }
+.date-overlay { display: flex; flex-wrap: wrap; align-content: flex-end; align-items: flex-end; gap: 8px; padding: 12px; }
+.date-card-meta { flex: 1 0 min-content; min-width: 0; display: grid; gap: 3px; color: #fff; text-shadow: 0 1px 3px rgb(0 0 0 / 78%); }
+.date-card-meta strong { display: grid; gap: 2px; line-height: 1.2; white-space: nowrap; }
+.gallery-year { font-size: 12px; font-weight: 500; }
+.date-card-stats { color: rgb(255 255 255 / 82%); font-size: 12px; }
+.date-card-stats, .date-overlay .card-actions { opacity: 0; transition: opacity 150ms ease; }
 .photo-card { position: relative; min-width: 0; overflow: hidden; border-radius: 2px; background: var(--surface-strong); }
-.photo-card::after {
+.date-card::after, .photo-card::after {
   content: ""; position: absolute; z-index: 4; inset: 0; opacity: 0; pointer-events: none;
   box-shadow: inset 0 0 0 3px var(--accent); transition: opacity 120ms ease;
 }
-.photo-card:focus-within::after { opacity: 1; }
+.date-card:focus-within::after, .photo-card:focus-within::after { opacity: 1; }
 .photo-open { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; }
 .photo-open img { width: 100%; height: 100%; display: block; object-fit: contain; background: var(--surface-strong); transition: filter 150ms ease; }
-.photo-open:focus-visible { outline: 0; }
-.photo-overlay {
-  position: absolute; z-index: 2; inset: 0; opacity: 0; transform: translateY(4px); pointer-events: none;
+.date-open:focus-visible, .photo-open:focus-visible { outline: 0; }
+.date-overlay, .photo-overlay {
+  position: absolute; z-index: 2; inset: 0; pointer-events: none;
   background: linear-gradient(180deg, transparent 48%, rgb(0 0 0 / 18%) 62%, rgb(0 0 0 / 82%) 100%);
+}
+.photo-overlay {
+  opacity: 0; transform: translateY(4px);
   transition: opacity 150ms ease, transform 150ms ease;
 }
 .photo-meta {
@@ -168,12 +172,14 @@ main { width: min(1500px, 100%); margin: 0 auto; padding: 18px clamp(12px, 3vw, 
 .photo-card.has-map-action .photo-meta { right: 102px; }
 .photo-meta strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .photo-meta time { color: rgb(255 255 255 / 82%); font-size: 12px; }
+.date-card:focus-within .date-card-stats, .date-card:focus-within .card-actions { opacity: 1; }
 .photo-card:focus-within .photo-overlay { opacity: 1; transform: none; }
-.photo-card:focus-within .photo-overlay .card-action { pointer-events: auto; }
+.date-card:focus-within .date-overlay .card-action, .photo-card:focus-within .photo-overlay .card-action { pointer-events: auto; }
 .photo-card:focus-within .photo-open img { filter: brightness(1.04); }
 @media (hover: hover) and (pointer: fine) {
+  .date-card:hover .date-card-stats, .date-card:hover .card-actions { opacity: 1; }
   .photo-card:hover .photo-overlay { opacity: 1; transform: none; }
-  .photo-card:hover .photo-overlay .card-action { pointer-events: auto; }
+  .date-card:hover .date-overlay .card-action, .photo-card:hover .photo-overlay .card-action { pointer-events: auto; }
   .photo-card:hover .photo-open img { filter: brightness(1.04); }
 }
 .card-actions { position: absolute; z-index: 2; right: 8px; bottom: 8px; display: flex; gap: 6px; }
@@ -183,9 +189,11 @@ main { width: min(1500px, 100%); margin: 0 auto; padding: 18px clamp(12px, 3vw, 
   background: color-mix(in srgb, var(--topbar) 88%, transparent); color: var(--accent); cursor: pointer; backdrop-filter: blur(8px);
 }
 .card-actions .card-action { position: static; }
+.date-overlay .card-actions { position: static; flex: none; }
+.date-overlay .card-action { flex: 0 0 38px; }
 .card-action:hover { background: var(--accent); color: var(--background); }
-.photo-overlay .card-action { pointer-events: none; }
-.photo-overlay .card-action:focus-visible { outline: 0; box-shadow: 0 0 0 3px var(--accent); }
+.date-overlay .card-action, .photo-overlay .card-action { pointer-events: none; }
+.date-overlay .card-action:focus-visible, .photo-overlay .card-action:focus-visible { outline: 0; box-shadow: 0 0 0 3px var(--accent); }
 .card-action svg, .lightbox-photo-button svg {
   width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8;
 }
@@ -445,10 +453,11 @@ body.is-exploring { height: 100dvh; min-height: 0; overflow: hidden; }
   #all-galleries { display: none !important; }
   .is-photo-grid main { padding-inline: 4px; }
   .is-photo-grid .gallery-heading { margin-inline: 4px; }
-  .date-card-meta { padding: 8px 54px 8px 8px; }
-  .date-card.has-map-action .date-card-meta { padding-right: 96px; }
+  .gallery-cover-row { display: grid; gap: 16px; }
+  .gallery-cover-card { width: 100% !important; height: auto !important; }
+  .date-overlay { padding: 8px; }
   .date-card-meta strong { font-size: 13px; }
-  .date-card-stats { overflow: hidden; font-size: 11px; white-space: nowrap; text-overflow: ellipsis; }
+  .date-card-stats { font-size: 11px; }
   .lightbox-toolbar { align-items: start; }
   .lightbox-identity { display: none; }
   .zoom-controls { width: 100%; justify-content: flex-end; }
@@ -473,7 +482,11 @@ body.is-exploring { height: 100dvh; min-height: 0; overflow: hidden; }
 @media (prefers-reduced-motion: reduce) {
   .socials-button, .socials-label, .lightbox-loading::before, .lightbox-loading.is-complete { animation: none; }
   .socials-label-invite { display: none; }
-  .lightbox-nav, .lightbox-preview, .lightbox-full, .lightbox-tiles, .photo-card::after, .photo-overlay, .photo-open img { transition: none; }
+  .lightbox-nav, .lightbox-preview, .lightbox-full, .lightbox-tiles, .date-card::after, .date-card-stats, .date-overlay .card-actions, .photo-card::after, .photo-overlay, .photo-open img { transition: none; }
+}
+@media (hover: none), (pointer: coarse), (max-width: 620px) {
+  .date-card-stats, .date-overlay .card-actions { opacity: 1; }
+  .date-overlay .card-action { pointer-events: auto; }
 }
 @media (hover: none), (pointer: coarse) {
   .explore-strip-nav:not(:disabled) { opacity: .55; }

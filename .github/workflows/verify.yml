@@ -21,6 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         service:
+          - frame-auth
           - frame-audio
           - frame-audio-bridge
           - frame-belabox-manager
@@ -45,3 +46,9 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+
+  images:
+    needs: [contracts, services]
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build-images.yml

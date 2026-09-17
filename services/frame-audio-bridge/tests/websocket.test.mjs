@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { once } from "node:events";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import test from "node:test";
@@ -96,6 +97,51 @@ test("control websocket messages update snapshots and active audio clients recei
     assert.deepEqual([...await audio.waitBinary()], [...pcm]);
 
     await Promise.all([control.close(), audio.close()]);
+  } finally {
+    await fixture.close();
+  }
+});
+
+test("audio backlog is bounded per listener and disconnected listeners leave client counts", async (t) => {
+  const fixture = await createFixture();
+  try {
+    await fixture.manager.startSession({
+      guildId: "guild-1", bridgeKey: fixture.profile.bridgeKey,
+      channelId: "voice-1", channelName: "Green Room",
+    });
+    const url = fixture.wsUrl("audio", fixture.profile.bridgeKey, { obsToken: "readonly-token" });
+    const slow = createClient(url);
+    await slow.open();
+    await slow.waitJson("audio-state");
+    const slowClient = [...fixture.websockets.clients].find((client) => client.kind === "audio");
+    const sends = t.mock.method(slowClient.ws, "send");
+    const pcm = Buffer.alloc(48_000 / 1000 * 20 * 2 * 2, 1);
+    let bufferedAmount = 96_000 - pcm.length;
+    Object.defineProperty(slowClient.ws, "bufferedAmount", { get: () => bufferedAmount });
+    const healthy = createClient(url);
+    await healthy.open();
+    await healthy.waitJson("audio-state");
+    const publish = () => fixture.manager.publishAudioChunk("guild-1", fixture.profile.bridgeKey, {
+      pcm, sampleRate: 48_000, channels: 2, createdAt: Date.now(),
+    });
+
+    publish();
+    assert.deepEqual(await slow.waitBinary(), pcm, "a complete frame fits at the limit");
+    assert.deepEqual(await healthy.waitBinary(), pcm);
+    bufferedAmount += 1;
+    const closed = slow.waitClose();
+    const serverClosed = once(slowClient.ws, "close");
+    publish();
+    assert.deepEqual(await healthy.waitBinary(), pcm, "a slow listener does not block a healthy one");
+    await Promise.all([closed, serverClosed]);
+    assert.equal(slow.closeCode, 1006, "stale queued data is terminated instead of flushed");
+    assert.equal(sends.mock.callCount(), 1, "no frame is queued past the limit");
+    assert.equal(fixture.websockets.clients.has(slowClient), false);
+    assert.equal(fixture.websockets.getClientCounts(fixture.profile.bridgeKey).audio, 1);
+    publish();
+    assert.deepEqual(await healthy.waitBinary(), pcm);
+    await healthy.close();
+    assert.equal(fixture.websockets.getClientCounts(fixture.profile.bridgeKey).audio, 0);
   } finally {
     await fixture.close();
   }

@@ -26,7 +26,9 @@ publication visible only when `<base>.ready` exists and `<base>.trashed.json` do
 Restoring removes only the trash marker. Permanent deletion is allowed only for a trashed
 publication and removes the JPG, sidecars, `.ready`, trash marker, and cached thumbnail.
 Successful source uploads retained under `/data/archive` remain governed by the separate archive
-retention policy.
+retention policy: 14 days from backup creation by default, configurable by the owner on the Pipeline
+page, with `0` keeping backups indefinitely. Backup expiry is independent of gallery visibility or
+trash state. Galleries, published images, and trash entries are never deleted automatically.
 
 After every publish, trash, restore, or permanent deletion, the pipeline atomically recalculates
 `state/latest.json`. `updated_at` is the visible-library revision timestamp and always advances for

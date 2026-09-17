@@ -4,6 +4,8 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+$OutputEncoding = [Console]::OutputEncoding
 $Root = Split-Path -Parent $PSScriptRoot
 $RuntimeImage = "node:22-alpine@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920"
 $Command = "menu"
@@ -46,7 +48,7 @@ $AdvancedSettings = @(
   "BELABOX_MANAGER_API_URL",
   "PIPELINE_POLL_MS", "PIPELINE_CONCURRENCY", "PIPELINE_LOG_LEVEL",
   "PHOTO_MAX_INPUT_MB", "PHOTO_MAX_MEGAPIXELS", "PHOTO_CONVERSION_ATTEMPTS", "PHOTO_ARCHIVE_ORIGINALS",
-  "PHOTO_ARCHIVE_RETENTION_DAYS", "PHOTO_TRASH_RETENTION_DAYS",
+  "PHOTO_ARCHIVE_RETENTION_DAYS",
   "GALLERY_THUMB_WIDTH", "GALLERY_THUMB_QUALITY", "TODAY_DEFAULT_INTERVAL_MS", "TODAY_REFRESH_MS",
   "ENABLE_CONTAINER_RESTARTS", "STATUS_REFRESH_MS", "STATUS_CACHE_MS", "REQUEST_TIMEOUT_MS",
   "DISK_WARN_PERCENT", "DISK_ERROR_PERCENT", "DISK_MINIMUM_FREE_GB", "DEFAULT_AUDIO_DELAY_MS",
@@ -70,6 +72,7 @@ function Assert-Docker {
 
 function Invoke-Runtime {
   param([string[]]$Arguments)
+  if ($Arguments[0] -eq "install") { Save-DeploymentSnapshot }
   $dockerArguments = Get-RuntimeDockerArguments $Arguments
   & docker @dockerArguments
   if ($LASTEXITCODE -ne 0) {
@@ -109,17 +112,74 @@ function Invoke-Compose {
   if (-not (Test-Path (Join-Path $Root "docker-compose.yml"))) {
     throw "The generated docker-compose.yml is missing. Run stack.cmd install first."
   }
-  & docker compose --project-directory $Root --env-file (Join-Path $Root ".env") -f (Join-Path $Root "docker-compose.yml") @Arguments
+  $composeArguments = @("compose", "--project-directory", $Root, "--env-file", (Join-Path $Root ".env"), "-f", (Join-Path $Root "docker-compose.yml"))
+  $releaseCompose = Join-Path $Root "docker-compose.release.json"
+  if (Test-Path -LiteralPath $releaseCompose) { $composeArguments += @("-f", $releaseCompose) }
+  & docker @composeArguments @Arguments
   if ($LASTEXITCODE -ne 0) {
     throw "Docker Compose command failed."
   }
 }
 
+function Save-DeploymentSnapshot {
+  $snapshotFile = Join-Path $Root ".frame-deployment-backup/snapshot.json"
+  if ((Test-Path -LiteralPath $snapshotFile) -and (Get-Content -LiteralPath $snapshotFile -Raw | ConvertFrom-Json).pending) { return }
+  $compose = @{ name = "syronius-frame"; services = @{} }
+  if (Test-Path -LiteralPath (Join-Path $Root "docker-compose.yml")) {
+    $compose = (Invoke-Compose @("--profile", "*", "config", "--format", "json") | Out-String) | ConvertFrom-Json
+  }
+  $images = @{}
+  $containers = @(& docker ps -q --filter "label=com.docker.compose.project=syronius-frame")
+  if ($LASTEXITCODE -ne 0) { throw "Could not inspect the running FRAME containers." }
+  if ($containers.Count -gt 0) {
+    $records = @(& docker inspect --format '{{.Image}} {{json .Config.Labels}}' @containers)
+    if ($LASTEXITCODE -ne 0) { throw "Could not capture the running FRAME image IDs." }
+    foreach ($record in $records) {
+      $parts = $record -split ' ', 2
+      $labels = $parts[1] | ConvertFrom-Json
+      $images[$labels.'com.docker.compose.service'] = $parts[0]
+    }
+  }
+  Invoke-RuntimeInput @("deployment-snapshot") (@{ compose = $compose; images = $images } | ConvertTo-Json -Depth 100 -Compress)
+}
+
+function Invoke-HostPreflight {
+  if (-not $env:FRAME_PREFLIGHT_NODE -and -not $env:FRAME_PREFLIGHT_SCRIPT) { return }
+  if (-not $env:FRAME_PREFLIGHT_NODE -or -not $env:FRAME_PREFLIGHT_SCRIPT) {
+    throw "Both FRAME_PREFLIGHT_NODE and FRAME_PREFLIGHT_SCRIPT are required for host port validation."
+  }
+  $previousNodeMode = $env:ELECTRON_RUN_AS_NODE
+  try {
+    $env:ELECTRON_RUN_AS_NODE = "1"
+    & $env:FRAME_PREFLIGHT_NODE $env:FRAME_PREFLIGHT_SCRIPT $Root
+    if ($LASTEXITCODE -ne 0) { throw "Host port preflight failed. Fix the reported issues before starting FRAME." }
+  } finally {
+    $env:ELECTRON_RUN_AS_NODE = $previousNodeMode
+  }
+}
+
+function Restore-Deployment {
+  param([bool]$UpAttempted = $true)
+  $backupDirectory = Join-Path $Root ".frame-deployment-backup"
+  if (-not (Test-Path -LiteralPath (Join-Path $backupDirectory "snapshot.json"))) { throw "No FRAME deployment backup was found." }
+  $recoveryCompose = Join-Path $backupDirectory "compose.json"
+  if ($UpAttempted -and -not (Test-Path -LiteralPath $recoveryCompose)) {
+    Invoke-Compose @("stop")
+  }
+  Invoke-Runtime @("deployment-restore")
+  if ($UpAttempted -and (Test-Path -LiteralPath $recoveryCompose)) {
+    & docker compose --project-directory $Root -f $recoveryCompose up -d --force-recreate --no-build --pull never --remove-orphans --wait --wait-timeout 120
+    if ($LASTEXITCODE -ne 0) { throw "FRAME recovery failed its health check; the deployment backup was retained." }
+  }
+  Invoke-Runtime @("deployment-complete")
+  Write-Host "The previous FRAME deployment configuration was restored." -ForegroundColor Yellow
+}
+
 function Get-EnvMap {
+  param([string]$File = (Join-Path $Root ".env"))
   $values = @{}
-  $file = Join-Path $Root ".env"
   if (-not (Test-Path $file)) { return $values }
-  foreach ($line in Get-Content $file) {
+  foreach ($line in Get-Content -LiteralPath $file -Encoding UTF8) {
     if ($line -notmatch "^([^#=]+)=(.*)$") { continue }
     $key = $Matches[1].Trim()
     $value = $Matches[2].Trim()
@@ -155,7 +215,9 @@ function Get-RuntimeDockerArguments {
   $dockerArguments = @("run", "--rm", "-i", "--mount", "type=bind,source=$Root,target=/workspace")
   $dataRoot = Get-ArgumentValue $Arguments "--data-root"
   if (-not $dataRoot) {
-    $env = Get-EnvMap
+    $environmentFile = Join-Path $Root ".env"
+    if ($Arguments[0] -eq "deployment-restore") { $environmentFile = Join-Path $Root ".frame-deployment-backup/.env" }
+    $env = Get-EnvMap $environmentFile
     if ($env.FRAME_DATA_ROOT) { $dataRoot = $env.FRAME_DATA_ROOT }
   }
   if ($dataRoot -and [System.IO.Path]::IsPathRooted($dataRoot)) {
@@ -499,31 +561,55 @@ function Invoke-Install {
 }
 
 function Invoke-StartStack {
-  Write-Host ""
-  Write-Host "Reconciling configuration..." -ForegroundColor Cyan
-  Invoke-Runtime @("install")
-  Invoke-Compose @("config", "--quiet")
-  Write-Host "Validating startup requirements..." -ForegroundColor Cyan
-  Invoke-Runtime @("validate", "--for-start")
-  Invoke-Compose @("up", "-d", "--build", "--remove-orphans", "--wait", "--wait-timeout", "120")
-  $currentEnv = Get-EnvMap
-  if ($currentEnv.FRAME_MODE -eq "HYBRID") {
-    Invoke-Compose @("up", "-d", "--force-recreate", "--no-deps", "--wait", "--wait-timeout", "60", "frame-public-gateway")
+  Save-DeploymentSnapshot
+  $upAttempted = $false
+  try {
+    Write-Host ""
+    Write-Host "Reconciling configuration..." -ForegroundColor Cyan
+    Invoke-Runtime @("install")
+    Invoke-Compose @("config", "--quiet")
+    Write-Host "Validating startup requirements..." -ForegroundColor Cyan
+    Invoke-Runtime @("validate", "--for-start")
+    Invoke-HostPreflight
+    $imageArguments = @("--build")
+    if (Test-Path -LiteralPath (Join-Path $Root "docker-compose.release.json")) {
+      Invoke-Compose @("pull", "--policy", "always")
+      $imageArguments = @("--no-build", "--pull", "never")
+    }
+    Invoke-HostPreflight
+    $upAttempted = $true
+    Invoke-Compose (@("up", "-d") + $imageArguments + @("--remove-orphans", "--wait", "--wait-timeout", "120"))
+    $currentEnv = Get-EnvMap
+    if ($currentEnv.FRAME_MODE -eq "HYBRID") {
+      Invoke-Compose @("up", "-d", "--force-recreate", "--no-deps", "--no-build", "--pull", "never", "--wait", "--wait-timeout", "60", "frame-public-gateway")
+    }
+  } catch {
+    $failure = $_
+    try { Restore-Deployment $upAttempted } catch { Write-Host "FRAME recovery could not complete: $_" -ForegroundColor Red }
+    throw $failure
   }
+  Invoke-Runtime @("deployment-complete")
   Start-FrameDiscovery
   Write-Host "FRAME stack reconciliation completed." -ForegroundColor Green
 }
 
 function Invoke-SourceUpdate {
   param([string[]]$Arguments)
+  Save-DeploymentSnapshot
   Write-Host "Downloading and applying the FRAME source update..." -ForegroundColor Cyan
-  Invoke-Runtime (@("source-update") + $Arguments)
+  try {
+    Invoke-Runtime (@("source-update") + $Arguments)
+  } catch {
+    $failure = $_
+    try { Restore-Deployment $false } catch { Write-Host "FRAME recovery could not complete: $_" -ForegroundColor Red }
+    throw $failure
+  }
   Write-Host "Starting FRAME with the downloaded files..." -ForegroundColor Cyan
   $launcher = Join-Path $Root "stack.cmd"
   & $launcher "start"
   if ($LASTEXITCODE -ne 0) {
     $exitCode = $LASTEXITCODE
-    Write-Host "FRAME could not start with the downloaded files; the update remains pending." -ForegroundColor Red
+    Write-Host "FRAME could not start with the downloaded files. Review the recovery result above." -ForegroundColor Red
     exit $exitCode
   }
   & $launcher "finalize-source-update"
@@ -963,6 +1049,9 @@ switch ($Command) {
   }
   "start" {
     Invoke-StartStack
+  }
+  "recover" {
+    Restore-Deployment
   }
   "update" {
     Invoke-SourceUpdate $CommandArgs

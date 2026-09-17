@@ -169,7 +169,7 @@ test("Photo Stage dashboard renders named pipeline stages with collapsed perform
   assert.match(activity, /<details class="pipeline-performance">/);
   assert.doesNotMatch(activity, /<details[^>]+\bopen\b/);
   assert.doesNotMatch(activity, /<progress|\d+%/);
-  assert.match(script, /fetch\("\/today\/api\/pipeline", \{ cache: "no-store" \}\)/);
+  assert.match(script, /fetch\("\/today\/api\/pipeline", \{ cache: "no-store", signal: AbortSignal\.timeout\(30_000\) \}\)/);
   assert.match(script, /if \(renderPipeline\(pipeline\)\) nextRefreshMs = 1000/);
   assert.match(script, /stage\.textContent = stageLabel\(job\?\.stage\)/);
   assert.match(script, /numberOrNull\(job\?\.elapsed_ms\)/);
@@ -214,8 +214,8 @@ test("Photo Stage Viewer displays one full JPEG without gallery tiles", async ()
   assert.doesNotMatch(renderSource, /setAttribute\(["']aria-label["']/);
   assert.match(stageSource, /layoutLayer\(currentLayer, ["']default["']\)[\s\S]*setAttribute\(["']aria-label["']/);
   assert.match(viewerHtml, /id="photo-current" class="photo-layer current"><\/div>/);
-  assert.match(viewerHtml, /today\.css\?v=full-image-viewer-1/);
-  assert.match(viewerHtml, /viewer\.js\?v=full-image-viewer-1/);
+  assert.match(viewerHtml, /today\.css\?v=stage-controls-1/);
+  assert.match(viewerHtml, /viewer\.js\?v=stage-controls-1/);
 });
 
 test("Photo Stage Remote keeps controls in one viewport and uses a dismissible thumbnail drawer", async () => {
@@ -225,12 +225,14 @@ test("Photo Stage Remote keeps controls in one viewport and uses a dismissible t
     readFile(new URL("../public/today.css", import.meta.url), "utf8"),
   ]);
   assert.match(remoteHtml, /id="thumbnails-close"[^>]+aria-label="Close thumbnails"/);
-  assert.match(remoteHtml, /id="thumbnail-section"[^>]+role="dialog"/);
+  assert.match(remoteHtml, /<dialog id="thumbnail-section"[^>]+aria-labelledby="thumbnail-heading"/);
   assert.match(remoteHtml, /id="header-collapse"[^>]+aria-label="Collapse header"[^>]+aria-expanded="true"/);
   assert.equal((remoteHtml.match(/class="action-button/g) || []).length, 7);
   assert.match(remoteHtml, /id="interval"[^>]+min="0"[^>]+max="14"[^>]+value="7"/);
   assert.match(remoteScript, /elements\.thumbnailsClose\.addEventListener\("click", \(\) => setThumbnailsVisible\(false\)\)/);
-  assert.match(remoteScript, /event\.key === "Escape" && thumbnailsVisible/);
+  assert.match(remoteScript, /elements\.thumbnailSection\.addEventListener\("cancel", \(event\) => \{\s+event\.preventDefault\(\);\s+setThumbnailsVisible\(false\)/);
+  assert.match(remoteScript, /elements\.thumbnailSection\.showModal\(\)/);
+  assert.match(remoteScript, /elements\.thumbnailSection\.close\(\)/);
   assert.match(remoteScript, /if \(collapsed && event\.detail > 0\) elements\.headerCollapse\.blur\(\)/);
   assert.match(remoteScript, /document\.body\.classList\.toggle\("header-collapsed", collapsed\)/);
   assert.match(remoteScript, /send\(\{ type: "GOTO_INDEX", index \}\);\s+setThumbnailsVisible\(false\)/);
@@ -238,12 +240,97 @@ test("Photo Stage Remote keeps controls in one viewport and uses a dismissible t
   assert.match(remoteScript, /interval_ms: durationSteps\[Number\(elements\.interval\.value\)\] \* 1000/);
   assert.match(styles, /\.action-controls\s*\{[^}]*grid-template-columns:\s*repeat\(7/);
   assert.match(styles, /\.remote-page\s*\{[^}]*height:\s*100dvh[^}]*overflow:\s*hidden/);
-  assert.match(styles, /\.header-collapsed \.header-collapse\s*\{[^}]*position:\s*fixed[^}]*opacity:\s*\.35[^}]*1\.5s/);
-  assert.match(styles, /\.header-collapsed \.header-collapse:hover[^}]*opacity:\s*1/);
+  assert.match(styles, /\.header-collapse\s*\{[^}]*left:\s*50%[^}]*border:\s*0[^}]*background:\s*transparent/);
+  assert.match(styles, /\.header-collapsed \.header-collapse\s*\{[^}]*position:\s*fixed[^}]*top:\s*0/);
   assert.match(styles, /\.remote-main\s*\{[^}]*grid-template-rows:\s*minmax\(0, 1fr\) auto/);
   assert.match(styles, /\.thumbnail-section\s*\{[^}]*position:\s*fixed[^}]*grid-template-rows:\s*auto minmax\(0, 1fr\)/);
   assert.match(styles, /\.thumbnail-list\s*\{[^}]*overflow-y:\s*auto/);
   assert.match(styles, /@media \(max-height:\s*560px\)/);
+});
+
+test("remote thumbnails show the latest 60 in reverse order without rebuilding on playback updates or losing full-gallery indexes", async () => {
+  const script = await readFile(new URL("../public/remote.js", import.meta.url), "utf8");
+  const declarations = ["renderThumbnails", "friendlyBase"].map((name) => {
+    const match = script.match(new RegExp(`^function ${name}\\([^]*?^\\}`, "m"));
+    assert.ok(match, `Missing remote function ${name}`);
+    return match[0];
+  }).join("\n");
+  const document = {
+    activeElement: null,
+    createElement(tag) {
+      const classes = new Set();
+      return {
+        tag, dataset: {}, attributes: {}, listeners: {},
+        classList: { toggle(name, active) { if (active) classes.add(name); else classes.delete(name); }, contains: (name) => classes.has(name) },
+        setAttribute(name, value) { this.attributes[name] = value; },
+        append(child) { if (child.tag === "img") this.image = child; },
+        addEventListener(name, listener) { this.listeners[name] = listener; },
+        focus() { document.activeElement = this; },
+      };
+    },
+  };
+  let replacements = 0;
+  const elements = {
+    count: {}, thumbnailsClose: document.createElement("button"),
+    thumbnails: {
+      children: [], scrollTop: 0,
+      contains(element) { return this.children.includes(element); },
+      replaceChildren(...children) { this.children = children; this.scrollTop = 0; replacements += 1; },
+    },
+  };
+  const commands = [];
+  const visibility = [];
+  const render = Function("elements", "document", "send", "setThumbnailsVisible", `
+    let state;
+    let thumbnailKey = "";
+    ${declarations}
+    return (nextState) => { state = nextState; renderThumbnails(); };
+  `)(elements, document, (command) => commands.push(command), (visible) => visibility.push(visible));
+  const photos = Array.from({ length: 125 }, (_, index) => ({
+    base: `photo_${String(index + 1).padStart(3, "0")}`, thumbnail_url: `/gallery/thumb/2026-09-07/photo_${index + 1}.webp`,
+    processed_at: new Date(Date.UTC(2026, 8, 7, 0, index)).toISOString(),
+  }));
+  const state = { date_folder: "2026-09-07", photos, count_today: photos.length, current_base: photos.at(-1).base, current_index: 124, playback_state: "stopped" };
+  render(state);
+  const buttons = [...elements.thumbnails.children];
+  assert.equal(buttons.length, 60);
+  assert.deepEqual(buttons.map((button) => button.dataset.base), photos.slice(65).reverse().map((photo) => photo.base));
+  assert.equal(photos[0].base, "photo_001", "rendering must preserve the controller's oldest-first order");
+  assert.equal(elements.count.textContent, "Latest 60 of 125 photos · Newest first");
+  assert.equal(buttons[0].attributes["aria-pressed"], "true");
+  assert.equal(buttons[0].image.src, photos[124].thumbnail_url);
+  buttons[0].listeners.click();
+  buttons.at(-1).listeners.click();
+  assert.deepEqual(commands, [{ type: "GOTO_INDEX", index: 124 }, { type: "GOTO_INDEX", index: 65 }]);
+  assert.deepEqual(visibility, [false, false]);
+
+  elements.thumbnails.scrollTop = 720;
+  buttons[4].focus();
+  render({ ...state, photos: photos.map((photo) => ({ ...photo })), current_base: photos[70].base, current_index: 70, playback_state: "playing" });
+  assert.equal(replacements, 1);
+  assert.ok(elements.thumbnails.children.every((button, index) => button === buttons[index]));
+  assert.equal(elements.thumbnails.scrollTop, 720);
+  assert.equal(document.activeElement, buttons[4]);
+  assert.equal(buttons[0].attributes["aria-pressed"], "false");
+  assert.equal(buttons.find((button) => button.dataset.base === photos[70].base).classList.contains("active"), true);
+
+  render({ ...state, photos: photos.slice(1), count_today: 124, current_index: 123 });
+  assert.equal(replacements, 1, "removing an older photo outside the visible window must preserve buttons");
+  buttons[0].listeners.click();
+  assert.deepEqual(commands.at(-1), { type: "GOTO_INDEX", index: 123 }, "a retained button must resolve its base against the current full photo list");
+
+  const newest = { base: "photo_126", thumbnail_url: "/gallery/thumb/2026-09-07/photo_126.webp" };
+  render({ ...state, photos: [...photos, newest], count_today: 126, current_base: newest.base, current_index: 125 });
+  assert.equal(replacements, 2);
+  assert.equal(elements.thumbnails.children.length, 60);
+  assert.equal(elements.thumbnails.children[0].dataset.base, newest.base);
+  assert.equal(elements.thumbnails.children.at(-1).dataset.base, "photo_067");
+  assert.equal(elements.thumbnails.scrollTop, 720);
+  assert.equal(document.activeElement.dataset.base, buttons[4].dataset.base);
+  assert.notEqual(document.activeElement, buttons[4]);
+  render({ ...state, photos: [], count_today: 0, current_base: null, current_index: -1 });
+  assert.equal(elements.thumbnails.children.length, 0);
+  assert.equal(elements.count.textContent, "Latest 0 of 0 photos · Newest first");
 });
 
 async function fixture() {

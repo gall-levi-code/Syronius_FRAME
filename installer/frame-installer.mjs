@@ -19,8 +19,11 @@ import {
   upgradeStackConfig,
 } from "./frame-contract.mjs";
 import { finalizeSourceUpdate, sourceUpdate } from "./frame-updater.mjs";
+import { parseEnv } from "./frame-env.mjs";
+import { clearDeploymentBackup, completeDeployment, DEPLOYMENT_BACKUP, restoreDeployment, snapshotDeployment, writeReleaseOverride } from "./frame-release.mjs";
 
-const WORKSPACE = "/workspace";
+// Docker wrappers retain /workspace; desktop installers supply their host installation directory.
+const WORKSPACE = process.env.FRAME_WORKSPACE ?? "/workspace";
 const ENV_PATH = path.join(WORKSPACE, ".env");
 const COMPOSE_PATH = path.join(WORKSPACE, "docker-compose.yml");
 const COMPOSE_TEMPLATE_PATH = path.join(WORKSPACE, "installer/templates/docker-compose.yml");
@@ -35,6 +38,9 @@ const PLACEHOLDERS = new Set([
 ]);
 
 const IMPORTABLE_ENV_KEYS = new Set([
+  "FRAME_CONTROL_MEMORY_MB",
+  "FRAME_BELABOX_MEMORY_MB",
+  "FRAME_CONTROL_PIDS",
   "DISCORD_TOKEN",
   "DISCORD_CLIENT_ID",
   "PUBLIC_BASE_URL",
@@ -63,6 +69,7 @@ const IMPORTABLE_ENV_KEYS = new Set([
   "BELABOX_CHUNK_SIZE_BYTES",
   "BELABOX_CHUNK_PARALLEL_UPLOADS",
   "BELABOX_CHUNK_UPLOAD_KBPS",
+  "BELABOX_CHUNK_STAGE_TIMEOUT_MS",
   "BELABOX_DIAGNOSTIC_UPLOAD_BYTES",
   "BELABOX_DIAGNOSTIC_MAX_UPLOAD_BYTES",
   "BELABOX_DIAGNOSTIC_PARALLEL_STREAMS",
@@ -71,9 +78,13 @@ const IMPORTABLE_ENV_KEYS = new Set([
   "PHOTO_FTP_MAX_SESSIONS_PER_IP",
   "PHOTO_UPLOAD_MAX_FILES",
   "PHOTO_UPLOAD_MAX_SESSIONS",
+  "PHOTO_ARCHIVE_RETENTION_DAYS",
 ]);
 
 const CUSTOMIZABLE_ENV_KEYS = new Set([
+  "FRAME_CONTROL_MEMORY_MB",
+  "FRAME_BELABOX_MEMORY_MB",
+  "FRAME_CONTROL_PIDS",
   "TIMEZONE",
   "FRAME_AUTH_SESSION_DAYS",
   "PORTAL_PORT",
@@ -112,6 +123,7 @@ const CUSTOMIZABLE_ENV_KEYS = new Set([
   "BELABOX_CHUNK_SIZE_BYTES",
   "BELABOX_CHUNK_PARALLEL_UPLOADS",
   "BELABOX_CHUNK_UPLOAD_KBPS",
+  "BELABOX_CHUNK_STAGE_TIMEOUT_MS",
   "BELABOX_DIAGNOSTIC_UPLOAD_BYTES",
   "BELABOX_DIAGNOSTIC_MAX_UPLOAD_BYTES",
   "BELABOX_DIAGNOSTIC_PARALLEL_STREAMS",
@@ -123,7 +135,6 @@ const CUSTOMIZABLE_ENV_KEYS = new Set([
   "PHOTO_CONVERSION_ATTEMPTS",
   "PHOTO_ARCHIVE_ORIGINALS",
   "PHOTO_ARCHIVE_RETENTION_DAYS",
-  "PHOTO_TRASH_RETENTION_DAYS",
   "GALLERY_THUMB_WIDTH",
   "GALLERY_THUMB_QUALITY",
   "TODAY_DEFAULT_INTERVAL_MS",
@@ -146,6 +157,9 @@ const CUSTOMIZABLE_ENV_KEYS = new Set([
 ]);
 
 try {
+  if (process.env.FRAME_WORKSPACE !== undefined && !path.isAbsolute(WORKSPACE)) {
+    throw new Error("FRAME_WORKSPACE must be an absolute path.");
+  }
   const command = process.argv[2] ?? "help";
   const options = parseOptions(process.argv.slice(3));
   assertAllowedOptions(command, options);
@@ -164,9 +178,20 @@ try {
   } else if (command === "set-service-auth") {
     await setServiceAuth();
   } else if (command === "source-update") {
-    await sourceUpdate();
+    await sourceUpdate({ workspace: WORKSPACE, imageManifest: options["image-manifest"], source: Boolean(options.source) });
   } else if (command === "finalize-source-update") {
-    await finalizeSourceUpdate();
+    await finalizeSourceUpdate({ workspace: WORKSPACE });
+  } else if (command === "release-config") {
+    await writeReleaseOverride(WORKSPACE);
+  } else if (command === "deployment-snapshot") {
+    const env = await loadEnv();
+    const input = JSON.parse(await readStandardInput());
+    await snapshotDeployment({ workspace: WORKSPACE, dataRoot: process.env.FRAME_INSTALLER_DATA_ROOT || resolveDataRoot(env.FRAME_DATA_ROOT ?? "./data"), compose: input.compose, images: input.images });
+  } else if (command === "deployment-restore") {
+    const env = parseEnv(await readFile(path.join(WORKSPACE, DEPLOYMENT_BACKUP, ".env"), "utf8"));
+    await restoreDeployment({ workspace: WORKSPACE, dataRoot: process.env.FRAME_INSTALLER_DATA_ROOT || resolveDataRoot(env.FRAME_DATA_ROOT ?? "./data") });
+  } else if (command === "deployment-complete") {
+    await completeDeployment(WORKSPACE);
   } else if (command === "reset") {
     await reset(options);
   } else if (command === "help" || command === "--help" || command === "-h") {
@@ -180,6 +205,7 @@ try {
 }
 
 async function install(options) {
+  await writeReleaseOverride(WORKSPACE);
   const existingEnv = await loadEnv();
   const importedEnv = options["import-env"] ? await loadImportEnv(options["import-env"]) : {};
   const settingOverrides = parseSettingOverrides(options.set);
@@ -456,6 +482,7 @@ async function reset(options) {
   if (!options.yes) {
     throw new Error("Reset requires --yes after the wrapper confirmation.");
   }
+  await clearDeploymentBackup(WORKSPACE);
   const env = await loadEnv();
   const dataRoot = resolveDataRoot(env.FRAME_DATA_ROOT ?? "./data");
   if (isInsideWorkspace(dataRoot)) {
@@ -508,8 +535,7 @@ function buildEnvironment(existing, options, mode, capabilities) {
   const photoFtpMaxSessionsPerIp = normalizeInteger(setting(existing, "PHOTO_FTP_MAX_SESSIONS_PER_IP", "10"), "Photo FTP max sessions per IP", 1, 100);
   const photoUploadMaxFiles = normalizeInteger(setting(existing, "PHOTO_UPLOAD_MAX_FILES", "100"), "Photo upload max files", 1, 100);
   const photoUploadMaxSessions = normalizeInteger(setting(existing, "PHOTO_UPLOAD_MAX_SESSIONS", "2"), "Photo upload max sessions", 1, 100);
-  const photoArchiveRetentionDays = normalizeInteger(setting(existing, "PHOTO_ARCHIVE_RETENTION_DAYS", "0"), "Photo archive retention days", 0, 36500);
-  const photoTrashRetentionDays = normalizeInteger(setting(existing, "PHOTO_TRASH_RETENTION_DAYS", "0"), "Photo trash retention days", 0, 36500);
+  const photoArchiveRetentionDays = normalizeInteger(setting(existing, "PHOTO_ARCHIVE_RETENTION_DAYS", "14"), "Photo original backup retention days", 0, 36500);
   const slsStatsPort = normalizePort(setting(existing, "SLS_STATS_PORT", "8080"), "SLS statistics port");
   const srtlaPort = normalizePort(setting(existing, "SRTLA_PORT", "5000"), "SRTLA port");
   const srtPlayerPort = normalizePort(setting(existing, "SRT_PLAYER_PORT", "4000"), "SRT player port");
@@ -540,12 +566,13 @@ function buildEnvironment(existing, options, mode, capabilities) {
     ["Overlay Wizard", overlaysPort, capabilities["frame-overlays"]],
     ["Photo Upload", photoUploadPort, capabilities["frame-photo-webupload"]],
     ["Photo FTP", photoFtpPort, capabilities["frame-photo-ftp"]],
+    ["Photo FTP passive", photoFtpPassiveMin, capabilities["frame-photo-ftp"], "tcp", photoFtpPassiveMax],
     ["Photo Gallery", galleryPort, capabilities["frame-photo-gallery"]],
     ["Photo Stage", todayPort, capabilities["frame-photo-todaytools"]],
     ["SLS statistics", slsStatsPort, capabilities["frame-video-relay"]],
-    ["SRTLA ingest", srtlaPort, capabilities["frame-video-relay"]],
-    ["SRT player", srtPlayerPort, capabilities["frame-video-relay"]],
-    ["SRT sender", srtSenderPort, capabilities["frame-video-relay"]],
+    ["SRTLA ingest", srtlaPort, capabilities["frame-video-relay"], "udp"],
+    ["SRT player", srtPlayerPort, capabilities["frame-video-relay"], "udp"],
+    ["SRT sender", srtSenderPort, capabilities["frame-video-relay"], "udp"],
   ]);
   const profiles = computeComposeProfiles(capabilities, mode);
 
@@ -553,6 +580,9 @@ function buildEnvironment(existing, options, mode, capabilities) {
     FRAME_MODE: mode,
     FRAME_DATA_ROOT: dataRoot,
     FRAME_HOST_DATA_ROOT: hostDataRoot,
+    FRAME_CONTROL_MEMORY_MB: normalizeInteger(setting(existing, "FRAME_CONTROL_MEMORY_MB", "512"), "FRAME control memory MB", 128, 65536),
+    FRAME_BELABOX_MEMORY_MB: normalizeInteger(setting(existing, "FRAME_BELABOX_MEMORY_MB", "1024"), "FRAME Belabox memory MB", 128, 65536),
+    FRAME_CONTROL_PIDS: normalizeInteger(setting(existing, "FRAME_CONTROL_PIDS", "256"), "FRAME control PIDs", 64, 65536),
     TIMEZONE: setting(existing, "TIMEZONE", "America/Chicago"),
     COMPOSE_PROFILES: profiles.join(","),
     EDGE_HTTP_PORT: edgePort,
@@ -593,7 +623,6 @@ function buildEnvironment(existing, options, mode, capabilities) {
     PHOTO_CONVERSION_ATTEMPTS: setting(existing, "PHOTO_CONVERSION_ATTEMPTS", "3"),
     PHOTO_ARCHIVE_ORIGINALS: setting(existing, "PHOTO_ARCHIVE_ORIGINALS", "true"),
     PHOTO_ARCHIVE_RETENTION_DAYS: photoArchiveRetentionDays,
-    PHOTO_TRASH_RETENTION_DAYS: photoTrashRetentionDays,
     GALLERY_THUMB_WIDTH: setting(existing, "GALLERY_THUMB_WIDTH", "720"),
     GALLERY_THUMB_QUALITY: setting(existing, "GALLERY_THUMB_QUALITY", "82"),
     TODAY_DEFAULT_INTERVAL_MS: setting(existing, "TODAY_DEFAULT_INTERVAL_MS", "10000"),
@@ -616,6 +645,7 @@ function buildEnvironment(existing, options, mode, capabilities) {
     BELABOX_CHUNK_SIZE_BYTES: setting(existing, "BELABOX_CHUNK_SIZE_BYTES", "4194304"),
     BELABOX_CHUNK_PARALLEL_UPLOADS: setting(existing, "BELABOX_CHUNK_PARALLEL_UPLOADS", "1"),
     BELABOX_CHUNK_UPLOAD_KBPS: setting(existing, "BELABOX_CHUNK_UPLOAD_KBPS", "0"),
+    BELABOX_CHUNK_STAGE_TIMEOUT_MS: setting(existing, "BELABOX_CHUNK_STAGE_TIMEOUT_MS", "120000"),
     BELABOX_DIAGNOSTIC_UPLOAD_BYTES: setting(existing, "BELABOX_DIAGNOSTIC_UPLOAD_BYTES", "8388608"),
     BELABOX_DIAGNOSTIC_MAX_UPLOAD_BYTES: setting(existing, "BELABOX_DIAGNOSTIC_MAX_UPLOAD_BYTES", "67108864"),
     BELABOX_DIAGNOSTIC_PARALLEL_STREAMS: setting(existing, "BELABOX_DIAGNOSTIC_PARALLEL_STREAMS", "1"),
@@ -657,6 +687,9 @@ function buildEnvironment(existing, options, mode, capabilities) {
 
 function validateEnvironment(env, config, forStart) {
   assertBelaboxManagerDeployment(config.mode, config.capabilities);
+  normalizeInteger(setting(env, "FRAME_CONTROL_MEMORY_MB", "512"), "FRAME control memory MB", 128, 65536);
+  normalizeInteger(setting(env, "FRAME_BELABOX_MEMORY_MB", "1024"), "FRAME Belabox memory MB", 128, 65536);
+  normalizeInteger(setting(env, "FRAME_CONTROL_PIDS", "256"), "FRAME control PIDs", 64, 65536);
   const dataRoot = normalizeDataRoot(defaultIfBlank(env.FRAME_DATA_ROOT, "./data"));
   resolveDataRoot(dataRoot);
   const edgePort = normalizePort(defaultIfBlank(env.EDGE_HTTP_PORT, "80"), "FRAME Edge port");
@@ -682,8 +715,7 @@ function validateEnvironment(env, config, forStart) {
   if (!["info", "debug"].includes(defaultIfBlank(env.PIPELINE_LOG_LEVEL, "info").toLowerCase())) {
     throw new Error("PIPELINE_LOG_LEVEL must be info or debug.");
   }
-  normalizeInteger(setting(env, "PHOTO_ARCHIVE_RETENTION_DAYS", "0"), "Photo archive retention days", 0, 36500);
-  normalizeInteger(setting(env, "PHOTO_TRASH_RETENTION_DAYS", "0"), "Photo trash retention days", 0, 36500);
+  normalizeInteger(setting(env, "PHOTO_ARCHIVE_RETENTION_DAYS", "14"), "Photo original backup retention days", 0, 36500);
   const slsStatsPort = normalizePort(defaultIfBlank(env.SLS_STATS_PORT, "8080"), "SLS statistics port");
   const srtlaPort = normalizePort(defaultIfBlank(env.SRTLA_PORT, "5000"), "SRTLA port");
   const srtPlayerPort = normalizePort(defaultIfBlank(env.SRT_PLAYER_PORT, "4000"), "SRT player port");
@@ -698,6 +730,7 @@ function validateEnvironment(env, config, forStart) {
   normalizeInteger(setting(env, "BELABOX_CHUNK_SIZE_BYTES", "4194304"), "Belabox chunk size", 262144, 67108864);
   normalizeInteger(setting(env, "BELABOX_CHUNK_PARALLEL_UPLOADS", "1"), "Belabox chunk parallel uploads", 1, 4);
   normalizeInteger(setting(env, "BELABOX_CHUNK_UPLOAD_KBPS", "0"), "Belabox chunk upload cap", 0, 1000000);
+  normalizeInteger(setting(env, "BELABOX_CHUNK_STAGE_TIMEOUT_MS", "120000"), "Belabox chunk stage timeout", 1000, 3600000);
   normalizeInteger(setting(env, "BELABOX_DIAGNOSTIC_UPLOAD_BYTES", "8388608"), "Belabox diagnostic upload size", 65536, 67108864);
   normalizeInteger(setting(env, "BELABOX_DIAGNOSTIC_MAX_UPLOAD_BYTES", "67108864"), "Belabox diagnostic max upload size", 65536, 268435456);
   normalizeInteger(setting(env, "BELABOX_DIAGNOSTIC_PARALLEL_STREAMS", "1"), "Belabox diagnostic parallel streams", 1, 8);
@@ -710,12 +743,13 @@ function validateEnvironment(env, config, forStart) {
     ["Overlay Wizard", overlaysPort, config.capabilities["frame-overlays"]],
     ["Photo Upload", photoUploadPort, config.capabilities["frame-photo-webupload"]],
     ["Photo FTP", photoFtpPort, config.capabilities["frame-photo-ftp"]],
+    ["Photo FTP passive", photoFtpPassiveMin, config.capabilities["frame-photo-ftp"], "tcp", photoFtpPassiveMax],
     ["Photo Gallery", galleryPort, config.capabilities["frame-photo-gallery"]],
     ["Photo Stage", todayPort, config.capabilities["frame-photo-todaytools"]],
     ["SLS statistics", slsStatsPort, config.capabilities["frame-video-relay"]],
-    ["SRTLA ingest", srtlaPort, config.capabilities["frame-video-relay"]],
-    ["SRT player", srtPlayerPort, config.capabilities["frame-video-relay"]],
-    ["SRT sender", srtSenderPort, config.capabilities["frame-video-relay"]],
+    ["SRTLA ingest", srtlaPort, config.capabilities["frame-video-relay"], "udp"],
+    ["SRT player", srtPlayerPort, config.capabilities["frame-video-relay"], "udp"],
+    ["SRT sender", srtSenderPort, config.capabilities["frame-video-relay"], "udp"],
   ]);
   if (env.FRAME_MODE !== config.mode) {
     throw new Error(".env FRAME_MODE does not match stack-config.json mode.");
@@ -1060,12 +1094,15 @@ function setting(env, key, fallback) {
 
 function assertPortSet(entries) {
   const seen = new Map();
-  for (const [label, port, enabled] of entries) {
+  for (const [label, start, enabled, protocol = "tcp", end = start] of entries) {
     if (!enabled) continue;
-    if (seen.has(port)) {
-      throw new Error(`${label} host port ${port} conflicts with ${seen.get(port)}.`);
+    for (let port = Number(start); port <= Number(end); port += 1) {
+      const binding = `${protocol}:${port}`;
+      if (seen.has(binding)) {
+        throw new Error(`${label} host port ${port}/${protocol} conflicts with ${seen.get(binding)}.`);
+      }
+      seen.set(binding, label);
     }
-    seen.set(port, label);
   }
 }
 
@@ -1229,8 +1266,12 @@ function assertAllowedOptions(command, options) {
     "set-portal-auth": new Set(),
     "set-discord-auth": new Set(),
     "set-service-auth": new Set(),
-    "source-update": new Set(),
+    "source-update": new Set(["image-manifest", "source"]),
     "finalize-source-update": new Set(),
+    "release-config": new Set(),
+    "deployment-snapshot": new Set(),
+    "deployment-restore": new Set(),
+    "deployment-complete": new Set(),
     reset: new Set(["yes"]),
     status: new Set(),
     help: new Set(),
@@ -1297,36 +1338,10 @@ async function loadImportEnv(value) {
   );
 }
 
-function parseEnv(text) {
-  const env = {};
-  for (const rawLine of text.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line || line.startsWith("#")) {
-      continue;
-    }
-    const equals = line.indexOf("=");
-    if (equals < 1) {
-      continue;
-    }
-    const key = line.slice(0, equals).trim();
-    let value = line.slice(equals + 1).trim();
-    if (value.startsWith('"') && value.endsWith('"')) {
-      try {
-        value = JSON.parse(value);
-      } catch {
-        value = value.slice(1, -1);
-      }
-    } else if (value.startsWith("'") && value.endsWith("'")) {
-      value = value.slice(1, -1);
-    }
-    env[key] = value;
-  }
-  return env;
-}
-
 function serializeEnv(env) {
   const sections = [
     ["FRAME stack", ["FRAME_MODE", "FRAME_DATA_ROOT", "FRAME_HOST_DATA_ROOT", "TIMEZONE", "COMPOSE_PROFILES"]],
+    ["Container resources", ["FRAME_CONTROL_MEMORY_MB", "FRAME_BELABOX_MEMORY_MB", "FRAME_CONTROL_PIDS"]],
     ["FRAME Edge", ["EDGE_HTTP_PORT", "EDGE_PUBLIC_BASE_URL", "EDGE_LAN_BASE_URL"]],
     ["FRAME Auth", ["FRAME_AUTH_SESSION_SECRET", "FRAME_AUTH_SESSION_DAYS"]],
     ["Cloudflare Tunnel", ["CLOUDFLARE_PUBLIC_HOSTNAME", "CLOUDFLARE_TUNNEL_ORIGIN"]],
@@ -1356,6 +1371,7 @@ function serializeEnv(env) {
         "BELABOX_CHUNK_SIZE_BYTES",
         "BELABOX_CHUNK_PARALLEL_UPLOADS",
         "BELABOX_CHUNK_UPLOAD_KBPS",
+        "BELABOX_CHUNK_STAGE_TIMEOUT_MS",
         "BELABOX_DIAGNOSTIC_UPLOAD_BYTES",
         "BELABOX_DIAGNOSTIC_MAX_UPLOAD_BYTES",
         "BELABOX_DIAGNOSTIC_PARALLEL_STREAMS",
@@ -1385,7 +1401,6 @@ function serializeEnv(env) {
         "PHOTO_CONVERSION_ATTEMPTS",
         "PHOTO_ARCHIVE_ORIGINALS",
         "PHOTO_ARCHIVE_RETENTION_DAYS",
-        "PHOTO_TRASH_RETENTION_DAYS",
         "GALLERY_THUMB_WIDTH",
         "GALLERY_THUMB_QUALITY",
         "TODAY_DEFAULT_INTERVAL_MS",
@@ -1503,12 +1518,17 @@ Usage:
   stack discord-auth       Securely prompt for Discord Audio Bridge credentials
   stack validate           Validate config and startup requirements
   stack verify             Run contract tests and static verification
-  stack update             Download current FRAME source and reconcile the stack
-  stack start              Build and start enabled services
+  stack update [options]   Download matching FRAME source and reconcile the stack
+  stack start              Build or pull and start enabled services
+  stack recover            Restore the saved configuration and runtime images
   stack stop               Stop the stack without deleting data
   stack status             Show config summary and container status
   stack logs [service]     Show recent service logs
   stack reset [--yes]      Delete generated config/data and reinstall defaults
+
+Update options:
+  --image-manifest <path>  Install a published frame-images.json and matching source commit
+  --source                 Explicitly switch a release installation to main source builds
 
 Install options:
   --mode LAN|HYBRID        Stage a LAN or Cloudflare Tunnel deployment

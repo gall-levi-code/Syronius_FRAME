@@ -1,83 +1,83 @@
 # FRAME Setup
 
-FRAME Setup is the native host-facing installer and launcher prototype for the FRAME stack.
+FRAME Setup is the Electron online installer for Windows and Linux. Users download one Windows
+installer `.exe` or Linux `.AppImage`; the runtime includes Electron and Node, so they do not need
+to install Node, Python, Rust, or a development checkout.
 
-It is intentionally split from the container web UI:
+Docker is a prerequisite. Install Docker Desktop with Linux containers on Windows, or Docker Engine
+with Compose on Linux, and start it before running FRAME Setup. This release targets x64 hosts and
+`linux/amd64` container images. The host also needs `tar` (included with current Windows and common
+Linux distributions) to extract the release source. Installation needs internet access and a published official FRAME
+release with its release manifest and matching source archive.
 
-- The Tauri app handles host concerns: Docker readiness, storage path selection, exposed port checks,
-  previous-install detection, writing the stack configuration, and starting Docker Compose.
-- The container web UI handles app concerns: tutorials, service-specific setup, OBS URLs, auth,
-  Cloudflare, profiles, overlays, and operator controls.
+The installer downloads the official release, uses the shared installer runtime to generate
+configuration, checks the selected host ports, pulls prebuilt images, and starts Docker Compose.
+It waits for Docker Compose health checks before offering to open setup. Application images are not
+built on the user's machine. The desktop installer may close after installation; Docker keeps FRAME
+running. An offline image payload is outside this version's scope.
 
-The native Install FRAME action can detect host state, check TCP and UDP ports, write
-`state/frame-install-plan.json`, generate the stack `.env` and `docker-compose.yml`, prepare the
-selected data folders, generate the capability-aware stack config and tunnel ingress, run
-`docker compose config --quiet`, start the stack with
-`docker compose up -d --build --remove-orphans`, and open `http://localhost/setup`.
-During install, the UI streams progress from the native backend and waits for the FRAME web edge to
-accept connections before launching the browser. It also enables the shared mDNS launcher when
-available so other LAN devices can open `http://frame.local`; on Windows this resumes after sign-in.
+## Configuration and readiness
 
-The packaged installer bundles the current FRAME stack resources and copies them into the selected
-install root before running Docker Compose.
+- **Quick Start** selects the recommended capabilities; **Guided Setup** explains each service;
+  **Advanced** exposes more configuration values.
+- Choose an installation folder; new data lives in `<installRoot>/data`. Existing release deployments
+  retain their configured data root and reconfigure their pinned release. Source checkout conversions
+  are not supported; keep using `stack` for those installations. Subfolder
+  layouts remain managed by the shared installer.
+- Review every published port, including direct service web ports, UDP relay ports, and the complete
+  TCP FTP passive range. Edit conflicts and retry; automatic port reassignment is not offered.
+- Photo FTP needs this machine's reachable LAN IPv4 address or DNS hostname to advertise to cameras.
+  On an existing installation, leave it empty to preserve the deployed address.
+- Enter the operator login, plus Discord or Cloudflare credentials when those integrations are
+  selected. The interface keeps credentials in memory; the backend excludes them from saved plans
+  and cleans temporary configuration on normal exit. Blank credential pairs on a loaded installation
+  preserve its existing credentials.
+- Readiness must pass for the current plan before Install unlocks. Edits and failed checks clear old
+  results, and the backend checks again before applying the deployment.
+- The browser preview is labeled as simulated and cannot install or save a configuration.
 
-## Setup modes
-
-- **Quick Start** enables every implemented FRAME tool with basic defaults.
-- **Guided Setup** explains each service and lets the user opt in with checkboxes.
-- **Advanced** exposes the environment-variable model and subfolder overrides.
-
-## Deployment modes
-
-- **LAN** keeps browser tools on the local FRAME edge and does not expose tunnel routes.
-- **Hybrid** validates a public browser hostname, generates the Cloudflare ingress allowlist, and
-  accepts a separate `PUBLIC_RELAY_HOST` for SRTLA/SRT publishers.
-
-Selecting **Belabox Manager** switches the plan to Hybrid because managed agents require the public,
-authenticated `wss://.../belabox/control` endpoint. Initial agent installation and repair still use
-the Belabox's LAN SSH connection.
-
-## Exposed ports
-
-The target Scenario 2 stack exposes only:
-
-- FRAME web edge: TCP 80 by default.
-- Photo FTP control and passive range, when FTP ingest is enabled.
-- SRTLA/SRT UDP ports, when Stream Relay is enabled.
-
-Other tools route through FRAME Edge. Hybrid web access uses an outbound Cloudflare Tunnel rather
-than opening another inbound management port.
+Hybrid mode requires a public hostname and Cloudflare Tunnel token. Belabox Manager selects Hybrid
+mode because its agents connect through the authenticated public WebSocket endpoint. Video Relay
+also needs a reachable advertised relay host when used in Hybrid mode.
 
 ## Development
 
-```bash
+Use Node.js 22.12 or newer with npm:
+
+```sh
 cd apps/frame-setup
-npm install
+npm ci
 npm run dev
-npm run tauri dev
 ```
 
-## Windows installer build
+Development starts Vite on `127.0.0.1:5174` and opens Electron. To inspect the browser preview, open
+that address while development is running. `npm run build` builds the local UI; `npm start` opens
+that built UI in Electron.
 
-The preferred path for the Windows `.exe` installer is a native Windows build machine rather than a
-Docker container.
+The renderer has no Node access. The preload exposes only installer operations; the main process
+checks the sender and command allowlist, blocks page navigation, and opens only HTTP(S) links in the
+system browser. Host and Docker commands run in the backend. The previous Tauri source is retained
+for migration reference and is not part of the Electron package.
 
-Install the Tauri Windows prerequisites first:
+## Single-file downloads
 
-- Node.js and npm.
-- Rust through rustup.
-- Microsoft C++ Build Tools with the "Desktop development with C++" workload.
-- Microsoft Edge WebView2 Runtime. This is already present on most current Windows 10/11 systems.
+Build Windows on Windows and Linux on Linux:
 
-Then run:
-
-```powershell
-.\apps\frame-setup\scripts\build-windows.ps1
+```sh
+npm run dist:win
+npm run dist:linux
 ```
 
-The generated bundles will be under `apps/frame-setup/src-tauri/target/release/bundle/`.
+Windows also has `apps/frame-setup/scripts/build-windows.ps1`, which installs locked dependencies
+and builds the NSIS installer. Outputs go to `apps/frame-setup/release/`:
 
-Official references:
+- `FRAME-Setup-<version>-win-x64.exe`
+- `FRAME-Setup-<version>-linux-x64.AppImage`
 
-- https://v2.tauri.app/start/prerequisites/
-- https://v2.tauri.app/distribute/windows-installer/
+The Linux AppImage needs executable permission (`chmod +x FRAME-Setup-*.AppImage`). Release signing
+credentials are supplied by the release environment; a local build without them is unsigned. The
+package contains the setup runtime and bootstrap configuration tools, not service images or secrets.
+
+References: [Electron security](https://www.electronjs.org/docs/latest/tutorial/security),
+[electron-builder NSIS](https://www.electron.build/nsis.html),
+[electron-builder AppImage](https://www.electron.build/appimage.html).

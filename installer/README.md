@@ -52,10 +52,19 @@ keeping management navigation on whichever trusted LAN Edge origin opened SLSUI.
 
 Current limitations:
 
-- Host port conflicts are reported by Docker during `stack start`; an earlier preflight check is
-  still planned.
+- Electron FRAME Setup validates the resolved active Compose bindings on the host, including
+  TCP/UDP, IPv4/IPv6, FTP ranges, and exact ownership of existing FRAME containers. Its launchers
+  repeat this check before pulling images and immediately before `up`. Direct CLI use retains
+  Docker's conflict detection unless `FRAME_PREFLIGHT_NODE` and `FRAME_PREFLIGHT_SCRIPT` point to
+  an available Node runtime and `installer/frame-preflight.mjs`; the CLI does not require host Node.
 - Photo `.ready` manifests use the configured FRAME data folder by default; override
   `FRAME_HOST_DATA_ROOT` only when host tools need a different path.
+
+The shared runtime can also run under Electron's bundled Node with an absolute `FRAME_WORKSPACE`.
+Without that override it keeps the Docker wrappers' `/workspace` behavior. GUI readiness prepares
+configuration in a temporary folder and permits read-only Docker inspection/Compose resolution;
+no application image is pulled or container created until readiness passes. Socket checks are
+observations, so startup still handles binding races and restores the previous deployment on failure.
 
 ## Interactive command center
 
@@ -92,7 +101,9 @@ stable and do not enter the menu.
 .\stack.cmd validate
 .\stack.cmd verify
 .\stack.cmd update
+.\stack.cmd update --image-manifest frame-images.json
 .\stack.cmd start
+.\stack.cmd recover
 .\stack.cmd status
 .\stack.cmd logs frame-portal
 .\stack.cmd stop
@@ -115,16 +126,23 @@ endpoint.
 
 Use `./stack.sh` with the same arguments on Linux/macOS.
 
-## Alpha source updates
+## Release images and source updates
+
+To install a published image release, download its `frame-images.json` into the installation folder
+and run `stack.cmd update --image-manifest frame-images.json` (or the same arguments with
+`./stack.sh`). This downloads the matching source commit and starts digest-pinned prebuilt images.
+Later starts retain that release and pull before replacing containers. See
+[Release images and recovery](../docs/releases.md) for the publishing workflow and operational details.
 
 Run `stack.cmd update` or `./stack.sh update` to download the current official GitHub `main` source
 and reconcile the stack. The interactive command center exposes the same operation as **Download
-and update FRAME** (option 12). **Start or update stack** (option 7) remains a local/offline
-operation that uses the source already installed.
+and update FRAME** (option 12). **Start or update stack** (option 7) reconciles
+the source or release already selected; release startup needs registry access
+to check/pull its pinned images.
 
 The updater:
 
-1. Resolves `main` to an immutable Git commit and downloads that exact archive.
+1. Uses the release manifest's commit, or resolves `main` for source updates, and downloads that exact archive.
 2. Validates the archive structure, size, required files, JSON, and JavaScript syntax in temporary
    staging before changing the installation.
 3. Overlays FRAME-managed source while protecting `.env`, generated `docker-compose.yml`, and the
@@ -132,9 +150,13 @@ The updater:
 4. Runs the newly installed command wrapper through the existing install, validation, build, and
    health-check reconciliation path.
 
-This command is an explicit alpha/development refresh. It does not yet provide semantic-version
-comparison, stable/beta channels, per-tool updates, scheduled/background installation, or a complete
-rollback transaction. Those remain part of the release update-system backlog.
+Bare `stack update` is an explicit alpha/development refresh for source installations. Release
+installations require the next `--image-manifest`, or `--source` to deliberately switch back to
+`main` builds. There is no automatic version selection, stable/beta channel, or background updater.
+
+Startup now retains the previous generated configuration and exact local runtime image IDs. A
+failed deployment restores that snapshot; `stack recover` also exposes it for manual recovery.
+This restores the runtime configuration and containers, not source files or application data.
 
 Existing installations require one last manual download-and-overlay update to acquire this command.
 After that, future alpha source refreshes can run through `stack update`.
@@ -150,6 +172,10 @@ Advanced automation can repeat `--set KEY=VALUE` for installer-whitelisted non-s
 .\stack.cmd install --set TIMEZONE=America/Chicago --set PHOTO_MAX_INPUT_MB=100
 .\stack.cmd install --set PHOTO_UPLOAD_MAX_FILES=100 --set PHOTO_UPLOAD_MAX_SESSIONS=2
 ```
+
+Container log retention and the advanced control-service memory/PID settings are documented in
+[Runtime budgets](../docs/runtime-budgets.md). The [storage benchmark](../docs/storage-benchmark.md)
+compares the current data bind mount with an isolated Docker volume using synthetic files.
 
 `FRAME_DATA_ROOT` is the host directory Docker mounts into FRAME containers as `/data`. It can be a
 repository-relative path such as `./data` or an absolute path such as `D:\FRAME\data`. The

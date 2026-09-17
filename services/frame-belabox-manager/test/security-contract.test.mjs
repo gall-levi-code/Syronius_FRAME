@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { once } from "node:events";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
@@ -139,6 +139,28 @@ test("migrates upload credentials, bounds pending authentication per IP, and blo
   replacement.terminate();
   for (const pending of pendingSockets) pending.terminate();
   await waitForStatus(port, (value) => value.control.pending_authentications === 0);
+
+  await context.test("failed audit writes do not publish unpersisted records in the command API", async () => {
+    const commandsUrl = `http://127.0.0.1:${port}/belabox/api/commands`;
+    const previous = await fetch(commandsUrl).then((response) => response.json());
+    const auditFile = path.join(dataRoot, "command-audit.jsonl");
+    let saved = false;
+    try {
+      await rename(auditFile, `${auditFile}.saved`);
+      saved = true;
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    await mkdir(auditFile);
+    try {
+      const removal = await fetch(`http://127.0.0.1:${port}/belabox/api/devices/${deviceId}`, { method: "DELETE" });
+      assert.equal(removal.status, 500);
+      assert.deepEqual(await fetch(commandsUrl).then((response) => response.json()), previous);
+    } finally {
+      await rm(auditFile, { recursive: true });
+      if (saved) await rename(`${auditFile}.saved`, auditFile);
+    }
+  });
 });
 
 function messageInbox(socket) {

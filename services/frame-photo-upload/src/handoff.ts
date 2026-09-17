@@ -17,6 +17,12 @@ export interface StagedUpload {
   created: boolean;
 }
 
+export class UploadValidationError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
+  }
+}
+
 export function safeFilename(filename: string): string {
   const parsed = path.parse(path.basename(filename));
   const stem = parsed.name
@@ -35,6 +41,7 @@ export async function streamCompletedUpload(
   staging: string,
   journey: UploadJourney,
   onChunk?: (bytes: number) => void,
+  validation?: { maxBytes: number; expectedBytes: number | null; expectedSha256?: string; signal: AbortSignal },
 ): Promise<StagedUpload> {
   await mkdir(staging, { recursive: true });
   const safe = safeFilename(filename);
@@ -47,10 +54,22 @@ export async function streamCompletedUpload(
     const output = createWriteStream(path.join(temporary, "source"), { flags: "wx" });
     await pipeline(stream, inspectChunks((chunk) => {
       bytesReceived += chunk.length;
+      if (validation && bytesReceived > validation.maxBytes) {
+        throw new UploadValidationError(413, `Photo exceeds the ${validation.maxBytes} byte limit.`);
+      }
       hash.update(chunk);
       onChunk?.(chunk.length);
-    }), output);
+    }), output, { signal: validation?.signal });
     const contentSha256 = hash.digest("hex");
+    if (validation) {
+      if (!bytesReceived) throw new UploadValidationError(400, "Completed file body is required.");
+      if (validation.expectedBytes !== null && bytesReceived !== validation.expectedBytes) {
+        throw new UploadValidationError(400, "Completed file size does not match x-frame-file-size.");
+      }
+      if (validation.expectedSha256 && contentSha256 !== validation.expectedSha256) {
+        throw new UploadValidationError(400, "Completed file hash does not match x-frame-file-sha256.");
+      }
+    }
     await writeFile(path.join(temporary, "journey.json"), `${JSON.stringify({
       schema_version: 1,
       journey_id: journey.journeyId,
@@ -63,6 +82,7 @@ export async function streamCompletedUpload(
         bytes_received: bytesReceived,
       },
     }, null, 2)}\n`);
+    validation?.signal.throwIfAborted();
     const created = await commitEnvelope(temporary, finalEnvelope, journey.journeyId, safe, bytesReceived, contentSha256);
     return { stagedName: safe, created };
   } catch (error) {
@@ -74,8 +94,12 @@ export async function streamCompletedUpload(
 function inspectChunks(onChunk: (chunk: Buffer) => void): Transform {
   return new Transform({
     transform(chunk: Buffer, _encoding, callback) {
-      onChunk(chunk);
-      callback(null, chunk);
+      try {
+        onChunk(chunk);
+        callback(null, chunk);
+      } catch (error) {
+        callback(error as Error);
+      }
     },
   });
 }

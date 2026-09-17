@@ -1,5 +1,38 @@
 const FALLBACK_RATIO = 4 / 3;
 
+export function observeCoverGallery(container) {
+  let frame = 0;
+  let width = 0;
+  let layoutKey = "";
+  const ratios = new Map();
+  const schedule = () => {
+    if (frame) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      if (container.clientWidth < 1) return;
+      const cards = [...container.querySelectorAll(".gallery-cover-card")];
+      for (const card of cards) {
+        const image = card.querySelector("img");
+        if (image.naturalWidth && image.naturalHeight) ratios.set(image.src, image.naturalWidth / image.naturalHeight);
+        card.dataset.ratio = String(ratios.get(image.src) || FALLBACK_RATIO);
+      }
+      const targetHeight = Math.max(180, Math.min(405, window.innerHeight * 0.46));
+      const nextKey = `${container.clientWidth}:${targetHeight}:${cards.map((card) => `${card.querySelector("img").src}:${card.dataset.ratio}`).join(",")}`;
+      if (layoutKey === nextKey && container.firstElementChild?.classList.contains("gallery-cover-row")) return;
+      layoutKey = nextKey;
+      layoutJustifiedRows(container, cards, { rowClass: "gallery-cover-row", targetHeight });
+    });
+  };
+  new ResizeObserver(([entry]) => {
+    if (Math.abs(entry.contentRect.width - width) < 0.5) return;
+    width = entry.contentRect.width;
+    schedule();
+  }).observe(container);
+  container.addEventListener("load", schedule, true);
+  window.addEventListener("resize", schedule);
+  return schedule;
+}
+
 export function planJustifiedRows(ratios, width, targetHeight, gap = 5) {
   if (!ratios.length || width < 1 || targetHeight < 1) return [];
   const normalized = ratios.map((ratio) => Number.isFinite(Number(ratio)) && Number(ratio) > 0 ? Number(ratio) : FALLBACK_RATIO);

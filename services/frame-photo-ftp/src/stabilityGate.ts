@@ -69,6 +69,7 @@ export class StabilityGate {
   private observations = new Map<string, Observation>();
   private completed = new Map<string, CompletedTransfer>();
   private sequence = 0;
+  private scanning: Promise<void> | null = null;
 
   constructor(
     readonly inbox: string,
@@ -83,7 +84,12 @@ export class StabilityGate {
     if (recoveryErrors.length) this.status.last_error = recoveryErrors.join("; ").slice(0, 500);
   }
 
-  async runOnce(now = Date.now()): Promise<void> {
+  runOnce(now = Date.now()): Promise<void> {
+    this.scanning ??= this.scan(now).finally(() => { this.scanning = null; });
+    return this.scanning;
+  }
+
+  private async scan(now: number): Promise<void> {
     try {
       const scanErrors: string[] = [];
       const files = await listFiles(this.inbox);

@@ -28,6 +28,13 @@ The V1 photo workflow uses these contracts:
   larger than the compressed inputs; other formats still use the configured worker pool.
 - Successful originals are archived by default. Rejected originals and a machine-readable error
   descriptor are retained in quarantine.
+- Only original backups expire automatically, after 14 days from archive creation by default.
+  The owner can change `archive_retention_days` on the existing Pipeline settings page; `0` disables
+  expiry. Gallery photos, albums, and trash are deleted only through explicit owner actions.
+- New archive folders record actual original filenames and ISO creation timestamps in
+  `.frame-archive.json`. Legacy originals use filesystem creation time, then modified time if
+  creation time is unavailable. Expiry does not depend on a corresponding gallery publication.
+  Cleanup removes only known original files and never recursively deletes user data directories.
 - Published sidecars use `docs/schemas/photo-sidecar.schema.json`. Quarantine descriptors use
   `docs/schemas/photo-error.schema.json`.
 - All outputs are written through temporary files. `<base>.ready` is renamed into place last.
@@ -44,5 +51,6 @@ The V1 photo workflow uses these contracts:
 - Every source uses the same completion boundary and cannot bypass pipeline validation.
 - A host crash may cause a claimed file to be retried, but cannot expose a partial publish as ready.
 - HEIC/HEIF behavior no longer depends on optional codecs in the Sharp container build.
-- The archive grows indefinitely by default. Operators may explicitly enable journey-verified
-  retention; automated cleanup must preserve a verified alternate copy.
+- Original backups have a separate lifetime from gallery publications. Removing or trashing a
+  gallery photo does not extend its original backup's retention period; set retention to `0` when
+  the owner wants to keep original backups indefinitely.

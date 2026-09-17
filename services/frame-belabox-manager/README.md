@@ -145,6 +145,12 @@ adjust JPEG quality, and limit output size while preserving EXIF and ICC metadat
 FRAME's photo pipeline performs the final JPG normalization. Chunked HTTPS supports an upload cap
 and binds workers to healthy egress interfaces.
 
+FRAME verifies and assembles received chunks using bounded file streams, then streams the photo to
+Photo Upload with its expected size and SHA-256. `BELABOX_CHUNK_STAGE_TIMEOUT_MS` bounds this stage,
+including the acknowledgment body (default 120 seconds). A timeout keeps the original chunks for
+retry; a confirmed receipt releases the payload and makes repeated completion requests safe.
+The agent can time out sooner on an individual connection and retry the same transfer ID.
+
 Use **Apply changes** after editing device settings. Pending settings remain local to the manager
 until they are applied to the Belabox.
 
@@ -210,3 +216,11 @@ Relay RTT probes run every five seconds and publish a compact health message. Th
 host, port, and timeout can be adjusted with `BELABOX_RELAY_PROBE_INTERVAL_MS`,
 `BELABOX_RELAY_PROBE_HOST`, `BELABOX_RELAY_PROBE_PORT`, and
 `BELABOX_RELAY_PROBE_TIMEOUT_MS` in advanced deployments.
+
+Command audit history rotates `command-audit.jsonl` at 4 MiB and retains three numbered archives
+(`.1` is newest), normally limiting disk use to 16 MiB. Existing oversized files are preserved when
+first rotated and expire through the same retention policy. Logs use owner-only permissions. The
+manager restores the latest 200 valid records across retained files and shows the latest 100 in its
+command API. Startup reads bounded 64 KiB blocks, scanning at most 4 MiB per file; malformed,
+interrupted, or oversized lines are skipped within that window. A 512 KiB record guard allows room
+above the 256 KiB device-control message limit without retaining arbitrarily long corrupt lines.

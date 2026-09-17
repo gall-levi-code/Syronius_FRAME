@@ -2,14 +2,18 @@ import { EventEmitter } from "node:events";
 import type { LatestPublication, TodayPhoto, TodayStore } from "./store.js";
 
 export type TodayCommand =
-  | { type: "NEXT" | "PREV" | "PLAY_SLIDESHOW" | "PAUSE_SLIDESHOW" | "STOP_SLIDESHOW" | "AUTO_SCROLL_IMAGE" }
+  | { type: "NEXT" | "PREV" | "PLAY_SLIDESHOW" | "PAUSE_SLIDESHOW" | "STOP_SLIDESHOW" | "FOLLOW_LATEST" | "AUTO_SCROLL_IMAGE" }
   | { type: "SET_INTERVAL_MS"; interval_ms: number }
   | { type: "GOTO_INDEX"; index: number }
   | { type: "SET_SHOW_EXIF"; show_exif: boolean }
+  | { type: "SET_OVERLAY"; mode: OverlayMode; corner: OverlayCorner; auto_hide: boolean }
+  | { type: "SET_CLEAN_OUTPUT"; clean_output: boolean }
   | { type: "SET_SHOW_BACKGROUND"; show_background: boolean };
 
 export type PlaybackState = "playing" | "paused" | "stopped";
 export type PresentationMode = "default" | "auto-scroll";
+export type OverlayMode = "compact" | "full" | "hidden";
+export type OverlayCorner = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
 export interface TodayState {
   type: "STATE";
@@ -22,6 +26,8 @@ export interface TodayState {
   current_filename: string | null;
   slideshow_running: boolean;
   playback_state: PlaybackState;
+  following_latest: boolean;
+  new_photos_count: number;
   interval_ms: number;
   interval_started_at: string | null;
   next_change_at: string | null;
@@ -30,6 +36,10 @@ export interface TodayState {
   presentation_duration_ms: number;
   count_today: number;
   show_exif: boolean;
+  overlay_mode: OverlayMode;
+  overlay_corner: OverlayCorner;
+  overlay_auto_hide: boolean;
+  clean_output: boolean;
   show_background: boolean;
   current_photo: TodayPhoto | null;
   photos: Array<Pick<TodayPhoto, "base" | "filename" | "thumbnail_url" | "processed_at">>;
@@ -37,19 +47,29 @@ export interface TodayState {
 
 export class TodayController {
   private latest: LatestPublication | null = null;
+  private latestPhotos: TodayPhoto[] = [];
+  private activeDate: string | null = null;
   private photos: TodayPhoto[] = [];
   private currentIndex = -1;
   private playbackState: PlaybackState = "stopped";
+  private followingLatest = true;
+  private readonly baselinePhotos = new Set<string>();
+  private readonly newPhotos = new Set<string>();
   private intervalStartedAt: string | null = null;
   private nextChangeAt: string | null = null;
   private presentationMode: PresentationMode = "default";
   private presentationStartedAt: string | null = null;
-  private showExif = true;
+  private overlayMode: OverlayMode = "full";
+  private visibleOverlayMode: Exclude<OverlayMode, "hidden"> = "full";
+  private overlayCorner: OverlayCorner = "bottom-left";
+  private overlayAutoHide = false;
+  private cleanOutput = false;
   private showBackground = true;
   private revision = 0;
   private slideshowTimer: NodeJS.Timeout | null = null;
   private presentationTimer: NodeJS.Timeout | null = null;
   private refreshTimer: NodeJS.Timeout | null = null;
+  private refreshing: Promise<TodayState> | null = null;
   private readonly events = new EventEmitter();
 
   constructor(
@@ -86,12 +106,14 @@ export class TodayController {
       revision: this.revision,
       server_time: new Date().toISOString(),
       updated_at: this.latest?.updated_at ?? null,
-      date_folder: this.latest?.date_folder ?? null,
+      date_folder: this.activeDate,
       current_index: photo ? this.currentIndex : -1,
       current_base: photo?.base ?? null,
       current_filename: photo?.filename ?? null,
       slideshow_running: this.playbackState === "playing",
       playback_state: this.playbackState,
+      following_latest: this.followingLatest,
+      new_photos_count: this.newPhotos.size,
       interval_ms: this.intervalMs,
       interval_started_at: this.intervalStartedAt,
       next_change_at: this.nextChangeAt,
@@ -99,7 +121,11 @@ export class TodayController {
       presentation_started_at: this.presentationStartedAt,
       presentation_duration_ms: 7_000,
       count_today: this.photos.length,
-      show_exif: this.showExif,
+      show_exif: this.overlayMode !== "hidden",
+      overlay_mode: this.overlayMode,
+      overlay_corner: this.overlayCorner,
+      overlay_auto_hide: this.overlayAutoHide,
+      clean_output: this.cleanOutput,
       show_background: this.showBackground,
       current_photo: photo,
       photos: this.photos.map(({ base, filename, thumbnail_url, processed_at }) => ({
@@ -114,25 +140,34 @@ export class TodayController {
   command(command: TodayCommand): TodayState {
     switch (command.type) {
       case "NEXT":
+        this.hold();
         this.move(1);
         break;
       case "PREV":
+        this.hold();
         this.move(-1);
         break;
       case "PLAY_SLIDESHOW":
+        this.hold();
         this.playbackState = "playing";
         this.clearPresentation();
         this.scheduleSlideshow();
         this.emit();
         break;
       case "PAUSE_SLIDESHOW":
-        this.playbackState = "paused";
+        this.hold();
         this.scheduleSlideshow();
         this.emit();
         break;
       case "STOP_SLIDESHOW":
+      case "FOLLOW_LATEST":
+        this.followingLatest = true;
         this.playbackState = "stopped";
-        this.currentIndex = this.photos.length ? this.photos.length - 1 : -1;
+        this.newPhotos.clear();
+        this.baselinePhotos.clear();
+        this.activeDate = this.latest?.date_folder ?? null;
+        this.photos = this.latestPhotos;
+        this.currentIndex = this.latestIndex();
         this.clearPresentation();
         this.scheduleSlideshow();
         this.emit();
@@ -156,6 +191,7 @@ export class TodayController {
         if (!Number.isInteger(command.index) || command.index < 0 || command.index >= this.photos.length) {
           throw new TodayCommandError("Photo index is out of range.");
         }
+        this.hold();
         this.currentIndex = command.index;
         this.clearPresentation();
         this.scheduleSlideshow();
@@ -163,7 +199,20 @@ export class TodayController {
         break;
       case "SET_SHOW_EXIF":
         if (typeof command.show_exif !== "boolean") throw new TodayCommandError("show_exif must be a boolean.");
-        this.showExif = command.show_exif;
+        this.overlayMode = command.show_exif ? this.visibleOverlayMode : "hidden";
+        this.emit();
+        break;
+      case "SET_OVERLAY":
+        validateOverlay(command.mode, command.corner, command.auto_hide);
+        this.overlayMode = command.mode;
+        if (command.mode !== "hidden") this.visibleOverlayMode = command.mode;
+        this.overlayCorner = command.corner;
+        this.overlayAutoHide = command.auto_hide;
+        this.emit();
+        break;
+      case "SET_CLEAN_OUTPUT":
+        if (typeof command.clean_output !== "boolean") throw new TodayCommandError("clean_output must be a boolean.");
+        this.cleanOutput = command.clean_output;
         this.emit();
         break;
       case "SET_SHOW_BACKGROUND":
@@ -175,25 +224,67 @@ export class TodayController {
     return this.state();
   }
 
-  async refresh(force: boolean): Promise<TodayState> {
+  refresh(force: boolean): Promise<TodayState> {
+    this.refreshing ??= this.refreshLatest(force).finally(() => { this.refreshing = null; });
+    return this.refreshing;
+  }
+
+  private async refreshLatest(force: boolean): Promise<TodayState> {
     const latest = await this.store.readLatest();
     const changed = force || latest?.updated_at !== this.latest?.updated_at || latest?.date_folder !== this.latest?.date_folder;
     if (!changed) return this.state();
+    const dates = new Set([latest?.date_folder, this.latest?.date_folder, this.activeDate, ...[...this.newPhotos].map((key) => key.split("/")[0])]);
+    const galleries = new Map(await Promise.all([...dates].filter((date): date is string => Boolean(date))
+      .map(async (date) => [date, await this.store.listPhotos(date)] as const)));
     const previousBase = this.photos[this.currentIndex]?.base ?? null;
+    const previousDate = this.activeDate;
     this.latest = latest;
-    this.photos = latest ? await this.store.listPhotos(latest.date_folder) : [];
-    this.clearPresentation();
-    const preferredBase = latest?.latest_base ?? previousBase;
-    const preferredIndex = preferredBase ? this.photos.findIndex((photo) => photo.base === preferredBase) : -1;
-    this.currentIndex = preferredIndex >= 0 ? preferredIndex : this.photos.length ? this.photos.length - 1 : -1;
-    this.scheduleSlideshow();
+    this.latestPhotos = latest ? galleries.get(latest.date_folder) ?? [] : [];
+    if (this.followingLatest) {
+      this.activeDate = latest?.date_folder ?? null;
+      this.photos = this.latestPhotos;
+      this.currentIndex = this.latestIndex();
+    } else {
+      const unreadDates = new Set([...this.newPhotos].map((key) => key.split("/")[0]));
+      for (const [date, photos] of galleries) {
+        if (date !== latest?.date_folder && date !== this.activeDate && !unreadDates.has(date)) continue;
+        const available = new Set(photos.map((photo) => `${date}/${photo.base}`));
+        for (const key of this.newPhotos) {
+          if (key.startsWith(`${date}/`) && !available.has(key)) this.newPhotos.delete(key);
+        }
+        for (const key of available) {
+          if (!this.baselinePhotos.has(key)) this.newPhotos.add(key);
+        }
+      }
+      this.photos = this.activeDate ? galleries.get(this.activeDate) ?? [] : [];
+      const index = this.photos.findIndex((photo) => photo.base === previousBase);
+      this.currentIndex = index >= 0 ? index : Math.min(Math.max(this.currentIndex, 0), this.photos.length - 1);
+    }
+    if (previousDate !== this.activeDate || previousBase !== (this.photos[this.currentIndex]?.base ?? null)) {
+      this.clearPresentation();
+      this.scheduleSlideshow();
+    } else if (this.playbackState === "playing" && (this.photos.length < 2 || !this.slideshowTimer)) {
+      this.scheduleSlideshow();
+    }
     this.emit();
     return this.state();
   }
 
+  private latestIndex(): number {
+    const index = this.photos.findIndex((photo) => photo.base === this.latest?.latest_base);
+    return index >= 0 ? index : this.photos.length - 1;
+  }
+
+  private hold(): void {
+    if (this.followingLatest) {
+      for (const photo of this.photos) this.baselinePhotos.add(`${photo.date_folder}/${photo.base}`);
+    }
+    this.followingLatest = false;
+    this.playbackState = "paused";
+  }
+
   private move(offset: number): void {
-    if (!this.photos.length) return;
-    this.currentIndex = (this.currentIndex + offset + this.photos.length) % this.photos.length;
+    if (this.photos.length) this.currentIndex = (this.currentIndex + offset + this.photos.length) % this.photos.length;
     this.clearPresentation();
     this.scheduleSlideshow();
     this.emit();
@@ -243,9 +334,9 @@ export function parseCommand(value: unknown): TodayCommand {
   }
   const command = value as Record<string, unknown>;
   if (command.type === "START_SLIDESHOW") return { type: "PLAY_SLIDESHOW" };
-  if (["NEXT", "PREV", "PLAY_SLIDESHOW", "PAUSE_SLIDESHOW", "STOP_SLIDESHOW", "AUTO_SCROLL_IMAGE"].includes(command.type as string)) {
+  if (["NEXT", "PREV", "PLAY_SLIDESHOW", "PAUSE_SLIDESHOW", "STOP_SLIDESHOW", "FOLLOW_LATEST", "AUTO_SCROLL_IMAGE"].includes(command.type as string)) {
     return {
-      type: command.type as "NEXT" | "PREV" | "PLAY_SLIDESHOW" | "PAUSE_SLIDESHOW" | "STOP_SLIDESHOW" | "AUTO_SCROLL_IMAGE",
+      type: command.type as "NEXT" | "PREV" | "PLAY_SLIDESHOW" | "PAUSE_SLIDESHOW" | "STOP_SLIDESHOW" | "FOLLOW_LATEST" | "AUTO_SCROLL_IMAGE",
     };
   }
   if (command.type === "SET_INTERVAL_MS") return { type: command.type, interval_ms: Number(command.interval_ms) };
@@ -254,11 +345,27 @@ export function parseCommand(value: unknown): TodayCommand {
     if (typeof command.show_exif !== "boolean") throw new TodayCommandError("show_exif must be a boolean.");
     return { type: command.type, show_exif: command.show_exif };
   }
+  if (command.type === "SET_OVERLAY") {
+    validateOverlay(command.mode, command.corner, command.auto_hide);
+    return { type: command.type, mode: command.mode as OverlayMode, corner: command.corner as OverlayCorner, auto_hide: command.auto_hide as boolean };
+  }
+  if (command.type === "SET_CLEAN_OUTPUT") {
+    if (typeof command.clean_output !== "boolean") throw new TodayCommandError("clean_output must be a boolean.");
+    return { type: command.type, clean_output: command.clean_output };
+  }
   if (command.type === "SET_SHOW_BACKGROUND") {
     if (typeof command.show_background !== "boolean") throw new TodayCommandError("show_background must be a boolean.");
     return { type: command.type, show_background: command.show_background };
   }
   throw new TodayCommandError("Unknown command.");
+}
+
+function validateOverlay(mode: unknown, corner: unknown, autoHide: unknown): void {
+  if (mode !== "compact" && mode !== "full" && mode !== "hidden") throw new TodayCommandError("Choose compact, full, or hidden camera details.");
+  if (corner !== "top-left" && corner !== "top-right" && corner !== "bottom-left" && corner !== "bottom-right") {
+    throw new TodayCommandError("Choose a valid corner for camera details.");
+  }
+  if (typeof autoHide !== "boolean") throw new TodayCommandError("auto_hide must be a boolean.");
 }
 
 function errorMessage(error: unknown): string {

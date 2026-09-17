@@ -4,6 +4,7 @@ import path from "node:path";
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const BASE_PATTERN = /^[A-Za-z0-9_-]+$/;
+const DASHBOARD_CACHE_MS = 60_000;
 
 export interface LatestPublication {
   updated_at: string;
@@ -52,6 +53,8 @@ interface PhotoSidecar {
 export class TodayStore {
   readonly galleriesRoot: string;
   readonly latestFile: string;
+  private dashboardCache: { value: TodayDashboardSummary; expiresAt: number } | null = null;
+  private dashboardPending: Promise<TodayDashboardSummary> | null = null;
 
   constructor(readonly dataRoot: string) {
     this.galleriesRoot = path.join(dataRoot, "galleries");
@@ -99,36 +102,52 @@ export class TodayStore {
     return photos.sort((left, right) => left.processed_at.localeCompare(right.processed_at));
   }
 
-  async dashboardSummary(): Promise<TodayDashboardSummary> {
+  dashboardSummary(): Promise<TodayDashboardSummary> {
+    this.dashboardPending ??= this.refreshDashboardSummary().finally(() => { this.dashboardPending = null; });
+    return this.dashboardPending;
+  }
+
+  private async refreshDashboardSummary(): Promise<TodayDashboardSummary> {
     const latest = await this.readLatest();
+    // ponytail: manual file edits reconcile once a minute; per-album caching if library scans grow costly.
+    if (this.dashboardCache && Date.now() < this.dashboardCache.expiresAt
+      && JSON.stringify(latest) === JSON.stringify(this.dashboardCache.value.latest)) {
+      return this.dashboardCache.value;
+    }
     let entries: Dirent[];
     try {
       entries = await readdir(this.galleriesRoot, { withFileTypes: true });
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        return { latest, latest_photo: null, current_gallery: null, total_albums: 0, total_images: 0 };
+        entries = [];
+      } else {
+        throw error;
       }
-      throw error;
     }
     const albums = (await Promise.all(entries
       .filter((entry) => entry.isDirectory() && DATE_PATTERN.test(entry.name))
-      .map(async (entry) => summarizeGallery(entry.name, await this.listPhotos(entry.name)))))
-      .filter((album) => album.count > 0)
-      .sort((left, right) => right.date_folder.localeCompare(left.date_folder));
+      .map(async (entry) => {
+        const photos = await this.listPhotos(entry.name);
+        return { summary: summarizeGallery(entry.name, photos), photos };
+      })))
+      .filter((album) => album.summary.count > 0)
+      .sort((left, right) => right.summary.date_folder.localeCompare(left.summary.date_folder));
     const currentGallery = (latest
-      ? albums.find((album) => album.date_folder === latest.date_folder)
+      ? albums.find((album) => album.summary.date_folder === latest.date_folder)
       : null) ?? albums[0] ?? null;
-    const currentPhotos = currentGallery ? await this.listPhotos(currentGallery.date_folder) : [];
+    const currentPhotos = currentGallery?.photos ?? [];
     const latestPhoto = (latest?.latest_base
       ? currentPhotos.find((photo) => photo.base === latest.latest_base)
       : null) ?? currentPhotos[currentPhotos.length - 1] ?? null;
-    return {
+    const summary = {
       latest,
       latest_photo: latestPhoto,
-      current_gallery: currentGallery,
+      current_gallery: currentGallery?.summary ?? null,
       total_albums: albums.length,
-      total_images: albums.reduce((total, album) => total + album.count, 0),
+      total_images: albums.reduce((total, album) => total + album.summary.count, 0),
     };
+    this.dashboardCache = { value: summary, expiresAt: Date.now() + DASHBOARD_CACHE_MS };
+    return summary;
   }
 
   async requireImage(dateFolder: string, base: string): Promise<string> {

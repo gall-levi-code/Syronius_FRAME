@@ -3,9 +3,9 @@ import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import express, { type Express } from "express";
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
-import { Readable } from "node:stream";
+import { PassThrough } from "node:stream";
 import { type BasicAuthConfig, requireBasicAuth } from "./auth.js";
-import { streamCompletedUpload } from "./handoff.js";
+import { streamCompletedUpload, UploadValidationError } from "./handoff.js";
 import { type PhotoSourceAdapter, UploadProgressTracker } from "./progress.js";
 
 export interface UploadConfig {
@@ -17,6 +17,7 @@ export interface UploadConfig {
   auth: BasicAuthConfig;
   serviceToken: string;
   progressTracker?: UploadProgressTracker;
+  internalStageTimeoutMs?: number;
 }
 
 interface CompletedUpload {
@@ -34,6 +35,23 @@ export async function createApp(config: UploadConfig): Promise<Express> {
 
   const app = express();
   let activeSessions = 0;
+  const admitSession: express.RequestHandler = (_request, response, next) => {
+    if (activeSessions >= config.maxSessions) {
+      response.setHeader("Connection", "close");
+      response.status(429).json({ error: "Too many active upload sessions. Try again in a moment." });
+      return;
+    }
+    activeSessions += 1;
+    let released = false;
+    const releaseSession = () => {
+      if (released) return;
+      released = true;
+      activeSessions -= 1;
+    };
+    response.once("finish", releaseSession);
+    response.once("close", releaseSession);
+    next();
+  };
   app.disable("x-powered-by");
   app.get("/healthz", (_request, response) => {
     response.json({
@@ -49,40 +67,67 @@ export async function createApp(config: UploadConfig): Promise<Express> {
     response.setHeader("Cache-Control", "no-store");
     response.json(progress.snapshot());
   });
-  app.post("/api/internal/photo-upload/stage", requireServiceToken(config.serviceToken), express.raw({ type: "*/*", limit: config.maxInputBytes }), async (request, response, next) => {
+  app.post("/api/internal/photo-upload/stage", requireServiceToken(config.serviceToken), admitSession, async (request, response, next) => {
     const filename = safeHeader(request.header("x-frame-filename")) || "belabox-photo.jpg";
     const transferId = validTransferId(request.header("x-frame-transfer-id")) || randomUUID();
     const suppliedJourneyId = request.header("x-frame-journey-id");
     const journeyId = suppliedJourneyId ? validJourneyId(suppliedJourneyId) : journeyIdForTransfer(transferId);
     const suppliedAdapter = request.header("x-frame-ingest-adapter");
     const adapter = suppliedAdapter ? validAdapter(suppliedAdapter) : "belabox_chunked";
-    const bytesTotal = validFileSize(request.header("x-frame-file-size"), config.maxInputBytes);
+    const suppliedSize = request.header("x-frame-file-size");
+    const bytesTotal = validFileSize(suppliedSize, Number.MAX_SAFE_INTEGER);
+    const suppliedHash = request.header("x-frame-file-sha256");
+    const controller = new AbortController();
+    // Keep the HTTP socket outside pipeline so validation errors can return JSON.
+    // pipe() propagates disk backpressure through this bounded buffer to the sender.
+    const input = new PassThrough();
+    input.on("error", () => undefined);
+    const interrupted = () => controller.abort(new Error("Upload connection was interrupted."));
+    request.once("aborted", interrupted);
+    const timeout = setTimeout(() => controller.abort(new UploadValidationError(408, "Completed file upload timed out.")), config.internalStageTimeoutMs ?? 120_000);
+    timeout.unref();
     try {
       if (!journeyId) {
-        response.status(400).json({ error: "x-frame-journey-id must be 8-96 letters, numbers, dashes, or underscores and cannot contain '__'." });
-        return;
+        throw new UploadValidationError(400, "x-frame-journey-id must be 8-96 letters, numbers, dashes, or underscores and cannot contain '__'.");
       }
       if (!adapter) {
-        response.status(400).json({ error: "x-frame-ingest-adapter must be a lowercase adapter name." });
-        return;
+        throw new UploadValidationError(400, "x-frame-ingest-adapter must be a lowercase adapter name.");
       }
-      if (!Buffer.isBuffer(request.body) || request.body.length === 0) {
-        response.status(400).json({ error: "Completed file body is required." });
-        return;
+      if (suppliedSize !== undefined && bytesTotal === null) {
+        throw new UploadValidationError(400, "x-frame-file-size must be a nonnegative integer.");
+      }
+      if ((bytesTotal ?? 0) > config.maxInputBytes || Number(request.header("content-length")) > config.maxInputBytes) {
+        throw new UploadValidationError(413, `Photo exceeds the ${config.maxInputBytes} byte limit.`);
+      }
+      if (suppliedHash !== undefined && !/^[a-fA-F0-9]{64}$/.test(suppliedHash)) {
+        throw new UploadValidationError(400, "x-frame-file-sha256 must be a SHA-256 hex digest.");
       }
       progress.begin(transferId, journeyId, filename, bytesTotal, adapter);
+      request.pipe(input);
       const { stagedName } = await streamCompletedUpload(
-        Readable.from(request.body),
+        input,
         filename,
         staging,
         { journeyId, transferId, adapter },
         (bytes) => progress.addBytes(transferId, bytes),
+        { maxBytes: config.maxInputBytes, expectedBytes: bytesTotal, expectedSha256: suppliedHash?.toLowerCase(), signal: controller.signal },
       );
       progress.queued(transferId);
       response.status(202).json({ accepted: true, staged_name: stagedName, transfer_id: transferId, journey_id: journeyId });
     } catch (error) {
-      progress.failed(transferId, errorMessage(error));
-      next(error);
+      const failure = controller.signal.aborted ? controller.signal.reason : error;
+      progress.failed(transferId, errorMessage(failure));
+      request.unpipe(input);
+      input.destroy();
+      if (!response.destroyed) {
+        response.setHeader("Connection", "close");
+        if (failure instanceof UploadValidationError) response.status(failure.status).json({ error: failure.message });
+        else next(failure);
+        request.resume();
+      }
+    } finally {
+      clearTimeout(timeout);
+      request.removeListener("aborted", interrupted);
     }
   });
   app.use("/photos", requireBasicAuth(config.auth));
@@ -98,21 +143,7 @@ export async function createApp(config: UploadConfig): Promise<Express> {
       active_sessions: activeSessions,
     });
   });
-  app.post("/photos/api/upload", (request, response, next) => {
-    if (activeSessions >= config.maxSessions) {
-      response.status(429).json({ error: "Too many active upload sessions. Try again in a moment." });
-      return;
-    }
-    activeSessions += 1;
-    let released = false;
-    const releaseSession = () => {
-      if (released) return;
-      released = true;
-      activeSessions = Math.max(0, activeSessions - 1);
-    };
-    response.once("finish", releaseSession);
-    response.once("close", releaseSession);
-
+  app.post("/photos/api/upload", admitSession, (request, response, next) => {
     const requestTransferId = validTransferId(request.header("x-frame-transfer-id")) || randomUUID();
     const bytesTotal = validFileSize(request.header("x-frame-file-size"), config.maxInputBytes);
     const startedTransfers = new Set<string>();
@@ -125,7 +156,6 @@ export async function createApp(config: UploadConfig): Promise<Express> {
         limits: { files: config.maxFiles, fileSize: config.maxInputBytes, fields: 4 },
       });
     } catch (error) {
-      releaseSession();
       response.status(400).json({ error: errorMessage(error) });
       return;
     }

@@ -162,9 +162,11 @@ Include subfolders and process only files whose names end exactly in `.ready`.
 Photo Upload defaults to 10 selected files and 10 concurrent upload sessions. Tune
 `PHOTO_UPLOAD_MAX_FILES` and `PHOTO_UPLOAD_MAX_SESSIONS` from Advanced setup or `.env`.
 Photo FTP passwords default to a 5-character minimum through `PHOTO_FTP_MIN_PASSWORD_LENGTH`.
-Photo retention stays off by default. Advanced setup can opt into archive or trash expiry with
-`PHOTO_ARCHIVE_RETENTION_DAYS` and `PHOTO_TRASH_RETENTION_DAYS`; FRAME pauses new photo processing
-at the same disk error and minimum-free-space thresholds shown by Portal.
+Original backup archives expire 14 days after creation by default. Owners can change
+**Original backup retention (days)** in Portal's Photo Pipeline settings, or set the installation
+default with `PHOTO_ARCHIVE_RETENTION_DAYS`; `0` keeps originals indefinitely. Galleries and trash
+are deleted only through owner actions. FRAME pauses new photo processing at the same disk error
+and minimum-free-space thresholds shown by Portal.
 
 Connect a Belabox to FRAME:
 
@@ -188,10 +190,11 @@ Run verification:
 
 ## Native Setup App
 
-The native [`apps/frame-setup`](apps/frame-setup) prototype explores the GUI-first installer path.
-It uses the FRAME theme, offers Quick Start, Guided Setup, and Advanced flows, detects Docker
-readiness and previous installs, plans host storage, checks exposed ports, and opens the local
-`/setup` handoff.
+[`FRAME Setup`](apps/frame-setup/README.md) is the Electron online installer. Its runtime ships as
+one Windows `.exe` installer or Linux `.AppImage`; Docker remains a prerequisite. It retains the
+FRAME setup screens, validates the selected TCP/UDP ports on the host, and downloads an official
+release's prebuilt images before starting the stack. Node and Python do not need to be installed.
+See [release publishing](docs/releases.md) for the required `frame-images.json` release asset.
 
 For development:
 
@@ -205,7 +208,7 @@ Start with the service README when you want to understand, operate, or customize
 
 | Area | Service |
 | --- | --- |
-| Native setup prototype | [`apps/frame-setup/`](apps/frame-setup/README.md) |
+| Online setup app | [`apps/frame-setup/`](apps/frame-setup/README.md) |
 | Routing | [`services/frame-edge/`](services/frame-edge/README.md) |
 | Shared login | [`services/frame-auth/`](services/frame-auth/README.md) |
 | Portal and status | [`services/frame-portal/`](services/frame-portal/README.md) |

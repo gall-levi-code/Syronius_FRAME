@@ -68,6 +68,7 @@ const elements = {
   pipelineQuality: document.getElementById("pipeline-quality"),
   pipelineQualityValue: document.getElementById("pipeline-quality-value"),
   pipelineMaxOutput: document.getElementById("pipeline-max-output"),
+  pipelineArchiveRetention: document.getElementById("pipeline-archive-retention"),
   pipelineSave: document.getElementById("pipeline-save"),
 };
 
@@ -532,6 +533,7 @@ function renderPipelineSettings(settings) {
   elements.pipelineLongEdge.value = String(settings?.long_edge_px ?? 0);
   elements.pipelineQuality.value = String(settings?.jpeg_quality ?? 92);
   elements.pipelineMaxOutput.value = String(settings?.max_output_mb ?? 0);
+  elements.pipelineArchiveRetention.value = String(settings?.archive_retention_days ?? 14);
   updatePipelineQualityLabel();
 }
 
@@ -547,6 +549,7 @@ async function savePipelineSettings(event) {
         long_edge_px: Number.parseInt(elements.pipelineLongEdge.value || "0", 10),
         jpeg_quality: Number.parseInt(elements.pipelineQuality.value || "92", 10),
         max_output_mb: Number.parseFloat(elements.pipelineMaxOutput.value || "0"),
+        archive_retention_days: Number(elements.pipelineArchiveRetention.value || "14"),
       }),
     });
     renderPipelineSettings(payload.settings);

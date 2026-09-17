@@ -79,18 +79,43 @@ app.delete("/api/internal/photo-pipeline/explore", requireServiceToken, async (r
 });
 
 app.post("/api/internal/photo-pipeline/manage", requireServiceToken, async (request, response, next) => {
+  let streaming = false;
+  const send = (record: unknown) => {
+    if (response.destroyed || response.writableEnded) return;
+    try { response.write(`${JSON.stringify(record)}\n`); } catch { /* client disconnected; finish the move */ }
+  };
   try {
     const candidate = typeof request.body?.action === "string" ? request.body.action : "";
     if (![
-      "trash-photo", "restore-photo", "purge-photo", "trash-album", "restore-album", "purge-album", "empty-trash",
+      "move-photos", "trash-photos", "trash-photo", "restore-photo", "purge-photo", "trash-album", "restore-album", "purge-album", "empty-trash",
     ].includes(candidate)) {
       throw new PhotoManagementError("Unknown photo management action.", 400);
     }
     const action = candidate as PhotoManagementAction;
     response.setHeader("Cache-Control", "no-store");
-    response.json(await pipeline.managePhotos(action, request.body?.date_folder, request.body?.base));
+    streaming = action === "move-photos" && Boolean(request.header("accept")?.includes("application/x-ndjson"));
+    if (streaming) {
+      response.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
+      response.setHeader("Cache-Control", "no-store, no-transform");
+      response.setHeader("X-Accel-Buffering", "no");
+      response.on("error", () => undefined);
+      response.flushHeaders();
+    }
+    const result = await pipeline.managePhotos(
+      action, request.body?.date_folder, request.body?.base, request.body?.target_date_folder, request.body?.bases,
+      streaming ? (progress) => send({ type: "progress", ...progress }) : undefined,
+    );
+    if (streaming) {
+      send({ type: "result", result });
+      response.end();
+    } else response.json(result);
   } catch (error) {
-    next(error);
+    if (streaming) {
+      const safeError = error instanceof PhotoManagementError && error.status < 500;
+      if (!safeError) console.error(`[photo-pipeline] management request failed: ${errorMessage(error)}`);
+      send({ type: "error", error: safeError ? errorMessage(error) : "Photo management request failed." });
+      response.end();
+    } else next(error);
   }
 });
 

@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rename, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { createInterface } from "node:readline";
 import { DatabaseSync } from "node:sqlite";
+import { Readable } from "node:stream";
 import test from "node:test";
 import sharp from "sharp";
 import { createApp } from "../dist/app.js";
@@ -1133,6 +1135,227 @@ test("gallery admin is protected and proxies management through the internal ser
   }
 });
 
+test("batch trash requires admin authentication and preserves the selected bases in one pipeline request", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-gallery-batch-trash-"));
+  const store = new GalleryStore(root, 320, 80);
+  const body = { action: "trash-photos", date_folder: "2026-09-05", bases: ["selected_two", "selected_one"] };
+  const result = { ok: true, action: "trash-photos", affected: 2 };
+  const requests = [];
+  const pipeline = createServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    requests.push({ method: request.method, url: request.url, token: request.headers["x-frame-service-token"], body: JSON.parse(Buffer.concat(chunks).toString("utf8")) });
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify(result));
+  });
+  let server;
+  try {
+    pipeline.listen(0);
+    await once(pipeline, "listening");
+    const app = await createApp(store, path.resolve("public"), {
+      pipelineUrl: `http://127.0.0.1:${pipeline.address().port}`,
+      serviceToken: "batch-trash-test-token",
+      auth: { username: "frame", password: "secret", realm: "FRAME Test" },
+    });
+    server = app.listen(0);
+    await once(server, "listening");
+    const url = `http://127.0.0.1:${server.address().port}/gallery/admin/api/manage`;
+    const options = { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) };
+    assert.equal((await fetch(url, options)).status, 401);
+    assert.equal(requests.length, 0);
+    const response = await fetch(url, {
+      ...options,
+      headers: { ...options.headers, authorization: `Basic ${Buffer.from("frame:secret").toString("base64")}` },
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), result);
+    assert.deepEqual(requests, [{ method: "POST", url: "/api/internal/photo-pipeline/manage", token: "batch-trash-test-token", body }]);
+  } finally {
+    await Promise.all([closeServer(server), closeServer(pipeline)]);
+    store.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("moving photos proxies the protected request and immediately refreshes both gallery catalogs and the source cover", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-gallery-move-"));
+  const sourceDate = "2026-06-14";
+  const targetDate = "2026-06-13";
+  const source = path.join(root, "galleries", sourceDate);
+  const target = path.join(root, "galleries", targetDate);
+  await mkdir(source, { recursive: true });
+  await mkdir(target, { recursive: true });
+  await publish(source, "moving", true, "2026-06-14T00:01:00.000Z");
+  await publish(source, "staying", true, "2026-06-14T00:02:00.000Z");
+  await publish(target, "earlier", true);
+  const store = new GalleryStore(root, 320, 80);
+  const move = { action: "move-photos", date_folder: sourceDate, target_date_folder: targetDate, bases: ["moving"] };
+  const result = { ok: true, action: "move-photos", affected: 1, target_date_folder: targetDate };
+  const proxied = [];
+  const pipeline = createServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    proxied.push({ method: request.method, url: request.url, token: request.headers["x-frame-service-token"], body: JSON.parse(Buffer.concat(chunks).toString("utf8")) });
+    for (const extension of ["jpg", "json", "txt", "ready"]) {
+      await rename(path.join(source, `moving.${extension}`), path.join(target, `moving.${extension}`));
+    }
+    response.setHeader("content-type", "application/json");
+    response.end(JSON.stringify(result));
+  });
+  let server;
+  try {
+    pipeline.listen(0);
+    await once(pipeline, "listening");
+    const app = await createApp(store, path.resolve("public"), {
+      pipelineUrl: `http://127.0.0.1:${pipeline.address().port}`,
+      serviceToken: "move-test-token",
+      auth: { username: "frame", password: "secret", realm: "FRAME Test" },
+    });
+    server = app.listen(0);
+    await once(server, "listening");
+    const origin = `http://127.0.0.1:${server.address().port}`;
+    const authorization = `Basic ${Buffer.from("frame:secret").toString("base64")}`;
+    const manageUrl = `${origin}/gallery/admin/api/manage`;
+    await store.updateGallerySettings(sourceDate, { cover_base: "moving", photo_sort: "oldest" });
+    const before = await store.listPhotoPage(sourceDate, 1);
+    const targetBefore = await store.listPhotoPage(targetDate, 1);
+    assert.ok(before.next_cursor);
+    assert.equal((await fetch(manageUrl, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(move),
+    })).status, 401);
+    assert.equal(proxied.length, 0);
+
+    const response = await fetch(manageUrl, {
+      method: "POST", headers: { authorization, "content-type": "application/json" }, body: JSON.stringify(move),
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), result);
+    assert.deepEqual(proxied, [{ method: "POST", url: "/api/internal/photo-pipeline/manage", token: "move-test-token", body: move }]);
+    const dates = (await fetch(`${origin}/gallery/api/dates`).then((item) => item.json())).dates;
+    assert.deepEqual(dates.map((item) => [item.date_folder, item.count]), [[sourceDate, 1], [targetDate, 2]]);
+    assert.equal(dates[0].cover_base, "staying");
+    assert.equal(dates[0].cover_is_custom, false);
+    const settings = await store.getGallerySettings(sourceDate);
+    assert.equal(settings.cover_base, null);
+    assert.equal(settings.photo_sort, "oldest");
+    const sourcePage = await fetch(`${origin}/gallery/api/photos?date=${sourceDate}&limit=1&cursor=${encodeURIComponent(before.next_cursor)}`).then((item) => item.json());
+    assert.deepEqual(sourcePage.photos.map((photo) => photo.base), ["staying"]);
+    assert.equal(sourcePage.total, 1);
+    assert.equal(sourcePage.next_cursor, null);
+    assert.ok(sourcePage.revision > before.revision);
+    const targetPage = await fetch(`${origin}/gallery/api/photos?date=${targetDate}`).then((item) => item.json());
+    assert.deepEqual(targetPage.photos.map((photo) => photo.base), ["moving", "earlier"]);
+    assert.equal(targetPage.photos[0].date_folder, targetDate);
+    assert.equal(targetPage.photos[0].processed_at, "2026-06-14T00:01:00.000Z");
+    assert.ok(targetPage.revision > targetBefore.revision);
+    await assert.rejects(store.requireImage(sourceDate, "moving"));
+    assert.equal(await store.requireImage(targetDate, "moving"), path.join(target, "moving.jpg"));
+  } finally {
+    await Promise.all([closeServer(server), closeServer(pipeline)]);
+    store.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("streams move progress before completion, refreshes before success, and terminates failed streams without success", { timeout: 10_000 }, async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-gallery-move-stream-"));
+  const store = new GalleryStore(root, 320, 80);
+  const move = { action: "move-photos", date_folder: "2026-06-14", target_date_folder: "2026-06-13", bases: ["moving"] };
+  const result = { ok: true, action: "move-photos", affected: 1, target_date_folder: move.target_date_folder };
+  const progress = { type: "progress", phase: "preparing", completed: 0, total: 1 };
+  const refreshing = { type: "progress", phase: "refreshing", completed: 0, total: 1 };
+  const requests = [];
+  let mode = "gated";
+  let backendFinished = false;
+  let finishBackend;
+  const backendGate = new Promise((resolve) => { finishBackend = resolve; });
+  let finishPrune;
+  const pruneGate = new Promise((resolve) => { finishPrune = resolve; });
+  let pruned = 0;
+  const prune = store.pruneGallerySettings.bind(store);
+  store.pruneGallerySettings = async () => {
+    await pruneGate;
+    await prune();
+    pruned += 1;
+  };
+  const pipeline = createServer(async (request, response) => {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    requests.push({ method: request.method, url: request.url, token: request.headers["x-frame-service-token"], accept: request.headers.accept, body: JSON.parse(Buffer.concat(chunks).toString("utf8")) });
+    if (mode === "legacy" || mode === "json") {
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify(result));
+      return;
+    }
+    response.setHeader("content-type", "application/x-ndjson");
+    response.write(`${JSON.stringify(progress)}\n`);
+    if (mode === "gated") {
+      await backendGate;
+      backendFinished = true;
+      response.end(JSON.stringify({ type: "result", result }));
+    } else if (mode === "error") response.end(`${JSON.stringify({ type: "error", error: "The destination already contains moving." })}\n`);
+    else if (mode === "malformed") response.end("{broken\n");
+    else response.end();
+  });
+  let server;
+  try {
+    pipeline.listen(0);
+    await once(pipeline, "listening");
+    const app = await createApp(store, path.resolve("public"), {
+      pipelineUrl: `http://127.0.0.1:${pipeline.address().port}`,
+      serviceToken: "stream-test-token",
+      auth: { username: "frame", password: "secret", realm: "FRAME Test" },
+    });
+    server = app.listen(0);
+    await once(server, "listening");
+    const url = `http://127.0.0.1:${server.address().port}/gallery/admin/api/manage`;
+    const headers = { authorization: `Basic ${Buffer.from("frame:secret").toString("base64")}`, "content-type": "application/json", accept: "application/x-ndjson" };
+    assert.equal((await fetch(url, { method: "POST", headers: { "content-type": headers["content-type"], accept: headers.accept }, body: JSON.stringify(move), signal: t.signal })).status, 401);
+    assert.equal(requests.length, 0);
+    const response = await fetch(url, { method: "POST", headers, body: JSON.stringify(move), signal: t.signal });
+    assert.match(response.headers.get("content-type"), /^application\/x-ndjson/);
+    assert.equal(response.headers.get("x-accel-buffering"), "no");
+    assert.match(response.headers.get("cache-control"), /no-transform/);
+    const lines = createInterface({ input: Readable.fromWeb(response.body), crlfDelay: Infinity });
+    const events = lines[Symbol.asyncIterator]();
+    assert.deepEqual(JSON.parse((await events.next()).value), progress);
+    assert.equal(backendFinished, false, "progress must reach the browser while the backend is still working");
+    assert.deepEqual(requests, [{ method: "POST", url: "/api/internal/photo-pipeline/manage", token: "stream-test-token", accept: "application/x-ndjson", body: move }]);
+    finishBackend();
+    assert.deepEqual(JSON.parse((await events.next()).value), refreshing);
+    assert.equal(pruned, 0, "catalog refresh progress must arrive before refresh completes");
+    finishPrune();
+    assert.deepEqual(JSON.parse((await events.next()).value), { type: "result", result });
+    assert.equal(pruned, 1);
+    assert.equal((await events.next()).done, true);
+
+    for (mode of ["error", "truncated", "malformed"]) {
+      const failed = await fetch(url, { method: "POST", headers, body: JSON.stringify(move), signal: t.signal });
+      const records = (await failed.text()).trim().split("\n").map((line) => JSON.parse(line));
+      assert.deepEqual(records[0], progress);
+      assert.equal(records.length, 2);
+      assert.equal(records[1].type, "error");
+      assert.match(records[1].error, mode === "error" ? /destination already contains/ : /move may still be running; refresh/i);
+      assert.equal(pruned, 1, "failed streams must not announce successful refresh");
+    }
+    mode = "legacy";
+    const legacy = await fetch(url, { method: "POST", headers, body: JSON.stringify(move), signal: t.signal });
+    assert.deepEqual((await legacy.text()).trim().split("\n").map((line) => JSON.parse(line)), [refreshing, { type: "result", result }]);
+    mode = "json";
+    const json = await fetch(url, { method: "POST", headers: { ...headers, accept: "application/json" }, body: JSON.stringify(move), signal: t.signal });
+    assert.match(json.headers.get("content-type"), /^application\/json/);
+    assert.deepEqual(await json.json(), result);
+    assert.notEqual(requests.at(-1).accept, "application/x-ndjson");
+    assert.equal(pruned, 3);
+  } finally {
+    finishBackend();
+    finishPrune();
+    await Promise.all([closeServer(server), closeServer(pipeline)]);
+    store.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("wires cover selection, global downloads, flowing photos, and viewer modes into the owner and visitor interfaces", async () => {
   const [adminHtml, adminScript, adminStyles, galleryHtml, galleryScript, galleryStyles, justifiedScript] = await Promise.all([
     readFile(path.resolve("public/admin.html"), "utf8"),
@@ -1156,13 +1379,22 @@ test("wires cover selection, global downloads, flowing photos, and viewer modes 
   assert.match(adminHtml, /id="downloads-disabled"[^>]+aria-pressed="true"/);
   assert.match(adminHtml, /id="downloads-enabled"[^>]+aria-pressed="false"/);
   assert.match(adminHtml, /id="settings-action-bar"[^>]+hidden/);
-  assert.equal((adminHtml.match(/d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 11v6M14 11v6"/g) || []).length, 4);
+  assert.match(adminHtml, /id="trash-album"[^>]*>Move entire gallery to trash<\/button>/);
   assert.doesNotMatch(adminHtml, /<span class="trash-icon"/);
   assert.match(adminHtml, /class="photo-details">\s*<span><strong><\/strong><small><\/small><\/span>\s*<button class="trash-photo-button icon-danger-button"/);
   assert.doesNotMatch(adminHtml, /class="photo-actions"/);
   assert.match(adminHtml, /class="cover-star"[^>]+role="img"[^>]+aria-label="Current gallery cover"[^>]*>\s*<svg[^>]+viewBox="0 0 24 24"/);
-  assert.match(adminHtml, /admin\.css\?v=gallery-photo-sort-1/);
-  assert.match(adminHtml, /admin\.js\?v=gallery-photo-sort-1/);
+  assert.match(adminHtml, /admin\.css\?v=gallery-trash-selected-1/);
+  assert.match(adminHtml, /admin\.js\?v=gallery-trash-selected-1/);
+  assert.match(adminHtml, /id="published-tab"[^>]+aria-controls="published-view"[^>]*>Galleries/);
+  assert.match(adminHtml, /id="site-settings-tab"[^>]+aria-controls="site-settings-view"[^>]*>Site settings/);
+  assert.match(adminHtml, /id="site-settings-view"[\s\S]*aria-label="Site settings sections"[\s\S]*id="gallery-styling-tab"[^>]*>General/);
+  assert.match(adminHtml, /<details id="album-settings"/);
+  assert.match(adminHtml, /id="back-to-galleries"/);
+  assert.match(adminHtml, /id="previous-gallery"/);
+  assert.match(adminHtml, /id="next-gallery"/);
+  assert.match(adminHtml, /id="clear-selection"/);
+  assert.match(adminHtml, /<details class="photo-metadata">[\s\S]*<summary>Photo details<\/summary>[\s\S]*<dt>Processed<\/dt>[\s\S]*<dt>Captured \(camera clock\)<\/dt>/);
   assert.match(adminHtml, /id="support-tab"[^>]+aria-controls="support-view"/);
   assert.match(adminHtml, /FRAME will usually identify it automatically/);
   assert.match(adminScript, /cover_base: photo\.base/);
@@ -1175,7 +1407,8 @@ test("wires cover selection, global downloads, flowing photos, and viewer modes 
   assert.match(adminScript, /trash: `<svg class="trash-icon"[^>]+><path d="M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 11v6M14 11v6"\/><\/svg>`/);
   assert.match(adminScript, /class="icon-danger-button social-remove"[^>]+aria-label="Remove social link"[^>]*>\$\{icons\.trash\}<\/button>/);
   assert.match(adminScript, /querySelectorAll\("\.cover-picker-photo"\)/);
-  assert.match(adminScript, /import \{ layoutJustifiedRows \} from "\.\/justified-rows\.js\?v=gallery-justified-1"/);
+  assert.match(adminScript, /import \{ layoutJustifiedRows, observeCoverGallery \} from "\.\/justified-rows\.js\?v=gallery-justified-4"/);
+  assert.match(galleryScript, /import \{ layoutJustifiedRows, observeCoverGallery \} from "\.\/justified-rows\.js\?v=gallery-justified-4"/);
   assert.match(adminScript, /layoutJustifiedRows\(elements\.cover_picker_grid, items/);
   assert.match(justifiedScript, /export function planJustifiedRows/);
   assert.match(justifiedScript, /container\.replaceChildren\(\.\.\.rowElements\)/);
@@ -1220,7 +1453,7 @@ test("wires cover selection, global downloads, flowing photos, and viewer modes 
   assert.match(galleryHtml, /class="card-action photo-map-jump"/);
   assert.match(galleryHtml, /class="card-action photo-share"/);
   assert.doesNotMatch(galleryHtml, /photo-download/);
-  assert.match(galleryStyles, /\.gallery-photo-row\s*\{[^}]*flex-wrap:\s*nowrap/);
+  assert.match(galleryStyles, /\.gallery-photo-row,\s*\.gallery-cover-row\s*\{[^}]*flex-wrap:\s*nowrap/);
   assert.match(galleryStyles, /\.photo-open img\s*\{[^}]*object-fit:\s*contain/);
   assert.match(galleryStyles, /\.photo-card:focus-within \.photo-overlay\s*\{[^}]*opacity:\s*1/);
   assert.match(galleryStyles, /\.photo-card:focus-within::after\s*\{[^}]*opacity:\s*1/);
@@ -1316,8 +1549,8 @@ test("wires cover selection, global downloads, flowing photos, and viewer modes 
   assert.match(galleryStyles, /html, body\s*\{[^}]*overflow-x:\s*clip/);
   assert.match(galleryStyles, /html:has\(\.lightbox\[open\]\)\s*\{[^}]*overflow:\s*hidden/);
   assert.match(galleryStyles, /\.topbar\s*\{[^}]*position:\s*sticky[^}]*z-index:\s*1100[^}]*top:\s*0/);
-  assert.match(galleryHtml, /styles\.css\?v=gallery-lightbox-scroll-1/);
-  assert.match(galleryHtml, /gallery\.js\?v=gallery-photo-sort-1/);
+  assert.match(galleryHtml, /styles\.css\?v=gallery-cover-layout-7/);
+  assert.match(galleryHtml, /gallery\.js\?v=gallery-cover-layout-7/);
   assert.match(galleryScript, /error\.status = response\.status/);
   assert.match(galleryScript, /Automatic copy was blocked\. Press and hold the link to copy it\./);
   assert.match(galleryHtml, /<script[^>]*id="leaflet-script"[^>]*defer[^>]*src="https:\/\/unpkg\.com\/leaflet/);

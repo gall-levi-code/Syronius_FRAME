@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 import { WebSocketServer } from "ws";
 import { loadConfig } from "./config.js";
 import { errorContext, logAudio } from "./logger.js";
-import { RelayManager } from "./relayManager.js";
+import { PUBLISHER_MAX_MESSAGE_BYTES, RelayManager } from "./relayManager.js";
 import { AudioStreamStore, BITRATE_PRESETS, StoreError, validateStreamInput } from "./store.js";
 
 const execFileAsync = promisify(execFile);
@@ -18,7 +18,7 @@ await relays.init();
 
 const app = express();
 const server = createServer(app);
-const captureSockets = new WebSocketServer({ noServer: true, maxPayload: 2 * 1024 * 1024 });
+const captureSockets = new WebSocketServer({ noServer: true, maxPayload: PUBLISHER_MAX_MESSAGE_BYTES });
 const publicDir = path.resolve(process.cwd(), "public");
 const hlsDir = path.join(config.dataRoot, "hls");
 

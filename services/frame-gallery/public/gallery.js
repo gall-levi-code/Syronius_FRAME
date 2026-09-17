@@ -1,7 +1,7 @@
 import { buildGalleryShareUrls, captureTimestamp, matchExplorePhotos, routeSegments, simulatedRouteSegments } from "./explore.js?v=gallery-share-7";
 import { SOCIAL_PLATFORMS, socialIcon } from "./socials.js?v=gallery-socials-6";
 import { SUPPORT_PLATFORMS, supportIcon } from "./support.js?v=gallery-support-1";
-import { layoutJustifiedRows } from "./justified-rows.js?v=gallery-justified-1";
+import { layoutJustifiedRows, observeCoverGallery } from "./justified-rows.js?v=gallery-justified-4";
 
 const elements = {
   home: document.querySelector("#gallery-home"),
@@ -76,6 +76,7 @@ const elements = {
   shareQrLabel: document.querySelector("#share-qr-label"),
   shareStatus: document.querySelector("#share-status"),
 };
+const scheduleDateGalleryLayout = observeCoverGallery(elements.dateGallery);
 const icons = {
   moon: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.4 15.1A8.4 8.4 0 0 1 8.9 3.6 8.5 8.5 0 1 0 20.4 15.1Z"/></svg>`,
   sun: `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/></svg>`,
@@ -715,7 +716,7 @@ function normalizePhotoSort(value) {
 function renderDates() {
   const total = state.dates.reduce((sum, date) => sum + date.count, 0);
   elements.headingEyebrow.textContent = "Published galleries";
-  elements.heading.textContent = "Photo days";
+  elements.heading.textContent = "Photo galleries";
   elements.summary.textContent = `${state.dates.length} day${state.dates.length === 1 ? "" : "s"} of published photos`;
   elements.count.textContent = `${total} photo${total === 1 ? "" : "s"}`;
   elements.empty.hidden = state.dates.length > 0;
@@ -731,11 +732,20 @@ function renderDates() {
     const link = card.querySelector(".date-open");
     const image = card.querySelector("img");
     const dayHref = `${route.root}/${date.date_folder}/`;
+    const title = card.querySelector("strong");
+    const stats = card.querySelector(".date-card-stats");
     link.href = dayHref;
+    title.id = `date-cover-title-${date.date_folder}`;
+    stats.id = `date-cover-stats-${date.date_folder}`;
+    link.setAttribute("aria-labelledby", title.id);
+    link.setAttribute("aria-describedby", stats.id);
     image.src = date.cover_thumbnail_url || "/gallery/assets/frame-logo-square.svg";
     image.alt = `Gallery cover for ${formatLongDate(date.date_folder)}`;
-    card.querySelector("strong").textContent = formatLongDate(date.date_folder);
-    card.querySelector(".date-card-stats").textContent = `${photoLabel(date.count)} - ${durationLabel(date.duration_ms)}`;
+    const coverDate = new Date(`${date.date_folder}T12:00:00`);
+    title.querySelector("time").dateTime = date.date_folder;
+    title.querySelector("time").textContent = coverDate.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+    title.querySelector(".gallery-year").textContent = coverDate.toLocaleDateString([], { year: "numeric" });
+    stats.textContent = `${photoLabel(date.count)} - ${durationLabel(date.duration_ms)}`;
     const mapLink = card.querySelector(".date-map-jump");
     if (date.has_explore) {
       card.classList.add("has-map-action");
@@ -752,6 +762,7 @@ function renderDates() {
     shareButton.addEventListener("click", () => openShareDialog(dayHref, date.has_explore));
     return card;
   }));
+  scheduleDateGalleryLayout();
 }
 
 function renderDay(openPhotoBase = null) {

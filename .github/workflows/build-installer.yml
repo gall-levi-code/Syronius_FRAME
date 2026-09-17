@@ -1,0 +1,38 @@
+name: Build FRAME online installers
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  installer:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: win
+            extension: exe
+          - os: ubuntu-latest
+            target: linux
+            extension: AppImage
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/frame-setup/package-lock.json
+      - run: node --test tests/electron-backend.test.mjs tests/electron-ui.test.mjs tests/frame-preflight.test.mjs tests/installer-host-runtime.test.mjs
+      - run: npm ci
+        working-directory: apps/frame-setup
+      - run: npm run dist:${{ matrix.target }}
+        working-directory: apps/frame-setup
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FRAME-Setup-${{ matrix.target }}-x64
+          path: apps/frame-setup/release/*.${{ matrix.extension }}
+          if-no-files-found: error

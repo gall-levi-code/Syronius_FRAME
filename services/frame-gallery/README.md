@@ -17,6 +17,7 @@ Use it if you want to:
 - Attach one or more RTIRL GPX routes to a gallery day.
 - Explore a day's route and jump between mapped photos.
 - Hide or restore photos from the gallery.
+- Move selected photos into another day's gallery after a late upload.
 - Permanently delete published gallery copies when needed.
 - Choose each album's gallery cover.
 - Choose each album's photo order without exposing visitor sorting controls.
@@ -90,6 +91,8 @@ On the public gallery, viewers can:
 
 On the admin page, operators can:
 
+- Select photos (or **Select all**) and **Move selected** to another gallery date.
+- Use **Trash selected** to move up to 1000 checked photos to recoverable Trash with one confirmation.
 - Move photos or albums to trash.
 - Restore trashed photos or albums.
 - Permanently delete trashed gallery copies.
@@ -104,6 +107,40 @@ On the admin page, operators can:
 - Enable or disable full gallery JPEG downloads for every public gallery.
 
 Trash is reversible. Permanent delete is not.
+
+Gallery Admin separates **Galleries**, **Trash**, and **Site settings**. Opening a gallery focuses the
+page on its photos; **Back to galleries** returns to the list, and **Previous gallery** / **Next gallery**
+skip to the nearest existing dates. The selected gallery is retained in the URL for reloads.
+Both public and admin gallery lists preserve each cover image's full proportions, using the individual
+gallery's row layout on desktop and full-width covers on mobile. Stacked edges distinguish galleries
+from individual photos, and each gallery date stays visible as a short weekday, month, and day with
+the year on its own line. Photo counts and duration fade in over
+the cover on hover or keyboard focus; touch and narrow screens keep these details visible.
+**Album settings** contains the cover, public photo order, Explore link, and whole-gallery trash action.
+Site settings groups General (branding and downloads), Socials, and Support; these apply to all galleries.
+
+The photo selection bar stays visible while scrolling and includes the selected count and **Clear selection**.
+Cards label their processing timestamp explicitly. Expand **Photo details** to see the published filename,
+processing time with the browser's time zone, and the original camera clock when available.
+
+To fix uploads that crossed midnight, open the newer album in **Gallery Admin → Galleries**,
+select the affected photos, and choose **Move N photos…**. The destination defaults to the previous
+calendar day. Pick an existing gallery or **Choose another date…** to create one, then choose
+**Move photos**. The destination album opens after the move; you can use the same action to move photos
+back. Each request accepts up to 1,000 photos, and a filename conflict stops the batch without replacing
+existing photos.
+
+During a move, the dialog shows the current step, completed/total photos and percentage for that step,
+an activity bar when a count is unavailable, and elapsed time. The dialog stays open through the final
+gallery refresh. Controls are disabled while it runs, and leaving or reloading the page prompts a
+browser warning. An accepted move continues on the server if the browser disconnects; if progress is
+lost, refresh the gallery to check the result before retrying.
+
+Moving preserves filenames, image quality, capture details, and processing timestamps. The album date
+changes, so existing links to those photos need to be shared again. Moved photos use the destination
+gallery's routes and display settings. Manual map placements transfer when both galleries have an Explore map; otherwise
+they remain saved in the source gallery for a move back. The destination can still match photos using
+their capture details once it has a route.
 
 Saving Explore publishes its route and mapped photo locations immediately to everyone who can view
 that gallery. Routes contain precise location data. Configure RTIRL privacy zones so tracking is
@@ -140,7 +177,7 @@ to publish absolute canonical and preview URLs for link crawlers.
 
 The admin page should stay login-protected.
 
-Photo Gallery asks Photo Pipeline to hide, restore, or delete photos and albums. It does not edit the
+Photo Gallery asks Photo Pipeline to move, hide, restore, or delete photos and albums. It does not edit the
 published photo files directly.
 
 Photo Gallery keeps a rebuildable SQLite catalog in `gallery-cache/gallery-catalog.sqlite`. The

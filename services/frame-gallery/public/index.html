@@ -34,7 +34,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous">
     <script id="leaflet-script" defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
     <script defer src="https://unpkg.com/qrcodejs@1.0.0/qrcode.min.js" integrity="sha384-3zSEDfvllQohrq0PHL1fOXJuC/jSOO34H46t6UQfobFOmxE5BpjjaIJY5F2/bMnU" crossorigin="anonymous"></script>
-    <link rel="stylesheet" href="/gallery/assets/styles.css?v=gallery-lightbox-scroll-1">
+    <link rel="stylesheet" href="/gallery/assets/styles.css?v=gallery-cover-layout-7">
   </head>
   <body>
     <header class="topbar">
@@ -213,17 +213,19 @@
     </dialog>
 
     <template id="date-template">
-      <article class="date-card">
+      <article class="date-card gallery-cover-card">
         <a class="date-open">
           <img alt="" loading="lazy">
+        </a>
+        <span class="date-overlay">
           <span class="date-card-meta">
-            <strong></strong>
+            <strong><time></time><span class="gallery-year"></span></strong>
             <span class="date-card-stats"></span>
           </span>
-        </a>
-        <span class="card-actions">
-          <a class="card-action date-map-jump" hidden></a>
-          <button class="card-action date-share" type="button"></button>
+          <span class="card-actions">
+            <a class="card-action date-map-jump" hidden></a>
+            <button class="card-action date-share" type="button"></button>
+          </span>
         </span>
       </article>
     </template>
@@ -241,6 +243,6 @@
         </span>
       </article>
     </template>
-    <script type="module" src="/gallery/assets/gallery.js?v=gallery-photo-sort-1"></script>
+    <script type="module" src="/gallery/assets/gallery.js?v=gallery-cover-layout-7"></script>
   </body>
 </html>

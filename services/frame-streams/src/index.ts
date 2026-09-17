@@ -10,6 +10,7 @@ import {
   type NormalizedStats,
 } from "./statsOutput";
 import { createLastGoodCache } from "./lastGoodCache";
+import { createStatsCache } from "./statsCache";
 
 type SourceType = "sls" | "custom";
 
@@ -130,6 +131,7 @@ if (Boolean(config.username) !== Boolean(config.password)) {
 const app = express();
 const publicDir = path.resolve(process.cwd(), "public");
 const customStatePath = path.join(config.dataRoot, "state/custom-streams.json");
+const statsCache = createStatsCache<PublisherStats | null>();
 const slsProfiles = createLastGoodCache(
   async () => {
     const result = await upstreamJson<{ data?: StreamId[] }>("/api/stream-ids");
@@ -257,8 +259,8 @@ app.post("/slsui/api/streams", async (request, response, next) => {
     const profiles = await readProfiles(false);
     if (request.body?.source_type === "custom") {
       const stream = validateCustomStream(request.body);
-      assertUniqueCustomStream(stream, profiles, (await readCustomState()).streams);
       const document = await readCustomState();
+      assertUniqueCustomStream(stream, profiles, document.streams);
       document.streams.push(stream);
       await writeCustomState(document);
       response.status(201).json({ stream: publicCustomProfile(stream) });
@@ -272,7 +274,10 @@ app.post("/slsui/api/streams", async (request, response, next) => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(stream),
     });
-    if (upstream.ok) slsProfiles.invalidate();
+    if (upstream.ok) {
+      slsProfiles.invalidate();
+      statsCache.invalidate();
+    }
     response.status(upstream.status).json(await upstream.json());
   } catch (error) {
     next(error);
@@ -298,6 +303,7 @@ app.delete("/slsui/api/streams/:id", async (request, response, next) => {
       return;
     }
     slsProfiles.invalidate();
+    statsCache.invalidate();
     response.status(upstream.status).json(await withOverlayCleanup(id, result));
   } catch (error) {
     next(error);
@@ -358,7 +364,10 @@ async function readProfiles(includeStats: boolean): Promise<StreamProfile[]> {
   if (!includeStats) {
     return profiles;
   }
-  return await Promise.all(profiles.map(async (profile) => ({ ...profile, stats: await readStats(profile.id) })));
+  return await Promise.all(profiles.map(async (profile) => ({
+    ...profile,
+    stats: await readStats(profile.id, customDocument.streams),
+  })));
 }
 
 async function buildBelaboxRelayCatalog(): Promise<RelayCatalog> {
@@ -395,9 +404,11 @@ async function readSlsProfiles(): Promise<StreamId[]> {
   return await slsProfiles.read();
 }
 
-async function readStats(id: string): Promise<PublisherStats | null> {
-  const custom = (await readCustomState()).streams.find((stream) => stream.id === id);
-  return custom ? await readBelaboxStats(custom) : await readSlsStats(id);
+async function readStats(id: string, customStreams?: CustomStream[]): Promise<PublisherStats | null> {
+  return statsCache.read(id, async () => {
+    const custom = (customStreams ?? (await readCustomState()).streams).find((stream) => stream.id === id);
+    return custom ? await readBelaboxStats(custom) : await readSlsStats(id);
+  });
 }
 
 async function readSlsStats(player: string): Promise<PublisherStats | null> {
@@ -460,16 +471,10 @@ async function readBelaboxStats(stream: CustomStream): Promise<PublisherStats | 
 }
 
 async function externalFetch(url: string): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), config.requestTimeoutMs);
-  try {
-    return await fetch(url, {
-      headers: { Accept: "application/json", "User-Agent": "FRAME-Stream-Management/0.1" },
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timer);
-  }
+  return await fetch(url, {
+    headers: { Accept: "application/json", "User-Agent": "FRAME-Stream-Management/0.1" },
+    signal: AbortSignal.timeout(config.requestTimeoutMs),
+  });
 }
 
 async function ensureCustomState(): Promise<void> {
@@ -497,6 +502,7 @@ async function writeCustomState(document: CustomStreamDocument): Promise<void> {
   const temporary = `${customStatePath}.tmp-${process.pid}`;
   await writeFile(temporary, `${JSON.stringify(document, null, 2)}\n`, "utf8");
   await rename(temporary, customStatePath);
+  statsCache.invalidate();
 }
 
 function publicSlsProfile(stream: StreamId): StreamProfile {
@@ -557,18 +563,14 @@ async function upstreamFetch(
   init: RequestInit = {},
   authenticated = true,
 ): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), config.requestTimeoutMs);
   const headers = new Headers(init.headers);
   headers.set("Accept", "application/json");
   if (authenticated) {
     headers.set("Authorization", `Bearer ${config.slsApiKey}`);
   }
-  try {
-    return await fetch(`${config.slsApiUrl}${route}`, { ...init, headers, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
+  return await fetch(`${config.slsApiUrl}${route}`, {
+    ...init, headers, signal: AbortSignal.timeout(config.requestTimeoutMs),
+  });
 }
 
 async function unbindOverlays(id: string): Promise<string[]> {

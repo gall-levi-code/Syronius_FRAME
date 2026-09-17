@@ -6,12 +6,14 @@ const dataRoot = path.resolve(process.env.DATA_ROOT?.trim() || "./data");
 const maxInputBytes = readInteger("PHOTO_MAX_INPUT_MB", 50, 1, 2048) * 1024 * 1024;
 const maxFiles = readInteger("PHOTO_UPLOAD_MAX_FILES", 10, 1, 100);
 const maxSessions = readInteger("PHOTO_UPLOAD_MAX_SESSIONS", 10, 1, 100);
+const internalStageTimeoutMs = readInteger("BELABOX_CHUNK_STAGE_TIMEOUT_MS", 120_000, 1000, 3_600_000);
 const publicDir = path.resolve(process.cwd(), "public");
 const app = await createApp({
   dataRoot,
   maxInputBytes,
   maxFiles,
   maxSessions,
+  internalStageTimeoutMs,
   publicDir,
   auth: {
     username: process.env.PORTAL_USERNAME?.trim() || "",
@@ -21,6 +23,7 @@ const app = await createApp({
   serviceToken: process.env.PORTAL_SERVICE_TOKEN?.trim() || "",
 });
 const server = app.listen(port, () => console.log(`[photo-upload] listening on ${port}`));
+server.requestTimeout = Math.max(server.requestTimeout, internalStageTimeoutMs + 1000);
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => server.close(() => process.exit(0)));

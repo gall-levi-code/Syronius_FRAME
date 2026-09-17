@@ -1,4 +1,4 @@
-import express, { type Express, type Request, type RequestHandler } from "express";
+import express, { type Express, type Request, type RequestHandler, type Response } from "express";
 import { createHmac, randomBytes } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -121,6 +121,10 @@ export async function createApp(store: GalleryStore, publicDir: string, manageme
     app.post(["/gallery/admin/api/manage", "/today/gallery/admin/api/manage"], protect, async (request, response, next) => {
       try {
         response.setHeader("Cache-Control", "no-store");
+        if (request.body?.action === "move-photos" && request.get("accept")?.includes("application/x-ndjson")) {
+          await streamPhotoMove(management, store, request.body, response);
+          return;
+        }
         const result = await pipelineRequest(management, "/api/internal/photo-pipeline/manage", "POST", request.body);
         try {
           await store.pruneGallerySettings();
@@ -539,6 +543,71 @@ function escapeHtml(value: string): string {
     '"': "&quot;",
     "'": "&#39;",
   })[character]!);
+}
+
+async function streamPhotoMove(config: GalleryManagementConfig, store: GalleryStore, body: unknown, response: Response): Promise<void> {
+  response.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
+  response.setHeader("Cache-Control", "no-store, no-transform");
+  response.setHeader("X-Accel-Buffering", "no");
+  response.on("error", () => undefined);
+  response.flushHeaders();
+  const send = (event: unknown) => {
+    try {
+      if (!response.destroyed && !response.writableEnded) response.write(`${JSON.stringify(event)}\n`);
+    } catch { /* A disconnected viewer must not interrupt the move or catalog refresh. */ }
+  };
+  try {
+    // Continue reading and refreshing the catalog even if the browser disconnects.
+    const upstream = await fetch(`${config.pipelineUrl.replace(/\/+$/, "")}/api/internal/photo-pipeline/manage`, {
+      method: "POST",
+      headers: { "x-frame-service-token": config.serviceToken, "content-type": "application/json", accept: "application/x-ndjson" },
+      body: JSON.stringify(body),
+    });
+    let result: { ok?: boolean; affected?: number } | undefined;
+    if (!upstream.headers.get("content-type")?.includes("application/x-ndjson")) {
+      const value = await upstream.json() as { ok?: boolean; affected?: number; error?: string };
+      if (!upstream.ok || !value.ok) throw new GalleryRequestError(value.error || "Photo move failed.", 400);
+      result = value;
+    } else {
+      if (!upstream.ok || !upstream.body) throw new Error("Photo move progress is unavailable.");
+      const reader = upstream.body.getReader();
+      const decoder = new TextDecoder();
+      let pending = "";
+      try {
+        while (!result) {
+          const { done, value } = await reader.read();
+          pending += decoder.decode(value, { stream: !done });
+          const lines = pending.split("\n");
+          pending = lines.pop() || "";
+          if (done && pending.trim()) lines.push(pending);
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            const event = JSON.parse(line);
+            if (event.type === "error") throw new GalleryRequestError(event.error || "Photo move failed.", 400);
+            if (event.type === "progress") send(event);
+            if (event.type === "result") { result = event.result; break; }
+          }
+          if (done) break;
+        }
+      } finally {
+        await reader.cancel().catch(() => undefined);
+      }
+    }
+    if (!result?.ok) throw new Error("Move progress disconnected. The move may still be running; refresh the gallery before retrying.");
+    send({ type: "progress", phase: "refreshing", completed: 0, total: result.affected });
+    try {
+      await store.pruneGallerySettings();
+    } catch (error) {
+      console.error(`[gallery] settings cleanup failed after photo management: ${errorMessage(error)}`);
+    }
+    send({ type: "result", result });
+  } catch (error) {
+    console.error(`[gallery] move progress failed: ${errorMessage(error)}`);
+    send({ type: "error", error: error instanceof GalleryRequestError
+      ? error.message : "Move progress stopped. The move may still be running; refresh the gallery before retrying." });
+  } finally {
+    if (!response.destroyed) response.end();
+  }
 }
 
 async function pipelineRequest(

@@ -1,15 +1,20 @@
 import { createHash, randomUUID } from "node:crypto";
-import { createReadStream } from "node:fs";
+import { constants, createReadStream } from "node:fs";
 import {
   access,
   copyFile,
+  link,
+  lstat,
   mkdir,
+  opendir,
   readdir,
   readFile,
   rename,
   rm,
+  rmdir,
   stat,
   statfs,
+  utimes,
 } from "node:fs/promises";
 import path from "node:path";
 import exifReader from "exif-reader";
@@ -32,7 +37,10 @@ const MAX_EXPLORE_SEGMENTS = 2_000;
 const MAX_EXPLORE_POINTS = 50_000;
 const MAX_EXPLORE_PLACEMENTS = 10_000;
 const STORAGE_CHECK_INTERVAL_MS = 30_000;
-const RETENTION_SWEEP_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const RETENTION_SWEEP_INTERVAL_MS = 60 * 60 * 1000;
+const ARCHIVE_METADATA_FILE = ".frame-archive.json";
+const ARCHIVE_BATCH_SIZE = 25;
+const ARCHIVE_BATCH_MS = 50;
 const ROLLING_WINDOW_MS = 60_000;
 const PERFORMANCE_SAMPLE_LIMIT = 100;
 const LOCK_SAMPLE_LIMIT = 500;
@@ -252,6 +260,8 @@ interface RawImage {
 }
 
 export type PhotoManagementAction =
+  | "move-photos"
+  | "trash-photos"
   | "trash-photo"
   | "restore-photo"
   | "purge-photo"
@@ -276,6 +286,24 @@ export interface PhotoManagementResult {
   date_folder: string;
   latest_base: string | null;
   count_today: number;
+  target_date_folder?: string;
+}
+
+export interface PhotoMoveProgress {
+  phase: "waiting" | "checking" | "preparing" | "moving" | "finalizing" | "cleanup" | "recovering";
+  completed: number;
+  total: number;
+}
+
+interface PhotoMoveRecord {
+  schema_version: 1;
+  committed: boolean;
+  source_date: string;
+  target_date: string;
+  bases: string[];
+  receipts: JourneyProgress[];
+  archives: Array<{ journey_id: string; identity: string }>;
+  explore: null | { source_before: unknown; target_before: unknown; source_after: GalleryExplore; target_after: GalleryExplore };
 }
 
 interface QuarantineReason {
@@ -286,10 +314,26 @@ interface QuarantineReason {
   attempts?: number;
 }
 
+interface ArchiveCandidate {
+  dateFolder: string;
+  journeyId?: string;
+  fileName: string;
+}
+
+interface ArchiveMetadata {
+  schema_version: 1;
+  originals: Record<string, string>;
+}
+
 export class PhotoPipeline {
   readonly directories: Record<string, string>;
   readonly status: PipelineStatus;
   private timer: NodeJS.Timeout | null = null;
+  private retentionTimer: NodeJS.Timeout | null = null;
+  private archiveIterator: AsyncGenerator<ArchiveCandidate | null> | null = null;
+  private retentionScanning = false;
+  private retentionReset = false;
+  private archivePrunedDirectories = new Set<string>();
   private processing = new Set<string>();
   private scanning = false;
   private queueRefreshing = false;
@@ -362,6 +406,7 @@ export class PhotoPipeline {
       await mkdir(directory, { recursive: true });
     }
     await mkdir(this.journeyReceiptDirectory(), { recursive: true });
+    await this.recoverPhotoMoves();
     await this.loadJourneyReceipts();
     await this.loadSettings();
     await this.ensureCurrentGallery();
@@ -375,11 +420,18 @@ export class PhotoPipeline {
     void this.processOnce();
     this.timer = setInterval(() => void this.processOnce(), this.config.pollMs);
     this.timer.unref();
+    // Expiry is independent of startup, ingest scans, and the gallery lifecycle.
+    this.retentionTimer = setInterval(() => void this.sweepArchiveBatch(), 1000);
+    this.retentionTimer.unref();
   }
 
   stop(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    if (this.retentionTimer) clearInterval(this.retentionTimer);
+    this.retentionTimer = null;
+    this.retentionReset = true;
+    if (!this.retentionScanning) void this.resetArchiveIterator();
     this.status.running = false;
   }
 
@@ -497,13 +549,287 @@ export class PhotoPipeline {
     return trashed.sort((left, right) => right.trashed_at.localeCompare(left.trashed_at));
   }
 
-  async managePhotos(action: PhotoManagementAction, dateFolder?: string, base?: string): Promise<PhotoManagementResult> {
+  async managePhotos(
+    action: PhotoManagementAction,
+    dateFolder?: string,
+    base?: string,
+    targetDateFolder?: unknown,
+    bases?: unknown,
+    onProgress?: (progress: PhotoMoveProgress) => void,
+  ): Promise<PhotoManagementResult> {
+    const total = Array.isArray(bases) && bases.length <= 1000 ? new Set(bases).size : 0;
+    const report = (phase: PhotoMoveProgress["phase"], completed = 0) => {
+      // Feedback is best effort: closing the browser must never roll back an accepted move.
+      try { onProgress?.({ phase, completed, total }); } catch { /* observer disconnected */ }
+    };
+    if (action === "move-photos") report("waiting");
     return this.withPublishLock(async () => {
-      const affected = await this.applyManagementAction(action, dateFolder, base);
+      if (action === "move-photos") report("checking");
+      await this.recoverPhotoMoves();
+      if (action === "move-photos") return this.movePublications(dateFolder, targetDateFolder, bases, report);
+      const affected = await this.applyManagementAction(action, dateFolder, base, bases);
       const latest = await this.recalculateLatest(new Date().toISOString());
       console.log(`[photo-pipeline] ${action} affected ${affected} publication(s)`);
       return { ok: true, action, affected, ...latest };
     });
+  }
+
+  private async movePublications(
+    sourceDate: unknown, targetDate: unknown, candidateBases: unknown,
+    report: (phase: PhotoMoveProgress["phase"], completed?: number) => void,
+  ): Promise<PhotoManagementResult> {
+    for (const date of [sourceDate, targetDate]) {
+      if (typeof date !== "string" || !isDateFolder(date)
+        || !Number.isFinite(Date.parse(`${date}T00:00:00.000Z`))
+        || new Date(`${date}T00:00:00.000Z`).toISOString().slice(0, 10) !== date) {
+        throw new PhotoManagementError("Valid source and target gallery dates are required.", 400);
+      }
+    }
+    const dateFolder = sourceDate as string;
+    const targetDateFolder = targetDate as string;
+    if (dateFolder === targetDateFolder) throw new PhotoManagementError("Choose a different destination gallery.", 400);
+    if (!Array.isArray(candidateBases) || candidateBases.length === 0 || candidateBases.length > 1000
+      || candidateBases.some((base) => typeof base !== "string" || !isPhotoBase(base) || base.length > 200)) {
+      throw new PhotoManagementError("Select between 1 and 1000 valid photos to move.", 400);
+    }
+    const bases = [...new Set(candidateBases as string[])];
+    await this.requireGallery(dateFolder);
+    const sourceDirectory = path.join(this.directories.galleries, dateFolder);
+    const targetDirectory = path.join(this.directories.galleries, targetDateFolder);
+    const targetEntries = new Set(await safeReadEntries(targetDirectory));
+    for (const claim of await this.readClaims()) {
+      const publication = await this.readPublication(claim);
+      if (publication && [dateFolder, targetDateFolder].includes(publication.dateFolder) && bases.includes(publication.base)) {
+        throw new PhotoManagementError("Photo publishing is still finishing. Try moving again shortly.", 409);
+      }
+    }
+    const publications = [];
+    for (const base of bases) {
+      const source = outputFiles(sourceDirectory, base);
+      const target = outputFiles(targetDirectory, base);
+      if (await exists(path.join(sourceDirectory, `${base}.trashed.json`))) {
+        throw new PhotoManagementError("Restore trashed photos before moving them.", 409);
+      }
+      if (Object.values(target).some((file) => targetEntries.has(path.basename(file))) || targetEntries.has(`${base}.trashed.json`)) {
+        throw new PhotoManagementError(`The destination already contains ${base}. No photos were moved.`, 409);
+      }
+      for (const file of Object.values(source)) {
+        if (!(await lstat(file).catch((error: NodeJS.ErrnoException) => {
+          if (error.code === "ENOENT") throw new PhotoManagementError(`Published photo ${base} is missing or incomplete.`, 404);
+          throw error;
+        })).isFile()) throw new PhotoManagementError(`Published photo ${base} is incomplete.`, 409);
+      }
+      const sidecar = await readJsonOrNull<Record<string, unknown>>(source.json);
+      const orientation = (await readFile(source.orientation, "utf8")).trim();
+      if (!isRecord(sidecar) || !["0", "1"].includes(orientation)) {
+        throw new PhotoManagementError(`Photo metadata for ${base} is incomplete.`, 409);
+      }
+      const journeyId = sidecar.journey_id;
+      const receipt = validJourneyId(journeyId) ? await this.readJourneyReceipt(journeyId) : null;
+      if (validJourneyId(journeyId) && (!receipt || receipt.state !== "published" || receipt.date_folder !== dateFolder || receipt.base !== base)) {
+        throw new PhotoManagementError(`Photo journey for ${base} is incomplete.`, 409);
+      }
+      const archive = receipt ? path.join(this.directories.archive, dateFolder, receipt.journey_id) : null;
+      const targetArchive = receipt ? path.join(this.directories.archive, targetDateFolder, receipt.journey_id) : null;
+      if (targetArchive && await exists(targetArchive)) {
+        throw new PhotoManagementError(`The destination already contains the original for ${base}. No photos were moved.`, 409);
+      }
+      publications.push({ base, source, target, sidecar, orientation, receipt,
+        archive: archive && await exists(archive) ? archive : null, targetArchive, readyInfo: await stat(source.ready) });
+      report("checking", publications.length);
+    }
+
+    const sourceExploreFile = path.join(sourceDirectory, EXPLORE_FILE);
+    const targetExploreFile = path.join(targetDirectory, EXPLORE_FILE);
+    const sourceExplore = await readJsonOrNull<unknown>(sourceExploreFile);
+    const targetExplore = await readJsonOrNull<unknown>(targetExploreFile);
+    const now = new Date().toISOString();
+    const explore = sourceExplore && targetExplore
+      ? { source: normalizeExplore(sourceExplore, now), target: normalizeExplore(targetExplore, now) } : null;
+    let transferredPlacements = false;
+    if (explore) {
+      for (const base of bases) {
+        const placement = explore.source.placements[base];
+        if (!placement) continue;
+        explore.target.placements[base] = placement;
+        delete explore.source.placements[base];
+        transferredPlacements = true;
+      }
+      if (Object.keys(explore.target.placements).length > MAX_EXPLORE_PLACEMENTS) {
+        throw new PhotoManagementError("The destination Explore map has too many placements for this move.", 409);
+      }
+    }
+
+    const moveDirectory = path.join(this.directories.state, "photo-moves", randomUUID());
+    const originals = path.join(moveDirectory, "originals");
+    const prepared = path.join(moveDirectory, "prepared");
+    const record: PhotoMoveRecord = {
+      schema_version: 1, committed: false, source_date: dateFolder, target_date: targetDateFolder, bases,
+      receipts: publications.flatMap((photo) => photo.receipt ? [photo.receipt] : []),
+      archives: [],
+      explore: explore && transferredPlacements
+        ? { source_before: sourceExplore, target_before: targetExplore, source_after: explore.source, target_after: explore.target } : null,
+    };
+    report("preparing");
+    await mkdir(originals, { recursive: true });
+    await mkdir(prepared);
+    try {
+      for (const [index, photo] of publications.entries()) {
+        for (const file of Object.values(photo.source)) await link(file, path.join(originals, path.basename(file)));
+        const files = outputFiles(prepared, photo.base);
+        for (const extension of ["jpg", "txt", "orientation"] as const) {
+          await link(photo.source[extension], files[extension]);
+        }
+        await atomicWriteJson(files.json, { ...photo.sidecar, date_folder: targetDateFolder });
+        await atomicWrite(files.ready,
+          `${hostJoin(this.config.hostDataRoot, "galleries", targetDateFolder, `${photo.base}.jpg`)}\n`
+          + `${hostJoin(this.config.hostDataRoot, "galleries", targetDateFolder, `${photo.base}.txt`)}\n${photo.orientation}\n`);
+        await utimes(files.ready, photo.readyInfo.atime, photo.readyInfo.mtime);
+        if (photo.archive && photo.receipt) record.archives.push({ journey_id: photo.receipt.journey_id, identity: (await moveFileIdentity(photo.archive))! });
+        report("preparing", index + 1);
+      }
+      // Originals and prepared files identify owned paths; persist recovery before any gallery mutation.
+      await atomicWriteJson(path.join(moveDirectory, "move.json"), record);
+      report("moving");
+      await mkdir(targetDirectory, { recursive: true });
+      for (const [index, photo] of publications.entries()) {
+        for (const extension of ["jpg", "json", "txt", "orientation"] as const) {
+          await link(path.join(prepared, `${photo.base}.${extension}`), photo.target[extension]);
+        }
+        if (photo.archive && photo.targetArchive) {
+          await mkdir(path.dirname(photo.targetArchive), { recursive: true });
+          if (await moveFileIdentity(photo.targetArchive)) throw new PhotoManagementError("The destination archive is already occupied.", 409);
+          await rename(photo.archive, photo.targetArchive);
+        }
+        if (photo.receipt) await this.writeJourneyReceipt({ ...photo.receipt, date_folder: targetDateFolder });
+        await this.clearThumbnail(dateFolder, photo.base);
+        await this.clearThumbnail(targetDateFolder, photo.base);
+        report("moving", index + 1);
+      }
+      report("finalizing");
+      if (record.explore) {
+        await atomicWriteJson(sourceExploreFile, record.explore.source_after);
+        await atomicWriteJson(targetExploreFile, record.explore.target_after);
+      }
+      for (const photo of publications) await link(path.join(prepared, `${photo.base}.ready`), photo.target.ready);
+      for (const photo of publications) await rm(photo.source.ready);
+      const latest = await this.recalculateLatest(now);
+      record.committed = true;
+      await atomicWriteJson(path.join(moveDirectory, "move.json"), record);
+      report("finalizing", bases.length);
+      report("cleanup");
+      await this.recoverPhotoMove(moveDirectory, (completed) => report("cleanup", completed)).catch((error) => {
+        console.warn(`[photo-pipeline] committed move cleanup will resume: ${errorMessage(error)}`);
+      });
+      return { ok: true, action: "move-photos", affected: bases.length, target_date_folder: targetDateFolder, ...latest };
+    } catch (error) {
+      report("recovering");
+      await this.recoverPhotoMove(moveDirectory).catch((recoveryError) => {
+        console.error(`[photo-pipeline] photo move recovery will resume: ${errorMessage(recoveryError)}`);
+      });
+      await this.recalculateLatest(new Date().toISOString()).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  private async recoverPhotoMoves(): Promise<void> {
+    const directory = path.join(this.directories.state, "photo-moves");
+    for (const entry of await safeReadEntries(directory)) {
+      if (/^[a-f0-9-]{36}$/.test(entry)) await this.recoverPhotoMove(path.join(directory, entry));
+    }
+  }
+
+  private async recoverPhotoMove(directory: string, onCleanup?: (completed: number) => void): Promise<void> {
+    const record = await readJsonOrNull<PhotoMoveRecord>(path.join(directory, "move.json"));
+    if (!record) {
+      // Preparation did not reach its durable record, so no gallery files were changed.
+      await rm(directory, { recursive: true, force: true });
+      return;
+    }
+    if (record.schema_version !== 1 || typeof record.committed !== "boolean"
+      || !isDateFolder(record.source_date) || !isDateFolder(record.target_date) || record.source_date === record.target_date
+      || !Array.isArray(record.bases) || !record.bases.length || record.bases.some((base) => typeof base !== "string" || !isPhotoBase(base))
+      || !Array.isArray(record.receipts) || record.receipts.some((receipt) => !validJourneyId(receipt.journey_id)
+        || receipt.date_folder !== record.source_date || !record.bases.includes(receipt.base ?? ""))
+      || !Array.isArray(record.archives) || record.archives.some((archive) => !validJourneyId(archive.journey_id) || !/^\d+:\d+$/.test(archive.identity))) {
+      throw new Error(`Invalid photo move recovery record: ${directory}`);
+    }
+    const source = path.join(this.directories.galleries, record.source_date);
+    const target = path.join(this.directories.galleries, record.target_date);
+    const originals = path.join(directory, "originals");
+    const prepared = path.join(directory, "prepared");
+    const extensions = ["jpg", "json", "txt", "orientation", "ready"];
+    if (!record.committed) {
+      // Restore complete source publications before removing any owned destination paths.
+      await mkdir(source, { recursive: true });
+      for (const base of record.bases) {
+        for (const extension of extensions) {
+          const name = `${base}.${extension}`;
+          const original = path.join(originals, name);
+          const identity = await moveFileIdentity(original);
+          if (!identity) throw new Error(`Photo move original is missing: ${name}`);
+          const current = await moveFileIdentity(path.join(source, name));
+          if (current && current !== identity) throw new Error(`Photo move recovery preserves a conflicting source file: ${name}`);
+          if (!current) await link(original, path.join(source, name));
+        }
+      }
+      for (const archive of record.archives) {
+        const original = path.join(this.directories.archive, record.source_date, archive.journey_id);
+        const destination = path.join(this.directories.archive, record.target_date, archive.journey_id);
+        const current = await moveFileIdentity(original);
+        if (current === archive.identity) continue;
+        if (current || await moveFileIdentity(destination) !== archive.identity) throw new Error("Photo move recovery preserves a conflicting archive.");
+        await rename(destination, original);
+      }
+      for (const receipt of record.receipts) {
+        const current = await readJsonOrNull(this.journeyReceiptPath(receipt.journey_id));
+        if (current && JSON.stringify(current) !== JSON.stringify(receipt)
+          && JSON.stringify(current) !== JSON.stringify({ ...receipt, date_folder: record.target_date })) {
+          throw new Error("Photo move recovery preserves a conflicting journey receipt.");
+        }
+        await this.writeJourneyReceipt(receipt);
+      }
+      if (record.explore) {
+        for (const [gallery, before, after] of [
+          [source, record.explore.source_before, record.explore.source_after],
+          [target, record.explore.target_before, record.explore.target_after],
+        ] as const) {
+          const file = path.join(gallery, EXPLORE_FILE);
+          const current = await readJsonOrNull(file);
+          if (current && JSON.stringify(current) !== JSON.stringify(before) && JSON.stringify(current) !== JSON.stringify(after)) {
+            throw new Error("Photo move recovery preserves a conflicting Explore map.");
+          }
+          await atomicWriteJson(file, before);
+        }
+      }
+    }
+    for (const [index, base] of record.bases.entries()) {
+      if (record.committed) {
+        for (const extension of extensions) {
+          const name = `${base}.${extension}`;
+          const expected = await moveFileIdentity(path.join(prepared, name));
+          if (!expected || await moveFileIdentity(path.join(target, name)) !== expected) {
+            throw new Error(`Committed photo move destination changed before cleanup: ${name}`);
+          }
+        }
+        if (await moveFileIdentity(path.join(source, `${base}.ready`))) {
+          onCleanup?.(index + 1);
+          continue;
+        }
+      }
+      // Delete only hard links owned by this move; leave foreign replacements intact.
+      for (const extension of [...extensions].reverse()) {
+        const name = `${base}.${extension}`;
+        const reference = path.join(record.committed ? originals : prepared, name);
+        const file = path.join(record.committed ? source : target, name);
+        const expected = await moveFileIdentity(reference);
+        if (expected && await moveFileIdentity(file) === expected) await rm(file);
+      }
+      onCleanup?.(index + 1);
+    }
+    // Remove the recovery record before backups, so interrupted cleanup is safe to repeat.
+    await rm(path.join(directory, "move.json"), { force: true });
+    await rm(directory, { recursive: true, force: true });
   }
 
   getSettings(): PipelineProcessingSettings {
@@ -511,26 +837,21 @@ export class PhotoPipeline {
   }
 
   async updateSettings(candidate: unknown): Promise<PipelineProcessingSettings> {
-    this.settings = normalizeSettings(candidate, this.config.defaultSettings);
-    await atomicWriteJson(path.join(this.directories.state, SETTINGS_FILE), this.settings);
+    if (isRecord(candidate) && Object.hasOwn(candidate, "archive_retention_days")
+      && !validArchiveRetention(candidate.archive_retention_days)) {
+      throw new PhotoManagementError("archive_retention_days must be an integer from 0 to 36500.", 400);
+    }
+    const settings = normalizeSettings(candidate, this.settings);
+    await atomicWriteJson(path.join(this.directories.state, SETTINGS_FILE), settings);
+    if (settings.archive_retention_days !== this.settings.archive_retention_days) {
+      this.nextRetentionSweepAt = 0;
+      this.retentionReset = true;
+    }
+    this.settings = settings;
     return this.getSettings();
   }
 
   private async maintainStorage(now = Date.now()): Promise<void> {
-    if (now >= this.nextRetentionSweepAt) {
-      this.nextRetentionSweepAt = now + RETENTION_SWEEP_INTERVAL_MS;
-      try {
-        const trashPurged = await this.pruneExpiredTrash(now);
-        const archivesPruned = await this.pruneExpiredArchives(now);
-        this.status.trash_purged += trashPurged;
-        this.status.archives_pruned += archivesPruned;
-        if (trashPurged || archivesPruned) {
-          console.log(`[photo-pipeline] storage cleanup purged ${trashPurged} trashed publication(s) and ${archivesPruned} archived original(s)`);
-        }
-      } catch (error) {
-        console.warn(`[photo-pipeline] storage cleanup skipped: ${errorMessage(error)}`);
-      }
-    }
     if (now < this.nextStorageCheckAt) return;
     this.nextStorageCheckAt = now + STORAGE_CHECK_INTERVAL_MS;
     try {
@@ -574,68 +895,131 @@ export class PhotoPipeline {
     this.lastStorageNotice = message;
   }
 
-  private async pruneExpiredTrash(now: number): Promise<number> {
-    if (!(this.config.trashRetentionDays > 0)) return 0;
-    const cutoff = now - this.config.trashRetentionDays * 24 * 60 * 60 * 1000;
-    return this.withPublishLock(async () => {
-      let purged = 0;
-      for (const item of await this.listTrash()) {
-        const directory = path.join(this.directories.galleries, item.date_folder);
-        const marker = await readJsonOrNull<Record<string, unknown>>(path.join(directory, `${item.base}.trashed.json`));
-        const trashedAt = canonicalTimestampMs(marker?.trashed_at);
-        if (trashedAt === null || trashedAt > cutoff) continue;
-        const sidecar = await readJsonOrNull<Record<string, unknown>>(path.join(directory, `${item.base}.json`));
-        const journeyId = sidecar?.journey_id;
-        if (!validJourneyId(journeyId) || !(await this.verifiedTrackedArchive(item.date_folder, journeyId, item.base))) continue;
-        purged += await this.purgePublication(item.date_folder, item.base);
-      }
-      return purged;
-    });
+  private async resetArchiveIterator(): Promise<void> {
+    const iterator = this.archiveIterator;
+    this.archiveIterator = null;
+    this.retentionReset = false;
+    await iterator?.return(undefined);
   }
 
-  private async pruneExpiredArchives(now: number): Promise<number> {
-    if (!(this.config.archiveRetentionDays > 0)) return 0;
-    const cutoff = now - this.config.archiveRetentionDays * 24 * 60 * 60 * 1000;
+  private async sweepArchiveBatch(now = Date.now()): Promise<void> {
+    if (this.retentionScanning) return;
+    this.retentionScanning = true;
     let pruned = 0;
-    for (const dateFolder of await safeReadDirectories(this.directories.archive)) {
-      if (!isDateFolder(dateFolder)) continue;
-      for (const journeyId of await safeReadDirectories(path.join(this.directories.archive, dateFolder))) {
-        if (!validJourneyId(journeyId)) continue;
-        let receipt: JourneyProgress | null;
-        try {
-          receipt = await this.readJourneyReceipt(journeyId);
-        } catch {
-          continue;
+    try {
+      if (this.retentionReset) await this.resetArchiveIterator();
+      if (!this.settings.archive_retention_days || now < this.nextRetentionSweepAt) return;
+      this.archiveIterator ??= this.archiveCandidates();
+      const started = performance.now();
+      for (let visited = 0; visited < ARCHIVE_BATCH_SIZE && performance.now() - started < ARCHIVE_BATCH_MS; visited += 1) {
+        if (this.retentionReset || !this.settings.archive_retention_days) break;
+        const next = await this.archiveIterator.next();
+        if (next.done) {
+          this.archiveIterator = null;
+          if (!this.retentionReset) this.nextRetentionSweepAt = now + RETENTION_SWEEP_INTERVAL_MS;
+          break;
         }
-        const archivedAt = canonicalTimestampMs(receipt?.updated_at);
-        if (
-          receipt?.state !== "published"
-          || receipt.journey_id !== journeyId
-          || receipt.date_folder !== dateFolder
-          || !isPhotoBase(receipt.base ?? "")
-          || !validContentSha256(receipt.content_sha256)
-          || archivedAt === null
-          || archivedAt > cutoff
-        ) continue;
-        const verifiedReceipt = await this.verifiedTrackedArchive(dateFolder, journeyId, receipt.base);
-        if (!verifiedReceipt) continue;
-        const removed = await this.withPublishLock(async () => {
-          const gallery = path.join(this.directories.galleries, dateFolder);
-          if (!(await exists(path.join(gallery, `${verifiedReceipt.base}.jpg`))) || !(await exists(path.join(gallery, `${verifiedReceipt.base}.ready`)))) return false;
-          let sidecar: Record<string, unknown> | null;
-          try {
-            sidecar = await readJsonOrNull<Record<string, unknown>>(path.join(gallery, `${verifiedReceipt.base}.json`));
-          } catch {
-            return false;
+        if (!next.value) continue;
+        try {
+          if (await this.expireArchiveCandidate(next.value, now)) pruned += 1;
+        } catch (error) {
+          console.warn(`[photo-pipeline] archive expiry skipped ${next.value.fileName}: ${errorMessage(error)}`);
+        }
+      }
+    } catch (error) {
+      await this.resetArchiveIterator();
+      this.nextRetentionSweepAt = now + RETENTION_SWEEP_INTERVAL_MS;
+      console.warn(`[photo-pipeline] archive sweep skipped: ${errorMessage(error)}`);
+    } finally {
+      this.status.archives_pruned += pruned;
+      if (pruned) console.log(`[photo-pipeline] expired ${pruned} archived original(s)`);
+      if (this.retentionReset) await this.resetArchiveIterator();
+      this.retentionScanning = false;
+    }
+  }
+
+  private async *archiveCandidates(): AsyncGenerator<ArchiveCandidate | null> {
+    for await (const date of archiveEntries(this.directories.archive)) {
+      yield null;
+      if (!date.isDirectory() || !isDateFolder(date.name)) continue;
+      const dateDirectory = path.join(this.directories.archive, date.name);
+      for await (const entry of archiveEntries(dateDirectory)) {
+        if (entry.isFile()) {
+          yield { dateFolder: date.name, fileName: entry.name };
+        } else {
+          yield null;
+          if (!entry.isDirectory() || !validJourneyId(entry.name)) continue;
+          const journeyDirectory = path.join(dateDirectory, entry.name);
+          for await (const original of archiveEntries(journeyDirectory)) {
+            yield original.isFile() && original.name !== ARCHIVE_METADATA_FILE
+              ? { dateFolder: date.name, journeyId: entry.name, fileName: original.name }
+              : null;
           }
-          if (sidecar?.journey_id !== journeyId) return false;
-          await rm(path.join(this.directories.archive, dateFolder, journeyId), { recursive: true, force: true });
-          return true;
-        });
-        if (removed) pruned += 1;
+          if (this.archivePrunedDirectories.delete(journeyDirectory)) {
+            await this.withPublishLock(() => removeEmptyArchiveDirectory(journeyDirectory));
+          }
+        }
+      }
+      if (this.archivePrunedDirectories.delete(dateDirectory)) {
+        await this.withPublishLock(() => removeEmptyArchiveDirectory(dateDirectory));
       }
     }
-    return pruned;
+  }
+
+  private async expireArchiveCandidate(candidate: ArchiveCandidate, now: number): Promise<boolean> {
+    return this.withPublishLock(async () => {
+      // Use the current owner setting after acquiring the same lock as gallery moves.
+      const days = this.settings.archive_retention_days;
+      if (!days) return false;
+      const dateDirectory = path.join(this.directories.archive, candidate.dateFolder);
+      const directory = candidate.journeyId ? path.join(dateDirectory, candidate.journeyId) : dateDirectory;
+      for (const parent of new Set([this.directories.archive, dateDirectory, directory])) {
+        const info = await lstat(parent).catch(() => null);
+        if (!info?.isDirectory() || info.isSymbolicLink()) return false;
+      }
+      const file = path.join(directory, candidate.fileName);
+      const info = await lstat(file).catch(() => null);
+      if (!info?.isFile() || info.isSymbolicLink()) return false;
+      let metadata: ArchiveMetadata | null = null;
+      // Older archives lack our timestamp. NTFS bind mounts can report birthtime=0;
+      // mtime is the fallback, never gallery dates, EXIF, receipt updates, or ctime.
+      let createdAt = Number.isFinite(info.birthtimeMs) && info.birthtimeMs > 0 ? info.birthtimeMs : info.mtimeMs;
+      if (candidate.journeyId) {
+        metadata = await readArchiveMetadata(directory);
+        if (metadata) {
+          const archivedAt = canonicalTimestampMs(metadata.originals[candidate.fileName]);
+          if (archivedAt === null) return false;
+          createdAt = archivedAt;
+        } else {
+          const receipt = await this.readJourneyReceipt(candidate.journeyId);
+          if (receipt?.state !== "published" || receipt.journey_id !== candidate.journeyId
+            || !archivedOriginalMatches(candidate.fileName, receipt.original_name)) return false;
+        }
+      } else {
+        // Flat legacy originals have no receipt: require both an image suffix and header.
+        if (!RASTER_EXTENSIONS.has(path.extname(candidate.fileName).toLowerCase())) return false;
+        if (!(await fileTypeFromFile(file))?.mime.startsWith("image/")) return false;
+      }
+      const currentDays = this.settings.archive_retention_days;
+      if (!currentDays || !Number.isFinite(createdAt) || createdAt <= 0 || createdAt > now - currentDays * 86_400_000) return false;
+      await rm(file); // Never recursively remove an archive folder or its unknown contents.
+      this.archivePrunedDirectories.add(directory);
+      this.archivePrunedDirectories.add(dateDirectory);
+      if (metadata) {
+        delete metadata.originals[candidate.fileName];
+        const metadataPath = path.join(directory, ARCHIVE_METADATA_FILE);
+        try {
+          const remaining = await readdir(directory);
+          // An empty manifest prevents unknown original_2.jpg files from becoming legacy candidates later.
+          if (Object.keys(metadata.originals).length || remaining.some((name) => name !== ARCHIVE_METADATA_FILE)) {
+            await atomicWriteJson(metadataPath, metadata);
+          } else await rm(metadataPath);
+        } catch (error) {
+          console.warn(`[photo-pipeline] archive metadata cleanup skipped: ${errorMessage(error)}`);
+        }
+      }
+      return true;
+    });
   }
 
   private async verifiedTrackedArchive(dateFolder: string, journeyId: string, base?: string): Promise<JourneyProgress | null> {
@@ -1443,7 +1827,7 @@ export class PhotoPipeline {
         await this.markJourneyPublished(claim, publication, processedAt);
       }, claim.jobId);
       this.setActiveStage(claim.jobId, "archive");
-      await this.finishClaim(claim, publication);
+      await this.withPublishLock(() => this.finishClaim(claim, publication), claim.jobId);
       this.status.published += 1;
       this.status.last_publish_at = processedAt;
       this.status.last_publish_file = claim.originalName;
@@ -1550,7 +1934,12 @@ export class PhotoPipeline {
     if (this.config.archiveOriginals) {
       const archiveDirectory = path.join(this.directories.archive, publication.dateFolder, claim.journey.journey_id);
       await mkdir(archiveDirectory, { recursive: true });
-      await rename(claim.source, await availablePath(archiveDirectory, sanitizeFilename(claim.originalName)));
+      const target = await availablePath(archiveDirectory, sanitizeFilename(claim.originalName));
+      const metadata = await readArchiveMetadata(archiveDirectory) ?? { schema_version: 1, originals: {} };
+      metadata.originals[path.basename(target)] = new Date().toISOString();
+      // Persist creation before the rename so a restart never ages a new backup by its input mtime.
+      await atomicWriteJson(path.join(archiveDirectory, ARCHIVE_METADATA_FILE), metadata);
+      await rename(claim.source, target);
     }
     await rm(claim.directory, { recursive: true, force: true });
   }
@@ -1688,7 +2077,7 @@ export class PhotoPipeline {
       : Number.isFinite(candidateMs) ? candidateMs : Date.now()).toISOString();
   }
 
-  private async applyManagementAction(action: PhotoManagementAction, dateFolder?: string, base?: string): Promise<number> {
+  private async applyManagementAction(action: PhotoManagementAction, dateFolder?: string, base?: string, candidateBases?: unknown): Promise<number> {
     if (action === "empty-trash") {
       let affected = 0;
       for (const item of await this.listTrash()) {
@@ -1697,7 +2086,28 @@ export class PhotoPipeline {
       }
       return affected;
     }
-    if (!dateFolder || !isDateFolder(dateFolder)) throw new PhotoManagementError("A valid date_folder is required.", 400);
+    if (typeof dateFolder !== "string" || !isDateFolder(dateFolder)) throw new PhotoManagementError("A valid date_folder is required.", 400);
+    if (action === "trash-photos") {
+      if (!Array.isArray(candidateBases) || candidateBases.length === 0 || candidateBases.length > 1000
+        || candidateBases.some((item) => typeof item !== "string" || !isPhotoBase(item) || item.length > 200)) {
+        throw new PhotoManagementError("Select between 1 and 1000 valid photos to trash.", 400);
+      }
+      const selected = [...new Set(candidateBases as string[])];
+      for (const item of selected) {
+        if (!(await exists(path.join(this.directories.galleries, dateFolder, `${item}.ready`)))) {
+          throw new PhotoManagementError(`Published photo ${item} was not found. No photos were trashed.`, 404);
+        }
+      }
+      let affected = 0;
+      try {
+        for (const item of selected) affected += await this.trashPublication(dateFolder, item);
+      } catch (error) {
+        // Completed markers remain recoverable and make retrying the selection safe.
+        await this.recalculateLatest(new Date().toISOString()).catch(() => undefined);
+        throw error;
+      }
+      return affected;
+    }
     if (action.endsWith("-photo")) {
       if (!base || !isPhotoBase(base)) throw new PhotoManagementError("A valid photo base is required.", 400);
       if (action === "trash-photo") return this.trashPublication(dateFolder, base);
@@ -1855,10 +2265,54 @@ function failureReason(code: string, reason: string, detail: string, detectedMim
 function normalizeSettings(candidate: unknown, fallback: PipelineProcessingSettings): PipelineProcessingSettings {
   const source = isRecord(candidate) ? candidate : {};
   return {
+    archive_retention_days: validArchiveRetention(source.archive_retention_days) ? source.archive_retention_days : fallback.archive_retention_days,
     long_edge_px: boundedInteger(source.long_edge_px, fallback.long_edge_px, 0, 12000),
     jpeg_quality: boundedInteger(source.jpeg_quality, fallback.jpeg_quality, 40, 100),
     max_output_mb: boundedNumber(source.max_output_mb, fallback.max_output_mb, 0, 500),
   };
+}
+
+function validArchiveRetention(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 36500;
+}
+
+async function readArchiveMetadata(directory: string): Promise<ArchiveMetadata | null> {
+  const file = path.join(directory, ARCHIVE_METADATA_FILE);
+  const info = await lstat(file).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  });
+  if (!info) return null;
+  if (!info.isFile() || info.isSymbolicLink()) throw new Error("Archive metadata is not a regular file.");
+  const metadata: unknown = JSON.parse(await readFile(file, "utf8"));
+  if (!isRecord(metadata) || metadata.schema_version !== 1 || !isRecord(metadata.originals)
+    || Object.entries(metadata.originals).some(([name, timestamp]) => name === ARCHIVE_METADATA_FILE
+      || name !== path.basename(name) || name.includes("\\") || name === "." || name === ".." || canonicalTimestampMs(timestamp) === null)) {
+    throw new Error("Archive metadata is invalid; originals were preserved.");
+  }
+  return metadata as unknown as ArchiveMetadata;
+}
+
+async function* archiveEntries(directory: string) {
+  try {
+    const info = await lstat(directory);
+    if (!info.isDirectory() || info.isSymbolicLink()) return;
+    for await (const entry of await opendir(directory)) yield entry;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      console.warn(`[photo-pipeline] archive directory skipped: ${errorMessage(error)}`);
+    }
+  }
+}
+
+async function removeEmptyArchiveDirectory(directory: string): Promise<void> {
+  try {
+    // rmdir cannot remove a symlink or any remaining (possibly foreign) contents.
+    if ((await lstat(directory)).isSymbolicLink()) return;
+    await rmdir(directory);
+  } catch (error) {
+    if (!["ENOENT", "ENOTEMPTY", "EEXIST", "EBUSY"].includes((error as NodeJS.ErrnoException).code ?? "")) throw error;
+  }
 }
 
 function normalizeExplore(candidate: unknown, updatedAt: string): GalleryExplore {
@@ -2195,6 +2649,16 @@ async function availablePath(directory: string, filename: string): Promise<strin
 function sanitizeFilename(filename: string): string {
   const parsed = path.parse(filename);
   return `${sanitizeBase(parsed.name)}${parsed.ext.toLowerCase().replace(/[^.a-z0-9]/g, "").slice(0, 16)}`;
+}
+
+async function moveFileIdentity(file: string): Promise<string | null> {
+  try {
+    const info = await lstat(file, { bigint: true });
+    return `${info.dev}:${info.ino}`;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
 }
 
 function archivedOriginalMatches(candidate: string, originalName: string): boolean {

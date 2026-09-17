@@ -36,7 +36,10 @@ const elements = {
   themeToggle: document.querySelector("#theme-toggle"),
 };
 const dashboardConfig = { publicBaseUrl: "" };
+let dashboardRefreshTimer = 0;
 let pipelineRefreshTimer = 0;
+let dashboardRefreshing = false;
+let pipelineRefreshing = false;
 
 initializeTheme();
 elements.themeToggle.addEventListener("click", toggleTheme);
@@ -112,7 +115,14 @@ async function copyText(value, button) {
 
 refresh();
 refreshPipeline();
-setInterval(refresh, 5000);
+document.addEventListener("visibilitychange", () => {
+  window.clearTimeout(dashboardRefreshTimer);
+  window.clearTimeout(pipelineRefreshTimer);
+  if (!document.hidden) {
+    refresh();
+    refreshPipeline();
+  }
+});
 
 function initializeTheme() {
   setThemeMode(readStoredTheme(), false);
@@ -151,8 +161,11 @@ function writeStoredTheme(mode) {
 }
 
 async function refresh() {
+  window.clearTimeout(dashboardRefreshTimer);
+  if (document.hidden || dashboardRefreshing) return;
+  dashboardRefreshing = true;
   try {
-    const response = await fetch("/today/api/dashboard", { cache: "no-store" });
+    const response = await fetch("/today/api/dashboard", { cache: "no-store", signal: AbortSignal.timeout(30_000) });
     if (!response.ok) throw new Error(`Dashboard request failed (${response.status}).`);
     const summary = await response.json();
     dashboardConfig.publicBaseUrl = summary.public_base_url || "";
@@ -164,21 +177,27 @@ async function refresh() {
     elements.status.textContent = "Library unavailable";
     elements.status.className = "status-pill bad";
     elements.message.textContent = error instanceof Error ? error.message : String(error);
+  } finally {
+    dashboardRefreshing = false;
+    if (!document.hidden) dashboardRefreshTimer = window.setTimeout(refresh, 5000);
   }
 }
 
 async function refreshPipeline() {
   window.clearTimeout(pipelineRefreshTimer);
+  if (document.hidden || pipelineRefreshing) return;
+  pipelineRefreshing = true;
   let nextRefreshMs = 5000;
   try {
-    const response = await fetch("/today/api/pipeline", { cache: "no-store" });
+    const response = await fetch("/today/api/pipeline", { cache: "no-store", signal: AbortSignal.timeout(30_000) });
     const pipeline = await response.json().catch(() => null);
     if (!response.ok || !pipeline || pipeline.available === false) throw new Error("Photo Pipeline is unavailable.");
     if (renderPipeline(pipeline)) nextRefreshMs = 1000;
   } catch {
     renderPipelineUnavailable();
   } finally {
-    pipelineRefreshTimer = window.setTimeout(refreshPipeline, nextRefreshMs);
+    pipelineRefreshing = false;
+    if (!document.hidden) pipelineRefreshTimer = window.setTimeout(refreshPipeline, nextRefreshMs);
   }
 }
 

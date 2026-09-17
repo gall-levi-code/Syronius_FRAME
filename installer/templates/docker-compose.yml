@@ -1,10 +1,24 @@
 name: syronius-frame
 
+x-frame-logging: &frame-logging
+  driver: local
+  options:
+    max-size: "10m"
+    max-file: "3"
+    compress: "true"
+
+x-frame-control: &frame-control
+  mem_limit: ${FRAME_CONTROL_MEMORY_MB:-512}m
+  mem_reservation: 64m
+  pids_limit: ${FRAME_CONTROL_PIDS:-256}
+
 services:
   frame-edge:
+    <<: *frame-control
     image: traefik@sha256:cc1799c50550f730f686df9b368e690f9199542787db8d1dd328a7c3779f6eea
     container_name: frame-edge
     restart: unless-stopped
+    logging: *frame-logging
     command:
       - --api.dashboard=false
       - --entrypoints.web.address=:80
@@ -37,10 +51,12 @@ services:
       - frame-internal
 
   frame-auth:
+    <<: *frame-control
     build:
       context: ./services/frame-auth
     container_name: frame-auth
     restart: unless-stopped
+    logging: *frame-logging
     environment:
       PORT: 3740
       FRAME_AUTH_SESSION_SECRET: ${FRAME_AUTH_SESSION_SECRET}
@@ -72,10 +88,12 @@ services:
       - frame-internal
 
   frame-public-gateway:
+    <<: *frame-control
     profiles: ["hybrid"]
     image: traefik@sha256:cc1799c50550f730f686df9b368e690f9199542787db8d1dd328a7c3779f6eea
     container_name: frame-public-gateway
     restart: unless-stopped
+    logging: *frame-logging
     command:
       - --api.dashboard=false
       - --entrypoints.public.address=:8080
@@ -102,10 +120,12 @@ services:
       - frame-internal
 
   frame-tunnel:
+    <<: *frame-control
     profiles: ["hybrid"]
     image: cloudflare/cloudflared@sha256:ba461b8aa9c042156dbd39c38657fe7431bafa063220eab8d5330a523863da9f
     container_name: frame-tunnel
     restart: unless-stopped
+    logging: *frame-logging
     command:
       - tunnel
       - --loglevel
@@ -124,10 +144,12 @@ services:
       - frame-internal
 
   frame-portal:
+    <<: *frame-control
     build:
       context: ./services/frame-portal
     container_name: frame-portal
     restart: unless-stopped
+    logging: *frame-logging
     environment:
       PORT: 3730
       FRAME_MODE: ${FRAME_MODE:-LAN}
@@ -180,9 +202,11 @@ services:
       - frame-internal
 
   frame-docker-proxy:
+    <<: *frame-control
     image: tecnativa/docker-socket-proxy@sha256:1f3a6f303320723d199d2316a3e82b2e2685d86c275d5e3deeaf182573b47476
     container_name: frame-docker-proxy
     restart: unless-stopped
+    logging: *frame-logging
     environment:
       CONTAINERS: 1
       EVENTS: 1
@@ -203,11 +227,13 @@ services:
       - frame-internal
 
   frame-audio-bridge:
+    mem_reservation: 256m
     profiles: ["audio-bridge"]
     build:
       context: ./services/frame-audio-bridge
     container_name: frame-audio-bridge
     restart: unless-stopped
+    logging: *frame-logging
     environment:
       DISCORD_TOKEN: ${DISCORD_TOKEN}
       DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
@@ -234,11 +260,15 @@ services:
       - frame-internal
 
   frame-belabox-manager:
+    <<: *frame-control
+    mem_limit: ${FRAME_BELABOX_MEMORY_MB:-1024}m
+    mem_reservation: 128m
     profiles: ["belabox"]
     build:
       context: ./services/frame-belabox-manager
     container_name: frame-belabox-manager
     restart: unless-stopped
+    logging: *frame-logging
     environment:
       FRAME_MODE: ${FRAME_MODE:-LAN}
       PORT: 3741
@@ -273,6 +303,7 @@ services:
       BELABOX_CHUNK_SIZE_BYTES: ${BELABOX_CHUNK_SIZE_BYTES:-4194304}
       BELABOX_CHUNK_PARALLEL_UPLOADS: ${BELABOX_CHUNK_PARALLEL_UPLOADS:-1}
       BELABOX_CHUNK_UPLOAD_KBPS: ${BELABOX_CHUNK_UPLOAD_KBPS:-0}
+      BELABOX_CHUNK_STAGE_TIMEOUT_MS: ${BELABOX_CHUNK_STAGE_TIMEOUT_MS:-120000}
       BELABOX_DIAGNOSTIC_UPLOAD_BYTES: ${BELABOX_DIAGNOSTIC_UPLOAD_BYTES:-8388608}
       BELABOX_DIAGNOSTIC_MAX_UPLOAD_BYTES: ${BELABOX_DIAGNOSTIC_MAX_UPLOAD_BYTES:-67108864}
       BELABOX_DIAGNOSTIC_PARALLEL_STREAMS: ${BELABOX_DIAGNOSTIC_PARALLEL_STREAMS:-1}
@@ -306,11 +337,13 @@ services:
       - frame-internal
 
   frame-audio:
+    mem_reservation: 128m
     profiles: ["audio-monitor"]
     build:
       context: ./services/frame-audio
     container_name: frame-audio
     restart: unless-stopped
+    logging: *frame-logging
     environment:
       PORT: 3734
       DATA_ROOT: /data
@@ -337,11 +370,13 @@ services:
       - frame-internal
 
   frame-ingest-video:
+    mem_reservation: 256m
     profiles: ["video-relay"]
     build:
       context: ./services/frame-ingest-video
     container_name: frame-ingest-video
     restart: unless-stopped
+    logging: *frame-logging
     environment:
       SLS_API_KEY: ${SLS_API_KEY}
     ports:
@@ -355,11 +390,13 @@ services:
       - frame-internal
 
   frame-pipeline-photos:
+    mem_reservation: 1g
     profiles: ["photo-pipeline"]
     build:
       context: ./services/frame-pipeline-photos
     container_name: frame-pipeline-photos
     restart: unless-stopped
+    logging: *frame-logging
     environment:
       PORT: 3735
       DATA_ROOT: /data
@@ -372,8 +409,7 @@ services:
       PHOTO_MAX_MEGAPIXELS: ${PHOTO_MAX_MEGAPIXELS:-80}
       PHOTO_CONVERSION_ATTEMPTS: ${PHOTO_CONVERSION_ATTEMPTS:-3}
       PHOTO_ARCHIVE_ORIGINALS: ${PHOTO_ARCHIVE_ORIGINALS:-true}
-      PHOTO_ARCHIVE_RETENTION_DAYS: ${PHOTO_ARCHIVE_RETENTION_DAYS:-0}
-      PHOTO_TRASH_RETENTION_DAYS: ${PHOTO_TRASH_RETENTION_DAYS:-0}
+      PHOTO_ARCHIVE_RETENTION_DAYS: ${PHOTO_ARCHIVE_RETENTION_DAYS:-14}
       DISK_WARN_PERCENT: ${DISK_WARN_PERCENT:-85}
       DISK_ERROR_PERCENT: ${DISK_ERROR_PERCENT:-95}
       DISK_MINIMUM_FREE_GB: ${DISK_MINIMUM_FREE_GB:-20}
@@ -384,17 +420,20 @@ services:
       - frame-internal
 
   frame-photo-upload:
+    <<: *frame-control
     profiles: ["photo-webupload"]
     build:
       context: ./services/frame-photo-upload
     container_name: frame-photo-upload
     restart: unless-stopped
+    logging: *frame-logging
     environment:
       PORT: 3736
       DATA_ROOT: /data
       PHOTO_MAX_INPUT_MB: ${PHOTO_MAX_INPUT_MB:-50}
       PHOTO_UPLOAD_MAX_FILES: ${PHOTO_UPLOAD_MAX_FILES:-100}
       PHOTO_UPLOAD_MAX_SESSIONS: ${PHOTO_UPLOAD_MAX_SESSIONS:-2}
+      BELABOX_CHUNK_STAGE_TIMEOUT_MS: ${BELABOX_CHUNK_STAGE_TIMEOUT_MS:-120000}
       PORTAL_USERNAME: ${PORTAL_USERNAME:-}
       PORTAL_PASSWORD: ${PORTAL_PASSWORD:-}
       PORTAL_REALM: ${PORTAL_REALM:-FRAME Portal}
@@ -417,11 +456,13 @@ services:
       - frame-internal
 
   frame-photo-ftp:
+    <<: *frame-control
     profiles: ["photo-ftp"]
     build:
       context: ./services/frame-photo-ftp
     container_name: frame-photo-ftp
     restart: unless-stopped
+    logging: *frame-logging
     environment:
       PORT: 3737
       DATA_ROOT: /data
@@ -450,11 +491,13 @@ services:
       - frame-internal
 
   frame-gallery:
+    mem_reservation: 256m
     profiles: ["photo-gallery"]
     build:
       context: ./services/frame-gallery
     container_name: frame-gallery
     restart: unless-stopped
+    logging: *frame-logging
     environment:
       PORT: 3738
       DATA_ROOT: /data
@@ -490,11 +533,13 @@ services:
       - frame-internal
 
   frame-today:
+    <<: *frame-control
     profiles: ["photo-today"]
     build:
       context: ./services/frame-today
     container_name: frame-today
     restart: unless-stopped
+    logging: *frame-logging
     environment:
       PORT: 3739
       DATA_ROOT: /data
@@ -531,11 +576,13 @@ services:
       - frame-internal
 
   frame-streams:
+    <<: *frame-control
     profiles: ["video-relay", "overlays"]
     build:
       context: ./services/frame-streams
     container_name: frame-streams
     restart: unless-stopped
+    logging: *frame-logging
     environment:
       PORT: 3732
       DATA_ROOT: /data
@@ -571,11 +618,13 @@ services:
       - frame-internal
 
   frame-overlays:
+    <<: *frame-control
     profiles: ["overlays"]
     build:
       context: ./services/frame-overlays
     container_name: frame-overlays
     restart: unless-stopped
+    logging: *frame-logging
     environment:
       PORT: 3733
       DATA_ROOT: /data

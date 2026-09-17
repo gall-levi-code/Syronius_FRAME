@@ -13,8 +13,6 @@ export interface PipelineConfig {
   maxPixels: number;
   conversionAttempts: number;
   archiveOriginals: boolean;
-  archiveRetentionDays: number;
-  trashRetentionDays: number;
   diskWarnPercent: number;
   diskErrorPercent: number;
   diskMinimumFreeBytes: number;
@@ -22,6 +20,7 @@ export interface PipelineConfig {
 }
 
 export interface PipelineProcessingSettings {
+  archive_retention_days: number;
   long_edge_px: number;
   jpeg_quality: number;
   max_output_mb: number;
@@ -40,12 +39,11 @@ export function loadConfig(): PipelineConfig {
     maxPixels: integer("PHOTO_MAX_MEGAPIXELS", 80, 1, 1000) * 1_000_000,
     conversionAttempts: integer("PHOTO_CONVERSION_ATTEMPTS", 3, 1, 10),
     archiveOriginals: boolean("PHOTO_ARCHIVE_ORIGINALS", true),
-    archiveRetentionDays: integer("PHOTO_ARCHIVE_RETENTION_DAYS", 0, 0, 36500),
-    trashRetentionDays: integer("PHOTO_TRASH_RETENTION_DAYS", 0, 0, 36500),
     diskWarnPercent: integer("DISK_WARN_PERCENT", 85, 1, 100),
     diskErrorPercent: integer("DISK_ERROR_PERCENT", 95, 1, 100),
     diskMinimumFreeBytes: integer("DISK_MINIMUM_FREE_GB", 20, 0, 1_000_000) * 1024 ** 3,
     defaultSettings: {
+      archive_retention_days: integer("PHOTO_ARCHIVE_RETENTION_DAYS", 14, 0, 36500),
       long_edge_px: integer("PHOTO_LONG_EDGE_PX", 0, 0, 12000),
       jpeg_quality: integer("PHOTO_JPEG_QUALITY", 92, 40, 100),
       max_output_mb: decimal("PHOTO_MAX_OUTPUT_MB", 0, 0, 500),
@@ -60,7 +58,7 @@ function logLevel(name: string, fallback: "info" | "debug"): "info" | "debug" {
 }
 
 function integer(name: string, fallback: number, minimum: number, maximum: number): number {
-  const value = Number.parseInt(process.env[name]?.trim() || String(fallback), 10);
+  const value = Number(process.env[name]?.trim() || String(fallback));
   if (!Number.isInteger(value) || value < minimum || value > maximum) {
     throw new Error(`${name} must be an integer from ${minimum} to ${maximum}.`);
   }

@@ -105,6 +105,12 @@ Optional connections:
 
 Photo Upload writes completed uploads into the shared FRAME photo staging flow.
 
+Internal BELABOX handoffs stream directly to disk and share the browser upload session limit.
+The receiver enforces `PHOTO_MAX_INPUT_MB` while reading, checks supplied file size and SHA-256
+before publishing the staging envelope, and removes partial files on interruption or failure.
+`BELABOX_CHUNK_STAGE_TIMEOUT_MS` bounds each internal handoff (default 120,000 ms, range
+1,000–3,600,000 ms). Failed handoffs can retry with the same journey ID.
+
 Each accepted file receives a durable journey ID. FRAME uses that ID to correlate browser receipt,
 pipeline processing, publication, retries, and the upload-progress overlay without treating the same
 photo as several unrelated transfers.

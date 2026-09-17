@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 import {
   CAPABILITIES,
   IMPLEMENTED_CAPABILITIES,
@@ -42,6 +43,7 @@ test("verification, spec, and ignores keep their canonical project contracts", a
     readFile(".gitignore", "utf8"),
   ]);
   assert.match(workflow, /^\s+- frame-belabox-manager\s*$/m);
+  assert.match(workflow, /^\s+- frame-auth\s*$/m);
   assert.match(workflow, /^\s+- run: npm test\s*$/m);
   assert.ok(!workflow.includes("contains(fromJSON("), "Every service must run its test script");
   const schemaAppendix = spec.slice(spec.indexOf("### Appendix A — Canonical JSON Schema"));
@@ -536,9 +538,6 @@ test("photo pipeline reports per-file outcomes for transfer UX", async () => {
   assert.ok(source.includes("last_publish_file"));
   assert.ok(source.includes("last_quarantine_file"));
   assert.ok(source.includes("last_quarantine_at"));
-  const archiveExpiry = source.match(/private async pruneExpiredArchives[\s\S]*?private async verifiedTrackedArchive/)?.[0] ?? "";
-  assert.match(archiveExpiry, /this\.withPublishLock\(async \(\) => \{[\s\S]*?sidecar\?\.journey_id !== journeyId[\s\S]*?await rm\(/, "Archive expiry must recheck the alternate gallery copy and remove the archive under the publication lock");
-  assert.match(archiveExpiry, /receipt\.journey_id !== journeyId/, "Archive expiry must reject a receipt stored under the wrong journey ID");
   assert.ok(pipelineServer.includes('request.header("x-frame-service-token")'));
   assert.ok(overlayServer.includes('headers.set("X-Frame-Service-Token", config.ingestApiToken)'));
 });
@@ -1237,7 +1236,7 @@ test("Windows and Unix wrappers preserve direct commands while offering the numb
     assert.ok(wrapper.includes("set-discord-auth"));
     assert.ok(wrapper.includes("set-service-auth"));
     assert.ok(wrapper.includes("PHOTO_ARCHIVE_RETENTION_DAYS"));
-    assert.ok(wrapper.includes("PHOTO_TRASH_RETENTION_DAYS"));
+    assert.ok(!wrapper.includes("PHOTO_TRASH_RETENTION_DAYS"));
   }
   assert.ok(windowsLauncher.includes("stack.ps1.next"));
   assert.ok(unixLauncher.includes("stack.sh.next"));
@@ -1264,7 +1263,7 @@ test("Windows and Unix wrappers preserve direct commands while offering the numb
   assert.ok(installer.includes("setDiscordAuth"));
   assert.ok(installer.includes("setServiceAuth"));
   assert.ok(installer.includes("PORTAL_USERNAME and PORTAL_PASSWORD are required before starting FRAME."));
-  assert.ok(installer.includes("value = JSON.parse(value)"), "quoted .env values must remain idempotent");
+  assert.ok(installer.includes('import { parseEnv } from "./frame-env.mjs"'), "installer must use the shared environment parser");
   assert.ok(!powershell.includes("$(if"), "PowerShell wrapper must not execute inline if expressions as commands");
   assert.ok(!powershell.includes("= if ("), "PowerShell wrapper must remain compatible with Windows PowerShell 5");
   assert.ok(!powershell.includes("return if ("), "PowerShell wrapper must not return an if expression");
@@ -1373,7 +1372,7 @@ test("FRAME Setup app captures the approved GUI installer decisions", async () =
   for (const expected of ["renderGuidedServicePanel", "guidedServiceIndex", "guidedReviewedServices", "Next service", "Finish service review", "markCurrentGuidedServiceReviewed", "service-detail-card"]) {
     assert.ok(frontend.includes(expected) || styles.includes(expected), `${expected} is missing from guided service review`);
   }
-  for (const expected of ["installStatus", "startInstallLogListener", "install-log", "isTauriRuntime", "Open FRAME Setup", "finishInstaller", "lastSetupUrl"]) {
+  for (const expected of ["installStatus", "startInstallLogListener", "install-log", "frameDesktop", "Open FRAME Setup", "finishInstaller", "lastSetupUrl"]) {
     assert.ok(frontend.includes(expected), `${expected} is missing from install progress handling`);
   }
   for (const expected of ["What it does", "Why you might want it", "Ports and exposure", "What comes next in localhost/setup", "service-info-block"]) {
@@ -1386,19 +1385,20 @@ test("FRAME Setup app captures the approved GUI installer decisions", async () =
     assert.ok(frontend.includes(expected), `${expected} is missing from public hostname malformed checks`);
   }
   assert.ok(!frontend.includes("window.prompt"), "Storage selection should use the native folder picker, not typed browser prompts");
-  for (const expected of ["EDGE_HTTP_PORT", "PHOTO_FTP_PORT", "PHOTO_FTP_PASSIVE_MIN", "PHOTO_FTP_PASSIVE_MAX", "PHOTO_FTP_PASSIVE_MIN/MAX", "PHOTO_FTP_MIN_PASSWORD_LENGTH", "PHOTO_FTP_MAX_SESSIONS", "PHOTO_UPLOAD_MAX_FILES", "PHOTO_UPLOAD_MAX_SESSIONS", "PHOTO_ARCHIVE_RETENTION_DAYS", "PHOTO_TRASH_RETENTION_DAYS", "SRTLA_PORT", "SRT_PLAYER_PORT", "SRT_SENDER_PORT"]) {
+  for (const expected of ["EDGE_HTTP_PORT", "PHOTO_FTP_PORT", "PHOTO_FTP_PASSIVE_MIN", "PHOTO_FTP_PASSIVE_MAX", "PHOTO_FTP_PASSIVE_MIN/MAX", "PHOTO_FTP_MIN_PASSWORD_LENGTH", "PHOTO_FTP_MAX_SESSIONS", "PHOTO_UPLOAD_MAX_FILES", "PHOTO_UPLOAD_MAX_SESSIONS", "PHOTO_ARCHIVE_RETENTION_DAYS", "SRTLA_PORT", "SRT_PLAYER_PORT", "SRT_SENDER_PORT"]) {
     assert.ok(frontend.includes(expected), `${expected} is missing from exposed port planning`);
   }
   assert.match(frontend, /key: "ftpPassiveMax"[\s\S]*?defaultValue: 30019/, "Photo FTP passive max should default to the wider installer range");
   assert.match(frontend, /key: "PHOTO_FTP_MAX_SESSIONS"[\s\S]*?defaultValue: "20"/, "Photo FTP max sessions should match the installer default");
   assert.match(frontend, /key: "PHOTO_UPLOAD_MAX_FILES"[\s\S]*?defaultValue: "100"/, "Browser uploads should allow the larger queue by default");
   assert.match(frontend, /key: "PHOTO_UPLOAD_MAX_SESSIONS"[\s\S]*?defaultValue: "2"/, "Browser uploads should default to two concurrent sessions");
-  assert.match(frontend, /key: "PHOTO_ARCHIVE_RETENTION_DAYS"[\s\S]*?defaultValue: "0"[\s\S]*?min: 0[\s\S]*?max: 36500/, "Archive retention should be opt-in and bounded");
-  assert.match(frontend, /key: "PHOTO_TRASH_RETENTION_DAYS"[\s\S]*?defaultValue: "0"[\s\S]*?min: 0[\s\S]*?max: 36500/, "Trash retention should be opt-in and bounded");
+  assert.match(frontend, /key: "PHOTO_ARCHIVE_RETENTION_DAYS"[\s\S]*?defaultValue: "14"[\s\S]*?min: 0[\s\S]*?max: 36500/, "Original backup retention should default to 14 days and remain bounded");
+  assert.ok(frontend.includes("Days from archive creation before original backups expire."));
+  assert.ok(frontend.includes("0 keeps them indefinitely. Gallery photos and trash are never automatically deleted."));
+  assert.doesNotMatch(frontend, /key: "PHOTO_TRASH_RETENTION_DAYS"/, "Setup must not expose automatic trash expiry");
   assert.ok(frontend.includes('photoFtpPassive: "30000-30019"'), "Initial install plan should use the wider FTP passive range");
   assert.ok(frontend.includes("selectedServices"));
   assert.ok(frontend.includes("subfolders"));
-  assert.ok(frontend.includes("state/frame-install-plan.json"));
   assert.ok(frontend.includes("frame-logo-square.png"));
   assert.ok(styles.includes("--frame-accent: #2cb4fb"));
   assert.ok(!frontend.includes("day mode"));
@@ -1407,7 +1407,7 @@ test("FRAME Setup app captures the approved GUI installer decisions", async () =
   for (const expected of ["detect_previous_installations", "run_preflight", "save_install_plan", "apply_install_plan", "frame-install.json", "record_installation"]) {
     assert.ok(rust.includes(expected), `${expected} is missing from host setup commands`);
   }
-  for (const expected of ["docker", "compose", "docker-compose.yml", "COMPOSE_PROFILES", "find_stack_source", "frame-stack", "resource_dir", "hidden_command", "CREATE_NO_WINDOW", "BUILDKIT_PROGRESS", "advanced_settings", "PHOTO_FTP_MIN_PASSWORD_LENGTH", "PHOTO_UPLOAD_MAX_FILES", "PHOTO_ARCHIVE_RETENTION_DAYS", "PHOTO_TRASH_RETENTION_DAYS"]) {
+  for (const expected of ["docker", "compose", "docker-compose.yml", "COMPOSE_PROFILES", "find_stack_source", "frame-stack", "resource_dir", "hidden_command", "CREATE_NO_WINDOW", "BUILDKIT_PROGRESS", "advanced_settings", "PHOTO_FTP_MIN_PASSWORD_LENGTH", "PHOTO_UPLOAD_MAX_FILES", "PHOTO_ARCHIVE_RETENTION_DAYS"]) {
     assert.ok(rust.includes(expected), `${expected} is missing from native install/apply backend`);
   }
   assert.ok(rust.includes("is_valid_relay_host"), "Native setup must validate the advertised SRTLA host");
@@ -1415,8 +1415,8 @@ test("FRAME Setup app captures the approved GUI installer decisions", async () =
   assert.match(rust, /"PHOTO_FTP_MAX_SESSIONS"[\s\S]*?"20"/, "Native setup should write the current FTP session default");
   assert.match(rust, /"PHOTO_UPLOAD_MAX_FILES"[\s\S]*?"100"/, "Native setup should write the current browser upload queue default");
   assert.match(rust, /"PHOTO_UPLOAD_MAX_SESSIONS"[\s\S]*?"2"/, "Native setup should write the current browser upload concurrency default");
-  assert.match(rust, /"PHOTO_ARCHIVE_RETENTION_DAYS"[\s\S]*?"0"[\s\S]*?0,[\s\S]*?36500/, "Native setup should validate and persist archive retention");
-  assert.match(rust, /"PHOTO_TRASH_RETENTION_DAYS"[\s\S]*?"0"[\s\S]*?0,[\s\S]*?36500/, "Native setup should validate and persist trash retention");
+  assert.match(rust, /"PHOTO_ARCHIVE_RETENTION_DAYS"[\s\S]*?"14"[\s\S]*?0,[\s\S]*?36500/, "Native setup should validate and persist archive retention with a 14-day fallback");
+  assert.ok(!rust.split("#[cfg(test)]")[0].includes("PHOTO_TRASH_RETENTION_DAYS"), "Native setup must not generate automatic trash expiry");
   assert.ok(tauriConfig.bundle.resources["../../../services/"], "setup app must bundle FRAME services");
   assert.ok(tauriConfig.bundle.resources["../../../config/"], "setup app must bundle FRAME config");
   assert.ok(tauriConfig.bundle.resources["../../../installer/stack.ps1"], "setup app must bundle the Windows stack launcher");
@@ -1427,11 +1427,110 @@ test("FRAME Setup app captures the approved GUI installer decisions", async () =
   assert.ok(frontend.includes("apply_install_plan"), "Install FRAME must call the native apply backend");
   assert.ok(styles.includes("install-frame-button"), "Install FRAME should use the Audio Bridge action button treatment");
   assert.ok(rust.includes("Start Docker, then recheck."), "Docker Engine must be a blocking readiness check");
-  assert.ok(buildScript.includes("npm install"));
-  assert.ok(buildScript.includes("npm run tauri build"));
-  assert.ok(appReadme.includes("Windows installer build"));
-  assert.ok(appReadme.includes("Microsoft C++ Build Tools"));
+  assert.ok(buildScript.includes("npm ci"));
+  assert.ok(buildScript.includes("npm run dist:win"));
+  assert.equal(manifest.main, "electron/main.cjs");
+  assert.equal(manifest.build.win.target[0].target, "nsis");
+  assert.equal(manifest.build.linux.target[0].target, "AppImage");
+  assert.ok(!manifest.build.extraResources[0].filter.some((entry) => entry.startsWith("services/")), "online bootstrap must not bundle service sources");
+  assert.ok(appReadme.includes("Electron online installer"));
   assert.ok(adr.includes("native Windows host"));
+});
+
+test("installer preserves and validates archive, staging and resource settings across defaults, overrides and imports", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-installer-env-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const executable = fileURLToPath(new URL("../installer/frame-installer.mjs", import.meta.url));
+  const runtimeEnv = { ...process.env, FRAME_WORKSPACE: root };
+  delete runtimeEnv.FRAME_INSTALLER_DATA_ROOT;
+  await mkdir(path.join(root, "installer", "templates"), { recursive: true });
+  await writeFile(path.join(root, "installer", "templates", "docker-compose.yml"), "services: {}\n");
+  const run = (...args) => execFileAsync(process.execPath, [executable, "install", ...args], { env: runtimeEnv });
+  const envPath = path.join(root, ".env");
+  const readSetting = async (key) => (await readFile(envPath, "utf8"))
+    .match(new RegExp(`^${key}=(.+)$`, "m"))?.[1];
+  await run();
+  for (const [key, fallback, minimum, maximum, imported, label] of [
+    ["BELABOX_CHUNK_STAGE_TIMEOUT_MS", "120000", 1000, 3600000, "180000", "Belabox chunk stage timeout"],
+    ["FRAME_CONTROL_MEMORY_MB", "512", 128, 65536, "768", "FRAME control memory MB"],
+    ["FRAME_BELABOX_MEMORY_MB", "1024", 128, 65536, "2048", "FRAME Belabox memory MB"],
+    ["FRAME_CONTROL_PIDS", "256", 64, 65536, "512", "FRAME control PIDs"],
+    ["PHOTO_ARCHIVE_RETENTION_DAYS", "14", 0, 36500, "0", "Photo original backup retention days"],
+  ]) {
+    assert.equal(await readSetting(key), fallback);
+    for (const value of [String(minimum), String(maximum)]) {
+      await run("--set", `${key}=${value}`);
+      await run();
+      assert.equal(await readSetting(key), value, "reinstall retains an existing override");
+    }
+    await writeFile(path.join(root, "import.env"), `${key}=${imported}\n`);
+    await run("--import-env", "import.env");
+    assert.equal(await readSetting(key), imported);
+    const error = new RegExp(`${label} must be an integer from ${minimum} to ${maximum}`);
+    for (const value of [String(minimum - 1), String(maximum + 1), "512.5", "not-a-number"]) {
+      await assert.rejects(run("--set", `${key}=${value}`), error);
+      assert.equal(await readSetting(key), imported, "invalid input leaves the saved environment intact");
+    }
+    const saved = await readFile(envPath, "utf8");
+    await writeFile(envPath, saved.replace(`${key}=${imported}`, `${key}=${minimum - 1}`));
+    await assert.rejects(execFileAsync(process.execPath, [executable, "validate"], { env: runtimeEnv }), error);
+    await writeFile(envPath, saved);
+  }
+  await writeFile(envPath, `${await readFile(envPath, "utf8")}PHOTO_TRASH_RETENTION_DAYS=1\n`);
+  await run();
+  assert.equal(await readSetting("PHOTO_ARCHIVE_RETENTION_DAYS"), "0");
+  assert.equal(await readSetting("PHOTO_TRASH_RETENTION_DAYS"), undefined, "reinstall removes legacy automatic trash expiry");
+  await assert.rejects(run("--set", "PHOTO_TRASH_RETENTION_DAYS=1"), /PHOTO_TRASH_RETENTION_DAYS/);
+  const template = await readFile("installer/templates/docker-compose.yml", "utf8");
+  assert.ok(template.includes("PHOTO_ARCHIVE_RETENTION_DAYS: ${PHOTO_ARCHIVE_RETENTION_DAYS:-14}"));
+  assert.ok(!template.includes("PHOTO_TRASH_RETENTION_DAYS"));
+});
+
+test("native first-install deployment helpers use the explicit data mount before .env exists", async (t) => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "frame-native-snapshot-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const dataRoot = path.join(root, "mounted-native-data");
+  await mkdir(path.join(dataRoot, "state"), { recursive: true });
+  await writeFile(path.join(dataRoot, "state", "frame-install-plan.json"), "original native plan");
+  const executable = fileURLToPath(new URL("../installer/frame-installer.mjs", import.meta.url));
+  const run = (command) => execFileAsync(process.execPath, [executable, command], {
+    env: { ...process.env, FRAME_WORKSPACE: root, FRAME_INSTALLER_DATA_ROOT: dataRoot },
+  });
+  const snapshot = run("deployment-snapshot");
+  snapshot.child.stdin.end(JSON.stringify({ compose: { name: "syronius-frame", services: {} }, images: {} }));
+  await snapshot;
+  await writeFile(path.join(dataRoot, "state", "frame-install-plan.json"), "candidate native plan");
+  await writeFile(path.join(root, ".env"), "FRAME_DATA_ROOT=./wrong-candidate-data\n");
+  await run("deployment-restore");
+  assert.equal(await readFile(path.join(dataRoot, "state", "frame-install-plan.json"), "utf8"), "original native plan");
+  await assert.rejects(readFile(path.join(root, ".env")), { code: "ENOENT" });
+});
+
+test("Compose rotates every service log and limits only the control services", async () => {
+  const compose = (await readFile("installer/templates/docker-compose.yml", "utf8")).replaceAll("\r\n", "\n");
+  const control = [
+    "frame-edge", "frame-auth", "frame-public-gateway", "frame-tunnel", "frame-portal",
+    "frame-docker-proxy", "frame-belabox-manager", "frame-photo-upload", "frame-photo-ftp",
+    "frame-today", "frame-streams", "frame-overlays",
+  ];
+  const media = ["frame-audio-bridge", "frame-audio", "frame-ingest-video", "frame-pipeline-photos", "frame-gallery"];
+  const serviceSection = compose.split("\nservices:\n")[1].split(/\n(?=\S)/)[0];
+  const services = [...serviceSection.matchAll(/^  (frame-[a-z-]+):$/gm)].map((match) => match[1]);
+  assert.deepEqual(services.sort(), [...control, ...media].sort());
+  assert.match(compose, /x-frame-logging: &frame-logging\n  driver: local\n  options:\n    max-size: "10m"\n    max-file: "3"/);
+  assert.match(compose, /x-frame-control: &frame-control\n  mem_limit: \$\{FRAME_CONTROL_MEMORY_MB:-512\}m\n  mem_reservation: 64m\n  pids_limit: \$\{FRAME_CONTROL_PIDS:-256\}/);
+  for (const service of services) {
+    const block = composeServiceBlock(compose, service);
+    assert.match(block, /^    logging: \*frame-logging$/m, `${service} must rotate its logs`);
+    assert.doesNotMatch(block, /^    (?:cpus|cpu_quota|cpu_period|cpuset):/m, `${service} must retain CPU burst capacity`);
+    if (control.includes(service)) {
+      assert.match(block, /^    <<: \*frame-control$/m, `${service} must inherit control budgets`);
+    } else {
+      assert.doesNotMatch(block, /^    (?:<<|mem_limit|pids_limit|deploy):/m, `${service} must remain uncapped pending representative load`);
+      assert.match(block, /^    mem_reservation: \S+$/m, `${service} must retain its soft reservation`);
+    }
+  }
+  assert.match(composeServiceBlock(compose, "frame-belabox-manager"), /^    mem_limit: \$\{FRAME_BELABOX_MEMORY_MB:-1024\}m$/m);
 });
 
 async function assertSameFile(left, right) {
@@ -1445,7 +1544,7 @@ async function assertSameFile(left, right) {
 function composeServiceBlock(compose, service) {
   compose = compose.replaceAll("\r\n", "\n");
   const marker = `  ${service}:\n`;
-  const start = compose.indexOf(marker);
+  const start = compose.search(new RegExp(`^${marker}`, "m"));
   assert.notEqual(start, -1, `${service} is missing from the installer Compose template`);
   const followingService = compose.slice(start + marker.length).match(/\n  [A-Za-z0-9_-]+:\n/);
   const end = followingService
