@@ -76,6 +76,29 @@ test("online release discovery requires an official manifest asset and validates
     ? releaseFetch(url) : Response.json({ ...manifest(), images: {} })), /exactly the 13/);
 });
 
+test("explicit release selection accepts a published prerelease and never falls back to another tag", async () => {
+  const releaseTag = "v1.0.0-alpha.2";
+  const taggedAssetUrl = `https://github.com/gall-levi-code/Syronius_FRAME/releases/download/${releaseTag}/frame-images.json`;
+  const metadata = { tag_name: releaseTag, draft: false, prerelease: true, published_at: "2026-09-17T12:00:00Z",
+    assets: [{ name: "frame-images.json", browser_download_url: taggedAssetUrl }] };
+  const calls = [];
+  const fetchImpl = async (url) => { calls.push(url); return Response.json(String(url).includes("api.github.com") ? metadata : manifest()); };
+  assert.deepEqual(await fetchLatestRelease(validateReleaseManifest, fetchImpl, releaseTag), manifest());
+  assert.deepEqual(calls, [`https://api.github.com/repos/gall-levi-code/Syronius_FRAME/releases/tags/${releaseTag}`, taggedAssetUrl]);
+  for (const changes of [{ tag_name: "v1.0.0-alpha.1" }, { draft: true }, { draft: undefined }, { published_at: null }, { published_at: "invalid" }]) {
+    let requests = 0;
+    await assert.rejects(fetchLatestRelease(validateReleaseManifest, async () => {
+      requests += 1;
+      return Response.json({ ...metadata, ...changes });
+    }, releaseTag), /requested published FRAME release/);
+    assert.equal(requests, 1, "invalid release metadata must stop before fetching an asset or fallback release");
+  }
+  await assert.rejects(fetchLatestRelease(validateReleaseManifest, async () => Response.json({ ...metadata,
+    assets: [{ name: "frame-images.json", browser_download_url: assetUrl }],
+  }), releaseTag), /manifest does not belong to release/);
+  await assert.rejects(fetchLatestRelease(validateReleaseManifest, async () => new Response(null, { status: 404 }), releaseTag), /release "v1\.0\.0-alpha\.2" is not published/);
+});
+
 test("real Compose resolves candidate configuration for an absent installation folder and overrides inherited settings", async (t) => {
   try { await runCommand("docker", ["compose", "version"], { timeout: 10_000 }); }
   catch (error) {
@@ -117,6 +140,20 @@ test("missing online release blocks installation without downloading source or s
   assert.ok(result.checks.some((check) => check.status === "bad" && /No published FRAME release/.test(check.detail)));
   await assert.rejects(backend.invoke("apply_install_plan", { request: plan }), /readiness checks/);
   assert.ok(calls.every(({ command }) => command === "docker"), "source download/runtime must not start without a release");
+  assertReadOnlyDocker(calls);
+});
+
+test("backend passes its configured release tag and blocks when that exact release is unavailable", async (t) => {
+  const requests = [], releaseTag = "v1.0.0-release";
+  const { backend, calls, plan } = await backendFixture(t, { releaseTag, fetchImpl: async (url) => {
+    requests.push(url);
+    return new Response(null, { status: 404 });
+  } });
+  const result = await backend.invoke("run_preflight", { request: plan });
+  assert.ok(result.checks.some((check) => check.status === "bad" && check.detail.includes(releaseTag)));
+  assert.deepEqual(requests, [`https://api.github.com/repos/gall-levi-code/Syronius_FRAME/releases/tags/${releaseTag}`]);
+  await assert.rejects(backend.invoke("apply_install_plan", { request: plan }), /readiness checks/);
+  assert.ok(calls.every(({ command }) => command === "docker"));
   assertReadOnlyDocker(calls);
 });
 
@@ -204,7 +241,7 @@ async function copyRuntime(root) {
   }
 }
 
-async function backendFixture(t, { fetchImpl = releaseFetch, edge = 18080, wrapper, realCompose = false } = {}) {
+async function backendFixture(t, { fetchImpl = releaseFetch, edge = 18080, wrapper, realCompose = false, releaseTag } = {}) {
   for (const key of ["DOCKER_HOST", "DOCKER_CONTEXT"]) {
     const previous = process.env[key];
     delete process.env[key];
@@ -240,7 +277,7 @@ async function backendFixture(t, { fetchImpl = releaseFetch, edge = 18080, wrapp
     }
     return runCommand(command, args, options);
   };
-  const backend = createBackend({ resourcesRoot: repository, userData: path.join(root, "installer profile"), run, fetchImpl, emit: (_event, message) => logs.push(message) });
+  const backend = createBackend({ resourcesRoot: repository, userData: path.join(root, "installer profile"), run, fetchImpl, releaseTag, emit: (_event, message) => logs.push(message) });
   t.after(() => backend.dispose());
   return { backend, calls, plan, logs, resolved };
 }

@@ -63,11 +63,11 @@ export function runCommand(command, args, { cwd, env = process.env, input, onOut
   });
 }
 
-async function jsonResponse(url, fetchImpl, limit) {
+async function jsonResponse(url, fetchImpl, limit, missingMessage = "No published FRAME release is available. Publish a release containing frame-images.json, then retry.") {
   const response = await fetchImpl(url, { signal: AbortSignal.timeout(60_000), headers: {
     Accept: "application/vnd.github+json", "User-Agent": "FRAME-Setup", "X-GitHub-Api-Version": "2022-11-28",
   } });
-  if (response.status === 404) throw new Error("No published FRAME release is available. Publish a release containing frame-images.json, then retry.");
+  if (response.status === 404) throw new Error(missingMessage);
   if (!response.ok) throw new Error(`FRAME release download failed (HTTP ${response.status}). Check the connection or GitHub rate limit, then retry.`);
   if (!response.body) throw new Error("FRAME release download was empty.");
   const chunks = []; let bytes = 0;
@@ -79,14 +79,25 @@ async function jsonResponse(url, fetchImpl, limit) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
-export async function fetchLatestRelease(validateManifest, fetchImpl = fetch) {
-  const release = await jsonResponse(`https://api.github.com/repos/${REPOSITORY}/releases/latest`, fetchImpl, 1024 * 1024);
+export async function fetchLatestRelease(validateManifest, fetchImpl = fetch, releaseTag) {
+  if (releaseTag !== undefined && (typeof releaseTag !== "string" || !releaseTag || /[\r\n\0]/.test(releaseTag))) throw new Error("FRAME release tag must be a nonempty string.");
+  const endpoint = releaseTag ? `tags/${encodeURIComponent(releaseTag)}` : "latest";
+  const release = await jsonResponse(`https://api.github.com/repos/${REPOSITORY}/releases/${endpoint}`, fetchImpl, 1024 * 1024,
+    releaseTag ? `FRAME release "${releaseTag}" is not published or is unavailable. Publish that release with frame-images.json, then retry.` : undefined);
+  if (releaseTag && (release.tag_name !== releaseTag || release.draft !== false || typeof release.published_at !== "string" || !Number.isFinite(Date.parse(release.published_at)))) {
+    throw new Error(`GitHub did not return the requested published FRAME release "${releaseTag}".`);
+  }
   const asset = release.assets?.find((entry) => entry.name === "frame-images.json");
-  if (!asset) throw new Error("The latest FRAME release has no frame-images.json image manifest. Publish the release images before using the online installer.");
+  if (!asset) throw new Error(`The ${releaseTag ? `FRAME release "${releaseTag}"` : "latest FRAME release"} has no frame-images.json image manifest. Publish the release images before using the online installer.`);
   const url = new URL(asset.browser_download_url);
-  if (url.origin !== "https://github.com" || !url.pathname.startsWith(`/${REPOSITORY}/releases/download/`)
+  const downloadPrefix = `/${REPOSITORY}/releases/download/`;
+  if (url.origin !== "https://github.com" || !url.pathname.startsWith(downloadPrefix)
     || url.username || url.password || url.search || url.hash) throw new Error("FRAME release asset URL is not an official release download.");
-  return validateManifest(await jsonResponse(url.href, fetchImpl, 64 * 1024));
+  if (releaseTag && (!url.pathname.endsWith("/frame-images.json") || decodeURIComponent(url.pathname.slice(downloadPrefix.length, url.pathname.lastIndexOf("/"))) !== releaseTag)) {
+    throw new Error(`FRAME image manifest does not belong to release "${releaseTag}".`);
+  }
+  return validateManifest(await jsonResponse(url.href, fetchImpl, 64 * 1024,
+    releaseTag ? `The image manifest for FRAME release "${releaseTag}" is unavailable. Wait for its release images to finish publishing, then retry.` : undefined));
 }
 
 export function validatePlan(value, capabilities) {
@@ -171,7 +182,7 @@ async function payloadFiles(directory, relative = "") {
   return result;
 }
 
-export function createBackend({ emit = () => {}, userData, resourcesRoot, nodeExecutable = process.execPath, run = runCommand, fetchImpl = fetch }) {
+export function createBackend({ emit = () => {}, userData, resourcesRoot, nodeExecutable = process.execPath, run = runCommand, fetchImpl = fetch, releaseTag }) {
   let busy = false, prepared = null, modules, cleaned = false;
   const log = (message) => emit("install-log", String(message));
   const load = async () => modules ??= await Promise.all(["frame-env", "frame-contract", "frame-release", "frame-updater", "frame-preflight"]
@@ -275,7 +286,7 @@ export function createBackend({ emit = () => {}, userData, resourcesRoot, nodeEx
     await mkdir(userData, { recursive: true, mode: 0o700 });
     const temporary = await mkdtemp(path.join(userData, "preflight-"));
     try {
-      const manifest = before.manifest || await fetchLatestRelease(m.validateReleaseManifest, fetchImpl);
+      const manifest = before.manifest || await fetchLatestRelease(m.validateReleaseManifest, fetchImpl, releaseTag);
       let source = plan.installRoot;
       if (!before.existing) {
         // ponytail: stage each check independently; cache verified releases if repeated downloads become costly.

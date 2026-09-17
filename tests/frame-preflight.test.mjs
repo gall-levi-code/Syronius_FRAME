@@ -54,13 +54,15 @@ test("held TCP and UDP host sockets block preflight without process lookup", asy
 });
 
 test("host ports become available after listeners close", async () => {
-  const tcp = net.createServer();
+  const tcp = net.createServer(), udp = dgram.createSocket("udp4");
   tcp.listen(0, "127.0.0.1");
-  await once(tcp, "listening");
-  const number = tcp.address().port;
-  await new Promise((resolve) => tcp.close(resolve));
-  const result = await checkHostPorts({ compose: compose([port(number), port(number, { protocol: "udp" })]) });
-  assert.equal(failed(result).length, 0);
+  udp.bind(0, "127.0.0.1");
+  await Promise.all([once(tcp, "listening"), once(udp, "listening")]);
+  // A TCP-assigned port can be occupied or reserved for UDP (and vice versa).
+  const ports = [port(tcp.address().port), port(udp.address().port, { protocol: "udp" })];
+  await Promise.all([new Promise((resolve) => tcp.close(resolve)), new Promise((resolve) => udp.close(resolve))]);
+  const result = await checkHostPorts({ compose: compose(ports) });
+  assert.deepEqual(failed(result), []);
   assert.equal(result.checks.length, 2);
 });
 

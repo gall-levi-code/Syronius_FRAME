@@ -1,6 +1,6 @@
 {
   "name": "syronius-frame",
-  "version": "0.1.0",
+  "version": "1.0.0-release",
   "private": true,
   "description": "Verification tooling for the Syronius FRAME service stack.",
   "scripts": {

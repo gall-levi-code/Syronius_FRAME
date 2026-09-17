@@ -1,6 +1,7 @@
 {
   "name": "@syronius-frame/setup",
-  "version": "0.1.0",
+  "version": "1.0.0-release",
+  "frameReleaseTag": "v1.0.0-release",
   "private": true,
   "type": "module",
   "description": "FRAME online installer and launcher.",

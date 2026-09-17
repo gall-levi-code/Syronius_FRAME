@@ -4,6 +4,11 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      release-tag:
+        description: Existing release tag to build and attach the manifest to (including drafts).
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -13,15 +18,16 @@ defaults:
     shell: bash
 
 concurrency:
-  group: frame-release-images-${{ github.sha }}
+  group: frame-release-images-${{ inputs.release-tag || github.event.release.tag_name || github.sha }}
   cancel-in-progress: false
 
 jobs:
   build:
-    if: github.repository == 'gall-levi-code/Syronius_FRAME' && (github.event_name == 'release' || github.ref == 'refs/heads/main')
+    if: github.repository == 'gall-levi-code/Syronius_FRAME' && (github.event_name == 'release' || github.ref == 'refs/heads/main') && !(github.event_name == 'release' && contains(github.event.release.assets.*.name, 'frame-images.json'))
     uses: ./.github/workflows/build-images.yml
     with:
       save-images: true
+      release-tag: ${{ inputs.release-tag || github.event.release.tag_name || '' }}
 
   publish:
     needs: build
@@ -40,7 +46,7 @@ jobs:
       SOURCE_COMMIT: ${{ needs.build.outputs.commit }}
       IMAGE_PREFIX: ${{ needs.build.outputs.prefix }}
       IMAGE: ${{ needs.build.outputs.prefix }}/${{ matrix.service }}:${{ needs.build.outputs.commit }}
-      VERSION_TAG: ${{ github.event.release.tag_name || '' }}
+      VERSION_TAG: ${{ inputs.release-tag || github.event.release.tag_name || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -153,9 +159,9 @@ jobs:
           if-no-files-found: error
           retention-days: 90
           overwrite: true
-      - name: Attach the manifest to the published GitHub release
-        if: github.event_name == 'release'
+      - name: Attach the manifest to the GitHub release
+        if: inputs.release-tag || github.event_name == 'release'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TAG: ${{ inputs.release-tag || github.event.release.tag_name }}
         run: gh release upload "$RELEASE_TAG" frame-images.json --repo "$GITHUB_REPOSITORY" --clobber

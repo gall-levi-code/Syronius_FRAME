@@ -77,6 +77,7 @@ if (!app.requestSingleInstanceLock()) {
       userData: app.getPath("userData"),
       resourcesRoot: app.isPackaged ? path.join(process.resourcesPath, "frame") : path.resolve(__dirname, "../../.."),
       nodeExecutable: process.execPath,
+      releaseTag: require("../package.json").frameReleaseTag,
       emit: (event, payload) => {
         if (window && !window.isDestroyed() && window.webContents.getURL() === uiUrl) {
           window.webContents.send("frame:install-log", payload === undefined ? event : payload);

@@ -3,6 +3,10 @@ name: Build and smoke FRAME images
 on:
   workflow_call:
     inputs:
+      release-tag:
+        description: Build the exact existing release tag when preparing a draft release.
+        type: string
+        default: ""
       save-images:
         description: Save the verified images for the release publishing jobs.
         type: boolean
@@ -32,14 +36,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'release' && format('refs/tags/{0}', github.event.release.tag_name) || github.sha }}
+          ref: ${{ (inputs.release-tag || github.event.release.tag_name) && format('refs/tags/{0}', inputs.release-tag || github.event.release.tag_name) || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
       - id: metadata
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name || '' }}
+          RELEASE_TAG: ${{ inputs.release-tag || github.event.release.tag_name || '' }}
         run: |
           node --input-type=module <<'NODE'
           import { appendFileSync } from "node:fs";

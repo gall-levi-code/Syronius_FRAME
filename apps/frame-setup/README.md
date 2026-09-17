@@ -10,7 +10,12 @@ with Compose on Linux, and start it before running FRAME Setup. This release tar
 Linux distributions) to extract the release source. Installation needs internet access and a published official FRAME
 release with its release manifest and matching source archive.
 
-The installer downloads the official release, uses the shared installer runtime to generate
+This installer targets the official `v1.0.0-release` release. Its `frameReleaseTag` package metadata
+selects that exact published GitHub tag, including tagged builds marked as GitHub prereleases; it
+does not silently substitute another release. Developer packages without `frameReleaseTag` use the
+latest stable official release. Existing installations continue to use their selected release.
+
+The installer downloads that release, uses the shared installer runtime to generate
 configuration, checks the selected host ports, pulls prebuilt images, and starts Docker Compose.
 It waits for Docker Compose health checks before offering to open setup. Application images are not
 built on the user's machine. The desktop installer may close after installation; Docker keeps FRAME

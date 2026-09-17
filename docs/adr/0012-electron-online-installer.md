@@ -11,8 +11,9 @@ an AppImage for Linux x64. Reuse the existing web wizard and dependency-free FRA
 configuration, release, and recovery code. Electron bundles Node; users need a local Linux AMD64
 Docker engine, Compose, internet access, and host `tar`, but no development language runtime.
 
-New installs download the latest stable official GitHub release manifest and its exact source
-commit. The manifest pins FRAME service images by digest. Configuration and host port checks run
+New installs download the official GitHub release named by the installer's packaged `frameReleaseTag`
+and its exact source commit. Developer builds without a tag use the latest stable release. The
+manifest pins FRAME service images by digest. Configuration and host port checks run
 before application pulls or startup. Existing release installations retain their selected release
 when reconfigured. Source checkouts and source-based installations continue using the existing CLI.
 

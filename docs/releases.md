@@ -19,11 +19,13 @@ need their usual acceptance checks.
 manually dispatched from this repository's `main`. Every image must finish building and pass its
 smoke check before publishing begins. Publishing loads the saved, tested images and verifies their
 immutable image IDs. Images receive full source-commit tags and, for a published release, its
-version tag. No `latest` tag is used.
+version tag. No `latest` tag is used. For a draft release, supply its existing tag as the manual
+workflow's `release-tag` input; the workflow checks out and verifies that exact tag.
 
 The final job emits `frame-images.json` only after all 13 registry digests are available for the same
-source commit. A published-release run attaches it to that release; a manual run provides it as a
-workflow artifact. Release tags must also be valid Docker tags, such as `v0.1.0`.
+source commit. A release run or manual run with `release-tag` attaches it to that release; a manual
+run without a tag provides it as a workflow artifact. Publishing a draft that already contains the
+manifest skips rebuilding its images. Release tags must also be valid Docker tags, such as `v1.0.0-release`.
 
 The workflow uses `GITHUB_TOKEN`; package write access is confined to the publishing jobs. When
 publishing these GHCR packages for the first time, make them public if installations should pull
@@ -32,8 +34,9 @@ supported. This workflow must be committed and run on GitHub before there is a r
 
 ## Install a release
 
-The [Electron online installer](../apps/frame-setup/README.md) uses the latest stable official
-GitHub release and requires the `frame-images.json` asset attached to that release. A manual
+The [Electron online installer](../apps/frame-setup/README.md) uses the exact official GitHub release
+named by its packaged `frameReleaseTag` and requires the `frame-images.json` asset attached to that
+published release. Developer packages without that field use the latest stable release. A manual
 workflow artifact alone is not discoverable by the app. Publish images containing the current
 host runtime (`FRAME_WORKSPACE`) and launcher preflight hook before distributing this installer;
 older releases are rejected with an actionable message. GHCR packages must be publicly pullable
@@ -44,6 +47,13 @@ Build the runtime package on its target OS with `npm ci` and `npm run dist:win` 
 release source and images download during setup. The manual **Build FRAME online installers**
 workflow builds both platforms and uploads the runtime artifacts without publishing a release.
 Offline image bundles are not implemented yet.
+
+Prepare a release as a draft: push its tag, run the image workflow with that `release-tag`, and run
+the installer workflow at the same tag. Attach the Windows `.exe`, Linux `.AppImage`, and a
+`SHA256SUMS` file beside `frame-images.json`. Verify the manifest's commit matches the tag and that
+every image can be pulled anonymously before publishing the draft. The installer runtimes are
+unsigned; Windows may show a publisher warning. Docker must already be installed and running,
+and these runtime images currently target `linux/amd64`.
 
 Download the official release's `frame-images.json` into the FRAME installation directory, then run:
 

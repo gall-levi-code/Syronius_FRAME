@@ -12,7 +12,18 @@ management, OBS overlays, photo upload and gallery tools, Photo Stage controls, 
 optional Discord audio bridge. Each service has its own README under `services/` for deeper setup
 and operating details.
 
-Current release target: `v1.0.0-Alpha`.
+Current release target: `v1.0.0-release`.
+
+## Online Installer
+
+Download the Windows x64 `.exe` or Linux x64 `.AppImage` from the
+[v1.0.0-release downloads](https://github.com/gall-levi-code/Syronius_FRAME/releases/tag/v1.0.0-release).
+Install and start Docker first, then run FRAME Setup. The installer checks configuration and host
+ports before downloading and starting the matching prebuilt service images. Internet access is
+required; the single-file download contains the installer runtime, not the Docker images.
+
+The installers are unsigned. On Linux, make the AppImage executable before opening it.
+See [FRAME Setup](apps/frame-setup/README.md) for prerequisites and installation details.
 
 ## Get The Code
 
