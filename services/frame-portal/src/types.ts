@@ -47,18 +47,6 @@ export interface StatusResponse {
   last_photo: { at: string; base: string } | null;
   last_ingest: { at: string; stream_id: string } | null;
   audio_streams: Array<{ stream_id: string; status: "live" | "idle" | "offline"; listener_count: number }>;
-  discord_audio_bridges: Array<{
-    guild_id: string;
-    status: "active" | "idle" | "offline" | "error";
-    channel_name: string | null;
-    active_mix_count: number;
-    active_streamers: string[];
-    speaking_users: string[];
-    bot_connected: boolean;
-    voice_connection: string;
-    clients: { audio: number; overlay: number; control: number };
-    engine_health: "ok" | "warn" | "bad" | "idle" | "unknown";
-  }>;
   disk: {
     used_bytes: number;
     free_bytes: number;

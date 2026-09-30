@@ -45,8 +45,6 @@ removed.
 - [x] Add a canonical service/capability registry with dependency and profile activation tests.
 - [x] Add a root `stack verify` command and GitHub verification workflow.
 - [x] Decide that `frame-pipeline-photos` is an internal service activated by photo capabilities.
-- [x] Add Audio Bridge session, profile, and control mutation tests before splitting `SessionManager`.
-- [x] Add Audio Bridge HTTP route tests for portal status, bridge pages, and token gates.
 - [x] Add a numbered interactive command center with issue-first Standard/Advanced guided setup.
 - [x] Build the shared Traefik LAN HTTP edge and route implemented web services through it.
 - [x] Add capability-aware Cloudflare Tunnel routing and staged HYBRID deployment.

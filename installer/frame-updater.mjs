@@ -61,7 +61,7 @@ export async function sourceUpdate({ workspace = "/workspace", imageManifest, so
   workspace = path.resolve(workspace);
   await requireInstalledWorkspace(workspace);
   if (imageManifest && source) throw new Error("Choose --image-manifest or --source, not both.");
-  const release = imageManifest ? await readReleaseManifest(path.resolve(workspace, imageManifest)) : null;
+  const release = imageManifest ? await readReleaseManifest(path.resolve(workspace, imageManifest), { allowRetiredBridge: false }) : null;
   if (!release && !source && await lstat(path.join(workspace, RELEASE_MANIFEST_FILE)).catch((error) => { if (error.code === "ENOENT") return null; throw error; })) {
     throw new Error("This installation uses release images. Supply --image-manifest FILE for the next release, or --source to switch to main source builds.");
   }

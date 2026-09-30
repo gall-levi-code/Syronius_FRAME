@@ -1,6 +1,8 @@
 # ADR 0002: Discord Audio Bridge is a separate FRAME service
 
-- **Status:** Accepted
+> Superseded on 2026-09-22: Audio Bridge has been extracted to the independent **Syronius_FRAME_Audio_Bridge** project. The decision below is retained as historical context; its service paths and installer integration no longer apply. See the [extraction guide](../audio-bridge-extraction.md).
+
+- **Status:** Superseded by independent project extraction (2026-09-22)
 - **Date:** 2026-06-06
 
 ## Context

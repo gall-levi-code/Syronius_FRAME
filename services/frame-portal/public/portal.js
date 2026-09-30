@@ -22,7 +22,6 @@ const elements = {
   lastIngest: document.getElementById("last-ingest"),
   lastPhoto: document.getElementById("last-photo"),
   audioStreams: document.getElementById("audio-streams"),
-  discordBridges: document.getElementById("discord-bridges"),
   footerState: document.getElementById("footer-state"),
   logsDialog: document.getElementById("logs-dialog"),
   logsTitle: document.getElementById("logs-title"),
@@ -629,19 +628,6 @@ function renderActivity(status) {
   elements.audioStreams.textContent = activeAudio.length
     ? `${activeAudio.length} live - ${activeAudio.reduce((sum, stream) => sum + stream.listener_count, 0)} listeners`
     : "None active";
-
-  const bridges = status.discord_audio_bridges || [];
-  const activeMixes = bridges.reduce((sum, bridge) => sum + bridge.active_mix_count, 0);
-  const activeStreamers = bridges.flatMap((bridge) => bridge.active_streamers || []);
-  const clientCount = bridges.reduce(
-    (sum, bridge) => sum + (bridge.clients?.audio || 0) + (bridge.clients?.overlay || 0) + (bridge.clients?.control || 0),
-    0,
-  );
-  elements.discordBridges.textContent = bridges.length
-    ? activeMixes
-      ? `${activeMixes} mixes - ${activeStreamers.join(", ")} - ${clientCount} clients`
-      : `${bridges.length} configured - ${clientCount} clients`
-    : "None reported";
 }
 
 async function restartService(name, button) {

@@ -5,22 +5,6 @@ import type { DockerClient } from "./dockerClient";
 import { loadStackConfig } from "./stackConfig";
 import type { ServiceSummary, StatusResponse } from "./types";
 
-interface AudioBridgePortalStatus {
-  generated_at: string;
-  bot_connected: boolean;
-  guilds: Array<{
-    guildId: string;
-    active: boolean;
-    channelName: string | null;
-    activeProfileCount: number;
-    activeProfiles: Array<{ label: string }>;
-    speakingUsers: string[];
-    engineHealth: { state: "idle" | "ok" | "warn" | "bad" };
-    voice_connection: string;
-    clients: { audio: number; overlay: number; control: number };
-  }>;
-}
-
 export class StatusCollector {
   private cachedStatus: StatusResponse | null = null;
   private cachedAt = 0;
@@ -80,8 +64,6 @@ export class StatusCollector {
     }
 
     const disk = await this.readDisk(alerts);
-    const audioBridgeService = services.find((service) => service.name === "frame-audio-bridge");
-    const discordAudioBridges = await this.readAudioBridgeStatus(audioBridgeService, alerts);
     const lastPhoto = await this.readLastPhoto();
 
     return {
@@ -91,7 +73,6 @@ export class StatusCollector {
       last_photo: lastPhoto,
       last_ingest: null,
       audio_streams: [],
-      discord_audio_bridges: discordAudioBridges,
       disk,
       alerts,
     };
@@ -108,76 +89,6 @@ export class StatusCollector {
         : null;
     } catch {
       return null;
-    }
-  }
-
-  private async readAudioBridgeStatus(
-    service: ServiceSummary | undefined,
-    alerts: StatusResponse["alerts"],
-  ): Promise<StatusResponse["discord_audio_bridges"]> {
-    if (!service || service.status !== "running") {
-      return [];
-    }
-
-    if (!this.appConfig.audioBridgeStatusUrl || !this.appConfig.audioBridgeStatusToken) {
-      alerts.push({
-        level: "warn",
-        message: "Audio Bridge is running, but authoritative Portal telemetry is not configured.",
-      });
-      return [];
-    }
-
-    try {
-      const response = await fetchWithTimeout(
-        this.appConfig.audioBridgeStatusUrl,
-        {
-          headers: {
-            Accept: "application/json",
-            Authorization: `Bearer ${this.appConfig.audioBridgeStatusToken}`,
-          },
-        },
-        this.appConfig.requestTimeoutMs,
-      );
-      if (!response.ok) {
-        throw new Error(`Audio Bridge telemetry returned ${response.status}`);
-      }
-      const telemetry = (await response.json()) as AudioBridgePortalStatus;
-
-      if (!telemetry.bot_connected) {
-        alerts.push({ level: "error", message: "Audio Bridge is running but its Discord bot is offline." });
-      }
-
-      return telemetry.guilds.map((guild) => {
-        const voiceReady = guild.voice_connection === "ready";
-        if (guild.active && !voiceReady) {
-          alerts.push({
-            level: "error",
-            message: `An Audio Bridge mix is active without a ready Discord voice connection.`,
-          });
-        }
-        return {
-          guild_id: guild.guildId,
-          status: !telemetry.bot_connected || (guild.active && !voiceReady)
-            ? "error"
-            : guild.active
-              ? "active"
-              : "idle",
-          channel_name: guild.channelName,
-          active_mix_count: guild.activeProfileCount,
-          active_streamers: guild.activeProfiles.map((profile) => profile.label),
-          speaking_users: guild.speakingUsers,
-          bot_connected: telemetry.bot_connected,
-          voice_connection: guild.voice_connection,
-          clients: guild.clients,
-          engine_health: guild.engineHealth.state,
-        };
-      });
-    } catch (error) {
-      alerts.push({
-        level: "warn",
-        message: `Audio Bridge telemetry is unavailable: ${errorMessage(error)}`,
-      });
-      return [];
     }
   }
 
@@ -215,20 +126,6 @@ export class StatusCollector {
       });
       return { used_bytes: 0, free_bytes: 0, total_bytes: 0, percent_used: 0 };
     }
-  }
-}
-
-async function fetchWithTimeout(
-  url: string,
-  init: RequestInit,
-  timeoutMs: number,
-): Promise<Response> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
   }
 }
 

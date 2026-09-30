@@ -104,3 +104,18 @@ test("plan snapshots copy credentials and loaded plans never restore secrets", a
   assert.equal(page.state.autoPorts, false);
   assert.equal(page.state.subfolders.photos, "photos");
 });
+
+test("historical plans drop Audio Bridge controls and retain Audio Monitor", async () => {
+  const page = await ui();
+  page.applyLoadedPlan({ ...page.buildPlan(), selectedServices: ["frame-audio-relay", "frame-discord-audio-bridge"],
+    ports: { audioMonitor: 4734, audioBridge: 3729 }, credentials: { discordToken: "legacy-secret" } });
+  const plan = page.buildPlan();
+  assert.deepEqual(Array.from(plan.selectedServices), ["frame-audio-relay"]);
+  assert.equal(plan.ports.audioMonitor, 4734);
+  assert.equal(plan.ports.audioBridge, undefined);
+  assert.equal(plan.credentials.discordToken, undefined);
+  page.state.stage = 5;
+  page.render();
+  assert.doesNotMatch(page.app.innerHTML, /Discord|Audio Bridge|legacy-secret/);
+  assert.match(page.app.innerHTML, /Operator password/);
+});

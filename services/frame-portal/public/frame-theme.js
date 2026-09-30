@@ -5,7 +5,7 @@
   const THEME_PROFILE_KEY = "frame-theme-profile";
   const THEME_CUSTOM_PROFILES_KEY = "frame-theme-custom-profiles";
   const THEME_API_PATHS = ["/api/theme", "/api/portal/theme"];
-  const COMPAT_THEME_KEYS = ["frame-gallery-theme-mode", "frame-audio-bridge-color-mode"];
+  const COMPAT_THEME_KEYS = ["frame-gallery-theme-mode"];
   const aliases = {
     page: ["page", "bg", "background"],
     panel: ["panel", "topbar"],

@@ -30,7 +30,6 @@ const INSTALLER_HELPERS: &[&str] = &[
 const CAPABILITY_KEYS: &[&str] = &[
     "frame-video-relay",
     "frame-audio-relay",
-    "frame-discord-audio-bridge",
     "frame-belabox-manager",
     "frame-photo-gallery",
     "frame-photo-ftp",
@@ -42,7 +41,6 @@ const CAPABILITY_KEYS: &[&str] = &[
 const IMPLEMENTED_CAPABILITIES: &[&str] = &[
     "frame-video-relay",
     "frame-audio-relay",
-    "frame-discord-audio-bridge",
     "frame-belabox-manager",
     "frame-photo-gallery",
     "frame-photo-ftp",
@@ -51,7 +49,6 @@ const IMPLEMENTED_CAPABILITIES: &[&str] = &[
     "frame-overlays",
 ];
 const PROFILE_ORDER: &[&str] = &[
-    "audio-bridge",
     "audio-monitor",
     "belabox",
     "video-relay",
@@ -67,7 +64,6 @@ const PROFILE_ORDER: &[&str] = &[
 const DATA_DIRECTORIES: &[&str] = &[
     "state",
     "portal-theme",
-    "audio-bridge",
     "audio-monitor",
     "belabox-manager",
     "video-relay",
@@ -100,7 +96,6 @@ const PUBLIC_PREFIXES: &[(&str, Option<&str>)] = &[
     ("/audio/hls", Some("frame-audio-relay")),
     ("/audio/assets", Some("frame-audio-relay")),
     ("/audio/public", Some("frame-audio-relay")),
-    ("/bridge", Some("frame-discord-audio-bridge")),
     ("/belabox/remote", Some("frame-belabox-manager")),
     ("/belabox/mixer", Some("frame-belabox-manager")),
     ("/belabox/control", Some("frame-belabox-manager")),
@@ -267,6 +262,7 @@ fn apply_install_plan(app: AppHandle, plan: InstallPlan) -> Result<ApplyResult, 
     let dependency_warnings = enforce_apply_dependencies(&mut capabilities);
     let profiles = compute_profiles(&capabilities, &mode);
     let existing_env = load_env_file(&stack_workspace.join(".env"))?;
+    prepare_audio_bridge_extraction(&stack_workspace, &data_root, &existing_env)?;
     let env = build_apply_environment(&plan, &mode, &capabilities, &profiles, &existing_env)?;
     let config = stack_config(&mode, &capabilities);
     let effective_prefixes = compute_effective_public_prefixes(&mode, &capabilities);
@@ -339,13 +335,6 @@ fn apply_install_plan(app: AppHandle, plan: InstallPlan) -> Result<ApplyResult, 
         );
         for warning in dependency_warnings {
             push_install_log(&app, &mut logs, format!("Warning: {warning}"));
-        }
-        if capabilities
-            .get("frame-discord-audio-bridge")
-            .copied()
-            .unwrap_or(false)
-        {
-            push_install_log(&app, &mut logs, "Discord Audio Bridge was enabled. Add Discord credentials in localhost/setup before using the bot.");
         }
         if capabilities
             .get("frame-belabox-manager")
@@ -493,6 +482,11 @@ fn validate_installed_release_resources(workspace: &Path) -> Result<(), String> 
             .any(|name| !workspace.join(name).is_dir())
     {
         return Err("The active FRAME release is missing installed source/template/helper files. Restore or update the matching release with stack.cmd or stack.sh before using native reconfiguration.".to_string());
+    }
+    let runtime = fs::read_to_string(workspace.join("installer/frame-installer.mjs"))
+        .map_err(|error| format!("Could not inspect the installed FRAME runtime: {error}"))?;
+    if !runtime.contains("checkAudioBridgeExtraction") {
+        return Err("This installed runtime predates Audio Bridge extraction. Follow docs/audio-bridge-extraction.md to bootstrap the updated FRAME source before native reconfiguration.".to_string());
     }
     Ok(())
 }
@@ -999,6 +993,8 @@ fn read_install_plan_at_root(root: &Path) -> Result<InstallPlan, String> {
         .map_err(|error| format!("Could not read install plan at {}: {error}", path.display()))?;
     let mut plan = serde_json::from_str::<InstallPlan>(&contents)
         .map_err(|error| format!("Install plan contains invalid JSON: {error}"))?;
+    plan.selected_services
+        .retain(|service| service != "frame-discord-audio-bridge");
     let existing = load_env_file(&root.join(".env"))?;
     if let Some(value) = existing
         .get("PHOTO_ARCHIVE_RETENTION_DAYS")
@@ -1261,14 +1257,112 @@ fn enforce_apply_dependencies(capabilities: &mut BTreeMap<String, bool>) -> Vec<
     warnings
 }
 
+fn prepare_audio_bridge_extraction(
+    workspace: &Path,
+    data_root: &Path,
+    env: &BTreeMap<String, String>,
+) -> Result<(), String> {
+    let data_root = env
+        .get("FRAME_DATA_ROOT")
+        .filter(|value| !value.trim().is_empty())
+        .map(|value| workspace.join(value))
+        .unwrap_or_else(|| data_root.to_path_buf());
+    let config_path = data_root.join("state/stack-config.json");
+    let config_text = match fs::read_to_string(&config_path) {
+        Ok(value) => value,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => {
+            return Err(format!(
+                "Could not read previous stack configuration: {error}"
+            ))
+        }
+    };
+    let config: serde_json::Value = if config_text.is_empty() {
+        serde_json::Value::Null
+    } else {
+        serde_json::from_str(&config_text)
+            .map_err(|error| format!("Could not parse previous stack configuration: {error}"))?
+    };
+    let selected = env
+        .get("COMPOSE_PROFILES")
+        .map(|value| {
+            value
+                .split(',')
+                .any(|profile| profile.trim() == "audio-bridge")
+        })
+        .unwrap_or(false)
+        || config["capabilities"]["frame-discord-audio-bridge"].as_bool() == Some(true);
+    if selected
+        && fs::read_to_string(data_root.join("state/audio-bridge-extraction-complete"))
+            .unwrap_or_default()
+            .trim()
+            != "standalone-cutover-complete"
+    {
+        return Err("Audio Bridge now belongs to Syronius_FRAME_Audio_Bridge. Preserve its settings and data and complete the standalone cutover described in docs/audio-bridge-extraction.md before updating FRAME. Retire the legacy bot separately.".to_string());
+    }
+    if ![
+        "AUDIO_BRIDGE_PORT",
+        "DISCORD_TOKEN",
+        "DISCORD_CLIENT_ID",
+        "PUBLIC_BASE_URL",
+        "SESSION_SECRET",
+        "DEFAULT_AUDIO_DELAY_MS",
+        "MAX_AUDIO_DELAY_MS",
+        "SESSION_IDLE_TIMEOUT_MINUTES",
+        "READONLY_OBS_TOKEN",
+    ]
+    .iter()
+    .any(|key| env.contains_key(*key))
+        && config["capabilities"]
+            .get("frame-discord-audio-bridge")
+            .is_none()
+    {
+        return Ok(());
+    }
+    let directory = data_root.join("state/audio-bridge-extraction");
+    fs::create_dir_all(&directory)
+        .map_err(|error| format!("Could not preserve bridge settings: {error}"))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&directory, fs::Permissions::from_mode(0o700))
+            .map_err(|error| error.to_string())?;
+    }
+    for (source, target) in [
+        (workspace.join(".env"), directory.join("legacy.env")),
+        (config_path, directory.join("stack-config.json")),
+    ] {
+        if !source.exists() {
+            continue;
+        }
+        let contents = fs::read(&source).map_err(|error| error.to_string())?;
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        match options.open(&target) {
+            Ok(mut destination) => {
+                if let Err(error) = destination
+                    .write_all(&contents)
+                    .and_then(|_| destination.sync_all())
+                {
+                    drop(destination);
+                    let _ = fs::remove_file(&target);
+                    return Err(format!("Could not preserve bridge settings: {error}"));
+                }
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => (),
+            Err(error) => return Err(format!("Could not preserve bridge settings: {error}")),
+        }
+    }
+    Ok(())
+}
+
 fn compute_profiles(capabilities: &BTreeMap<String, bool>, mode: &str) -> Vec<String> {
     let mut enabled = BTreeSet::new();
-    add_capability_profiles(
-        capabilities,
-        &mut enabled,
-        "frame-discord-audio-bridge",
-        &["audio-bridge"],
-    );
     add_capability_profiles(
         capabilities,
         &mut enabled,
@@ -1357,7 +1451,6 @@ fn stack_config(mode: &str, capabilities: &BTreeMap<String, bool>) -> serde_json
             "audio_capture": "/audio/capture",
             "audio_listen": "/audio/listen",
             "audio_hls": "/audio/hls",
-            "discord_audio_bridge_root": "/bridge",
             "belabox_manager": "/belabox",
             "belabox_remote": "/belabox/remote",
             "belabox_mixer": "/belabox/mixer",
@@ -1509,7 +1602,6 @@ fn build_apply_environment(
     let data_root = storage_root(plan)?;
     let data_root_env = path_to_env(&data_root);
     let edge_port = validate_port(plan.ports.edge, "FRAME Edge port")?.to_string();
-    let audio_bridge_port = existing_or(existing, "AUDIO_BRIDGE_PORT", "3729");
     let (photo_ftp_passive_min, photo_ftp_passive_max) = parse_range(&plan.ports.photo_ftp_passive)
         .ok_or_else(|| "Photo FTP passive range must look like 30000-30019.".to_string())?;
     let hostname = plan.public_hostname.trim().to_lowercase();
@@ -1613,7 +1705,6 @@ fn build_apply_environment(
         "PORTAL_PORT".to_string(),
         existing_or(existing, "PORTAL_PORT", "3730"),
     );
-    env.insert("AUDIO_BRIDGE_PORT".to_string(), audio_bridge_port.clone());
     env.insert(
         "AUDIO_MONITOR_PORT".to_string(),
         existing_or(existing, "AUDIO_MONITOR_PORT", "3734"),
@@ -1941,46 +2032,6 @@ fn build_apply_environment(
         existing_or(existing, "DISK_MINIMUM_FREE_GB", "20"),
     );
     env.insert(
-        "DISCORD_TOKEN".to_string(),
-        existing_or(existing, "DISCORD_TOKEN", "your_bot_token_here"),
-    );
-    env.insert(
-        "DISCORD_CLIENT_ID".to_string(),
-        existing_or(
-            existing,
-            "DISCORD_CLIENT_ID",
-            "your_discord_application_client_id_here",
-        ),
-    );
-    env.insert(
-        "PUBLIC_BASE_URL".to_string(),
-        if mode == "HYBRID" {
-            edge_public_base_url.clone()
-        } else {
-            format!("http://localhost:{audio_bridge_port}")
-        },
-    );
-    env.insert(
-        "SESSION_SECRET".to_string(),
-        preserve_secret(existing, "SESSION_SECRET", 32),
-    );
-    env.insert(
-        "DEFAULT_AUDIO_DELAY_MS".to_string(),
-        existing_or(existing, "DEFAULT_AUDIO_DELAY_MS", "2000"),
-    );
-    env.insert(
-        "MAX_AUDIO_DELAY_MS".to_string(),
-        existing_or(existing, "MAX_AUDIO_DELAY_MS", "10000"),
-    );
-    env.insert(
-        "SESSION_IDLE_TIMEOUT_MINUTES".to_string(),
-        existing_or(existing, "SESSION_IDLE_TIMEOUT_MINUTES", "30"),
-    );
-    env.insert(
-        "READONLY_OBS_TOKEN".to_string(),
-        existing_or(existing, "READONLY_OBS_TOKEN", ""),
-    );
-    env.insert(
         "SLS_API_KEY".to_string(),
         preserve_secret(existing, "SLS_API_KEY", 32),
     );
@@ -2093,13 +2144,7 @@ fn preserve_secret(
 }
 
 fn credential_placeholder(value: &str) -> bool {
-    [
-        "",
-        "your_bot_token_here",
-        "your_discord_application_client_id_here",
-        "replace_with_a_long_random_value",
-    ]
-    .contains(&value.trim())
+    ["", "replace_with_a_long_random_value"].contains(&value.trim())
 }
 
 fn pseudo_secret(label: &str, length: usize) -> String {
@@ -2213,7 +2258,6 @@ fn serialize_env(env: &BTreeMap<String, String>) -> String {
             "Direct service ports",
             &[
                 "PORTAL_PORT",
-                "AUDIO_BRIDGE_PORT",
                 "AUDIO_MONITOR_PORT",
                 "STREAMS_PORT",
                 "OVERLAYS_PORT",
@@ -2294,19 +2338,6 @@ fn serialize_env(env: &BTreeMap<String, String>) -> String {
                 "DISK_WARN_PERCENT",
                 "DISK_ERROR_PERCENT",
                 "DISK_MINIMUM_FREE_GB",
-            ],
-        ),
-        (
-            "Discord Audio Bridge",
-            &[
-                "DISCORD_TOKEN",
-                "DISCORD_CLIENT_ID",
-                "PUBLIC_BASE_URL",
-                "SESSION_SECRET",
-                "DEFAULT_AUDIO_DELAY_MS",
-                "MAX_AUDIO_DELAY_MS",
-                "SESSION_IDLE_TIMEOUT_MINUTES",
-                "READONLY_OBS_TOKEN",
             ],
         ),
         (
@@ -2437,7 +2468,7 @@ fn run_compose_up(
                 .filter(|service| !deferred.contains(service)),
         );
         for service in deferred {
-            push_install_log(app, logs, format!("Deferred {service}: add its {} credentials in localhost/setup, then apply the setup to start it. The capability remains selected.", if service == "frame-tunnel" { "Cloudflare tunnel" } else { "Discord bot" }));
+            push_install_log(app, logs, format!("Deferred {service}: add its Cloudflare tunnel credentials in localhost/setup, then apply the setup to start it. The capability remains selected."));
         }
     }
     *up_attempted = true;
@@ -2476,13 +2507,6 @@ fn deferred_native_services(
         .unwrap_or("");
     let enabled = |profile| profiles.split(',').any(|value| value.trim() == profile);
     let mut deferred = Vec::new();
-    if enabled("audio-bridge")
-        && ["DISCORD_TOKEN", "DISCORD_CLIENT_ID"]
-            .iter()
-            .any(|key| credential_placeholder(env.get(*key).map(String::as_str).unwrap_or("")))
-    {
-        deferred.push("frame-audio-bridge");
-    }
     if enabled("hybrid")
         && (tunnel_token.trim().is_empty() || tunnel_token.trim() == TUNNEL_TOKEN_PLACEHOLDER)
     {
@@ -2912,39 +2936,66 @@ mod tests {
     }
 
     #[test]
-    fn bootstrap_defers_only_selected_services_with_missing_external_credentials() {
-        let mut env = BTreeMap::from([
-            (
-                "COMPOSE_PROFILES".to_string(),
-                "hybrid,audio-bridge,photo-pipeline".to_string(),
-            ),
-            (
-                "DISCORD_TOKEN".to_string(),
-                "your_bot_token_here".to_string(),
-            ),
-            (
-                "DISCORD_CLIENT_ID".to_string(),
-                "123456789012345678".to_string(),
-            ),
-        ]);
+    fn bootstrap_defers_only_selected_tunnel_with_missing_credentials() {
+        let mut env = BTreeMap::from([(
+            "COMPOSE_PROFILES".to_string(),
+            "hybrid,photo-pipeline".to_string(),
+        )]);
         assert_eq!(
             deferred_native_services(&env, TUNNEL_TOKEN_PLACEHOLDER),
-            ["frame-audio-bridge", "frame-tunnel"]
-        );
-        env.insert(
-            "DISCORD_TOKEN".to_string(),
-            "configured-discord-token".to_string(),
+            ["frame-tunnel"]
         );
         assert_eq!(deferred_native_services(&env, ""), ["frame-tunnel"]);
         assert!(deferred_native_services(&env, "configured-tunnel-token").is_empty());
-        env.remove("DISCORD_CLIENT_ID");
-        assert_eq!(
-            deferred_native_services(&env, "configured-tunnel-token"),
-            ["frame-audio-bridge"]
-        );
         env.insert("COMPOSE_PROFILES".to_string(), "photo-pipeline".to_string());
         assert!(deferred_native_services(&env, TUNNEL_TOKEN_PLACEHOLDER).is_empty());
-        assert_eq!(env.get("COMPOSE_PROFILES").unwrap(), "photo-pipeline");
+    }
+
+    #[test]
+    fn bridge_extraction_checks_existing_data_root_and_preserves_original_settings() {
+        let temporary = std::env::temp_dir();
+        let root = temporary.join(format!(
+            "frame-native-extraction-test-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let data = root.join("existing-data");
+        fs::create_dir_all(data.join("state")).unwrap();
+        let config = r#"{"capabilities":{"frame-discord-audio-bridge":true}}"#;
+        fs::write(data.join("state/stack-config.json"), config).unwrap();
+        let original = "FRAME_DATA_ROOT=existing-data\nSESSION_SECRET=legacy-secret\n";
+        fs::write(root.join(".env"), original).unwrap();
+        let env = load_env_file(&root.join(".env")).unwrap();
+        assert!(prepare_audio_bridge_extraction(&root, &root, &env)
+            .unwrap_err()
+            .contains("standalone cutover"));
+        assert!(!data.join("state/audio-bridge-extraction").exists());
+        fs::write(
+            data.join("state/audio-bridge-extraction-complete"),
+            "standalone-cutover-complete\n",
+        )
+        .unwrap();
+        prepare_audio_bridge_extraction(&root, &root, &env).unwrap();
+        fs::write(root.join(".env"), "changed settings").unwrap();
+        prepare_audio_bridge_extraction(&root, &root, &env).unwrap();
+        assert_eq!(
+            fs::read_to_string(data.join("state/audio-bridge-extraction/legacy.env")).unwrap(),
+            original
+        );
+        assert_eq!(
+            fs::read_to_string(data.join("state/audio-bridge-extraction/stack-config.json"))
+                .unwrap(),
+            config
+        );
+        assert!(!root.join("state").exists());
+        assert_eq!(
+            fs::canonicalize(&root).unwrap().parent(),
+            Some(fs::canonicalize(temporary).unwrap().as_path())
+        );
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
@@ -2976,6 +3027,14 @@ mod tests {
         for directory in ["config", "services"] {
             fs::create_dir(workspace.join(directory)).unwrap();
         }
+        assert!(validate_installed_release_resources(&workspace)
+            .unwrap_err()
+            .contains("predates Audio Bridge extraction"));
+        fs::write(
+            workspace.join("installer/frame-installer.mjs"),
+            "checkAudioBridgeExtraction",
+        )
+        .unwrap();
         validate_installed_release_resources(&workspace).unwrap();
         for launcher in ["stack.cmd", "stack.sh"] {
             fs::write(source.join(launcher), "bundled launcher").unwrap();
@@ -3050,8 +3109,12 @@ mod tests {
         };
         let capabilities = capabilities_from_plan(&plan).unwrap();
         let profiles = compute_profiles(&capabilities, "HYBRID");
-        let existing =
-            BTreeMap::from([("BELABOX_SSH_CREDENTIAL_KEY".to_string(), key.to_string())]);
+        let existing = BTreeMap::from([
+            ("BELABOX_SSH_CREDENTIAL_KEY".to_string(), key.to_string()),
+            ("DISCORD_TOKEN".to_string(), "legacy-token".to_string()),
+            ("AUDIO_BRIDGE_PORT".to_string(), "3729".to_string()),
+            ("AUDIO_MONITOR_PORT".to_string(), "4734".to_string()),
+        ]);
 
         let env =
             build_apply_environment(&plan, "HYBRID", &capabilities, &profiles, &existing).unwrap();
@@ -3061,6 +3124,12 @@ mod tests {
             Some(key)
         );
         assert!(serialize_env(&env).contains(&format!("BELABOX_SSH_CREDENTIAL_KEY={key}\n")));
+        assert!(!env.contains_key("DISCORD_TOKEN"));
+        assert!(!env.contains_key("AUDIO_BRIDGE_PORT"));
+        assert_eq!(
+            env.get("AUDIO_MONITOR_PORT").map(String::as_str),
+            Some("4734")
+        );
         let archive_key = "PHOTO_ARCHIVE_RETENTION_DAYS";
         let trash_key = "PHOTO_TRASH_RETENTION_DAYS";
         assert_eq!(env.get(archive_key).map(String::as_str), Some("14"));
@@ -3103,6 +3172,8 @@ mod tests {
                 .as_nanos()
         ));
         fs::create_dir_all(root.join("state")).unwrap();
+        plan.selected_services
+            .push("frame-discord-audio-bridge".to_string());
         fs::write(
             install_plan_path(&root),
             serde_json::to_string(&plan).unwrap(),
@@ -3111,6 +3182,10 @@ mod tests {
         for value in ["0", "30"] {
             fs::write(root.join(".env"), format!("{archive_key}={value}\n")).unwrap();
             let loaded = read_install_plan_at_root(&root).unwrap();
+            assert!(!loaded
+                .selected_services
+                .iter()
+                .any(|service| service == "frame-discord-audio-bridge"));
             assert_eq!(
                 loaded
                     .advanced_settings

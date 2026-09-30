@@ -33,8 +33,8 @@ running. An offline image payload is outside this version's scope.
   TCP FTP passive range. Edit conflicts and retry; automatic port reassignment is not offered.
 - Photo FTP needs this machine's reachable LAN IPv4 address or DNS hostname to advertise to cameras.
   On an existing installation, leave it empty to preserve the deployed address.
-- Enter the operator login, plus Discord or Cloudflare credentials when those integrations are
-  selected. The interface keeps credentials in memory; the backend excludes them from saved plans
+- Enter the operator login and, for Hybrid mode, the Cloudflare Tunnel token.
+  The interface keeps credentials in memory; the backend excludes them from saved plans
   and cleans temporary configuration on normal exit. Blank credential pairs on a loaded installation
   preserve its existing credentials.
 - Readiness must pass for the current plan before Install unlocks. Edits and failed checks clear old
@@ -44,6 +44,12 @@ running. An offline image payload is outside this version's scope.
 Hybrid mode requires a public hostname and Cloudflare Tunnel token. Belabox Manager selects Hybrid
 mode because its agents connect through the authenticated public WebSocket endpoint. Video Relay
 also needs a reachable advertised relay host when used in Hybrid mode.
+
+Audio Bridge is now a separate project. Older saved plans reopen without its service, credentials,
+or port controls. Existing installations must complete the [standalone cutover](../../docs/audio-bridge-extraction.md)
+before reconfiguration can remove an enabled legacy Bridge. Setup preserves the archived settings
+and leaves the Bridge data folder intact. Fresh installations require a release whose source and
+image manifest support the extraction; changing this checkout does not update a published release.
 
 ## Development
 

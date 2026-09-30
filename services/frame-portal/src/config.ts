@@ -17,8 +17,6 @@ export interface AppConfig {
   statusRefreshMs: number;
   statusCacheMs: number;
   requestTimeoutMs: number;
-  audioBridgeStatusUrl?: string;
-  audioBridgeStatusToken?: string;
   photoPipelineUrl?: string;
   photoPipelineToken?: string;
   streamsApiUrl: string;
@@ -100,8 +98,6 @@ export function loadConfig(): AppConfig {
     statusRefreshMs: readInt("STATUS_REFRESH_MS", 5_000, 1_000),
     statusCacheMs: readInt("STATUS_CACHE_MS", 4_000, 0),
     requestTimeoutMs: readInt("REQUEST_TIMEOUT_MS", 3_000, 250),
-    audioBridgeStatusUrl: process.env.AUDIO_BRIDGE_STATUS_URL?.trim() || undefined,
-    audioBridgeStatusToken: process.env.AUDIO_BRIDGE_STATUS_TOKEN?.trim() || undefined,
     photoPipelineUrl: process.env.PHOTO_PIPELINE_URL?.trim() || undefined,
     photoPipelineToken: process.env.PHOTO_PIPELINE_TOKEN?.trim() || undefined,
     streamsApiUrl: readUrl("STREAMS_API_URL", "http://frame-streams:3732"),

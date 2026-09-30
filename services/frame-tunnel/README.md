@@ -27,7 +27,6 @@ Common uses:
 - Public photo gallery access.
 - Photo Stage viewer access.
 - Audio Monitor listener links.
-- Audio Bridge OBS links, when enabled.
 - Public overlay viewer links, when enabled.
 
 FRAME Tunnel does not make every FRAME page public. FRAME still uses a public-route allowlist.
@@ -100,7 +99,6 @@ Optional connections:
 | Public gallery | FRAME Photo Gallery |
 | Photo Stage links | FRAME Photo Stage |
 | Audio listener links | FRAME Audio Monitor |
-| Discord Audio Bridge links | FRAME Audio Bridge |
 | Public overlay viewers | FRAME Overlays |
 
 ## Notes For Operators
@@ -112,14 +110,14 @@ The tunnel token is private. Treat it like a password.
 FRAME keeps a local public-route allowlist. This helps prevent admin and setup pages from being
 exposed by mistake.
 
-Cloudflare Tunnel must support WebSockets for Audio Bridge and other live pages.
+Cloudflare Tunnel must support WebSockets for live pages.
 
 Public access should still be tested after setup. Open the public hostname from outside your LAN and
 confirm only the pages you expect are reachable.
 
 ## Optional Cloudflare Worker Offline Shield
 
-For OBS overlays, Audio Bridge sources, or other browser sources, you may want a Cloudflare Worker in
+For OBS overlays or other browser sources, you may want a Cloudflare Worker in
 front of the tunnel.
 
 This prevents OBS from showing a Cloudflare tunnel error page when the FRAME tunnel is offline.

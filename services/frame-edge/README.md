@@ -34,7 +34,6 @@ Common paths:
 | `/today/dashboard` | Photo Stage dashboard |
 | `/audio/admin` | Audio Monitor admin |
 | `/audio/listen/...` | Audio Monitor listener pages |
-| `/bridge/...` | Audio Bridge pages, when enabled |
 
 ## How To Install
 

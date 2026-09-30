@@ -66,7 +66,6 @@ test("collects only sanitized generated links and keeps them on the public dashb
       "frame-overlays": true,
       "frame-audio-relay": true,
       "frame-belabox-manager": true,
-      "frame-discord-audio-bridge": false,
     },
     routes: {
       video_relay_ui: "/slsui",
@@ -141,7 +140,7 @@ test("collects only sanitized generated links and keeps them on the public dashb
   assert.equal(publicTools.find((tool) => tool.id === "streams").route, "");
   assert.deepEqual(publicTools.find((tool) => tool.id === "streams").link_groups, groups.streams);
   assert.deepEqual(publicTools.find((tool) => tool.id === "belabox").link_groups, groups.belabox);
-  assert.deepEqual(publicTools.find((tool) => tool.id === "audio-bridge").link_groups, []);
+  assert.equal(publicTools.find((tool) => tool.id === "audio-bridge"), undefined);
   const lanTools = buildPortalTools({ config: stack, source: "file" }, services, "lan", groupsWithLanOnly);
   assert.equal(lanTools.find((tool) => tool.id === "streams").link_groups.at(-1).label, "Should stay on LAN");
 

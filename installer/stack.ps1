@@ -23,7 +23,6 @@ $Capabilities = @(
   [pscustomobject]@{ Key = "frame-video-relay"; Name = "Video Relay and Stream Management"; Description = "Receive SRTLA/SRT feeds and manage stream profiles." },
   [pscustomobject]@{ Key = "frame-overlays"; Name = "Overlay Wizard"; Description = "Create OBS relay-stat overlays. Automatically enables Video Relay." },
   [pscustomobject]@{ Key = "frame-audio-relay"; Name = "Audio Monitor"; Description = "Capture and distribute monitored audio feeds." },
-  [pscustomobject]@{ Key = "frame-discord-audio-bridge"; Name = "Discord Audio Bridge"; Description = "Bridge Discord voice audio and speaking overlays into OBS." },
   [pscustomobject]@{ Key = "frame-belabox-manager"; Name = "Belabox Manager"; Description = "Monitor Belabox agents over one authenticated outbound WSS connection, with SSH reserved for maintenance." },
   [pscustomobject]@{ Key = "frame-photo-ftp"; Name = "Photo FTP Ingest"; Description = "Accept completed camera uploads through FTP." },
   [pscustomobject]@{ Key = "frame-photo-webupload"; Name = "Browser Photo Upload"; Description = "Upload photos from a protected browser page." },
@@ -32,7 +31,7 @@ $Capabilities = @(
 )
 
 $AdvancedSettings = @(
-  "TIMEZONE", "FRAME_AUTH_SESSION_DAYS", "PORTAL_PORT", "AUDIO_BRIDGE_PORT", "AUDIO_MONITOR_PORT",
+  "TIMEZONE", "FRAME_AUTH_SESSION_DAYS", "PORTAL_PORT", "AUDIO_MONITOR_PORT",
   "STREAMS_PORT", "OVERLAYS_PORT", "PHOTO_UPLOAD_PORT", "PHOTO_FTP_PORT", "GALLERY_PORT", "TODAY_PORT",
   "PHOTO_FTP_PASSIVE_MIN", "PHOTO_FTP_PASSIVE_MAX", "PHOTO_FTP_PASSIVE_HOST", "PHOTO_FTP_USERNAME",
   "PHOTO_FTP_MIN_PASSWORD_LENGTH", "PHOTO_FTP_MAX_SESSIONS", "PHOTO_FTP_MAX_SESSIONS_PER_IP",
@@ -51,8 +50,8 @@ $AdvancedSettings = @(
   "PHOTO_ARCHIVE_RETENTION_DAYS",
   "GALLERY_THUMB_WIDTH", "GALLERY_THUMB_QUALITY", "TODAY_DEFAULT_INTERVAL_MS", "TODAY_REFRESH_MS",
   "ENABLE_CONTAINER_RESTARTS", "STATUS_REFRESH_MS", "STATUS_CACHE_MS", "REQUEST_TIMEOUT_MS",
-  "DISK_WARN_PERCENT", "DISK_ERROR_PERCENT", "DISK_MINIMUM_FREE_GB", "DEFAULT_AUDIO_DELAY_MS",
-  "MAX_AUDIO_DELAY_MS", "SESSION_IDLE_TIMEOUT_MINUTES", "PUBLIC_RELAY_HOST", "SRTLA_PORT",
+  "DISK_WARN_PERCENT", "DISK_ERROR_PERCENT", "DISK_MINIMUM_FREE_GB",
+  "PUBLIC_RELAY_HOST", "SRTLA_PORT",
   "SRT_PLAYER_PORT", "SRT_SENDER_PORT", "SLS_STATS_PORT"
 )
 
@@ -662,9 +661,6 @@ function Get-SetupIssues {
   if (((Test-CapabilityEnabled $config "frame-photo-ftp") -or (Test-CapabilityEnabled $config "frame-photo-webupload")) -and $env.FRAME_HOST_DATA_ROOT -eq "/data") {
     $issues.Add("Host-visible photo data path is not configured for StreamerBot.")
   }
-  if ((Test-CapabilityEnabled $config "frame-discord-audio-bridge") -and ($env.DISCORD_TOKEN -like "your_*" -or $env.DISCORD_CLIENT_ID -like "your_*")) {
-    $issues.Add("Discord Audio Bridge credentials need setup.")
-  }
   return $issues
 }
 
@@ -823,11 +819,6 @@ function Resolve-SetupIssues {
     if ($env.FRAME_DATA_ROOT) { $dataRoot = $env.FRAME_DATA_ROOT }
     Invoke-Install @("--host-data-root", $dataRoot)
   }
-  if ((Test-CapabilityEnabled $config "frame-discord-audio-bridge") -and ($env.DISCORD_TOKEN -like "your_*" -or $env.DISCORD_CLIENT_ID -like "your_*")) {
-    $clientId = Read-Default "Discord application client ID" $env.DISCORD_CLIENT_ID
-    $token = Read-PlainTextSecret "Discord bot token (input hidden)"
-    Invoke-RuntimeInput @("set-discord-auth") "$clientId`n$token"
-  }
 }
 
 function Configure-AdvancedSetting {
@@ -852,12 +843,11 @@ function Configure-Credentials {
     Write-Host "Credentials and Security" -ForegroundColor Cyan
     Write-Host "1. Portal login        Shared login and session length for protected panels"
     Write-Host "2. Cloudflare token    Hidden connector token for Hybrid mode"
-    Write-Host "3. Discord bot         Client ID and hidden bot token"
-    Write-Host "4. Photo FTP           Camera upload username and hidden password"
-    Write-Host "5. Stream Management   Optional basic-auth username and hidden password"
-    Write-Host "6. Overlay Wizard      Optional basic-auth username and hidden password"
+    Write-Host "3. Photo FTP           Camera upload username and hidden password"
+    Write-Host "4. Stream Management   Optional basic-auth username and hidden password"
+    Write-Host "5. Overlay Wizard      Optional basic-auth username and hidden password"
     Write-Host "0. Back"
-    switch (Read-MenuChoice "Selection" @("0", "1", "2", "3", "4", "5", "6")) {
+    switch (Read-MenuChoice "Selection" @("0", "1", "2", "3", "4", "5")) {
       "0" { return }
       "1" {
         $username = Read-Host "Portal username"
@@ -870,11 +860,6 @@ function Configure-Credentials {
         Invoke-RuntimeInput @("set-tunnel-token") $token
       }
       "3" {
-        $clientId = Read-Host "Discord application client ID"
-        $token = Read-PlainTextSecret "Discord bot token (input hidden)"
-        Invoke-RuntimeInput @("set-discord-auth") "$clientId`n$token"
-      }
-      "4" {
         $env = Get-EnvMap
         $username = Read-Default "Photo FTP username" $env.PHOTO_FTP_USERNAME
         $minimum = "5"
@@ -884,13 +869,13 @@ function Configure-Credentials {
         $password = Read-PlainTextSecret "Photo FTP password, at least $minimum characters (input hidden)"
         Invoke-RuntimeInput @("set-service-auth") "photo-ftp`n$username`n$password"
       }
-      "5" {
+      "4" {
         $env = Get-EnvMap
         $username = Read-Default "Stream Management username" $env.STREAMS_USERNAME
         $password = Read-PlainTextSecret "Stream Management password (input hidden)"
         Invoke-RuntimeInput @("set-service-auth") "streams`n$username`n$password"
       }
-      "6" {
+      "5" {
         $env = Get-EnvMap
         $username = Read-Default "Overlay Wizard username" $env.OVERLAYS_USERNAME
         $password = Read-PlainTextSecret "Overlay Wizard password (input hidden)"
@@ -1025,11 +1010,6 @@ switch ($Command) {
     $password = Read-PlainTextSecret "Portal password (input hidden)"
     Configure-AuthSessionDays
     Invoke-RuntimeInput @("set-portal-auth") "$username`n$password"
-  }
-  "discord-auth" {
-    $clientId = Read-Host "Discord application client ID"
-    $token = Read-PlainTextSecret "Discord bot token (input hidden)"
-    Invoke-RuntimeInput @("set-discord-auth") "$clientId`n$token"
   }
   "install" {
     Invoke-Runtime (@("install") + $CommandArgs)

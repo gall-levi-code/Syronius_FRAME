@@ -23,7 +23,6 @@ jobs:
         service:
           - frame-auth
           - frame-audio
-          - frame-audio-bridge
           - frame-belabox-manager
           - frame-overlays
           - frame-portal

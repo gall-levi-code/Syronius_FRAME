@@ -7,13 +7,12 @@ Development installations can continue building the checked-out source.
 
 ## Build and publish
 
-`.github/workflows/build-images.yml` builds all 13 FRAME service images for `linux/amd64`. Normal
+`.github/workflows/build-images.yml` builds all 12 FRAME service images for `linux/amd64`. Normal
 pull-request/main verification runs it after the contract and service tests. Its smoke harness
 starts isolated containers without host ports or production data and checks health plus the native
-dependencies used by the media services: Sharp, SQLite, HEIC module loading, FFmpeg, Opus/DAVE,
-SLS/SRTLA, FTP, and the Belabox maintenance executables. Discord smoke checks exercise the real web
-stack without logging a bot into Discord. External integrations and a complete media session still
-need their usual acceptance checks.
+dependencies used by the media services: Sharp, SQLite, HEIC module loading, FFmpeg, SLS/SRTLA,
+FTP, and the Belabox maintenance executables. External integrations and a complete media session
+still need their usual acceptance checks.
 
 `.github/workflows/release-images.yml` runs when an official GitHub release is published, or when
 manually dispatched from this repository's `main`. Every image must finish building and pass its
@@ -22,7 +21,7 @@ immutable image IDs. Images receive full source-commit tags and, for a published
 version tag. No `latest` tag is used. For a draft release, supply its existing tag as the manual
 workflow's `release-tag` input; the workflow checks out and verifies that exact tag.
 
-The final job emits `frame-images.json` only after all 13 registry digests are available for the same
+The final job emits `frame-images.json` only after all 12 registry digests are available for the same
 source commit. A release run or manual run with `release-tag` attaches it to that release; a manual
 run without a tag provides it as a workflow artifact. Publishing a draft that already contains the
 manifest skips rebuilding its images. Release tags must also be valid Docker tags, such as `v1.0.0-release`.
@@ -54,6 +53,11 @@ the installer workflow at the same tag. Attach the Windows `.exe`, Linux `.AppIm
 every image can be pulled anonymously before publishing the draft. The installer runtimes are
 unsigned; Windows may show a publisher warning. Docker must already be installed and running,
 and these runtime images currently target `linux/amd64`.
+
+If the installed release predates Audio Bridge extraction, first follow the
+[extraction and bootstrap guide](audio-bridge-extraction.md). Its original installer expects 13
+images and cannot consume a new 12-image manifest before its source helpers are updated. The normal
+update commands below apply after that bootstrap, or to installations already using current helpers.
 
 Download the official release's `frame-images.json` into the FRAME installation directory, then run:
 
@@ -88,7 +92,7 @@ tools with its first source/release update.
 Before changing deployment configuration, the installers save the previous generated files and
 running services' exact local image IDs in `.frame-deployment-backup`. Startup succeeds only after
 Compose's health checks pass. Electron setup collects the operator login and the selected
-Cloudflare/Discord credentials before startup. The retained Tauri prototype has a different
+Cloudflare credentials before startup. The retained Tauri prototype has a different
 first-install flow that defers unconfigured integrations; it is not the distributed online app.
 
 If configuration validation or a release pull fails, the saved files are restored and the running
@@ -118,8 +122,11 @@ the selected release for the default configuration.
 
 After recovering from a source update, the source-commit guard may prevent ordinary `stack start`.
 Run `stack update --image-manifest frame-images.json` with the intended release again to restore its
-matching source before reconciling. `stack recover` itself uses the saved configuration and exact
-local images, so it remains available while source and release are mismatched.
+matching source before reconciling. For a pre-extraction 13-image release, current release activation
+cannot reinstall its manifest: use the retained matching historical source/helpers for a deliberate
+rollback, or bootstrap the new release as described in the extraction guide. Coordinate any legacy
+bot restoration with the standalone bot's Discord connection. `stack recover` itself uses the saved
+configuration and exact local images, so it remains available while source and release are mismatched.
 
 ## Local checks
 

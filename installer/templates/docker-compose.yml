@@ -163,8 +163,6 @@ services:
       STATUS_REFRESH_MS: ${STATUS_REFRESH_MS:-5000}
       STATUS_CACHE_MS: ${STATUS_CACHE_MS:-4000}
       REQUEST_TIMEOUT_MS: ${REQUEST_TIMEOUT_MS:-3000}
-      AUDIO_BRIDGE_STATUS_URL: http://frame-audio-bridge:3728/api/internal/portal-status
-      AUDIO_BRIDGE_STATUS_TOKEN: ${PORTAL_SERVICE_TOKEN}
       PHOTO_PIPELINE_URL: http://frame-pipeline-photos:3735
       PHOTO_PIPELINE_TOKEN: ${PORTAL_SERVICE_TOKEN}
       SLS_API_KEY: ${SLS_API_KEY}
@@ -223,39 +221,6 @@ services:
       retries: 3
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    networks:
-      - frame-internal
-
-  frame-audio-bridge:
-    mem_reservation: 256m
-    profiles: ["audio-bridge"]
-    build:
-      context: ./services/frame-audio-bridge
-    container_name: frame-audio-bridge
-    restart: unless-stopped
-    logging: *frame-logging
-    environment:
-      DISCORD_TOKEN: ${DISCORD_TOKEN}
-      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
-      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
-      PORT: 3728
-      SESSION_SECRET: ${SESSION_SECRET}
-      DEFAULT_AUDIO_DELAY_MS: ${DEFAULT_AUDIO_DELAY_MS:-2000}
-      MAX_AUDIO_DELAY_MS: ${MAX_AUDIO_DELAY_MS:-10000}
-      SESSION_IDLE_TIMEOUT_MINUTES: ${SESSION_IDLE_TIMEOUT_MINUTES:-30}
-      READONLY_OBS_TOKEN: ${READONLY_OBS_TOKEN:-}
-      PORTAL_SERVICE_TOKEN: ${PORTAL_SERVICE_TOKEN}
-      DATA_DIR: /data
-    ports:
-      - "${AUDIO_BRIDGE_PORT:-3729}:3728"
-    volumes:
-      - ${FRAME_DATA_ROOT:-./data}/audio-bridge:/data
-    labels:
-      traefik.enable: "true"
-      traefik.http.routers.frame-audio-bridge.entrypoints: web
-      traefik.http.routers.frame-audio-bridge.priority: "100"
-      traefik.http.routers.frame-audio-bridge.rule: PathPrefix(`/bridge`)
-      traefik.http.services.frame-audio-bridge.loadbalancer.server.port: "3728"
     networks:
       - frame-internal
 

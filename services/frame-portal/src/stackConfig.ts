@@ -26,7 +26,6 @@ const FALLBACK_ROUTES: Record<string, string> = {
   audio_capture: "/audio/capture",
   audio_listen: "/audio/listen",
   audio_hls: "/audio/hls",
-  discord_audio_bridge_root: "/bridge",
   belabox_manager: "/belabox",
   belabox_remote: "/belabox/remote",
   belabox_mixer: "/belabox/mixer",
@@ -89,14 +88,6 @@ const TOOL_DEFINITIONS: Array<
     serviceName: "frame-audio",
   },
   {
-    id: "audio-bridge",
-    name: "Discord Audio Bridge",
-    description: "Check the Discord voice-to-OBS bridge service.",
-    routeKey: "discord_audio_bridge_root",
-    capability: "frame-discord-audio-bridge",
-    serviceName: "frame-audio-bridge",
-  },
-  {
     id: "belabox",
     name: "Belabox Manager",
     description: "Monitor Belabox devices, transfers, and remote tools.",
@@ -135,9 +126,7 @@ export async function loadStackConfig(appConfig: AppConfig): Promise<LoadedStack
       source: "fallback",
       config: {
         mode: appConfig.mode,
-        capabilities: {
-          "frame-discord-audio-bridge": false,
-        },
+        capabilities: {},
         routes: { ...FALLBACK_ROUTES },
         public_route_prefixes: ["/dashboard", "/status", "/theme", "/assets", "/api/portal", "/api/theme"],
       },
@@ -160,10 +149,7 @@ export function buildPortalTools(
   return TOOL_DEFINITIONS.map(({ routeKey, serviceName, ...definition }) => {
     const enabled = definition.capability ? config.capabilities[definition.capability] === true : true;
     const service = servicesByName.get(serviceName);
-    const route =
-      definition.id === "audio-bridge"
-        ? `${config.routes.status || FALLBACK_ROUTES.status}#services`
-        : config.routes[routeKey] || FALLBACK_ROUTES[routeKey];
+    const route = config.routes[routeKey] || FALLBACK_ROUTES[routeKey];
     const access = routeIsPublic(route, config.public_route_prefixes) ? "public" : "lan-only";
     const accessible = accessContext === "lan" || access === "public";
     return {
@@ -220,7 +206,6 @@ function getToolReadiness(
   }
   if (
     loadedStackConfig.source === "fallback" &&
-    toolId !== "audio-bridge" &&
     toolId !== "status"
   ) {
     return "needs-setup";

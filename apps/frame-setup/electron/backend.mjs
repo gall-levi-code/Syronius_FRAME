@@ -7,7 +7,7 @@ import { pathToFileURL } from "node:url";
 const REPOSITORY = "gall-levi-code/Syronius_FRAME";
 const PORTS = {
   edge: ["EDGE_HTTP_PORT", 80], portal: ["PORTAL_PORT", 3730],
-  audioBridge: ["AUDIO_BRIDGE_PORT", 3729], audioMonitor: ["AUDIO_MONITOR_PORT", 3734],
+  audioMonitor: ["AUDIO_MONITOR_PORT", 3734],
   slsStats: ["SLS_STATS_PORT", 8080], photoFtp: ["PHOTO_FTP_PORT", 2121],
   photoUpload: ["PHOTO_UPLOAD_PORT", 3736], gallery: ["GALLERY_PORT", 3738],
   today: ["TODAY_PORT", 3739], streams: ["STREAMS_PORT", 3732], overlays: ["OVERLAYS_PORT", 3733],
@@ -15,7 +15,8 @@ const PORTS = {
 };
 const ADVANCED = new Set(["PUBLIC_RELAY_HOST", "PHOTO_FTP_PASSIVE_HOST", "PHOTO_FTP_MIN_PASSWORD_LENGTH", "PHOTO_FTP_MAX_SESSIONS",
   "PHOTO_FTP_MAX_SESSIONS_PER_IP", "PHOTO_UPLOAD_MAX_FILES", "PHOTO_UPLOAD_MAX_SESSIONS", "PHOTO_ARCHIVE_RETENTION_DAYS"]);
-const SECRET_KEYS = ["portalUsername", "portalPassword", "discordClientId", "discordToken", "tunnelToken"];
+const SECRET_KEYS = ["portalUsername", "portalPassword", "tunnelToken"];
+const EXTRACTION_STATE = ["audio-bridge-extraction-complete", "audio-bridge-extraction/legacy.env", "audio-bridge-extraction/stack-config.json"];
 const CONFIG_STATE = ["stack-config.json", "effective-public-prefixes.json", "cloudflared-ingress.yml", "public-routes.yml", "cloudflare-tunnel-token"];
 const INSTALL_MARKER = ".frame-online-install.json";
 const hash = (value) => createHash("sha256").update(value).digest("hex");
@@ -252,7 +253,7 @@ export function createBackend({ emit = () => {}, userData, resourcesRoot, nodeEx
     }) : null;
     if (manifest && (await optional(path.join(root, m.SOURCE_COMMIT_FILE)))?.trim() !== manifest.commit) throw new Error("Installed FRAME source and release images do not match. Restore the intended release with stack update --image-manifest before reconfiguring.");
     const state = {};
-    for (const file of CONFIG_STATE) {
+    for (const file of [...CONFIG_STATE, ...EXTRACTION_STATE]) {
       await safePath(path.join(dataRoot, "state", file));
       state[file] = await optional(path.join(dataRoot, "state", file));
     }
@@ -299,7 +300,13 @@ export function createBackend({ emit = () => {}, userData, resourcesRoot, nodeEx
         for (const wrapper of ["stack.ps1", "stack.sh"]) await rename(path.join(source, "installer", `${wrapper}.next`), path.join(source, "installer", wrapper));
         for (const launcher of ["stack.cmd", "stack.sh"]) await cp(path.join(resourcesRoot, launcher), path.join(source, launcher));
       }
-      if (!(await readFile(path.join(source, "installer/frame-installer.mjs"), "utf8")).includes("process.env.FRAME_WORKSPACE")) {
+      const runtimeSource = await readFile(path.join(source, "installer/frame-installer.mjs"), "utf8");
+      if (!runtimeSource.includes("checkAudioBridgeExtraction")) {
+        throw new Error(before.existing
+          ? "This FRAME installation predates Audio Bridge extraction. Complete the separate bridge cutover, then bootstrap the updated FRAME source/installer using docs/audio-bridge-extraction.md before reconfiguring this historical release."
+          : "This FRAME release still includes the integrated Audio Bridge. Use a release with matching source and images that support standalone Audio Bridge extraction.");
+      }
+      if (!runtimeSource.includes("process.env.FRAME_WORKSPACE")) {
         throw new Error("This FRAME release predates host installer support. Publish a release that includes FRAME_WORKSPACE support.");
       }
       const wrapperName = process.platform === "win32" ? "stack.ps1" : "stack.sh";
@@ -314,7 +321,6 @@ export function createBackend({ emit = () => {}, userData, resourcesRoot, nodeEx
       await runtime(source, candidate, installArguments(plan, m.CAPABILITIES, before.dataRoot), candidateData);
       const c = plan.credentials;
       if (c.portalUsername || c.portalPassword) await runtime(source, candidate, ["set-portal-auth"], candidateData, `${c.portalUsername}\n${c.portalPassword}\n`);
-      if (c.discordClientId || c.discordToken) await runtime(source, candidate, ["set-discord-auth"], candidateData, `${c.discordClientId}\n${c.discordToken}\n`);
       if (c.tunnelToken) await runtime(source, candidate, ["set-tunnel-token"], candidateData, `${c.tunnelToken}\n`);
       await runtime(source, candidate, ["validate", "--for-start"], candidateData);
       const compose = await composeAt(plan.installRoot, path.join(candidate, ".env"), path.join(candidate, "docker-compose.yml"), path.join(source, m.RELEASE_COMPOSE_FILE));
@@ -353,6 +359,15 @@ export function createBackend({ emit = () => {}, userData, resourcesRoot, nodeEx
         for (const launcher of ["stack.cmd", "stack.sh"]) await atomicWrite(path.join(root, launcher), await readFile(path.join(ready.source, launcher)));
         await m.recordSourceCommit(root, ready.manifest.commit);
         await m.activateRelease(root, ready.manifest);
+      }
+      for (const name of EXTRACTION_STATE) {
+        const contents = await optional(path.join(ready.candidateData, "state", name));
+        if (contents === null) continue;
+        const destination = path.join(dataRoot, "state", name);
+        await safePath(destination);
+        await mkdir(path.dirname(destination), { recursive: true, mode: 0o700 });
+        try { await writeFile(destination, contents, { flag: "wx", mode: 0o600 }); }
+        catch (error) { if (error.code !== "EEXIST") throw error; }
       }
       for (const name of [".env", "docker-compose.yml"]) await atomicWrite(path.join(root, name), await readFile(path.join(ready.candidate, name)));
       for (const name of CONFIG_STATE) await atomicWrite(path.join(dataRoot, "state", name), await readFile(path.join(ready.candidateData, "state", name)));
@@ -425,7 +440,10 @@ export function createBackend({ emit = () => {}, userData, resourcesRoot, nodeEx
           const current = await installationState(root);
           const text = await optional(path.join(current.dataRoot, "state/frame-install-plan.json")) || await optional(planPath(root));
           if (!text) throw new Error("No saved installer plan was found for this folder.");
-          return redacted(validatePlan({ ...JSON.parse(text), installRoot: root }, m.CAPABILITIES));
+          // Load historical plans without offering the retired service on the next apply.
+          const plan = validatePlan({ ...JSON.parse(text), installRoot: root }, [...m.CAPABILITIES, "frame-discord-audio-bridge"]);
+          plan.selectedServices = plan.selectedServices.filter((name) => name !== "frame-discord-audio-bridge");
+          return redacted(plan);
         }
         const plan = validatePlan(args.request || args.plan, m.CAPABILITIES.filter((name) => m.IMPLEMENTED_CAPABILITIES.has(name)));
         const capabilities = Object.fromEntries(m.CAPABILITIES.map((name) => [name, plan.selectedServices.includes(name)]));

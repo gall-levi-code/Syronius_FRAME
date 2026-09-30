@@ -44,29 +44,7 @@ runtime overlay contracts.
 
 Large files are reduced only when related behavior is already covered by tests. Avoid broad rewrites.
 
-### Audio Bridge `SessionManager`
-
-Extract in this order as behavior changes require it:
-
-1. Guild configuration and bridge-profile persistence.
-2. Active session lifecycle and idle expiration.
-3. Per-profile control mutations.
-4. Snapshot construction and publication.
-
-Keep the existing `SessionManager` facade until callers can migrate without a coordinated rewrite.
-
-### Audio Bridge Control Page
-
-Separate future changes along these boundaries:
-
-1. WebSocket state and optimistic command handling.
-2. Bridge/session information rendering.
-3. Overlay editor controls.
-4. User rows, meters, and per-user controls.
-5. Section ordering, locking, and theme preferences.
-
-Prefer updating stable DOM nodes over broad rerenders while sliders, buttons, or drag operations are
-active.
+Audio Bridge refactoring and tests now belong to the independent **Syronius_FRAME_Audio_Bridge** project. See the [extraction guide](audio-bridge-extraction.md).
 
 ### Installer
 

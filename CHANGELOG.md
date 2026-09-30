@@ -1,7 +1,12 @@
 # Changelog
 
+All notable changes to this project will be documented in this file.
+
+The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
+
 ## Unreleased
 
+- Extracted Audio Bridge to the independent `Syronius_FRAME_Audio_Bridge` project; removed FRAME installer, Portal, routing, and release integration. Existing installations must follow the [extraction guide](docs/audio-bridge-extraction.md) before upgrading. Earlier bridge entries below describe historical behavior.
 - Added an explicit `stack update` alpha command and command-center action that resolve official
   GitHub `main` to an immutable commit, validate and stage the source archive, preserve local
   configuration and data, overlay FRAME-managed files, and run the existing stack reconciliation.
@@ -30,11 +35,6 @@
   stats URLs now resolve profile IDs server-side.
 - Added an optional friendly stream Name field and clear active/inactive Telemetry toggle states.
 
-All notable changes to this project will be documented in this file.
-
-The format is based on Keep a Changelog and this project adheres to Semantic Versioning.
-
-## [Unreleased]
 - Initial documentation scaffold.
 - Added canonical V1.1 spec at `docs/spec/v1.1.md`.
 - Added schema placeholders in `docs/schemas/`.

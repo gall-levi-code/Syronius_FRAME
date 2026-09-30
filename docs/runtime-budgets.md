@@ -1,10 +1,10 @@
 # Runtime budgets and log retention
 
-FRAME applies the same logging policy to all 17 Compose services. Each uses Docker's
+FRAME applies the same logging policy to all 16 Compose services. Each uses Docker's
 `local` driver, retaining three files of up to 10 MiB each and compressing rotated files.
-This is roughly 30 MiB per container before compression, or 480 MiB for the 16 services
-enabled on this installation. Docker and Portal log viewing continue to use the Docker
-API. Docker manages these files; applications should not edit them directly.
+This is roughly 30 MiB per container before compression, or 480 MiB when all 16 services
+are enabled. Docker and Portal log viewing continue to use the Docker API. Docker manages
+these files; applications should not edit them directly.
 [Docker local logging documentation](https://docs.docker.com/engine/logging/drivers/local/)
 
 BELABOX command auditing is separate from container output. It retains the current
@@ -26,7 +26,7 @@ not measured peak requirements. CPU quotas are not applied.
 | Auth, Portal, Edge, Docker Proxy, Public Gateway, Tunnel, Overlays, Streams, Today, Photo Upload, Photo FTP | 64 MiB each | 512 MiB each | 256 each |
 | BELABOX Manager | 128 MiB | 1,024 MiB | 256 |
 | Photo Pipeline | 1,024 MiB | Unset | Unset |
-| Photo Gallery, Video Ingest, Audio Bridge | 256 MiB each | Unset | Unset |
+| Photo Gallery, Video Ingest | 256 MiB each | Unset | Unset |
 | Audio Monitor | 128 MiB | Unset | Unset |
 
 Reservations are soft settings under memory pressure; they do not preallocate RAM or
@@ -36,8 +36,8 @@ apply without Swarm.
 [Compose resource settings](https://docs.docker.com/reference/compose-file/services/#mem_limit),
 [Docker memory constraints](https://docs.docker.com/engine/containers/resource_constraints/#limit-a-containers-access-to-memory)
 
-The September 8, 2026 idle snapshot measured 543.62 MiB across the 16 running FRAME
-containers on a Docker Desktop VM with 15.57 GiB and 16 CPUs. Individual control
+The September 8, 2026 idle snapshot, before Audio Bridge extraction, measured 543.62 MiB
+across the 16 running FRAME containers on a Docker Desktop VM with 15.57 GiB and 16 CPUs. Individual control
 services used approximately 15–92 MiB. Active media load was absent. Phase 2's isolated
 50 MiB photo transfer measured sampled process RSS peaks of 124.8 MiB for the manager
 and 71.7 MiB for the receiver; these also do not establish maximum simultaneous load.
@@ -45,7 +45,7 @@ and 71.7 MiB for the receiver; these also do not establish maximum simultaneous 
 Media caps need a representative peak-load test first. The pipeline supports two
 80-megapixel images by default: two RGBA buffers alone would require roughly 610 MiB,
 before decoding and conversion overhead. Gallery processing uses Sharp, Audio Monitor
-spawns FFmpeg per source, and video/Discord allocations depend on simultaneous streams
+spawns FFmpeg per source, and video allocations depend on simultaneous streams
 and listeners. Idle measurements cannot establish safe limits for those workloads.
 
 ## Adjusting control limits

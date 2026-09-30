@@ -59,6 +59,7 @@ test("validated LAN plans feed the actual shared installer and preserve data pat
   assert.equal(saved.EDGE_HTTP_PORT, "18080");
   assert.throws(() => validatePlan({ ...plan, installRoot: "relative folder" }, capabilities), /absolute/);
   assert.throws(() => validatePlan({ ...plan, credentials: { portalPassword: "line\nbreak" } }, capabilities), /credential/);
+  assert.throws(() => validatePlan({ ...plan, selectedServices: ["frame-discord-audio-bridge"] }, capabilities), /valid FRAME services/);
 });
 
 test("online release discovery requires an official manifest asset and validates its image digests", async () => {
@@ -73,7 +74,7 @@ test("online release discovery requires an official manifest asset and validates
   }), /not an official release/);
   assert.equal(requests, 1, "foreign asset must be rejected before making its request");
   await assert.rejects(fetchLatestRelease(validateReleaseManifest, async (url) => String(url).includes("api.github.com")
-    ? releaseFetch(url) : Response.json({ ...manifest(), images: {} })), /exactly the 13/);
+    ? releaseFetch(url) : Response.json({ ...manifest(), images: {} })), /exactly the 12/);
 });
 
 test("explicit release selection accepts a published prerelease and never falls back to another tag", async () => {
@@ -241,7 +242,7 @@ async function copyRuntime(root) {
   }
 }
 
-async function backendFixture(t, { fetchImpl = releaseFetch, edge = 18080, wrapper, realCompose = false, releaseTag } = {}) {
+async function backendFixture(t, { fetchImpl = releaseFetch, edge = 18080, wrapper, realCompose = false, releaseTag, sourceTransform } = {}) {
   for (const key of ["DOCKER_HOST", "DOCKER_CONTEXT"]) {
     const previous = process.env[key];
     delete process.env[key];
@@ -273,6 +274,10 @@ async function backendFixture(t, { fetchImpl = releaseFetch, edge = 18080, wrapp
       for (const wrapperName of ["stack.ps1", "stack.sh"]) await copyFile(path.join(repository, "installer", wrapperName), path.join(source, "installer", `${wrapperName}.next`));
       await recordSourceCommit(source, manifest().commit);
       await activateRelease(source, manifest());
+      if (sourceTransform) {
+        const runtimePath = path.join(source, "installer/frame-installer.mjs");
+        await writeFile(runtimePath, sourceTransform(await readFile(runtimePath, "utf8")));
+      }
       return { stdout: "" };
     }
     return runCommand(command, args, options);
@@ -281,3 +286,75 @@ async function backendFixture(t, { fetchImpl = releaseFetch, edge = 18080, wrapp
   t.after(() => backend.dispose());
   return { backend, calls, plan, logs, resolved };
 }
+
+test("Electron stages extraction acknowledgement and preserves legacy secrets before applying replacement config", async (t) => {
+  const socket = net.createServer();
+  socket.listen(0, "127.0.0.1");
+  await once(socket, "listening");
+  const edge = socket.address().port;
+  await new Promise((resolve) => socket.close(resolve));
+  let starts = 0;
+  const { backend, plan } = await backendFixture(t, { edge, wrapper: async (_command, _args, options) => {
+    starts += 1;
+    await completeDeployment(options.cwd);
+    return { stdout: "healthy", stderr: "" };
+  } });
+  await backend.invoke("run_preflight", { request: plan });
+  await backend.invoke("apply_install_plan", { request: plan });
+  const historicalManifest = manifest();
+  historicalManifest.images["frame-audio-bridge"] = `${RELEASE_IMAGE_PREFIX}/frame-audio-bridge@sha256:${"b".repeat(64)}`;
+  await writeFile(path.join(plan.installRoot, "frame-release.json"), JSON.stringify(historicalManifest));
+  const envPath = path.join(plan.installRoot, ".env");
+  const stateRoot = path.join(plan.installRoot, "data/state");
+  const configPath = path.join(stateRoot, "stack-config.json");
+  const original = await readFile(envPath, "utf8");
+  const legacy = original.replace(/^COMPOSE_PROFILES=.*$/m, "COMPOSE_PROFILES=audio-monitor,audio-bridge") + "DISCORD_TOKEN=private-legacy-token\n";
+  const config = JSON.parse(await readFile(configPath, "utf8"));
+  config.capabilities["frame-discord-audio-bridge"] = true;
+  await writeFile(configPath, JSON.stringify(config));
+  await writeFile(envPath, legacy);
+  const planPath = path.join(stateRoot, "frame-install-plan.json");
+  const savedPlan = JSON.parse(await readFile(planPath, "utf8"));
+  await writeFile(planPath, JSON.stringify({ ...savedPlan, selectedServices: [...savedPlan.selectedServices, "frame-discord-audio-bridge"],
+    ports: { ...savedPlan.ports, audioBridge: 3729 }, credentials: { discordToken: "private-legacy-token" } }));
+  const loaded = await backend.invoke("load_install_plan", { installRoot: plan.installRoot });
+  assert.deepEqual(loaded.selectedServices, ["frame-audio-relay"]);
+  assert.equal(loaded.ports.audioBridge, undefined);
+  assert.equal(loaded.credentials, undefined);
+  assert.equal(loaded.ports.audioMonitor, 3734);
+  await writeFile(planPath, JSON.stringify({ ...savedPlan, selectedServices: ["frame-discord-audio-bridge"] }));
+  assert.deepEqual((await backend.invoke("load_install_plan", { installRoot: plan.installRoot })).selectedServices, []);
+  const runtimePath = path.join(plan.installRoot, "installer/frame-installer.mjs");
+  const runtimeSource = await readFile(runtimePath, "utf8");
+  await writeFile(runtimePath, runtimeSource.replaceAll("checkAudioBridgeExtraction", "historicalInstallerWithoutExtraction"));
+  const bootstrapBlocked = await backend.invoke("run_preflight", { request: plan });
+  assert.ok(bootstrapBlocked.checks.some((check) => check.status === "bad" && /bootstrap the updated FRAME source/.test(check.detail)));
+  await writeFile(runtimePath, runtimeSource);
+  const blocked = await backend.invoke("run_preflight", { request: plan });
+  assert.ok(blocked.checks.some((check) => check.status === "bad" && /complete the standalone cutover/.test(check.detail)));
+  await assert.rejects(backend.invoke("apply_install_plan", { request: plan }), /readiness checks/);
+  assert.equal(starts, 1);
+  assert.equal(await readFile(envPath, "utf8"), legacy);
+  const markerPath = path.join(stateRoot, "audio-bridge-extraction-complete");
+  await writeFile(markerPath, "standalone-cutover-complete\n");
+  const result = await backend.invoke("run_preflight", { request: plan });
+  assert.ok(result.checks.every((check) => check.status !== "bad"));
+  // Preflight writes only its temporary candidate.
+  await assert.rejects(readFile(path.join(stateRoot, "audio-bridge-extraction/legacy.env")), { code: "ENOENT" });
+  await backend.invoke("apply_install_plan", { request: plan });
+  assert.equal(starts, 2);
+  assert.equal(await readFile(path.join(stateRoot, "audio-bridge-extraction/legacy.env"), "utf8"), legacy);
+  assert.equal(parseEnv(await readFile(envPath, "utf8")).DISCORD_TOKEN, undefined);
+  assert.equal(await readFile(markerPath, "utf8"), "standalone-cutover-complete\n");
+});
+
+test("fresh setup rejects a downloaded historical runtime before creating an installation", async (t) => {
+  const { backend, calls, plan } = await backendFixture(t, {
+    sourceTransform: (source) => source.replaceAll("checkAudioBridgeExtraction", "historicalInstallerWithoutExtraction"),
+  });
+  const result = await backend.invoke("run_preflight", { request: plan });
+  assert.ok(result.checks.some((check) => check.status === "bad" && /release still includes the integrated Audio Bridge/.test(check.detail)), JSON.stringify(result.checks));
+  await assert.rejects(backend.invoke("apply_install_plan", { request: plan }), /readiness checks/);
+  await assert.rejects(readFile(path.join(plan.installRoot, ".env")), { code: "ENOENT" });
+  assertReadOnlyDocker(calls);
+});

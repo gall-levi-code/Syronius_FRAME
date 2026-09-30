@@ -23,7 +23,6 @@
       "required": [
         "frame-video-relay",
         "frame-audio-relay",
-        "frame-discord-audio-bridge",
         "frame-belabox-manager",
         "frame-photo-gallery",
         "frame-photo-ftp",
@@ -37,9 +36,6 @@
           "type": "boolean"
         },
         "frame-audio-relay": {
-          "type": "boolean"
-        },
-        "frame-discord-audio-bridge": {
           "type": "boolean"
         },
         "frame-belabox-manager": {
@@ -86,7 +82,6 @@
         "audio_capture",
         "audio_listen",
         "audio_hls",
-        "discord_audio_bridge_root",
         "belabox_manager",
         "belabox_remote",
         "belabox_mixer",
@@ -159,10 +154,6 @@
           "pattern": "^/"
         },
         "audio_hls": {
-          "type": "string",
-          "pattern": "^/"
-        },
-        "discord_audio_bridge_root": {
           "type": "string",
           "pattern": "^/"
         },

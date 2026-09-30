@@ -41,14 +41,6 @@ const IMPORTABLE_ENV_KEYS = new Set([
   "FRAME_CONTROL_MEMORY_MB",
   "FRAME_BELABOX_MEMORY_MB",
   "FRAME_CONTROL_PIDS",
-  "DISCORD_TOKEN",
-  "DISCORD_CLIENT_ID",
-  "PUBLIC_BASE_URL",
-  "SESSION_SECRET",
-  "DEFAULT_AUDIO_DELAY_MS",
-  "MAX_AUDIO_DELAY_MS",
-  "SESSION_IDLE_TIMEOUT_MINUTES",
-  "READONLY_OBS_TOKEN",
   "TIMEZONE",
   "FRAME_HOST_DATA_ROOT",
   "PHOTO_FTP_PASSIVE_HOST",
@@ -88,7 +80,6 @@ const CUSTOMIZABLE_ENV_KEYS = new Set([
   "TIMEZONE",
   "FRAME_AUTH_SESSION_DAYS",
   "PORTAL_PORT",
-  "AUDIO_BRIDGE_PORT",
   "AUDIO_MONITOR_PORT",
   "STREAMS_PORT",
   "OVERLAYS_PORT",
@@ -146,15 +137,18 @@ const CUSTOMIZABLE_ENV_KEYS = new Set([
   "DISK_WARN_PERCENT",
   "DISK_ERROR_PERCENT",
   "DISK_MINIMUM_FREE_GB",
-  "DEFAULT_AUDIO_DELAY_MS",
-  "MAX_AUDIO_DELAY_MS",
-  "SESSION_IDLE_TIMEOUT_MINUTES",
   "PUBLIC_RELAY_HOST",
   "SRTLA_PORT",
   "SRT_PLAYER_PORT",
   "SRT_SENDER_PORT",
   "SLS_STATS_PORT",
 ]);
+
+// Compatibility is limited to protecting installations while the standalone service is migrated.
+const RETIRED_BRIDGE_ENV_KEYS = [
+  "AUDIO_BRIDGE_PORT", "DISCORD_TOKEN", "DISCORD_CLIENT_ID", "PUBLIC_BASE_URL", "SESSION_SECRET",
+  "DEFAULT_AUDIO_DELAY_MS", "MAX_AUDIO_DELAY_MS", "SESSION_IDLE_TIMEOUT_MINUTES", "READONLY_OBS_TOKEN",
+];
 
 try {
   if (process.env.FRAME_WORKSPACE !== undefined && !path.isAbsolute(WORKSPACE)) {
@@ -173,8 +167,6 @@ try {
     await setTunnelToken();
   } else if (command === "set-portal-auth") {
     await setPortalAuth();
-  } else if (command === "set-discord-auth") {
-    await setDiscordAuth();
   } else if (command === "set-service-auth") {
     await setServiceAuth();
   } else if (command === "source-update") {
@@ -205,11 +197,12 @@ try {
 }
 
 async function install(options) {
-  await writeReleaseOverride(WORKSPACE);
   const existingEnv = await loadEnv();
   const importedEnv = options["import-env"] ? await loadImportEnv(options["import-env"]) : {};
   const settingOverrides = parseSettingOverrides(options.set);
   const existingConfigRaw = await readJsonIfExists(getConfigPathFromEnv(existingEnv));
+  await checkAudioBridgeExtraction(existingEnv, existingConfigRaw);
+  await writeReleaseOverride(WORKSPACE);
   const existingConfig = existingConfigRaw ? upgradeExistingConfig(existingConfigRaw) : null;
   if (existingConfig) {
     validateConfig(existingConfig);
@@ -253,6 +246,7 @@ async function install(options) {
     console.warn(`  Warning: ${warning}`),
   );
 
+  await archiveAudioBridgeSettings(existingEnv, existingConfigRaw);
   await ensureDataDirectories(dataRoot);
   await atomicWriteJson(path.join(dataRoot, "state/stack-config.json"), config);
   await atomicWriteJson(path.join(dataRoot, "state/effective-public-prefixes.json"), {
@@ -272,7 +266,6 @@ async function install(options) {
   console.log("FRAME configuration installed.");
   console.log(`  Mode: ${mode}`);
   console.log(`  Data: ${env.FRAME_DATA_ROOT}`);
-  console.log(`  Audio Bridge: ${capabilities["frame-discord-audio-bridge"] ? "enabled" : "disabled"}`);
   console.log(`  Belabox Manager: ${capabilities["frame-belabox-manager"] ? "enabled" : "disabled"}`);
   console.log(`  Audio Monitor: ${capabilities["frame-audio-relay"] ? "enabled" : "disabled"}`);
   console.log(`  Video Relay: ${capabilities["frame-video-relay"] ? "enabled" : "disabled"}`);
@@ -288,12 +281,6 @@ async function install(options) {
   }
   for (const warning of dependencyWarnings) {
     console.warn(`  Warning: ${warning}`);
-  }
-  if (
-    capabilities["frame-discord-audio-bridge"] &&
-    (isPlaceholder(env.DISCORD_TOKEN) || isPlaceholder(env.DISCORD_CLIENT_ID))
-  ) {
-    console.warn("  Setup needed: add Discord credentials to the generated .env before running stack start.");
   }
   if (capabilities["frame-belabox-manager"] && !env.BELABOX_HOST) {
     console.warn("  Optional: set BELABOX_HOST before using Belabox SSH install or diagnostic checks.");
@@ -323,6 +310,7 @@ async function validate(options) {
   const env = await loadEnv(true);
   const configPath = getConfigPathFromEnv(env);
   const config = await readJson(configPath);
+  await checkAudioBridgeExtraction(env, config);
   validateConfig(config);
   assertDeployableCapabilities(config.capabilities);
   validateEnvironment(env, config, Boolean(options["for-start"]));
@@ -354,13 +342,6 @@ async function status() {
     console.log(`  Public routes: ${effective.prefixes.length ? effective.prefixes.join(", ") : "none"}`);
   }
   console.log(`  Portal: ${env.EDGE_PUBLIC_BASE_URL}/dashboard`);
-  console.log(
-    `  Audio Bridge: ${
-      config.capabilities["frame-discord-audio-bridge"]
-        ? `http://localhost:${env.AUDIO_BRIDGE_PORT}`
-        : "disabled"
-    }`,
-  );
   console.log(
     `  Audio Monitor: ${
       config.capabilities["frame-audio-relay"] ? `${env.EDGE_LAN_BASE_URL}/audio/admin` : "disabled"
@@ -437,19 +418,6 @@ async function setPortalAuth() {
   console.log("Portal credentials stored.");
 }
 
-async function setDiscordAuth() {
-  const env = await loadEnv(true);
-  const [clientId = "", ...tokenLines] = (await readStandardInput()).replace(/\r/g, "").split("\n");
-  const token = tokenLines.join("\n").replace(/\n$/, "");
-  if (!/^\d{10,30}$/.test(clientId.trim()) || !token || isPlaceholder(token)) {
-    throw new Error("Discord client ID and bot token are both required.");
-  }
-  env.DISCORD_CLIENT_ID = clientId.trim();
-  env.DISCORD_TOKEN = token;
-  await atomicWrite(ENV_PATH, serializeEnv(env));
-  console.log("Discord Audio Bridge credentials stored.");
-}
-
 async function setServiceAuth() {
   const env = await loadEnv(true);
   const [group = "", username = "", ...passwordLines] = (await readStandardInput()).replace(/\r/g, "").split("\n");
@@ -496,6 +464,35 @@ async function reset(options) {
   await install({});
 }
 
+async function checkAudioBridgeExtraction(env, config) {
+  const enabled = config?.capabilities?.["frame-discord-audio-bridge"] === true ||
+    String(env.COMPOSE_PROFILES ?? "").split(",").some((profile) => profile.trim() === "audio-bridge");
+  if (!enabled) return;
+  const dataRoot = resolveDataRoot(env.FRAME_DATA_ROOT ?? "./data");
+  try {
+    const acknowledgement = await readFile(path.join(dataRoot, "state/audio-bridge-extraction-complete"), "utf8");
+    if (acknowledgement.trim() === "standalone-cutover-complete") return;
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+  throw new Error("Audio Bridge now belongs to Syronius_FRAME_Audio_Bridge. Preserve its data and settings, complete the standalone cutover, then follow docs/audio-bridge-extraction.md before updating FRAME. The legacy bot must be retired separately; this installer will not retire it automatically.");
+}
+
+async function archiveAudioBridgeSettings(env, config) {
+  if (!RETIRED_BRIDGE_ENV_KEYS.some((key) => Object.hasOwn(env, key)) &&
+      !Object.hasOwn(config?.capabilities ?? {}, "frame-discord-audio-bridge")) return;
+  const directory = path.join(resolveDataRoot(env.FRAME_DATA_ROOT ?? "./data"), "state/audio-bridge-extraction");
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  for (const [name, contents] of [["legacy.env", await readFile(ENV_PATH, "utf8")], ["stack-config.json", JSON.stringify(config, null, 2)]]) {
+    try {
+      await writeFile(path.join(directory, name), contents, { flag: "wx", mode: 0o600 });
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+    }
+  }
+  console.warn("Preserved legacy Audio Bridge settings in state/audio-bridge-extraction. Its data directory has not been changed.");
+}
+
 function buildEnvironment(existing, options, mode, capabilities) {
   const dataRoot = normalizeDataRoot(String(options["data-root"] ?? setting(existing, "FRAME_DATA_ROOT", "./data")));
   const defaultHostDataRoot = options["data-root"] === undefined
@@ -514,10 +511,6 @@ function buildEnvironment(existing, options, mode, capabilities) {
     capabilities["frame-video-relay"] && mode === "HYBRID",
   );
   const portalPort = normalizePort(options["portal-port"] ?? setting(existing, "PORTAL_PORT", "3730"), "portal port");
-  const audioPort = normalizePort(
-    options["audio-bridge-port"] ?? setting(existing, "AUDIO_BRIDGE_PORT", "3729"),
-    "Audio Bridge port",
-  );
   const audioMonitorPort = normalizePort(setting(existing, "AUDIO_MONITOR_PORT", "3734"), "Audio Monitor port");
   const streamsPort = normalizePort(setting(existing, "STREAMS_PORT", "3732"), "Stream Management port");
   const overlaysPort = normalizePort(setting(existing, "OVERLAYS_PORT", "3733"), "Overlay Wizard port");
@@ -560,7 +553,6 @@ function buildEnvironment(existing, options, mode, capabilities) {
   assertPortSet([
     ["FRAME Edge", edgePort, true],
     ["Portal", portalPort, true],
-    ["Audio Bridge", audioPort, capabilities["frame-discord-audio-bridge"]],
     ["Audio Monitor", audioMonitorPort, capabilities["frame-audio-relay"]],
     ["Stream Management", streamsPort, capabilities["frame-video-relay"]],
     ["Overlay Wizard", overlaysPort, capabilities["frame-overlays"]],
@@ -591,7 +583,6 @@ function buildEnvironment(existing, options, mode, capabilities) {
     CLOUDFLARE_PUBLIC_HOSTNAME: cloudflarePublicHostname,
     CLOUDFLARE_TUNNEL_ORIGIN: "http://frame-public-gateway:8080",
     PORTAL_PORT: portalPort,
-    AUDIO_BRIDGE_PORT: audioPort,
     AUDIO_MONITOR_PORT: audioMonitorPort,
     AUDIO_PUBLIC_BASE_URL: edgePublicBaseUrl,
     AUDIO_CAPTURE_BASE_URL: edgeLanBaseUrl,
@@ -663,14 +654,6 @@ function buildEnvironment(existing, options, mode, capabilities) {
     DISK_WARN_PERCENT: setting(existing, "DISK_WARN_PERCENT", "85"),
     DISK_ERROR_PERCENT: setting(existing, "DISK_ERROR_PERCENT", "95"),
     DISK_MINIMUM_FREE_GB: setting(existing, "DISK_MINIMUM_FREE_GB", "20"),
-    DISCORD_TOKEN: setting(existing, "DISCORD_TOKEN", "your_bot_token_here"),
-    DISCORD_CLIENT_ID: setting(existing, "DISCORD_CLIENT_ID", "your_discord_application_client_id_here"),
-    PUBLIC_BASE_URL: mode === "HYBRID" ? edgePublicBaseUrl : `http://localhost:${audioPort}`,
-    SESSION_SECRET: preserveSecret(existing.SESSION_SECRET, 32),
-    DEFAULT_AUDIO_DELAY_MS: setting(existing, "DEFAULT_AUDIO_DELAY_MS", "2000"),
-    MAX_AUDIO_DELAY_MS: setting(existing, "MAX_AUDIO_DELAY_MS", "10000"),
-    SESSION_IDLE_TIMEOUT_MINUTES: setting(existing, "SESSION_IDLE_TIMEOUT_MINUTES", "30"),
-    READONLY_OBS_TOKEN: existing.READONLY_OBS_TOKEN ?? "",
     SLS_API_KEY: preserveSecret(existing.SLS_API_KEY, 32),
     PUBLIC_RELAY_HOST: publicRelayHost,
     SRTLA_PORT: srtlaPort,
@@ -694,7 +677,6 @@ function validateEnvironment(env, config, forStart) {
   resolveDataRoot(dataRoot);
   const edgePort = normalizePort(defaultIfBlank(env.EDGE_HTTP_PORT, "80"), "FRAME Edge port");
   const portalPort = normalizePort(defaultIfBlank(env.PORTAL_PORT, "3730"), "portal port");
-  const audioPort = normalizePort(defaultIfBlank(env.AUDIO_BRIDGE_PORT, "3729"), "Audio Bridge port");
   const audioMonitorPort = normalizePort(defaultIfBlank(env.AUDIO_MONITOR_PORT, "3734"), "Audio Monitor port");
   const streamsPort = normalizePort(defaultIfBlank(env.STREAMS_PORT, "3732"), "Stream Management port");
   const overlaysPort = normalizePort(defaultIfBlank(env.OVERLAYS_PORT, "3733"), "Overlay Wizard port");
@@ -737,7 +719,6 @@ function validateEnvironment(env, config, forStart) {
   assertPortSet([
     ["FRAME Edge", edgePort, true],
     ["Portal", portalPort, true],
-    ["Audio Bridge", audioPort, config.capabilities["frame-discord-audio-bridge"]],
     ["Audio Monitor", audioMonitorPort, config.capabilities["frame-audio-relay"]],
     ["Stream Management", streamsPort, config.capabilities["frame-video-relay"]],
     ["Overlay Wizard", overlaysPort, config.capabilities["frame-overlays"]],
@@ -807,27 +788,6 @@ function validateEnvironment(env, config, forStart) {
   }
   if (forStart && (!String(env.PORTAL_USERNAME ?? "").trim() || !String(env.PORTAL_PASSWORD ?? "").trim())) {
     throw new Error("PORTAL_USERNAME and PORTAL_PASSWORD are required before starting FRAME.");
-  }
-  if (!forStart || !config.capabilities["frame-discord-audio-bridge"]) {
-    if (config.capabilities["frame-video-relay"] && (env.SLS_API_KEY ?? "").length < 32) {
-      throw new Error("SLS_API_KEY is missing or too short. Re-run stack install.");
-    }
-    if (config.capabilities["frame-overlays"] && !isHttpUrl(env.OVERLAYS_PUBLIC_BASE_URL)) {
-      throw new Error("OVERLAYS_PUBLIC_BASE_URL must be a valid http:// or https:// URL.");
-    }
-    return;
-  }
-  if (isPlaceholder(env.DISCORD_TOKEN)) {
-    throw new Error("DISCORD_TOKEN must be configured before starting the Audio Bridge.");
-  }
-  if (isPlaceholder(env.DISCORD_CLIENT_ID)) {
-    throw new Error("DISCORD_CLIENT_ID must be configured before starting the Audio Bridge.");
-  }
-  if (!isHttpUrl(env.PUBLIC_BASE_URL)) {
-    throw new Error("PUBLIC_BASE_URL must be a valid http:// or https:// URL.");
-  }
-  if ((env.SESSION_SECRET ?? "").length < 32 || (env.PORTAL_SERVICE_TOKEN ?? "").length < 32) {
-    throw new Error("Generated service secrets are missing or too short. Re-run stack install.");
   }
   if (config.capabilities["frame-video-relay"] && (env.SLS_API_KEY ?? "").length < 32) {
     throw new Error("SLS_API_KEY is missing or too short. Re-run stack install.");
@@ -982,7 +942,7 @@ async function readStandardInput() {
 }
 
 async function ensureDataDirectories(dataRoot) {
-  for (const directory of ["state", "portal-theme", "audio-bridge", "audio-monitor", "belabox-manager", "video-relay", "overlays", "logs", "inbox", "staging", "processing", "galleries", "gallery-cache", "gallery-branding", "archive", "quarantine"]) {
+  for (const directory of ["state", "portal-theme", "audio-monitor", "belabox-manager", "video-relay", "overlays", "logs", "inbox", "staging", "processing", "galleries", "gallery-cache", "gallery-branding", "archive", "quarantine"]) {
     await mkdir(path.join(dataRoot, directory), { recursive: true });
   }
 }
@@ -1253,7 +1213,6 @@ function assertAllowedOptions(command, options) {
       "host-data-root",
       "edge-http-port",
       "portal-port",
-      "audio-bridge-port",
       "public-hostname",
       "public-relay-host",
       "import-env",
@@ -1264,7 +1223,6 @@ function assertAllowedOptions(command, options) {
     validate: new Set(["for-start"]),
     "set-tunnel-token": new Set(),
     "set-portal-auth": new Set(),
-    "set-discord-auth": new Set(),
     "set-service-auth": new Set(),
     "source-update": new Set(["image-manifest", "source"]),
     "finalize-source-update": new Set(),
@@ -1347,7 +1305,7 @@ function serializeEnv(env) {
     ["Cloudflare Tunnel", ["CLOUDFLARE_PUBLIC_HOSTNAME", "CLOUDFLARE_TUNNEL_ORIGIN"]],
     [
       "Direct service ports",
-      ["PORTAL_PORT", "AUDIO_BRIDGE_PORT", "AUDIO_MONITOR_PORT", "STREAMS_PORT", "OVERLAYS_PORT", "PHOTO_UPLOAD_PORT", "PHOTO_FTP_PORT", "GALLERY_PORT", "TODAY_PORT"],
+      ["PORTAL_PORT", "AUDIO_MONITOR_PORT", "STREAMS_PORT", "OVERLAYS_PORT", "PHOTO_UPLOAD_PORT", "PHOTO_FTP_PORT", "GALLERY_PORT", "TODAY_PORT"],
     ],
     ["Audio Monitor", ["AUDIO_PUBLIC_BASE_URL", "AUDIO_CAPTURE_BASE_URL"]],
     [
@@ -1425,19 +1383,6 @@ function serializeEnv(env) {
       ],
     ],
     [
-      "Discord Audio Bridge",
-      [
-        "DISCORD_TOKEN",
-        "DISCORD_CLIENT_ID",
-        "PUBLIC_BASE_URL",
-        "SESSION_SECRET",
-        "DEFAULT_AUDIO_DELAY_MS",
-        "MAX_AUDIO_DELAY_MS",
-        "SESSION_IDLE_TIMEOUT_MINUTES",
-        "READONLY_OBS_TOKEN",
-      ],
-    ],
-    [
       "Video Relay",
       [
         "SLS_API_KEY",
@@ -1466,6 +1411,11 @@ function serializeEnv(env) {
     for (const key of keys) {
       output.push(`${key}=${formatEnvValue(env[key] ?? "")}`);
     }
+  }
+  const retired = RETIRED_BRIDGE_ENV_KEYS.filter((key) => Object.hasOwn(env, key));
+  if (retired.length) {
+    output.push("", "# Retired Audio Bridge settings preserved for extraction; not used by FRAME.");
+    for (const key of retired) output.push(`${key}=${formatEnvValue(env[key])}`);
   }
   return `${output.join("\n")}\n`;
 }
@@ -1515,7 +1465,6 @@ Usage:
   stack hybrid-stage       Prompt for a hostname and stage Hybrid mode without starting it
   stack tunnel-token       Securely prompt for and store the Cloudflare tunnel token
   stack portal-auth        Securely prompt for Portal credentials and session length
-  stack discord-auth       Securely prompt for Discord Audio Bridge credentials
   stack validate           Validate config and startup requirements
   stack verify             Run contract tests and static verification
   stack update [options]   Download matching FRAME source and reconcile the stack
@@ -1538,8 +1487,7 @@ Install options:
   --host-data-root <path>  Advanced .ready manifest path override
   --edge-http-port 80      Shared FRAME web entry point
   --portal-port 3730       Portal host port
-  --audio-bridge-port 3729 Audio Bridge host port
-  --import-env <path>      Import Audio Bridge settings from a repo-relative .env
+  --import-env <path>      Import supported FRAME settings from a repo-relative .env
   --enable <capability>    Enable a deployable capability
   --disable <capability>   Disable a capability
   --set KEY=VALUE          Set an advanced non-secret setting (repeatable)

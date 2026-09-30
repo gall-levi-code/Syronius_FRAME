@@ -8,7 +8,7 @@ import { FRAME_IMAGE_SERVICES } from "../installer/frame-release.mjs";
 const runFile = promisify(execFile);
 const ownerLabel = "frame.image-smoke";
 const services = FRAME_IMAGE_SERVICES;
-const ports = { "frame-audio-bridge": 3728, "frame-portal": 3730, "frame-streams": 3732,
+const ports = { "frame-portal": 3730, "frame-streams": 3732,
   "frame-overlays": 3733, "frame-audio": 3734, "frame-pipeline-photos": 3735,
   "frame-photo-upload": 3736, "frame-photo-ftp": 3737, "frame-gallery": 3738,
   "frame-today": 3739, "frame-auth": 3740, "frame-belabox-manager": 3741 };
@@ -23,23 +23,6 @@ function options(args) {
     assert.ok(values.image && !values.image.startsWith("-") && !/\s/.test(values.image), "--image must name a local runtime image");
   }
   return values;
-}
-
-// Run the real bridge web stack without Discord registration/login, which needs a real token.
-async function bridgeStartup() {
-  const { loadConfig } = require("./dist/config.js");
-  const { JsonGuildConfigStore } = require("./dist/storage/jsonStore.js");
-  const { SessionManager } = require("./dist/sessions/sessionManager.js");
-  const { VoiceManager } = require("./dist/voice/voiceManager.js");
-  const { createDiscordClient } = require("./dist/bot/client.js");
-  const { createWebServer } = require("./dist/web/server.js");
-  const config = loadConfig();
-  const store = new JsonGuildConfigStore(config.dataDir);
-  await store.init();
-  const sessions = new SessionManager(store, config);
-  const voice = new VoiceManager(sessions);
-  const client = createDiscordClient();
-  await createWebServer(config, sessions, voice, client).start();
 }
 
 async function nativeChecks(service, port) {
@@ -71,25 +54,6 @@ async function nativeChecks(service, port) {
     assert.equal(pcm.length, 48000 * 0.05 * 2 * 2);
     assert.match(execFileSync("ffprobe", ["-version"], { encoding: "utf8", timeout: 10000 }), /ffprobe version/);
   }
-  if (service === "frame-audio-bridge") {
-    const dave = require("@snazzah/davey");
-    const session = new dave.DAVESession(dave.DAVE_PROTOCOL_VERSION, "123456789012345678", "234567890123456789");
-    assert.equal(session.protocolVersion, dave.DAVE_PROTOCOL_VERSION);
-    session.reset();
-    const Opus = require("opusscript");
-    const encoder = new Opus(48000, 2, Opus.Application.AUDIO);
-    const packet = encoder.encode(Buffer.alloc(960 * 2 * 2), 960);
-    const { opus } = require("prism-media");
-    const decoder = new opus.Decoder({ rate: 48000, channels: 2, frameSize: 960 });
-    const decoded = await new Promise((resolve, reject) => {
-      decoder.once("data", resolve);
-      decoder.once("error", reject);
-      decoder.end(packet);
-    });
-    assert.equal(decoded.length, 960 * 2 * 2);
-    decoder.destroy();
-    encoder.delete();
-  }
   if (service === "frame-photo-ftp") {
     const { createConnection } = require("node:net");
     await new Promise((resolve, reject) => {
@@ -112,21 +76,18 @@ async function nativeChecks(service, port) {
 
 function createArgs(service, imageId, name, token) {
   const env = {
-    DATA_ROOT: "/data", DATA_DIR: "/data/bridge", FRAME_MODE: "LAN",
+    DATA_ROOT: "/data", FRAME_MODE: "LAN",
     FRAME_AUTH_SESSION_SECRET: "synthetic-image-smoke-session-secret",
     PORTAL_SERVICE_TOKEN: "synthetic-image-smoke-service-token", SLS_API_KEY: "synthetic-image-smoke-sls-key",
     BELABOX_SSH_CREDENTIAL_KEY: "synthetic-image-smoke-credential-key",
     PHOTO_FTP_PASSWORD: "synthetic-image-smoke-ftp-password",
-    DISCORD_TOKEN: "synthetic-no-login", DISCORD_CLIENT_ID: "123456789012345678",
     SLS_API_URL: "http://127.0.0.1:9", STREAMS_API_URL: "http://127.0.0.1:3732",
   };
   const args = ["create", "--pull=never", "--name", name, "--label", `${ownerLabel}=${token}`,
     "--network", "none", "--memory", "1g", "--pids-limit", "256",
     "--health-interval", "1s", "--health-start-period", "0s", "--health-timeout", "5s", "--health-retries", "30"];
   for (const [key, value] of Object.entries(env)) args.push("--env", `${key}=${value}`);
-  if (service === "frame-audio-bridge") args.push("--entrypoint", "node");
   args.push(imageId);
-  if (service === "frame-audio-bridge") args.push("--input-type=commonjs", "-e", `(${bridgeStartup})().catch(error => { console.error(error); process.exit(1); });`);
   return args;
 }
 
@@ -198,11 +159,11 @@ async function smoke(service, image) {
       process.removeListener("SIGTERM", interrupt);
     }
   }
-  console.log(JSON.stringify({ service, image, imageId: imageInfo.Id, passed: true, checks: ["image-healthcheck", "runtime-dependencies"], discordLogin: service === "frame-audio-bridge" ? "not-tested" : undefined }));
+  console.log(JSON.stringify({ service, image, imageId: imageInfo.Id, passed: true, checks: ["image-healthcheck", "runtime-dependencies"] }));
 }
 
 function selfTest() {
-  assert.equal(new Set(services).size, 13);
+  assert.equal(new Set(services).size, 12);
   assert.deepEqual(Object.keys(ports).sort(), services.filter(service => service !== "frame-ingest-video").sort());
   assert.throws(() => options(["--service", "unknown", "--image", "candidate"]), /--service/);
   assert.throws(() => options(["--service", "frame-auth"]), /--image/);
@@ -213,13 +174,12 @@ function selfTest() {
     assert.equal(args[args.indexOf("--network") + 1], "none");
     assert.ok(args.includes("--pull=never"));
     assert.ok(!args.some(arg => ["--mount", "--volume", "-v", "--publish", "-p", "-P"].includes(arg)));
-    assert.equal(args.includes("--entrypoint"), service === "frame-audio-bridge");
+    assert.equal(args.includes("--entrypoint"), false);
   }
   assertOwned({ Name: "/owned", Config: { Labels: { [ownerLabel]: "token" } } }, "owned", "token");
   assert.throws(() => assertOwned({ Name: "/owned", Config: { Labels: { [ownerLabel]: "wrong" } } }, "owned", "token"), /ownership/);
-  new Function(`return (${bridgeStartup})`);
   new Function(`return (${nativeChecks})`);
-  console.log("Image smoke self-test passed: 13 service plans, isolated arguments, ownership guard, embedded script syntax.");
+  console.log("Image smoke self-test passed: 12 service plans, isolated arguments, ownership guard, embedded script syntax.");
 }
 
 try {

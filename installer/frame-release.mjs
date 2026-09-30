@@ -3,7 +3,7 @@ import { chmod, lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/pr
 import path from "node:path";
 
 export const FRAME_IMAGE_SERVICES = [
-  "frame-auth", "frame-audio", "frame-audio-bridge", "frame-belabox-manager", "frame-gallery",
+  "frame-auth", "frame-audio", "frame-belabox-manager", "frame-gallery",
   "frame-ingest-video", "frame-overlays", "frame-photo-ftp", "frame-photo-upload",
   "frame-pipeline-photos", "frame-portal", "frame-streams", "frame-today",
 ];
@@ -14,18 +14,21 @@ export const SOURCE_COMMIT_FILE = "frame-source-commit";
 export const DEPLOYMENT_BACKUP = ".frame-deployment-backup";
 const WORKSPACE_FILES = [".env", "docker-compose.yml", RELEASE_MANIFEST_FILE, RELEASE_COMPOSE_FILE];
 const STATE_FILES = ["stack-config.json", "effective-public-prefixes.json", "cloudflared-ingress.yml", "public-routes.yml", "installed-build.json", "pending-source-update.json", "frame-install-plan.json", "frame-install.json", "cloudflare-tunnel-token"];
-const SERVICES = new Set([...FRAME_IMAGE_SERVICES, "frame-edge", "frame-docker-proxy", "frame-public-gateway", "frame-tunnel"]);
+// The retired bridge is accepted only when reading historical releases or restoring a snapshot.
+const RETIRED_BRIDGE = "frame-audio-bridge";
+const RECOVERABLE_SERVICES = new Set([...FRAME_IMAGE_SERVICES, RETIRED_BRIDGE, "frame-edge", "frame-docker-proxy", "frame-public-gateway", "frame-tunnel"]);
 
-export function validateReleaseManifest(value) {
+export function validateReleaseManifest(value, { allowRetiredBridge = false } = {}) {
   if (!value || value.schema_version !== 1 || typeof value.commit !== "string" || !/^[0-9a-f]{40}$/.test(value.commit)
     || value.platform !== "linux/amd64" || !value.images || typeof value.images !== "object" || Array.isArray(value.images)) {
     throw new Error("Invalid FRAME release manifest: expected schema 1, commit SHA, linux/amd64 and image digests.");
   }
   const keys = Object.keys(value.images);
-  if (keys.length !== FRAME_IMAGE_SERVICES.length || keys.some((key) => !FRAME_IMAGE_SERVICES.includes(key))) {
-    throw new Error("FRAME release manifest must contain exactly the 13 FRAME service images.");
+  const acceptedServices = allowRetiredBridge ? [...FRAME_IMAGE_SERVICES, RETIRED_BRIDGE] : FRAME_IMAGE_SERVICES;
+  if (FRAME_IMAGE_SERVICES.some((service) => !Object.hasOwn(value.images, service)) || keys.some((key) => !acceptedServices.includes(key))) {
+    throw new Error(`FRAME release manifest must contain exactly the ${FRAME_IMAGE_SERVICES.length} FRAME service images${allowRetiredBridge ? ", with only the retired Audio Bridge optionally retained for historical compatibility" : ""}.`);
   }
-  for (const service of FRAME_IMAGE_SERVICES) {
+  for (const service of keys) {
     const prefix = `${RELEASE_IMAGE_PREFIX}/${service}@sha256:`;
     const image = value.images[service];
     if (typeof image !== "string" || !image.startsWith(prefix) || !/^[0-9a-f]{64}$/.test(image.slice(prefix.length))) {
@@ -35,10 +38,10 @@ export function validateReleaseManifest(value) {
   return { schema_version: 1, commit: value.commit, platform: value.platform, images: { ...value.images } };
 }
 
-export async function readReleaseManifest(file) {
+export async function readReleaseManifest(file, { allowRetiredBridge = true } = {}) {
   const info = await lstat(file);
   if (!info.isFile() || info.size > 64 * 1024) throw new Error("Release manifest must be a regular JSON file no larger than 64 KiB.");
-  return validateReleaseManifest(JSON.parse(await readFile(file, "utf8")));
+  return validateReleaseManifest(JSON.parse(await readFile(file, "utf8")), { allowRetiredBridge });
 }
 
 export async function activateRelease(workspace, manifest) {
@@ -61,7 +64,10 @@ export async function writeReleaseOverride(workspace) {
   await assertSafePath(workspace, SOURCE_COMMIT_FILE);
   const sourceCommit = await optionalFile(path.join(workspace, SOURCE_COMMIT_FILE));
   if (sourceCommit?.trim() !== manifest.commit) {
-    throw new Error("FRAME release images do not match the installed source commit. Recovery does not restore source files; rerun stack update --image-manifest FILE with the intended release before starting FRAME.");
+    const recovery = Object.hasOwn(manifest.images, RETIRED_BRIDGE)
+      ? "Recovery does not restore source files. This is a historical pre-extraction release. Restore its retained matching source/helpers, or bootstrap a current release using docs/audio-bridge-extraction.md before starting FRAME."
+      : "Recovery does not restore source files; rerun stack update --image-manifest FILE with the intended release before starting FRAME.";
+    throw new Error(`FRAME release images do not match the installed source commit. ${recovery}`);
   }
   await atomicFile(workspace, RELEASE_COMPOSE_FILE, `${JSON.stringify({ services: Object.fromEntries(
     FRAME_IMAGE_SERVICES.map((service) => [service, { image: manifest.images[service], platform: manifest.platform }]),
@@ -79,7 +85,7 @@ export function recoveryCompose(compose, images) {
   const previous = structuredClone(compose);
   previous.services = {};
   for (const [service, image] of Object.entries(images)) {
-    if (!SERVICES.has(service) || !compose.services[service] || !/^sha256:[0-9a-f]{64}$/.test(image)) {
+    if (!RECOVERABLE_SERVICES.has(service) || !compose.services[service] || !/^sha256:[0-9a-f]{64}$/.test(image)) {
       throw new Error(`Invalid previous FRAME image for ${service}.`);
     }
     const config = { ...compose.services[service], image };

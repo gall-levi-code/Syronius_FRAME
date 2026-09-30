@@ -3,8 +3,9 @@
 FRAME Audio Monitor captures audio from a browser and gives trusted listeners a stable web link to
 hear it.
 
-It is separate from FRAME Audio Bridge. Audio Monitor is for microphones, mixer outputs, virtual
-audio cables, and desktop audio feeds. Audio Bridge is for Discord voice and OBS mixes.
+Audio Monitor is for microphones, mixer outputs, virtual audio cables, and desktop audio feeds.
+Existing Discord Audio Bridge deployments have moved to **Syronius_FRAME_Audio_Bridge**;
+follow the [extraction guide](../../docs/audio-bridge-extraction.md) before upgrading FRAME.
 
 ## Who This Is For
 
@@ -27,7 +28,6 @@ Common uses:
 - Send a stream mix to a remote producer.
 - Let staff check microphone or desktop audio during a live show.
 - Give a trusted listener a browser link instead of a full production tool.
-- Keep audio monitoring separate from Discord Audio Bridge.
 
 Audio Monitor is not a public music broadcast tool. Treat listener links as trusted production
 links.
@@ -158,7 +158,6 @@ Optional connections:
 | --- | --- |
 | Public listener links | FRAME Tunnel or configured public FRAME access |
 | OBS monitoring workflow | OBS, a mixer output, or a virtual audio cable |
-| Discord voice mixes | FRAME Audio Bridge instead of Audio Monitor |
 
 ## Notes For Operators
 

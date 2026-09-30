@@ -63,7 +63,7 @@ test("release planning uses the actual checked-out tag commit and the canonical 
   }));
   assert.equal(outputs.commit, commit);
   assert.deepEqual(JSON.parse(outputs.services), FRAME_IMAGE_SERVICES);
-  assert.equal(FRAME_IMAGE_SERVICES.length, 13);
+  assert.equal(FRAME_IMAGE_SERVICES.length, 12);
   assert.equal(outputs.prefix, RELEASE_IMAGE_PREFIX);
   assert.notEqual(setup.run(script, { RELEASE_TAG: "v1.0.0-Alpha", TEST_TAG_COMMIT: "b".repeat(40) }).status, 0);
 });
@@ -88,7 +88,7 @@ test("publishing validates the tested artifact identity and records only its own
   }
 });
 
-test("release manifest merging requires all 13 unique image results from one source commit", async (t) => {
+test("release manifest merging requires all 12 unique image results from one source commit", async (t) => {
   const setup = await fixture(t);
   const script = await inline("release-images.yml", "const manifest =");
   const records = FRAME_IMAGE_SERVICES.map((name) => ({ commit, service: name, image: `${RELEASE_IMAGE_PREFIX}/${name}@sha256:${"e".repeat(64)}` }));
@@ -100,7 +100,7 @@ test("release manifest merging requires all 13 unique image results from one sou
   const manifest = JSON.parse(await readFile(output));
   assert.equal(manifest.commit, commit);
   assert.equal(manifest.platform, "linux/amd64");
-  assert.equal(Object.keys(manifest.images).length, 13);
+  assert.equal(Object.keys(manifest.images).length, 12);
   await rm(output);
   for (const invalid of [{ ...records[0], commit: "a".repeat(40) }, records[1]]) {
     await save(invalid, 0);

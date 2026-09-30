@@ -171,7 +171,6 @@ test("global theme is Portal-backed and available to public surfaces", async () 
 test("service URL utilities use icon-only Copy and Open controls", async () => {
   const paths = [
     "services/frame-audio/public/admin.js",
-    "services/frame-audio-bridge/public/control.html",
     "services/frame-belabox-manager/public/app.js",
     "services/frame-overlays/public/app.js",
     "services/frame-portal/public/portal.js",
@@ -192,7 +191,6 @@ test("service URL copy helpers require browser-confirmed clipboard success", asy
     ["Stream Management", "services/frame-streams/public/app.js", "async function copyText", "function formatBitrate"],
     ["Today Dashboard", "services/frame-today/public/dashboard.js", "async function copyText", "refresh();"],
     ["Audio Management", "services/frame-audio/public/admin.js", "async function copyText", "async function api"],
-    ["Audio Bridge", "services/frame-audio-bridge/public/control.js", "async function copyText", "async function copyUrl"],
   ];
   const url = "http://frame.local/example";
 
@@ -312,7 +310,6 @@ test("implemented Node services expose build and typecheck scripts", async () =>
   for (const service of [
     "frame-auth",
     "frame-audio",
-    "frame-audio-bridge",
     "frame-belabox-manager",
     "frame-overlays",
     "frame-portal",
@@ -421,7 +418,7 @@ test("Overlay Wizard presents OBS sources as the only editable objects", async (
   assert.ok(frontend.includes('sliderValueToTelemetryColumns'), "Blocks per row slider should persist to a concrete telemetry column setting");
   assert.ok(frontend.includes('data-block-density'), "Block height should be exposed as density presets instead of a large raw slider");
   assert.ok(frontend.includes("anchorIcon"), "Anchor positions should use icon controls");
-  assert.ok(frontend.includes("icons.grip"), "Telemetry drag handles should share the Audio Bridge grip icon");
+  assert.ok(frontend.includes("icons.grip"), "Telemetry drag handles should use the shared grip icon");
   assert.ok(frontend.includes("Advanced timing"), "Timing controls should live in an advanced section");
   assert.ok(frontend.includes("Chart Sample Rates"), "Telemetry sampling controls should use user-facing chart sample rate wording");
   assert.ok(frontend.includes('id="chart-timing-section"'), "Chart timing controls should be hideable when the chart block is disabled");
@@ -467,7 +464,6 @@ test("implemented capability profiles are stable and ordered", () => {
   const capabilities = Object.fromEntries(CAPABILITIES.map((name) => [name, false]));
   for (const name of IMPLEMENTED_CAPABILITIES) capabilities[name] = true;
   assert.deepEqual(computeComposeProfiles(capabilities, "LAN"), [
-    "audio-bridge",
     "audio-monitor",
     "belabox",
     "video-relay",
@@ -479,7 +475,6 @@ test("implemented capability profiles are stable and ordered", () => {
     "photo-today",
   ]);
   assert.deepEqual(computeComposeProfiles(capabilities, "HYBRID"), [
-    "audio-bridge",
     "audio-monitor",
     "belabox",
     "video-relay",
@@ -864,7 +859,6 @@ test("Hybrid public URL configs force external HTTPS", async () => {
     readFile("services/frame-streams/src/index.ts", "utf8"),
     readFile("services/frame-overlays/src/index.ts", "utf8"),
     readFile("services/frame-audio/src/config.ts", "utf8"),
-    readFile("services/frame-audio-bridge/src/config.ts", "utf8"),
     readFile("services/frame-belabox-manager/src/index.ts", "utf8"),
   ]);
   for (const source of files) {
@@ -1233,7 +1227,7 @@ test("Windows and Unix wrappers preserve direct commands while offering the numb
     assert.ok(wrapper.includes("Download and update FRAME"));
     assert.ok(wrapper.includes("source-update"));
     assert.ok(wrapper.includes("finalize-source-update"));
-    assert.ok(wrapper.includes("set-discord-auth"));
+    assert.ok(!wrapper.includes("set-discord-auth"));
     assert.ok(wrapper.includes("set-service-auth"));
     assert.ok(wrapper.includes("PHOTO_ARCHIVE_RETENTION_DAYS"));
     assert.ok(!wrapper.includes("PHOTO_TRASH_RETENTION_DAYS"));
@@ -1260,7 +1254,7 @@ test("Windows and Unix wrappers preserve direct commands while offering the numb
   );
   assert.ok(installer.includes('"set"'));
   assert.ok(installer.includes("CUSTOMIZABLE_ENV_KEYS"));
-  assert.ok(installer.includes("setDiscordAuth"));
+  assert.ok(!installer.includes("setDiscordAuth"));
   assert.ok(installer.includes("setServiceAuth"));
   assert.ok(installer.includes("PORTAL_USERNAME and PORTAL_PASSWORD are required before starting FRAME."));
   assert.ok(installer.includes('import { parseEnv } from "./frame-env.mjs"'), "installer must use the shared environment parser");
@@ -1425,7 +1419,7 @@ test("FRAME Setup app captures the approved GUI installer decisions", async () =
   assert.ok(tauriConfig.bundle.icon.includes("icons/icon.ico"));
   assert.ok((await readFile("apps/frame-setup/src-tauri/src/main.rs", "utf8")).includes("windows_subsystem"));
   assert.ok(frontend.includes("apply_install_plan"), "Install FRAME must call the native apply backend");
-  assert.ok(styles.includes("install-frame-button"), "Install FRAME should use the Audio Bridge action button treatment");
+  assert.ok(styles.includes("install-frame-button"), "Install FRAME should use the shared action button treatment");
   assert.ok(rust.includes("Start Docker, then recheck."), "Docker Engine must be a blocking readiness check");
   assert.ok(buildScript.includes("npm ci"));
   assert.ok(buildScript.includes("npm run dist:win"));
@@ -1513,7 +1507,7 @@ test("Compose rotates every service log and limits only the control services", a
     "frame-docker-proxy", "frame-belabox-manager", "frame-photo-upload", "frame-photo-ftp",
     "frame-today", "frame-streams", "frame-overlays",
   ];
-  const media = ["frame-audio-bridge", "frame-audio", "frame-ingest-video", "frame-pipeline-photos", "frame-gallery"];
+  const media = ["frame-audio", "frame-ingest-video", "frame-pipeline-photos", "frame-gallery"];
   const serviceSection = compose.split("\nservices:\n")[1].split(/\n(?=\S)/)[0];
   const services = [...serviceSection.matchAll(/^  (frame-[a-z-]+):$/gm)].map((match) => match[1]);
   assert.deepEqual(services.sort(), [...control, ...media].sort());

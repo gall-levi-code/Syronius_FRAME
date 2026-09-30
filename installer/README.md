@@ -14,7 +14,6 @@ The installer currently deploys the implemented FRAME services:
 - `frame-tunnel` (Hybrid only)
 - `frame-portal`
 - `frame-audio`
-- `frame-discord-audio-bridge`
 - `frame-belabox-manager`
 - `frame-ingest-video`
 - `frame-streams`
@@ -97,7 +96,6 @@ stable and do not enter the menu.
 .\stack.cmd hybrid-stage
 .\stack.cmd tunnel-token
 .\stack.cmd portal-auth
-.\stack.cmd discord-auth
 .\stack.cmd validate
 .\stack.cmd verify
 .\stack.cmd update
@@ -190,15 +188,9 @@ only when a host tool sees the same folder through a different path than Docker 
 `verify` runs deterministic capability/route contract tests and JavaScript syntax checks, then
 validates the generated Docker Compose configuration when it exists.
 
-Re-running `install` preserves existing credentials and generated secrets. To migrate an existing
-Audio Bridge configuration, place its ignored `.env` inside the repository and import it:
+Re-running `install` preserves existing FRAME credentials and generated secrets. `--import-env` accepts supported FRAME settings from a repository-relative file; installer-owned mode, capability, port, and Portal security settings cannot be imported.
 
-```powershell
-.\stack.cmd install --import-env services/frame-audio-bridge/.env
-```
-
-The import accepts Audio Bridge settings only. It does not allow an imported file to replace
-installer-owned mode, capability, port, or Portal security configuration.
+Audio Bridge has moved to **Syronius_FRAME_Audio_Bridge**. Read the [extraction and bootstrap guide](../docs/audio-bridge-extraction.md) before upgrading an installation that used it. Older release installers require 13 images and must bootstrap updated source helpers before accepting the new 12-image manifest.
 
 ## Shared portal login
 
@@ -208,7 +200,7 @@ URL. The session lasts seven days by default and unlocks all protected panels on
 Change `FRAME_AUTH_SESSION_DAYS` in `.env` to a value from 1 to 30, then restart the stack.
 Guided setup prompts for these credentials before the stack can start.
 
-Public OBS viewers, gallery pages, overlay views, listener links, and tokenized Audio Bridge pages
+Public OBS viewers, gallery pages, overlay views, and listener links
 do not require this shared login. Direct service ports retain their existing service-level
 authentication behavior.
 
@@ -253,7 +245,7 @@ Before `stack start` will proceed:
 4. Run `stack validate --for-start`, then `stack start`.
 
 Credential prompts hide typed input. The tunnel token is mounted into `frame-tunnel` as a read-only file and is not stored in container
-environment variables. Cloudflare Tunnel supports WebSockets, which are required by Audio Bridge.
+environment variables. Cloudflare Tunnel supports WebSockets for live pages.
 The generated `public-routes.yml` remains the final local allowlist even if the Cloudflare
 Published application route is broad.
 When Belabox Manager is enabled, that allowlist includes `/belabox/remote`, `/belabox/mixer`,
@@ -268,17 +260,7 @@ pages instead of Traefik's bare default responses.
 Before the unified stack's first start, stop standalone FRAME Compose deployments so their fixed
 container names and host ports do not conflict.
 
-An existing Audio Bridge's `/data` contains the guild configurations and permanent link keys. Copy
-it into the unified data root before replacing the standalone container:
-
-```powershell
-docker stop frame-audio-bridge
-docker cp frame-audio-bridge:/data/. ./data/audio-bridge/
-docker start frame-audio-bridge
-```
-
-After verifying the copy, stop the standalone deployment and run `stack start`. Do not delete the
-standalone volume until the unified Audio Bridge has been tested and its permanent URLs still work.
+Audio Bridge is deployed independently. FRAME no longer imports, starts, or routes it. Preserve the old data and settings and follow the [extraction guide](../docs/audio-bridge-extraction.md) before applying a FRAME update.
 
 ## Generated files
 
@@ -296,7 +278,7 @@ written atomically.
 ## Safety behavior
 
 - `stack start` refuses to launch until Portal credentials are configured.
-- `stack start` refuses to launch an enabled Audio Bridge with placeholder Discord credentials.
+- Existing Audio Bridge deployments must complete the separate extraction process before FRAME updates replace their configuration.
 - `stack start` waits for enabled services to report healthy and fails after a bounded timeout.
 - Hybrid startup is refused until its hostname and tunnel token are configured.
 - Belabox Manager installation is refused outside Hybrid mode or without a public

@@ -45,7 +45,7 @@ test("release override keeps build source intact, rejects invalid state, and can
   await activateRelease(root, manifest());
   assert.deepEqual(await readReleaseManifest(path.join(root, "frame-release.json")), manifest());
   const override = JSON.parse(await readFile(path.join(root, "docker-compose.release.json")));
-  assert.equal(Object.keys(override.services).length, 13);
+  assert.equal(Object.keys(override.services).length, 12);
   assert.deepEqual(override.services["frame-auth"], { image: manifest().images["frame-auth"], platform: "linux/amd64" });
   assert.equal(await readFile(path.join(root, "docker-compose.yml"), "utf8"), "services: {}\n");
   await writeFile(path.join(root, "frame-release.json"), "");
@@ -273,4 +273,52 @@ test("deployment backup refuses linked destinations before restoring any generat
   await assert.rejects(restoreDeployment(args), /Unsafe FRAME deployment path/);
   assert.equal(await readFile(path.join(args.workspace, ".env"), "utf8"), "candidate");
   assert.equal(await readFile(outside, "utf8"), "outside");
+});
+
+test("historical manifests retain one validated retired image while current release overrides stay at twelve", async (t) => {
+  const { workspace: root } = await workspace(t);
+  const historical = manifest();
+  historical.images["frame-audio-bridge"] = `${RELEASE_IMAGE_PREFIX}/frame-audio-bridge@${imageId}`;
+  assert.deepEqual(validateReleaseManifest(historical, { allowRetiredBridge: true }), historical);
+  assert.throws(() => validateReleaseManifest(historical), /exactly the 12/);
+  for (const edit of [
+    (value) => { delete value.images["frame-auth"]; },
+    (value) => { value.images["unrelated-service"] = imageId; },
+    (value) => { value.images["frame-audio-bridge"] = `${RELEASE_IMAGE_PREFIX}/frame-audio-bridge:latest`; },
+    (value) => { value.images["frame-audio-bridge"] = `ghcr.io/untrusted/frame-audio-bridge@${imageId}`; },
+    (value) => { value.images["frame-audio-bridge"] = `${RELEASE_IMAGE_PREFIX}/frame-auth@${imageId}`; },
+  ]) {
+    const invalid = structuredClone(historical);
+    edit(invalid);
+    assert.throws(() => validateReleaseManifest(invalid, { allowRetiredBridge: true }));
+  }
+  await writeFile(path.join(root, "frame-release.json"), JSON.stringify(historical));
+  await recordSourceCommit(root, historical.commit);
+  assert.deepEqual(await readReleaseManifest(path.join(root, "frame-release.json")), historical);
+  await assert.rejects(readReleaseManifest(path.join(root, "frame-release.json"), { allowRetiredBridge: false }), /exactly the 12/);
+  await writeReleaseOverride(root);
+  const override = JSON.parse(await readFile(path.join(root, "docker-compose.release.json"), "utf8"));
+  assert.deepEqual(Object.keys(override.services), FRAME_IMAGE_SERVICES);
+  assert.equal(override.services["frame-audio-bridge"], undefined);
+  assert.deepEqual(await readReleaseManifest(path.join(root, "frame-release.json")), historical);
+  await recordSourceCommit(root, "c".repeat(40));
+  await assert.rejects(writeReleaseOverride(root), /historical pre-extraction release/);
+});
+
+test("historical recovery snapshots can restore the retired bridge without adding it to release inventory", async (t) => {
+  const args = await workspace(t);
+  const previous = compose();
+  previous.services["frame-audio-bridge"] = { build: { context: "./services/frame-audio-bridge" },
+    profiles: ["audio-bridge"], environment: { DISCORD_TOKEN: "old-private-token" }, volumes: ["./data/audio-bridge:/data"] };
+  const result = recoveryCompose(previous, { "frame-auth": imageId, "frame-audio-bridge": imageId });
+  assert.equal(result.services["frame-audio-bridge"].image, imageId);
+  assert.equal(result.services["frame-audio-bridge"].build, undefined);
+  assert.equal(result.services["frame-audio-bridge"].profiles, undefined);
+  assert.deepEqual(result.services["frame-audio-bridge"].volumes, ["./data/audio-bridge:/data"]);
+  assert.equal(FRAME_IMAGE_SERVICES.includes("frame-audio-bridge"), false);
+  await snapshotDeployment({ ...args, compose: previous, images: { "frame-audio-bridge": imageId } });
+  const snapshot = JSON.parse(await readFile(path.join(args.workspace, DEPLOYMENT_BACKUP, "compose.json"), "utf8"));
+  assert.equal(snapshot.services["frame-audio-bridge"].image, imageId);
+  assert.throws(() => recoveryCompose(previous, { "frame-audio-bridge": "latest" }), /Invalid previous FRAME image/);
+  assert.throws(() => recoveryCompose(previous, { "unknown-retired-service": imageId }), /Invalid previous FRAME image/);
 });

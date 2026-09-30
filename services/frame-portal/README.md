@@ -126,7 +126,6 @@ Optional connections:
 
 | Feature | Relies Upon |
 | --- | --- |
-| Audio Bridge status | FRAME Audio Bridge |
 | Public or Hybrid dashboard access | FRAME Edge, FRAME Auth, FRAME Tunnel |
 | Restart buttons | Operator-enabled restart access |
 

@@ -6,7 +6,6 @@ RUNTIME_IMAGE="node:22-alpine@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4
 ADVANCED_SETTINGS="TIMEZONE
 FRAME_AUTH_SESSION_DAYS
 PORTAL_PORT
-AUDIO_BRIDGE_PORT
 AUDIO_MONITOR_PORT
 STREAMS_PORT
 OVERLAYS_PORT
@@ -70,9 +69,6 @@ REQUEST_TIMEOUT_MS
 DISK_WARN_PERCENT
 DISK_ERROR_PERCENT
 DISK_MINIMUM_FREE_GB
-DEFAULT_AUDIO_DELAY_MS
-MAX_AUDIO_DELAY_MS
-SESSION_IDLE_TIMEOUT_MINUTES
 PUBLIC_RELAY_HOST
 SRTLA_PORT
 SRT_PLAYER_PORT
@@ -499,7 +495,6 @@ configure_services() {
   configure_capability "frame-video-relay" "Video Relay and Stream Management"
   configure_capability "frame-overlays" "Overlay Wizard"
   configure_capability "frame-audio-relay" "Audio Monitor"
-  configure_capability "frame-discord-audio-bridge" "Discord Audio Bridge"
   configure_capability "frame-belabox-manager" "Belabox Manager"
   configure_capability "frame-photo-ftp" "Photo FTP Ingest"
   configure_capability "frame-photo-webupload" "Browser Photo Upload"
@@ -616,16 +611,6 @@ show_setup_issues() {
       ISSUE_COUNT=$((ISSUE_COUNT + 1))
     fi
   fi
-  if profile_enabled discord-audio-bridge; then
-    discord_token=$(env_value DISCORD_TOKEN your_bot_token_here)
-    discord_client_id=$(env_value DISCORD_CLIENT_ID your_discord_application_client_id_here)
-    case "$discord_token:$discord_client_id" in
-      your_*|*:your_*)
-        echo "- Discord Audio Bridge credentials need setup."
-        ISSUE_COUNT=$((ISSUE_COUNT + 1))
-        ;;
-    esac
-  fi
 }
 
 resolve_setup_issues() {
@@ -669,10 +654,9 @@ configure_credentials() {
     echo "Credentials and security"
     echo "1. Portal login and session length"
     echo "2. Cloudflare tunnel token"
-    echo "3. Discord bot credentials"
-    echo "4. Photo FTP credentials"
-    echo "5. Stream Management basic auth"
-    echo "6. Overlay Wizard basic auth"
+    echo "3. Photo FTP credentials"
+    echo "4. Stream Management basic auth"
+    echo "5. Overlay Wizard basic auth"
     echo "0. Back"
     printf "Selection: "
     read -r choice
@@ -694,14 +678,6 @@ configure_credentials() {
         unset token
         ;;
       3)
-        read_default "Discord application client ID" "$(env_value DISCORD_CLIENT_ID "")"
-        client_id=$REPLY
-        read_secret "Discord bot token (input hidden)"
-        token=$REPLY
-        printf "%s\n%s\n" "$client_id" "$token" | runtime set-discord-auth
-        unset token
-        ;;
-      4)
         read_default "Photo FTP username" "$(env_value PHOTO_FTP_USERNAME frame)"
         username=$REPLY
         minimum=$(env_value PHOTO_FTP_MIN_PASSWORD_LENGTH 5)
@@ -710,7 +686,7 @@ configure_credentials() {
         printf "photo-ftp\n%s\n%s\n" "$username" "$password" | runtime set-service-auth
         unset password
         ;;
-      5)
+      4)
         read_default "Stream Management username" "$(env_value STREAMS_USERNAME "")"
         username=$REPLY
         read_secret "Stream Management password (input hidden)"
@@ -718,7 +694,7 @@ configure_credentials() {
         printf "streams\n%s\n%s\n" "$username" "$password" | runtime set-service-auth
         unset password
         ;;
-      6)
+      5)
         read_default "Overlay Wizard username" "$(env_value OVERLAYS_USERNAME "")"
         username=$REPLY
         read_secret "Overlay Wizard password (input hidden)"
@@ -866,14 +842,6 @@ case "$COMMAND" in
     configure_auth_session_days
     printf "%s\n%s\n" "$username" "$password" | runtime set-portal-auth
     unset username password
-    ;;
-  discord-auth)
-    printf "Discord application client ID: "
-    read -r client_id
-    read_secret "Discord bot token (input hidden)"
-    token=$REPLY
-    printf "%s\n%s\n" "$client_id" "$token" | runtime set-discord-auth
-    unset token
     ;;
   install)
     runtime install "$@"

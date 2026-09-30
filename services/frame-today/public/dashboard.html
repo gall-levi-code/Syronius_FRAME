@@ -13,7 +13,7 @@
           const key = (value) => String(value).replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
           const aliases = { page: ["page", "bg", "background"], panel: ["panel", "topbar"], panelStrong: ["panel-2", "surface", "surface-strong", "control"], panelMuted: ["panel-muted", "queue"], border: ["border", "line"], borderSoft: ["border-soft"], label: ["label", "muted"], text: ["text", "control-text"], accent: ["accent"], accentStrong: ["accent-strong"], accentSoft: ["accent-soft"], accentBorder: ["accent-border"], accentContrast: ["accent-contrast", "action-text"], danger: ["danger", "bad"], warning: ["warning", "warn"], good: ["good"], toggleNightBg: ["toggle-night-bg"], toggleNightText: ["toggle-night-text"], toggleDayBg: ["toggle-day-bg"], toggleDayText: ["toggle-day-text"] };
           window.FrameTheme = { apply(mode) {
-            const stored = mode || localStorage.getItem("frame-theme") || localStorage.getItem("frame-gallery-theme-mode") || localStorage.getItem("frame-audio-bridge-color-mode");
+            const stored = mode || localStorage.getItem("frame-theme") || localStorage.getItem("frame-gallery-theme-mode");
             const theme = stored === "day" || stored === "night" ? stored : "night";
             root.dataset.theme = theme;
             root.dataset.themeMode = theme;

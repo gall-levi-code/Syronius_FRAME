@@ -1,0 +1,85 @@
+import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
+import { CAPABILITIES, PUBLIC_PREFIXES, ROUTES, computeComposeProfiles, upgradeStackConfig } from "../installer/frame-contract.mjs";
+import { FRAME_IMAGE_SERVICES } from "../installer/frame-release.mjs";
+import { parseEnv } from "../installer/frame-env.mjs";
+
+const execute = promisify(execFile);
+const installer = fileURLToPath(new URL("../installer/frame-installer.mjs", import.meta.url));
+
+test("standalone bridge is absent from FRAME services, routes, releases, and public tooling", async () => {
+  assert.ok(!CAPABILITIES.includes("frame-discord-audio-bridge"));
+  assert.ok(!PUBLIC_PREFIXES.includes("/bridge"));
+  assert.ok(!Object.hasOwn(ROUTES, "discord_audio_bridge_root"));
+  assert.ok(!FRAME_IMAGE_SERVICES.includes("frame-audio-bridge"));
+  assert.ok(CAPABILITIES.includes("frame-audio-relay"));
+  assert.ok(CAPABILITIES.includes("frame-photo-discord"));
+  const legacy = { mode: "HYBRID", capabilities: { "frame-discord-audio-bridge": true, "frame-audio-relay": true }, routes: { discord_audio_bridge_root: "/bridge" }, public_route_prefixes: ["/bridge"] };
+  const upgraded = upgradeStackConfig(legacy);
+  assert.equal(upgraded.capabilities["frame-audio-relay"], true);
+  assert.ok(!Object.hasOwn(upgraded.capabilities, "frame-discord-audio-bridge"));
+  assert.ok(!Object.hasOwn(upgraded.routes, "discord_audio_bridge_root"));
+  assert.ok(!upgraded.public_route_prefixes.includes("/bridge"));
+  assert.deepEqual(computeComposeProfiles(upgraded.capabilities, "HYBRID"), ["audio-monitor", "hybrid"]);
+  for (const file of ["installer/templates/docker-compose.yml", "services/frame-portal/src/statusCollector.ts", "services/frame-portal/public/portal.js", "apps/frame-setup/src/main.js"]) {
+    assert.doesNotMatch(await readFile(file, "utf8"), /frame-audio-bridge|frame-discord-audio-bridge|discord_audio_bridges|AUDIO_BRIDGE_STATUS/);
+  }
+});
+
+test("FRAME upgrade blocks active legacy bridges and preserves data and credentials through acknowledged extraction", async (t) => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "frame-bridge-extraction-"));
+  t.after(() => rm(workspace, { recursive: true, force: true }));
+  const env = { ...process.env, FRAME_WORKSPACE: workspace };
+  delete env.FRAME_INSTALLER_DATA_ROOT;
+  const run = (...args) => execute(process.execPath, [installer, ...args], { env });
+  await mkdir(path.join(workspace, "installer/templates"), { recursive: true });
+  await writeFile(path.join(workspace, "installer/templates/docker-compose.yml"), "services: {}\n");
+  await run("install");
+  const envPath = path.join(workspace, ".env");
+  const configPath = path.join(workspace, "data/state/stack-config.json");
+  const fresh = await readFile(envPath, "utf8");
+  assert.doesNotMatch(fresh, /DISCORD_TOKEN|AUDIO_BRIDGE_PORT|^SESSION_SECRET=/m);
+  await assert.rejects(run("install", "--enable", "frame-discord-audio-bridge"), /Unknown capability/);
+  await assert.rejects(run("install", "--audio-bridge-port", "3729"), /is not valid for install/);
+  await assert.rejects(run("set-discord-auth"), /Unknown command/);
+  const config = JSON.parse(await readFile(configPath, "utf8"));
+  config.capabilities["frame-discord-audio-bridge"] = true;
+  config.routes.discord_audio_bridge_root = "/bridge";
+  config.public_route_prefixes.push("/bridge");
+  await writeFile(configPath, JSON.stringify(config));
+  const legacyEnv = fresh.replace(/^COMPOSE_PROFILES=.*$/m, "COMPOSE_PROFILES=audio-bridge") + "DISCORD_TOKEN=legacy-private-token\nSESSION_SECRET=legacy-session-secret\nPUBLIC_BASE_URL=https://old.example.test\nAUDIO_BRIDGE_PORT=3729\n";
+  await writeFile(envPath, legacyEnv);
+  const bridgeFile = path.join(workspace, "data/audio-bridge/guilds.json");
+  await mkdir(path.dirname(bridgeFile), { recursive: true });
+  const guildData = '{"guilds":{"123":{"permanentKey":"keep-this-key"}}}';
+  await writeFile(bridgeFile, guildData);
+  await assert.rejects(run("install"), /complete the standalone cutover/);
+  await assert.rejects(run("validate", "--for-start"), /complete the standalone cutover/);
+  assert.equal(await readFile(envPath, "utf8"), legacyEnv);
+  assert.deepEqual(JSON.parse(await readFile(configPath, "utf8")), config);
+  assert.equal(await readFile(bridgeFile, "utf8"), guildData);
+  const marker = path.join(workspace, "data/state/audio-bridge-extraction-complete");
+  await writeFile(marker, "not-complete\n");
+  await assert.rejects(run("install"), /complete the standalone cutover/);
+  await writeFile(marker, "standalone-cutover-complete\n");
+  await run("install", "--enable", "frame-audio-relay");
+  const after = parseEnv(await readFile(envPath, "utf8"));
+  assert.equal(after.COMPOSE_PROFILES, "audio-monitor");
+  assert.equal(after.DISCORD_TOKEN, undefined);
+  assert.equal(after.SESSION_SECRET, undefined);
+  assert.equal(after.FRAME_AUTH_SESSION_SECRET, parseEnv(fresh).FRAME_AUTH_SESSION_SECRET);
+  const preserved = path.join(workspace, "data/state/audio-bridge-extraction/legacy.env");
+  assert.equal(await readFile(preserved, "utf8"), legacyEnv);
+  assert.deepEqual(JSON.parse(await readFile(path.join(path.dirname(preserved), "stack-config.json"), "utf8")), config);
+  if (process.platform !== "win32") assert.equal((await stat(preserved)).mode & 0o777, 0o600);
+  assert.equal(await readFile(bridgeFile, "utf8"), guildData);
+  await run("install");
+  assert.equal(await readFile(preserved, "utf8"), legacyEnv);
+  assert.equal(await readFile(bridgeFile, "utf8"), guildData);
+});

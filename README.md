@@ -8,11 +8,12 @@ FRAME is a modular, Docker-based streaming appliance for IRL and live production
 F.R.A.M.E. is an acronym for "Federated Relay and Automation of Media and Experiences".
 
 This repository is the platform stack: a shared portal, routing edge, video relay, Belabox remote
-management, OBS overlays, photo upload and gallery tools, Photo Stage controls, audio tools, and an
-optional Discord audio bridge. Each service has its own README under `services/` for deeper setup
+management, OBS overlays, photo upload and gallery tools, Photo Stage controls, and Audio Monitor. Each service has its own README under `services/` for deeper setup
 and operating details.
 
 Current release target: `v1.0.0-release`.
+
+Audio Bridge is maintained independently in **Syronius_FRAME_Audio_Bridge**. Existing users should follow the [extraction guide](docs/audio-bridge-extraction.md) before upgrading FRAME.
 
 ## Online Installer
 
@@ -233,7 +234,6 @@ Start with the service README when you want to understand, operate, or customize
 | Gallery | [`services/frame-gallery/`](services/frame-gallery/README.md) |
 | Photo Stage viewer and remote | [`services/frame-today/`](services/frame-today/README.md) |
 | Audio monitor | [`services/frame-audio/`](services/frame-audio/README.md) |
-| Discord audio bridge | [`services/frame-audio-bridge/`](services/frame-audio-bridge/README.md) |
 | Belabox Manager | [`services/frame-belabox-manager/`](services/frame-belabox-manager/README.md) |
 
 ## Container Breakdown
@@ -262,7 +262,6 @@ flowchart TD
   streams --> belaboxManager
 
   edge --> audio["frame-audio"]
-  edge --> audioBridge["frame-audio-bridge"]
 
   edge --> photoUpload["frame-photo-upload"]
   camera["Camera FTP"] --> photoFtp["frame-photo-ftp"]
@@ -293,7 +292,6 @@ flowchart TD
 | `frame-streams` | Video Relay or Overlays | Stream profile management and `/stats` routing. |
 | `frame-overlays` | Overlays | OBS overlay sources and the Overlay Wizard. |
 | `frame-audio` | Audio Monitor | Browser capture, audio relay, listen pages, and HLS output. |
-| `frame-audio-bridge` | Discord Audio Bridge | Discord voice audio, OBS mixes, speaking overlay, and controls. |
 | `frame-belabox-manager` | Belabox Manager | Authenticated device WSS control, agent installation, FRAME Remote belaUI and Mixer access, relay selection, photo controls, diagnostics, and maintenance. |
 | `frame-photo-upload` | Browser Photo Upload | Protected browser/phone upload page. |
 | `frame-photo-ftp` | Photo FTP Ingest | Camera FTP upload intake. |

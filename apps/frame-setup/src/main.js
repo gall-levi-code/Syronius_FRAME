@@ -69,18 +69,6 @@ const SERVICES = [
     defaultEnabled: true,
   },
   {
-    id: "frame-discord-audio-bridge",
-    label: "Discord Audio Bridge",
-    summary: "Optional Discord voice-to-OBS bridge. Requires a Discord bot and extra setup.",
-    guided: {
-      what: "Runs the Discord voice bridge service that can mix selected Discord voice users into stable OBS browser-source URLs.",
-      why: "Use this when streamers need Discord voice audio and speaker overlays without changing OBS URLs for every session.",
-      ports: "Uses FRAME Edge and a direct TCP port. Requires a Discord bot token and Discord application permissions.",
-      setup: "In localhost/setup you will add Discord bot credentials, configure operator access, invite/setup guild links, and then finish per-guild control from Discord commands.",
-    },
-    defaultEnabled: false,
-  },
-  {
     id: "frame-belabox-manager",
     label: "Belabox Manager",
     summary: "Hybrid-only remote device control over one authenticated outbound WSS connection.",
@@ -146,7 +134,6 @@ const SERVICES = [
 const EXPOSED_PORTS = [
   { key: "edge", label: "FRAME Web GUI", protocol: "tcp", env: "EDGE_HTTP_PORT", defaultValue: 80, required: true },
   { key: "portal", label: "Portal direct access", protocol: "tcp", env: "PORTAL_PORT", defaultValue: 3730, required: true },
-  { key: "audioBridge", label: "Discord bridge direct access", protocol: "tcp", env: "AUDIO_BRIDGE_PORT", defaultValue: 3729, service: "frame-discord-audio-bridge" },
   { key: "audioMonitor", label: "Audio Monitor direct access", protocol: "tcp", env: "AUDIO_MONITOR_PORT", defaultValue: 3734, service: "frame-audio-relay" },
   { key: "slsStats", label: "Relay statistics", protocol: "tcp", env: "SLS_STATS_PORT", defaultValue: 8080, service: "frame-video-relay" },
   { key: "photoUpload", label: "Photo Upload direct access", protocol: "tcp", env: "PHOTO_UPLOAD_PORT", defaultValue: 3736, service: "frame-photo-webupload" },
@@ -181,7 +168,6 @@ const ADVANCED_SETTINGS = [
   ["SRT_SENDER_PORT", "UDP sender/control port used by the relay."],
   ["PUBLIC_RELAY_HOST", "Hostname stream senders should target for relay services."],
   ["PORTAL_USERNAME/PASSWORD", "Shared login for protected setup and operator panels."],
-  ["DISCORD_CLIENT_ID/TOKEN", "Only needed when Discord Audio Bridge is enabled."],
   ["BELABOX_HOST/USER/PORT", "Optional Belabox SSH target for install, diagnostics, or removal."],
   ["BELABOX_SSH_KEY_PATH", "Optional key path used by the Belabox Manager for manual SSH checks."],
   ["BELABOX_CONTROL_RECONNECT_MS", "Agent reconnect interval for the control connection."],
@@ -262,7 +248,7 @@ const SERVICE_ADVANCED_FIELDS = {
 };
 
 const SUBFOLDERS = ["photos", "galleries", "today", "inbox", "staging", "archive", "state", "logs"];
-const emptyCredentials = () => ({ portalUsername: "", portalPassword: "", discordClientId: "", discordToken: "", tunnelToken: "" });
+const emptyCredentials = () => ({ portalUsername: "", portalPassword: "", tunnelToken: "" });
 
 const state = {
   stage: 0,
@@ -734,13 +720,12 @@ function renderCredentialsPanel() {
   const fields = [
     ["portalUsername", "Operator username", "text"],
     ["portalPassword", "Operator password", "password"],
-    ...(state.selectedServices["frame-discord-audio-bridge"] ? [["discordClientId", "Discord application ID", "text"], ["discordToken", "Discord bot token", "password"]] : []),
     ...(state.deploymentMode === "HYBRID" ? [["tunnelToken", "Cloudflare Tunnel token", "password"]] : []),
   ];
   return `
     <section class="advanced-section">
       <h3>Installation credentials</h3>
-      <p>${state.existingInstall ? "Leave credential pairs empty to preserve the existing login and integrations. Enter both fields to replace an operator login or Discord configuration." : "Set your operator login. Optional integrations require their credentials before the stack can start."} Credentials are excluded from saved installer plans and used only to prepare and apply this installation.</p>
+      <p>${state.existingInstall ? "Leave both operator fields empty to keep your login. Enter both to replace it. Leave the Cloudflare token empty to keep the existing connection." : "Set your operator login. Hybrid mode also requires a Cloudflare Tunnel token."} Credentials are excluded from saved installer plans and used only to prepare and apply this installation.</p>
       <div class="subfolder-grid">
         ${fields.map(([key, label, type]) => `<label class="field"><span>${label}</span><input data-credential="${key}" type="${type}" autocomplete="off" value="${escapeHtml(state.credentials[key])}" /></label>`).join("")}
       </div>
@@ -1486,11 +1471,9 @@ function credentialsValidation() {
   const credentials = state.credentials;
   if (state.existingInstall) {
     if (Boolean(credentials.portalUsername.trim()) !== Boolean(credentials.portalPassword)) return "Enter both operator fields to change the login, or leave both empty to keep it.";
-    if (state.selectedServices["frame-discord-audio-bridge"] && Boolean(credentials.discordClientId.trim()) !== Boolean(credentials.discordToken)) return "Enter both Discord fields to change the integration, or leave both empty to keep it.";
     return "";
   }
   if (!credentials.portalUsername.trim() || !credentials.portalPassword) return "Enter an operator username and password before running readiness checks.";
-  if (state.selectedServices["frame-discord-audio-bridge"] && (!credentials.discordClientId.trim() || !credentials.discordToken)) return "Enter the Discord application ID and bot token for Discord Audio Bridge.";
   if (state.deploymentMode === "HYBRID" && !credentials.tunnelToken) return "Enter the Cloudflare Tunnel token for Hybrid mode.";
   return "";
 }
