@@ -7,7 +7,8 @@ Development installations can continue building the checked-out source.
 
 ## Build and publish
 
-`.github/workflows/build-images.yml` builds all 12 FRAME service images for `linux/amd64`. Normal
+`.github/workflows/build-images.yml` builds all 12 FRAME service images for both `linux/amd64` and
+`linux/arm64`, on native x64 and ARM64 Linux runners respectively. Normal
 pull-request/main verification runs it after the contract and service tests. Its smoke harness
 starts isolated containers without host ports or production data and checks health plus the native
 dependencies used by the media services: Sharp, SQLite, HEIC module loading, FFmpeg, SLS/SRTLA,
@@ -17,14 +18,17 @@ still need their usual acceptance checks.
 `.github/workflows/release-images.yml` runs when an official GitHub release is published, or when
 manually dispatched from this repository's `main`. Every image must finish building and pass its
 smoke check before publishing begins. Publishing loads the saved, tested images and verifies their
-immutable image IDs. Images receive full source-commit tags and, for a published release, its
-version tag. No `latest` tag is used. For a draft release, supply its existing tag as the manual
+immutable image IDs and platform metadata. AMD64 images retain full source-commit tags and, for a
+published release, its version tag; ARM64 tags append `-arm64`. No `latest` tag is used. For a draft release, supply its existing tag as the manual
 workflow's `release-tag` input; the workflow checks out and verifies that exact tag.
 
-The final job emits `frame-images.json` only after all 12 registry digests are available for the same
-source commit. A release run or manual run with `release-tag` attaches it to that release; a manual
-run without a tag provides it as a workflow artifact. Publishing a draft that already contains the
-manifest skips rebuilding its images. Release tags must also be valid Docker tags, such as `v1.0.0-release`.
+The final job emits `frame-images.json` for AMD64 and `frame-images-arm64.json` for ARM64 only after
+all 12 registry digests for each architecture are available from the same source commit. Each is a
+schema-1 manifest with one platform and digest-pinned images. Mixed, missing, duplicate, or foreign
+results fail validation before either manifest is written. A release run or manual run with
+`release-tag` attaches both to that release; a manual run without a tag provides workflow artifacts.
+Publishing a draft that already contains both manifests skips rebuilding its images. Release tags
+and their `-arm64` suffixed form must be valid Docker tags, such as `v1.0.0-release`.
 
 The workflow uses `GITHUB_TOKEN`; package write access is confined to the publishing jobs. When
 publishing these GHCR packages for the first time, make them public if installations should pull
@@ -34,39 +38,60 @@ supported. This workflow must be committed and run on GitHub before there is a r
 ## Install a release
 
 The [Electron online installer](../apps/frame-setup/README.md) uses the exact official GitHub release
-named by its packaged `frameReleaseTag` and requires the `frame-images.json` asset attached to that
-published release. Developer packages without that field use the latest stable release. A manual
+named by its packaged `frameReleaseTag` and requires the matching image asset attached to that
+published release: `frame-images.json` for an AMD64 Docker engine, or `frame-images-arm64.json` for
+ARM64. The manifest's platform must match the running engine; there is no silent fallback to an
+AMD64 release on Apple Silicon. Developer packages without that field use the latest stable release. A manual
 workflow artifact alone is not discoverable by the app. Publish images containing the current
 host runtime (`FRAME_WORKSPACE`) and launcher preflight hook before distributing this installer;
 older releases are rejected with an actionable message. GHCR packages must be publicly pullable
 without a registry sign-in. The app does not fall back to source builds when a release is absent.
 
-Build the runtime package on its target OS with `npm ci` and `npm run dist:win` or
-`npm run dist:linux` in `apps/frame-setup`. The package contains bootstrap tools and the UI;
+Build the runtime package on its target OS with `npm ci` and `npm run dist:win`,
+`npm run dist:linux`, `npm run dist:mac:x64`, or `npm run dist:mac:arm64` in `apps/frame-setup`.
+The package contains bootstrap tools and the UI;
 release source and images download during setup. The manual **Build FRAME online installers**
-workflow builds both platforms and uploads the runtime artifacts without publishing a release.
+workflow builds Windows x64, Linux x64, macOS Intel, and macOS Apple Silicon packages and uploads
+the runtime artifacts without publishing a release. Mac jobs also run an isolated Electron smoke
+check of the real window, preload, menu, and tray, without controlling Docker or registering login items.
 Offline image bundles are not implemented yet.
 
+The development launcher adds installed-stack status, offline resume/stop, tray controls and saved
+setup progress. Ordinary start/stop must use the installed containers and must not select a new
+release. Existing installation paths are retained. The new launcher still needs a matching release
+pin before distribution; do not package the historical pre-extraction tag as a current launcher.
+Test the Windows installed shortcut/notifications and tray exit behavior on the actual package,
+and test the Linux window fallback when the desktop does not expose a usable tray. On both Mac
+architectures, check the signed app installed in Applications, Dock reopen, menu-bar light/dark
+appearance, notifications and login-item approval, Docker Desktop folder sharing, install/start/stop/
+recovery, and real photo/HEIC/audio/video workflows. CI configuration and mocked platform tests do
+not establish that these real-Mac acceptance checks have passed.
+
 Prepare a release as a draft: push its tag, run the image workflow with that `release-tag`, and run
-the installer workflow at the same tag. Attach the Windows `.exe`, Linux `.AppImage`, and a
-`SHA256SUMS` file beside `frame-images.json`. Verify the manifest's commit matches the tag and that
-every image can be pulled anonymously before publishing the draft. The installer runtimes are
-unsigned; Windows may show a publisher warning. Docker must already be installed and running,
-and these runtime images currently target `linux/amd64`.
+the installer workflow at the same tag. Attach the Windows `.exe`, Linux `.AppImage`, Mac Intel and
+Apple Silicon `.dmg`/`.zip` packages, and a `SHA256SUMS` file beside both image manifests. Verify each
+manifest's commit matches the tag and that every image can be pulled anonymously before publishing
+the draft. The existing release pin still refers to the historical pre-extraction version; update
+it to the actual new release before distribution. Windows builds remain unsigned and may show a
+publisher warning. Mac CI builds are unsigned unless the signing/notarization secrets described in
+the app README are configured; use signed, notarized Mac packages for public distribution.
+Docker must already be installed and running with Linux containers.
 
 If the installed release predates Audio Bridge extraction, first follow the
 [extraction and bootstrap guide](audio-bridge-extraction.md). Its original installer expects 13
 images and cannot consume a new 12-image manifest before its source helpers are updated. The normal
 update commands below apply after that bootstrap, or to installations already using current helpers.
 
-Download the official release's `frame-images.json` into the FRAME installation directory, then run:
+Download the official release's matching manifest into the FRAME installation directory, then run
+on AMD64:
 
 ```powershell
 .\stack.cmd update --image-manifest frame-images.json
 ```
 
 On Linux/macOS use `./stack.sh update --image-manifest frame-images.json`. The relative manifest path
-is resolved inside the installation directory. The manifest must contain the complete service set,
+is resolved inside the installation directory. On ARM64 use
+`./stack.sh update --image-manifest frame-images-arm64.json` instead. The manifest must contain the complete service set,
 the official GHCR repositories, immutable SHA-256 digests, and one full source commit. The updater
 downloads that exact source commit so configuration/templates and runtime images belong together.
 These update commands target installed copies; the updater refuses a Git checkout, where source
@@ -127,6 +152,28 @@ cannot reinstall its manifest: use the retained matching historical source/helpe
 rollback, or bootstrap the new release as described in the extraction guide. Coordinate any legacy
 bot restoration with the standalone bot's Discord connection. `stack recover` itself uses the saved
 configuration and exact local images, so it remains available while source and release are mismatched.
+
+## Launcher updates and repair
+
+The launcher checks the latest published stable release only. Publish both architecture manifests
+and matching `FRAME-Setup-<version>-<os>-<arch>` packages before advertising a release as ready.
+Use stable `v<major>.<minor>.<patch>` tags; the historical `-release` suffix is also accepted, but
+alpha/beta/preview/RC tags are rejected even when incorrectly marked stable by GitHub. Keep the
+launcher package version aligned with its release tag and update the initial-install release pin.
+Version metadata for new launcher-managed installations/updates retains the selected release tag;
+older installs can display a commit fallback until their provenance is established.
+
+Native launcher maintenance keeps a source-file backup alongside the deployment snapshot so failed
+or interrupted cross-version updates can restore matching application files offline. This is an
+additional native-launcher recovery path; the CLI snapshot behavior described above still does not
+rewind source files. Neither path restores uploaded media or reverses database migrations. Only
+claim rollback compatibility for releases whose data migrations are backward compatible.
+
+Test on each supported OS: explicit update from a published release, exact-release repair after
+removing a container/image, no-service-start maintenance while stopped, preservation of individually
+stopped services, download failure before interruption, failed health with source/config/image
+recovery, interrupted maintenance, and retry after failed recovery. Existing fake-Docker tests verify
+orchestration but do not establish native end-to-end release acceptance.
 
 ## Local checks
 

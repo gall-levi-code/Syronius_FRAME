@@ -13,6 +13,62 @@ const MAX_BINDINGS = 4096;
 const bad = (label, detail, binding = {}) => ({ ...binding, label, status: "bad", detail });
 const label = (b) => `${b.service}: ${b.protocol.toUpperCase()} ${b.address || "all addresses"}:${b.hostPort}`;
 
+export function localDockerEnv(settings, inherited = process.env) {
+  const env = { ...inherited, ...settings };
+  // Installed settings cannot select another daemon, context, CLI config or TLS identity.
+  for (const key of Object.keys(env)) if (/^DOCKER_/i.test(key)) delete env[key];
+  for (const [key, value] of Object.entries(inherited)) if (/^DOCKER_/i.test(key)) env[key] = value;
+  return env;
+}
+
+const readinessError = (code, message) => Object.assign(new Error(message), { launcherIssue: code });
+
+export function dockerReadinessFailure(error, stage) {
+  const detail = `${error?.stderr || ""}\n${error?.message || ""}`;
+  if (["EACCES", "EPERM"].includes(error?.code) || /permission denied|access (?:is )?denied|operation not permitted/i.test(detail)) {
+    return readinessError("docker_permission_denied", "Permission to run Docker or access its local engine was denied. Check Docker access for this user, then recheck.");
+  }
+  if (error?.code === "ENOENT" && (stage === "context" || error.spawned === false || /spawn/i.test(error.syscall || ""))) {
+    return readinessError("docker_cli_missing", "The Docker command-line tool was not found. Install Docker Desktop or Docker Engine with its CLI, then reopen FRAME Launcher.");
+  }
+  if (stage === "compose-version") {
+    const missing = /['"]?compose['"]? (?:is not a docker command|is not a docker subcommand)|unknown command[^\r\n]*\bcompose\b|docker-compose[^\r\n]*(?:no such file|not found)/i.test(detail);
+    return readinessError(missing ? "docker_compose_missing" : "docker_compose_unavailable",
+      missing ? "Docker Compose v2 was not found. Install the Docker Compose plugin or repair Docker Desktop, then recheck."
+        : "Docker Compose v2 could not run. Check or repair the Compose plugin or Docker Desktop, then recheck.");
+  }
+  if (["info", "ps", "inspect"].includes(stage)) {
+    return readinessError("docker_engine_unavailable", "The local Docker engine could not be reached or inspected. Open Docker Desktop or start Docker Engine, then recheck. If it is already running, check its selected context and access permissions.");
+  }
+  return readinessError("docker_unavailable", stage === "context"
+    ? "Docker's selected context could not be read. Check the Docker CLI and selected context, then recheck."
+    : "Docker could not inspect the installation configuration. Check Docker readiness and the selected settings, then recheck.");
+}
+
+export function validateDockerEndpoint(endpoint) {
+  if (typeof endpoint !== "string" || !(endpoint.startsWith("unix:///") || /^npipe:\/{2,}\.\/pipe\//i.test(endpoint))) {
+    throw readinessError("remote_engine", "Select a local Docker context. FRAME cannot validate host storage or ports on a remote Docker engine.");
+  }
+}
+
+export function validateDockerEngine(info, endpoint) {
+  validateDockerEndpoint(endpoint);
+  if (info?.OSType !== "linux") throw readinessError("unsupported_engine_os", "FRAME requires a Linux Docker engine. On Windows, switch Docker Desktop to Linux containers.");
+  const arch = { x86_64: "amd64", amd64: "amd64", aarch64: "arm64", arm64: "arm64" }[info.Architecture];
+  if (!arch) throw readinessError("unsupported_engine_architecture", "This Docker engine architecture is unsupported. FRAME requires native AMD64 or ARM64 Linux images; emulation is not used.");
+  if (info.SecurityOptions?.some((option) => /^(?:name=)?rootless(?:,|$)/.test(option))) {
+    throw readinessError("unsupported_rootless", "Rootless Docker is not supported by this FRAME deployment. Its management service requires the standard Docker engine socket. Select Docker Desktop or the standard local Docker Engine.");
+  }
+  const standard = /^unix:\/\/(?:\/var)?\/run\/docker\.sock$/.test(endpoint);
+  // Desktop's user-facing socket forwards into its VM; the proxy mounts the VM's standard socket.
+  const desktopSocket = /^unix:\/\/\/[^\r\n]+\/\.docker\/(?:run|desktop)\/docker\.sock$/.test(endpoint)
+    || /^npipe:\/{2,}\.\/pipe\/(?:docker_engine|dockerDesktopLinuxEngine)$/i.test(endpoint);
+  if (!standard && !(info.OperatingSystem === "Docker Desktop" && desktopSocket)) {
+    throw readinessError("unsupported_docker_socket", "This Docker socket configuration is not supported by FRAME's fixed /var/run/docker.sock mount. Select standard local Docker Engine or Docker Desktop; FRAME will not redirect the mount to a custom socket.");
+  }
+  return `linux/${arch}`;
+}
+
 function address(value = "") {
   if (typeof value !== "string") throw new Error("Host address must be an IP address.");
   if (!value) return "";
@@ -92,12 +148,25 @@ export function validateBindings(compose) {
   return { bindings, checks };
 }
 
-function workspacePath(value, platform) {
+export function workspacePath(value, platform = process.platform) {
   if (typeof value !== "string" || !value) return null;
   const paths = platform === "win32" ? path.win32 : path.posix;
   if (!paths.isAbsolute(value)) return null;
   const normalized = paths.normalize(value).replace(/[\\/]+$/, "");
   return platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+
+export function checkProjectOwnership({ containers, workspace, platform = process.platform }) {
+  if (!Array.isArray(containers)) return [bad("Docker project", "Docker container inspection is unavailable.")];
+  const owner = workspacePath(workspace, platform);
+  for (const container of containers) {
+    const labels = container.Config?.Labels || {};
+    if (labels["com.docker.compose.project"] === "syronius-frame"
+      && (!owner || workspacePath(labels["com.docker.compose.project.working_dir"], platform) !== owner)) {
+      return [bad("Docker project", "Another FRAME installation uses this Docker project, including when stopped. Select its installation folder before reconfiguring or starting FRAME.")];
+    }
+  }
+  return [];
 }
 
 function containerBindings(containers) {
@@ -171,7 +240,7 @@ async function probeInterfaces(binding) {
 }
 
 // Call on the Docker host, after verifying a local context and inspecting all
-// running containers. Results are observations, not a reservation: recheck at start.
+// running and stopped containers. Results are observations, not a reservation: recheck at start.
 export async function checkHostPorts({ compose, containers = [], workspace, platform = process.platform }) {
   const { bindings, checks } = validateBindings(compose);
   if (checks.some((check) => check.status === "bad")) return { bindings, checks };
@@ -182,15 +251,9 @@ export async function checkHostPorts({ compose, containers = [], workspace, plat
   try { publications = containerBindings(containers); }
   catch (error) { return { bindings, checks: [bad("Docker port inspection", error.message)] }; }
   const normalizedWorkspace = workspacePath(workspace, platform);
-  // Compose can replace services and remove orphans without overlapping ports.
-  // Protect the entire project identity, including internal-only services.
-  for (const container of containers) {
-    const labels = container.Config?.Labels || {};
-    if (container.State?.Running && labels["com.docker.compose.project"] === compose.name
-      && (!normalizedWorkspace || workspacePath(labels["com.docker.compose.project.working_dir"], platform) !== normalizedWorkspace)) {
-      return { bindings, checks: [bad("Docker project", "Another FRAME installation uses this Docker project. Select its installation folder before reconfiguring or starting FRAME.")] };
-    }
-  }
+  // Stopped and internal-only containers still own the deployment identity.
+  const ownership = checkProjectOwnership({ containers, workspace, platform });
+  if (ownership.length) return { bindings, checks: ownership };
   for (const planned of bindings) {
     // Unspecified Compose host IP publishes on all host interfaces. Probe IPv6
     // separately so a v6-only listener is not hidden by a successful IPv4 bind.
@@ -224,13 +287,12 @@ export async function checkHostPorts({ compose, containers = [], workspace, plat
 // CLI users do not need host Node unless they opt into this host preflight hook.
 export async function runHostPreflight(workspace, { run = promisify(execFile) } = {}) {
   if (typeof workspace !== "string" || !path.isAbsolute(workspace)) throw new Error("Preflight requires an absolute installation directory.");
-  const env = { ...process.env, ...parseEnv(await readFile(path.join(workspace, ".env"), "utf8")) };
-  const docker = async (args) => {
+  const env = localDockerEnv(parseEnv(await readFile(path.join(workspace, ".env"), "utf8")));
+  const docker = async (args, stage = args[0]) => {
     try {
       return (await run("docker", args, { cwd: workspace, env, timeout: 30_000, maxBuffer: 16 * 1024 * 1024, windowsHide: true })).stdout.trim();
-    } catch {
-      // Compose output can contain credentials; never forward an error's captured output.
-      throw new Error(`Docker ${args[0]} inspection failed. Check Docker availability and the installation configuration.`);
+    } catch (error) {
+      throw dockerReadinessFailure(error, stage);
     }
   };
   const dockerJson = async (args) => {
@@ -243,16 +305,16 @@ export async function runHostPreflight(workspace, { run = promisify(execFile) } 
     const contexts = await dockerJson(["context", "inspect"]);
     endpoint = contexts[0]?.Endpoints?.docker?.Host;
   }
-  if (!/^unix:\/\//.test(endpoint || "") && !/^npipe:\/\/+\.\/pipe\//i.test(endpoint || "")) {
-    throw new Error("Host port checks require a local Docker socket or named-pipe context. Select a local Docker context and retry.");
-  }
+  validateDockerEndpoint(endpoint);
+  validateDockerEngine(await dockerJson(["info", "--format", "{{json .}}"]), endpoint);
+  await docker(["compose", "version"], "compose-version");
   const args = ["compose", "--project-directory", workspace, "--env-file", path.join(workspace, ".env"), "-f", path.join(workspace, "docker-compose.yml")];
   const release = path.join(workspace, "docker-compose.release.json");
   try {
     if ((await stat(release)).isFile()) args.push("-f", release);
   } catch (error) { if (error.code !== "ENOENT") throw error; }
   const compose = await dockerJson([...args, "config", "--format", "json"]);
-  const ids = (await docker(["ps", "-q"])).split(/\s+/).filter(Boolean);
+  const ids = (await docker(["ps", "-a", "-q"])).split(/\s+/).filter(Boolean);
   const containers = ids.length ? await dockerJson(["inspect", ...ids]) : [];
   return checkHostPorts({ compose, containers, workspace });
 }

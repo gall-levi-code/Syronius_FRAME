@@ -1,0 +1,77 @@
+/* Page identities share the control-page header without changing theme presets. */
+.portal-page {
+  min-width: 0;
+  --panel: var(--frame-panel);
+  --panel-strong: var(--frame-panel-strong);
+  --panel-muted: var(--frame-panel-muted);
+  --muted: var(--frame-label);
+  --text: var(--frame-text);
+  --border: var(--frame-border);
+  --border-soft: var(--frame-border-soft);
+  --accent: var(--frame-accent-border);
+  --danger: var(--frame-danger);
+  --warning: var(--frame-warning);
+  --good: var(--frame-good);
+  --toggle-night-bg: var(--frame-toggle-night-bg);
+  --toggle-night-text: var(--frame-toggle-night-text);
+  --toggle-day-bg: var(--frame-toggle-day-bg);
+  --toggle-day-text: var(--frame-toggle-day-text);
+}
+.portal-page[data-frame-tool="portal"] { --tool-color: #2cb4fb; }
+.portal-page[data-frame-tool="status"] { --tool-color: #adcaf0; }
+.portal-page[data-frame-tool="pipeline"] { --tool-color: #e6d879; }
+.portal-page[data-frame-tool="theme"] { --tool-color: #bca1ff; }
+.portal-page .topbar .frame-header-title { color: var(--tool-ink); }
+.portal-page .portal-nav a:is(:hover, :focus-visible, .active) {
+  border-bottom-color: var(--tool-ink);
+  color: var(--tool-ink);
+}
+.portal-page .portal-nav a:focus-visible {
+  outline: 2px solid var(--tool-ink);
+  outline-offset: -2px;
+}
+.portal-page .portal-nav a { min-height: 44px; display: inline-flex; align-items: center; }
+.portal-page .portal-nav:has(> .frame-issue) { position: relative; padding-right: 48px; }
+.portal-page .portal-nav > .frame-issue { position: absolute; top: 0; right: 0; margin: 0; }
+.portal-page .portal-section > .section-heading .eyebrow { color: var(--tool-ink); }
+.portal-page .primary-text-button {
+  border-color: var(--tool-color);
+  background: var(--tool-color);
+  color: #07111b;
+}
+.portal-page .primary-text-button:is(:hover, :focus-visible) {
+  background: color-mix(in srgb, var(--tool-color) 85%, white);
+  border-color: var(--tool-color);
+  color: #07111b;
+}
+.portal-page .pipeline-presets button:is(:hover, :focus-visible) {
+  border-color: var(--tool-ink);
+  color: var(--tool-ink);
+}
+.portal-page :is(#refresh-button, .theme-preset-trigger):is(:hover, :focus-visible) {
+  border-color: var(--tool-ink);
+  color: var(--tool-ink);
+}
+.portal-page .portal-footer-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--frame-label);
+  text-decoration: none;
+}
+.portal-page .portal-footer-link:is(:hover, :focus-visible) {
+  color: var(--tool-ink);
+  text-decoration: underline;
+}
+@media (max-width: 560px) {
+  .portal-page .portal-nav { gap: 2px; }
+  .portal-page .portal-nav a { padding: 10px 9px; }
+  .portal-page .portal-nav:has(> .frame-issue) a { padding: 10px 7px; font-size: 12px; }
+}
+@media (forced-colors: active) {
+  .portal-page .topbar .frame-header-title,
+  .portal-page .portal-section > .section-heading .eyebrow { color: CanvasText; }
+  .portal-page .portal-nav a:is(:hover, :focus-visible, .active) { border-color: LinkText; color: LinkText; }
+  .portal-page .primary-text-button,
+  .portal-page .primary-text-button:is(:hover, :focus-visible) { border-color: ButtonText; background: ButtonFace; color: ButtonText; }
+}

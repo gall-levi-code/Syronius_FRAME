@@ -8,6 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn } from "node:child_process";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
 import WebSocket from "ws";
 
 const serviceRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -20,7 +21,50 @@ test("manager URL copying requires browser-confirmed clipboard success", async (
   assert.match(script, /navigator\.clipboard\?\.writeText/);
   assert.match(script, /clipboardData\.setData\("text\/plain", text\)/);
   assert.match(script, /document\.execCommand\("copy"\) && copied/);
-  assert.match(script, /Automatic copy was blocked\. Press and hold this URL to copy it:/);
+  assert.match(script, /fallback\.value = text/);
+  assert.match(script, /fallback\.select\(\)/);
+  assert.match(script, /Select or press and hold the link beside its Copy button/);
+  assert.doesNotMatch(script, /Automatic copy was blocked[^\n]+\$\{text\}/);
+});
+
+test("manager feedback stays quiet during polling and preserves device-specific failures", async () => {
+  const script = await readFile(path.join(serviceRoot, "public", "app.js"), "utf8");
+  const feedbackFunction = script.slice(script.indexOf("function showNotice("), script.indexOf("function readLastDeviceId("));
+  const issues = new Map([["connection", { message: "Disconnected" }]]);
+  const notices = [];
+  const state = { selectedDeviceId: "device-a" };
+  const context = {
+    state,
+    CSS: { escape: (value) => value },
+    window: { FrameFeedback: {
+      issue: (key, value) => issues.set(key, value),
+      clearIssue: (key) => issues.delete(key),
+      notify: (message, options) => notices.push({ message, ...options }),
+    } },
+  };
+  runInNewContext(feedbackFunction, context);
+  context.showNotice("Ready");
+  context.showNotice("Loading", "busy");
+  context.showNotice("Installing...", "busy");
+  assert.equal(notices.length, 0);
+  assert.equal(issues.size, 1);
+
+  const detail = "Processing failed: " + "Detailed agent response. ".repeat(30);
+  context.showNotice(detail, "error", { target: "#processing-form", summary: "Processing settings failed" });
+  const issue = issues.get("action:device-a:#processing-form");
+  assert.equal(issue.message, detail);
+  assert.equal(issue.summary, "Processing settings failed");
+  assert.equal(issue.target, '#device-panel[data-panel-key="device-a"] #processing-form');
+  assert.equal(notices.length, 0);
+
+  state.selectedDeviceId = "device-b";
+  context.showNotice("Settings applied.", "success", { target: "#processing-form" });
+  assert.equal(issues.has("action:device-a:#processing-form"), true);
+  state.selectedDeviceId = "device-a";
+  context.showNotice("Settings applied.", "success", { target: "#processing-form" });
+  assert.equal(issues.has("action:device-a:#processing-form"), false);
+  assert.equal(issues.has("connection"), true);
+  assert.equal(notices.length, 2);
 });
 const legacySecret = "legacy-control-secret-0123456789abcdef";
 

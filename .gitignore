@@ -4,6 +4,7 @@
 /frame-source-commit
 /docker-compose.release.json
 /.frame-deployment-backup/
+/.frame-source-backup/
 /data/
 /cf_token.txt
 /graphify-out/

@@ -61,17 +61,21 @@ jobs:
 
   images:
     needs: plan
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.target.runner }}
     timeout-minutes: 35
     strategy:
       fail-fast: false
       max-parallel: 4
       matrix:
         service: ${{ fromJSON(needs.plan.outputs.services) }}
+        target:
+          - { arch: amd64, runner: ubuntu-latest, suffix: "" }
+          - { arch: arm64, runner: ubuntu-24.04-arm, suffix: "-arm64" }
     env:
       SERVICE: ${{ matrix.service }}
       SOURCE_COMMIT: ${{ needs.plan.outputs.commit }}
-      IMAGE: ${{ needs.plan.outputs.prefix }}/${{ matrix.service }}:${{ needs.plan.outputs.commit }}
+      PLATFORM: linux/${{ matrix.target.arch }}
+      IMAGE: ${{ needs.plan.outputs.prefix }}/${{ matrix.service }}:${{ needs.plan.outputs.commit }}${{ matrix.target.suffix }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -80,10 +84,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
-      - name: Build the Linux AMD64 runtime image
+      - name: Build the native Linux runtime image
         run: |
           mkdir -p image-artifact
-          docker build --platform linux/amd64 --iidfile image-artifact/image-id \
+          docker build --platform "$PLATFORM" --iidfile image-artifact/image-id \
             --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
             --label "org.opencontainers.image.revision=$SOURCE_COMMIT" \
             --tag "$IMAGE" "services/$SERVICE"
@@ -98,6 +102,7 @@ jobs:
           writeFileSync("image-artifact/metadata.json", JSON.stringify({
             commit: process.env.SOURCE_COMMIT,
             service: process.env.SERVICE,
+            platform: process.env.PLATFORM,
             image: process.env.IMAGE,
             image_id: readFileSync("image-artifact/image-id", "utf8").trim(),
           }));
@@ -105,7 +110,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: inputs.save-images
         with:
-          name: frame-image-${{ matrix.service }}
+          name: frame-image-${{ matrix.service }}-${{ matrix.target.arch }}
           path: |
             image-artifact/image.tar.gz
             image-artifact/metadata.json

@@ -161,9 +161,6 @@ const previewCaption = document.querySelector("#preview-caption");
 const fakePreviewToggle = document.querySelector("#fake-preview-toggle");
 const uploadPreviewTools = document.querySelector("#upload-preview-tools");
 const previewScenario = document.querySelector("#preview-scenario");
-const notice = document.querySelector("#notice");
-const saveStatus = document.querySelector("#save-status");
-const receiverStatus = document.querySelector("#receiver-status");
 const themeToggle = document.querySelector("#theme-toggle");
 const confirmDialog = document.querySelector("#confirm-dialog");
 const confirmTitle = document.querySelector("#confirm-title");
@@ -295,25 +292,37 @@ function writeStoredUploadAdvancedView(value) {
 async function load(preserveSelection = false) {
   try {
     let streamsAvailable = true;
+    let streamError = "";
     const [catalog, streams, config] = await Promise.all([
       api("/overlays/api/catalog"),
-      api("/overlays/api/streams").catch(() => { streamsAvailable = false; return { streams:[] }; }),
+      api("/overlays/api/streams").catch((error) => { streamsAvailable = false; streamError = error.message; return { streams:[] }; }),
       api("/overlays/api/config"),
     ]);
     state.catalog = catalog;
     state.streams = (streams.streams || []).slice().sort(compareStream);
     state.config = config;
-    receiverStatus.textContent = streamsAvailable ? "Telemetry ready" : "Telemetry unavailable";
-    receiverStatus.classList.toggle("live", streamsAvailable);
     const sources = sortedSources();
     if (!preserveSelection || !sources.some((source) => source.id === state.selectedSourceId)) state.selectedSourceId = sources[0]?.id || null;
     if (!sources.length && state.mode !== "create") state.mode = "welcome";
     else if (state.mode !== "create") state.mode = "edit";
     setSaveStatus("saved", "");
     render();
+    window.FrameFeedback.clearIssue("connection", { notify: "Overlay Wizard reconnected." });
+    if (streamsAvailable) {
+      window.FrameFeedback.clearIssue("telemetry", { notify: "Stream telemetry reconnected." });
+    } else {
+      window.FrameFeedback.issue("telemetry", {
+        message: `Stream telemetry is unavailable. Existing overlays are kept; stream choices may be out of date.\n${streamError}`,
+        tone: "warning", summary: "Stream telemetry unavailable", target: "#main-content",
+        action: { label: "Retry", onClick: () => load(true) },
+      });
+    }
   } catch (error) {
-    receiverStatus.textContent = "Telemetry unavailable";
-    showNotice(error.message, true);
+    window.FrameFeedback.issue("connection", {
+      message: `Overlay Wizard could not load its configuration.\n${error.message}`,
+      tone: "error", summary: "Overlay configuration unavailable", target: "#main-content",
+      action: { label: "Retry", onClick: () => load(true) },
+    });
   }
 }
 
@@ -542,7 +551,7 @@ function renderSelectedSource() {
   const unbound = source.data_source.kind === "stream" && !source.data_source.stream_profile_id;
   const url = sourceUrl(source);
   mainContent.innerHTML = `
-    <section class="source-panel" ${type === "upload_progress" ? `data-upload-editor data-advanced-view="${state.uploadAdvancedView}"` : ""}>
+    <section class="source-panel" data-source-id="${escapeAttr(source.id)}" ${type === "upload_progress" ? `data-upload-editor data-advanced-view="${state.uploadAdvancedView}"` : ""}>
       <div class="source-head">
         <div>
           <div class="source-title-row"><h1>${escapeHtml(source.display_name)}</h1>${unbound ? '<span class="badge warn">Unbound</span>' : ""}<span class="badge">${escapeHtml(typeLabel(type))}</span></div>
@@ -566,9 +575,18 @@ function renderSelectedSource() {
   mainContent.querySelector("#copy-source").addEventListener("click", async (event) => {
     try {
       await copyText(url, event.currentTarget);
-      showNotice("OBS URL copied.");
+      window.FrameFeedback.clearIssue(`copy:${source.id}`);
+      window.FrameFeedback.notify("OBS URL copied.", { tone: "success" });
     } catch {
-      showNotice("Automatic copy was blocked. Press and hold the URL to copy it.", true);
+      const link = mainContent.querySelector(".source-url span");
+      link.style.userSelect = "text";
+      const range = document.createRange();
+      range.selectNodeContents(link);
+      window.getSelection()?.removeAllRanges();
+      window.getSelection()?.addRange(range);
+      showNotice("Automatic copy was blocked. Select or press and hold the OBS URL beside its Copy button to copy it manually.", true, {
+        key: `copy:${source.id}`, summary: "Copy blocked", target: `[data-source-id="${CSS.escape(source.id)}"] .source-url`,
+      });
     }
   });
   mainContent.querySelector("#reset-source").addEventListener("click", resetSourceDesign);
@@ -1110,13 +1128,18 @@ async function flushAutosave() {
   state.pendingSave.clear();
   const sourceDraft = kinds.has("source") && state.sourceDraft ? structuredClone(state.sourceDraft) : null;
   const designDraft = kinds.has("design") && state.designDraft ? structuredClone(state.designDraft) : null;
+  const sourceId = sourceDraft?.id || state.sourceDraft?.id;
   try {
     if (sourceDraft) await saveSourceDraft(sourceDraft);
     if (designDraft) await saveDesignDraft(designDraft);
     setSaveStatus("saved", "Saved");
+    window.FrameFeedback.clearIssue(`save:${sourceId}`);
   } catch (error) {
     setSaveStatus("error", "Save failed");
-    showNotice(error.message, true);
+    showNotice(error.message, true, {
+      key: `save:${sourceId}`, summary: "Settings could not be saved",
+      target: `[data-source-id="${CSS.escape(sourceId)}"] .source-actions`,
+    });
   } finally {
     state.saveInFlight = false;
     if (state.pendingSave.size) flushAutosave();
@@ -1149,8 +1172,22 @@ async function saveDesignDraft(draft) {
 }
 
 function setSaveStatus(kind, text) {
-  saveStatus.textContent = text;
-  saveStatus.className = `status-pill ${text ? kind : "hidden"}`;
+  const actions = mainContent.querySelector(".source-actions");
+  let progress = actions?.querySelector(".save-progress");
+  if (kind === "saving" && actions) {
+    if (!progress) {
+      progress = document.createElement("small");
+      progress.className = "save-progress";
+      progress.setAttribute("role", "status");
+      actions.prepend(progress);
+    }
+    progress.textContent = text;
+    actions.setAttribute("aria-busy", "true");
+  } else {
+    progress?.remove();
+    actions?.removeAttribute("aria-busy");
+    if (kind === "saved" && text) window.FrameFeedback.notify(text, { tone: "success" });
+  }
 }
 
 function renderPreview() {
@@ -1257,9 +1294,17 @@ async function resetSourceDesign() {
     window_title: base.window_title,
     description: base.description,
   };
-  await saveDesignDraft(structuredClone(state.designDraft));
-  showNotice("Visual settings reset.");
-  renderSelectedSource();
+  try {
+    await saveDesignDraft(structuredClone(state.designDraft));
+    window.FrameFeedback.clearIssue(`save:${state.sourceDraft.id}`);
+    showNotice("Visual settings reset.", false, { key: `reset:${state.sourceDraft.id}` });
+    renderSelectedSource();
+  } catch (error) {
+    showNotice(error.message, true, {
+      key: `reset:${state.sourceDraft.id}`, summary: "Visual settings could not be reset",
+      target: `[data-source-id="${CSS.escape(state.sourceDraft.id)}"] .source-actions`,
+    });
+  }
 }
 
 async function deleteSource() {
@@ -1698,12 +1743,17 @@ async function copyText(value, trigger) {
   throw new Error("Copy unavailable");
 }
 
-function showNotice(message, isError = false) {
-  notice.textContent = message;
-  notice.classList.remove("hidden", "error");
-  notice.classList.toggle("error", isError);
-  clearTimeout(showNotice.timer);
-  showNotice.timer = setTimeout(() => notice.classList.add("hidden"), 6000);
+function showNotice(message, isError = false, options = {}) {
+  const key = options.key || "action";
+  if (isError) {
+    window.FrameFeedback.issue(key, {
+      message, tone: "error", summary: options.summary || "Overlay action failed",
+      target: options.target || "#main-content",
+    });
+  } else {
+    window.FrameFeedback.clearIssue(key);
+    window.FrameFeedback.notify(message, { tone: "success" });
+  }
 }
 
 function designFrom(template) {

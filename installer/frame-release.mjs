@@ -8,6 +8,7 @@ export const FRAME_IMAGE_SERVICES = [
   "frame-pipeline-photos", "frame-portal", "frame-streams", "frame-today",
 ];
 export const RELEASE_IMAGE_PREFIX = "ghcr.io/gall-levi-code/syronius-frame";
+export const SUPPORTED_RELEASE_PLATFORMS = Object.freeze(["linux/amd64", "linux/arm64"]);
 export const RELEASE_MANIFEST_FILE = "frame-release.json";
 export const RELEASE_COMPOSE_FILE = "docker-compose.release.json";
 export const SOURCE_COMMIT_FILE = "frame-source-commit";
@@ -20,8 +21,8 @@ const RECOVERABLE_SERVICES = new Set([...FRAME_IMAGE_SERVICES, RETIRED_BRIDGE, "
 
 export function validateReleaseManifest(value, { allowRetiredBridge = false } = {}) {
   if (!value || value.schema_version !== 1 || typeof value.commit !== "string" || !/^[0-9a-f]{40}$/.test(value.commit)
-    || value.platform !== "linux/amd64" || !value.images || typeof value.images !== "object" || Array.isArray(value.images)) {
-    throw new Error("Invalid FRAME release manifest: expected schema 1, commit SHA, linux/amd64 and image digests.");
+    || !SUPPORTED_RELEASE_PLATFORMS.includes(value.platform) || !value.images || typeof value.images !== "object" || Array.isArray(value.images)) {
+    throw new Error("Invalid FRAME release manifest: expected schema 1, commit SHA, linux/amd64 or linux/arm64 and image digests.");
   }
   const keys = Object.keys(value.images);
   const acceptedServices = allowRetiredBridge ? [...FRAME_IMAGE_SERVICES, RETIRED_BRIDGE] : FRAME_IMAGE_SERVICES;

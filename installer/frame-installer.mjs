@@ -1476,7 +1476,7 @@ Usage:
   stack reset [--yes]      Delete generated config/data and reinstall defaults
 
 Update options:
-  --image-manifest <path>  Install a published frame-images.json and matching source commit
+  --image-manifest <path>  Install a release image manifest for this Docker architecture and its matching source commit
   --source                 Explicitly switch a release installation to main source builds
 
 Install options:

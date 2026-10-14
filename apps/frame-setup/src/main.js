@@ -5,7 +5,7 @@ const SETUP_STAGES = [
   "Mode",
   "Storage",
   "Services",
-  "Ports",
+  "Network",
   "Review",
   "Install",
 ];
@@ -15,7 +15,7 @@ const SETUP_MODES = [
     id: "quick",
     label: "Quick Start",
     eyebrow: "Recommended stack",
-    summary: "Install the core FRAME tools, create your operator login, then finish details in the web setup page.",
+    summary: "Use the recommended LAN tools and default ports, then open the FRAME dashboard.",
   },
   {
     id: "guided",
@@ -40,7 +40,7 @@ const SERVICES = [
       what: "Receives live video from a mobile encoder or IRL backpack and gives FRAME a place to manage that stream locally.",
       why: "Use this when you want FRAME to help route a live SRT/SRTLA feed, view relay health, and power overlays that show bitrate, RTT, dropped packets, and uptime.",
       ports: "Exposes UDP ports for SRTLA ingest, SRT playback, and relay sender/control traffic. These are real streaming ports, so routers/firewalls may need rules when sending video in from outside the LAN.",
-      setup: "In localhost/setup you will create or verify stream profiles, confirm relay hostnames/ports, and connect overlay presets to the stream stats you want to display.",
+      setup: "In the FRAME dashboard you will create or verify stream profiles, confirm relay hostnames/ports, and connect overlay presets to the stream stats you want to display.",
     },
     defaultEnabled: true,
   },
@@ -52,7 +52,7 @@ const SERVICES = [
       what: "Builds browser-source overlays for OBS using FRAME styling and live telemetry from the relay tools.",
       why: "Use this when you want clean on-stream status panels for bitrate, RTT, buffer health, uptime, or custom stream labels without designing each overlay by hand.",
       ports: "Uses FRAME Edge and currently publishes direct Overlay and Stream Manager TCP ports, shown in the Ports step.",
-      setup: "In localhost/setup you will create overlay presets, choose which stats appear, copy OBS browser-source URLs, and adjust layout/visibility for each scene.",
+      setup: "In the FRAME dashboard you will create overlay presets, choose which stats appear, copy OBS browser-source URLs, and adjust layout/visibility for each scene.",
     },
     defaultEnabled: true,
   },
@@ -64,7 +64,7 @@ const SERVICES = [
       what: "Captures a local audio source in the browser and creates listener pages so trusted people can monitor the feed remotely.",
       why: "Use this when you need a quick audio confidence monitor for a stream mix, especially when someone off-site is helping watch audio quality.",
       ports: "Uses FRAME Edge and currently publishes a direct Audio Monitor TCP port. Listener routes can be exposed later with Hybrid access.",
-      setup: "In localhost/setup you will pick the capture device/page, create listener links, tune quality settings, and decide which routes are safe to publish.",
+      setup: "In the FRAME dashboard you will pick the capture device/page, create listener links, tune quality settings, and decide which routes are safe to publish.",
     },
     defaultEnabled: true,
   },
@@ -76,7 +76,7 @@ const SERVICES = [
       what: "Adds a local FRAME page plus one authenticated WebSocket control connection for roaming Belabox agents.",
       why: "Use this when FRAME should collect Belabox health, stream, network, temperature, uptime, disk, and log data while the Belabox changes networks.",
       ports: "Requires Hybrid mode and a public hostname. The page stays local; agents connect outbound through the existing HTTPS tunnel at /belabox/control.",
-      setup: "Selecting this service switches the install to Hybrid. In localhost/setup you can then install or repair agents over the public WSS endpoint.",
+      setup: "Selecting this service switches the install to Hybrid. In the FRAME dashboard you can then install or repair agents over the public WSS endpoint.",
     },
     defaultEnabled: false,
     hybridOnly: true,
@@ -89,7 +89,7 @@ const SERVICES = [
       what: "Starts an FTP endpoint that cameras or phones can send photos to, then moves completed uploads into the photo pipeline.",
       why: "Use this when a camera can FTP images directly to FRAME for live photo galleries, Streamer.bot triggers, or Photo Stage.",
       ports: "Exposes an FTP control port plus a passive FTP port range. Cameras need these open on the LAN, and remote FTP may require router/firewall forwarding.",
-      setup: "In localhost/setup you will set the FTP username/password, passive host, passive range, camera connection instructions, and verify that uploads appear in the pipeline.",
+      setup: "In the FRAME dashboard you will set the FTP username/password, passive host, passive range, camera connection instructions, and verify that uploads appear in the pipeline.",
     },
     defaultEnabled: true,
   },
@@ -101,7 +101,7 @@ const SERVICES = [
       what: "Adds a protected web upload page for manually sending photos into the same photo pipeline.",
       why: "Use this when you want a simple backup to FTP or a phone-friendly way to upload images during an event.",
       ports: "Uses FRAME Edge and currently publishes a direct upload TCP port. Uploads require the portal login.",
-      setup: "In localhost/setup you will configure upload access, confirm accepted image types, and test multi-file uploads into the pipeline.",
+      setup: "In the FRAME dashboard you will configure upload access, confirm accepted image types, and test multi-file uploads into the pipeline.",
     },
     defaultEnabled: true,
   },
@@ -113,7 +113,7 @@ const SERVICES = [
       what: "Publishes processed photos into dated galleries with thumbnails, album stats, and admin cleanup tools.",
       why: "Use this when you want browseable day-by-day galleries for viewers, staff, or your own post-stream review.",
       ports: "Uses FRAME Edge and currently publishes a direct Gallery TCP port. Public/private access depends on your setup.",
-      setup: "In localhost/setup you will review gallery routes, admin access, deletion/trash behavior, album covers, and public exposure choices.",
+      setup: "In the FRAME dashboard you will review gallery routes, admin access, deletion/trash behavior, album covers, and public exposure choices.",
     },
     defaultEnabled: true,
   },
@@ -125,7 +125,7 @@ const SERVICES = [
       what: "Adds the live Photo Stage workflow: current-day gallery, OBS viewer, remote controls, latest image metadata, and Streamer.bot-friendly file outputs.",
       why: "Use this when you want photos to appear live during a stream, with a remote page to control what the OBS viewer shows.",
       ports: "Uses FRAME Edge and currently publishes a direct Photo Stage TCP port. The OBS viewer can be public while operator pages stay protected.",
-      setup: "In localhost/setup you will copy the OBS viewer URL, configure remote access, verify latest.json, and confirm published-photo ready-file behavior.",
+      setup: "In the FRAME dashboard you will copy the OBS viewer URL, configure remote access, verify latest.json, and confirm published-photo ready-file behavior.",
     },
     defaultEnabled: true,
   },
@@ -251,9 +251,42 @@ const SUBFOLDERS = ["photos", "galleries", "today", "inbox", "staging", "archive
 const emptyCredentials = () => ({ portalUsername: "", portalPassword: "", tunnelToken: "" });
 
 const state = {
+  screen: "home",
+  launcher: null,
+  launcherLoading: true,
+  launcherInitializing: true,
+  launcherAction: "",
+  startupProgress: null,
+  startupPending: false,
+  lastReadiness: null,
+  updates: null,
+  updatesChecking: false,
+  updatesError: "",
+  maintenance: null,
+  supportReport: null,
+  supportBusy: false,
+  supportMessage: "",
+  supportError: "",
+  protection: null,
+  protectionError: "",
+  backupRoot: "",
+  restoreBackup: null,
+  protectionChoosing: false,
+  launcherError: "",
+  launcherGeneration: 0,
+  activeInstallRoot: "",
+  confirmAction: null,
+  preferences: null,
+  preferencesError: "",
+  preferencesSaving: false,
+  defaults: { installRoot: "", dataRoot: "" },
+  pendingDraft: null,
+  draftError: "",
+  draftLoading: true,
   stage: 0,
   mode: "",
   installRoot: "",
+  dataRoot: "",
   deploymentMode: "LAN",
   publicHostname: "",
   autoPorts: false,
@@ -267,11 +300,11 @@ const state = {
   advancedSettings: Object.fromEntries(ADVANCED_VALUE_FIELDS.map((field) => [field.key, field.defaultValue])),
   hostStatus: null,
   detectedInstallations: [],
-  previewMode: false,
+  previewMode: !isDesktopRuntime(),
   preflight: null,
   preflightRunning: false,
   preflightGeneration: 0,
-  log: ["Welcome to FRAME Setup."],
+  log: ["Welcome to FRAME Launcher."],
   savedPlanPath: "",
   lastSetupUrl: "",
   installing: false,
@@ -282,11 +315,36 @@ const state = {
 };
 
 const app = document.querySelector("#app");
+let draftWrites = Promise.resolve();
+let pendingFocus = null;
 
 render();
-void refreshHostStatus({ quiet: true });
+void initializeLauncher();
 
 function render() {
+  const active = document.activeElement;
+  const focused = active?.id || Object.keys(active?.dataset || {}).length ? active : pendingFocus;
+  const identity = Object.entries(focused?.dataset || {});
+  const selection = typeof focused?.selectionStart === "number" ? [focused.selectionStart, focused.selectionEnd] : null;
+  renderContent();
+  // Status refreshes replace the view. Keep keyboard users on the same surviving control.
+  if (focused && (focused.id || identity.length)) {
+    const replacement = [...app.querySelectorAll("button, input, select, textarea, [tabindex]")].find((element) =>
+      element.tagName === focused.tagName && (focused.id ? element.id === focused.id
+        : identity.every(([key, value]) => element.dataset?.[key] === value)));
+    pendingFocus = replacement?.disabled ? focused : null;
+    if (replacement && !replacement.disabled) {
+      replacement.focus({ preventScroll: true });
+      if (selection && replacement.setSelectionRange) replacement.setSelectionRange(...selection);
+    }
+  }
+}
+
+function renderContent() {
+  if (state.screen !== "setup") {
+    renderLauncher();
+    return;
+  }
   app.innerHTML = `
     <div class="setup-shell">
       <aside class="sidebar">
@@ -294,16 +352,17 @@ function render() {
           <img src="./frame-logo-square.png" alt="" aria-hidden="true" />
           <div>
             <p class="eyebrow">Syronius FRAME</p>
-            <h2>Installer</h2>
+            <h2>Launcher</h2>
           </div>
         </div>
         <ol class="stage-list">
           ${SETUP_STAGES.map((stage, index) => renderStageItem(stage, index)).join("")}
         </ol>
+        <button class="button ghost setup-home" data-screen="home" type="button">Back to launcher</button>
       </aside>
       <section class="content">
         <div class="stage-viewport">
-          ${state.previewMode ? '<p class="stage-alert" role="status">Browser preview — host checks are simulated and installation is disabled.</p>' : ""}
+          ${state.previewMode ? previewNotice() : ""}
           ${renderCurrentStage()}
         </div>
         ${renderFooter()}
@@ -311,8 +370,519 @@ function render() {
     </div>
   `;
   bindEvents();
+  bindLauncherEvents();
   if (state.installing) app.querySelectorAll("button, input, select").forEach((control) => { control.disabled = true; });
   state.animateStage = false;
+}
+
+function previewNotice() {
+  return '<p class="stage-alert" role="status">Browser preview · simulated examples. Installation, service controls, saved drafts, and preferences are disabled.</p>';
+}
+
+function currentInstallation() {
+  const installations = state.launcher?.installations ?? [];
+  return installations.find((install) => install.installRoot === state.activeInstallRoot) ?? installations[0];
+}
+
+function portalUrl(install = currentInstallation()) {
+  if (!install?.dashboardUrl) return "";
+  try {
+    const url = new URL(install.dashboardUrl);
+    return `http://localhost${url.port && url.port !== "80" ? `:${url.port}` : ""}/dashboard`;
+  } catch { return ""; }
+}
+
+function containerReadiness(service) {
+  if (service.status === "running" && ["healthy", "none"].includes(service.health)) return { tone: "good", label: service.health === "healthy" ? "Healthy" : "Running · no health check", symbol: "✓" };
+  if (service.health === "unhealthy" || ["dead", "removing", "failed"].includes(service.status)) return { tone: "bad", label: service.health === "unhealthy" ? "Unhealthy" : "Failed", symbol: "!" };
+  if (service.status === "running" && service.health === "starting") return { tone: "waiting", label: "Starting · checking health", symbol: "…" };
+  const labels = { waiting: "Waiting", created: "Created · waiting to start", exited: "Stopped", restarting: "Restarting", missing: "Waiting for container", paused: "Paused", running: "Running · health not reported" };
+  return { tone: "waiting", label: labels[service.status] || "Status not reported", symbol: "…" };
+}
+
+function renderContainerStartup(progress) {
+  const services = progress?.services ?? [];
+  const ready = services.filter((service) => containerReadiness(service).tone === "good").length;
+  const failed = progress?.phase === "failed";
+  return `<section class="container-startup" aria-label="Container startup">
+    <div class="panel-heading"><div><p class="eyebrow">Container startup</p><h2>${failed ? "Startup needs attention" : progress?.phase === "complete" ? "Your FRAME tools are ready" : "Starting your FRAME tools"}</h2></div><span class="pill ${failed ? "bad" : ready === services.length && services.length ? "good" : "warn"}">${ready}/${services.length} ready</span></div>
+    <p class="startup-announcement" role="status" aria-live="polite" aria-atomic="true">${failed ? "FRAME did not finish starting. Review the container states below." : services.length ? `${ready} of ${services.length} containers ready.${progress.phase === "complete" ? " Startup checks have completed." : " Waiting for the remaining startup checks."}` : "Waiting for the configured container list."}</p>
+    ${progress?.detail ? `<p class="launcher-caption">${escapeHtml(progress.detail)}</p>` : ""}
+    <ul class="container-checklist">${services.map((service) => {
+      let result = containerReadiness(service);
+      if (failed && result.tone === "waiting") result = { tone: "bad", label: `Not ready · ${result.label}`, symbol: "!" };
+      return `<li class="container-check ${result.tone}" data-container="${escapeHtml(service.name)}"><span class="container-check-icon" aria-hidden="true">${result.symbol}</span><strong>${escapeHtml(service.name)}</strong><span class="container-check-state">${escapeHtml(result.label)}</span></li>`;
+    }).join("")}</ul></section>`;
+}
+
+function acceptLauncherProgress(progress) {
+  if (!progress || typeof progress.installRoot !== "string" || !Array.isArray(progress.services) || !["starting", "complete", "failed"].includes(progress.phase)) return;
+  const target = state.installing ? state.installRoot : currentInstallation()?.installRoot;
+  if (target && target !== progress.installRoot) return;
+  const previous = state.startupProgress;
+  if (previous?.installRoot === progress.installRoot && Date.parse(progress.observedAt) < Date.parse(previous.observedAt)) return;
+  const active = state.installing || state.launcherAction === "start_stack" || state.launcher?.busy;
+  if (!active && previous?.phase === "failed") return;
+  if (previous?.phase === "failed" && progress.phase === "complete") return;
+  if (!active && previous?.phase === "complete" && progress.phase === "starting") return;
+  state.startupProgress = progress;
+  state.startupPending = progress.phase === "starting" || progress.phase === "complete" && Boolean(state.startupPending || active);
+  if (["home", "updates"].includes(state.screen) || state.screen === "setup" && state.stage === 6 && state.installing) render();
+}
+
+function renderLauncher() {
+  const install = currentInstallation();
+  app.innerHTML = `
+    <div class="setup-shell launcher-shell">
+      <aside class="sidebar">
+        <div class="brand"><img src="./frame-logo-square.png" alt="" aria-hidden="true" /><div><p class="eyebrow">Syronius FRAME</p><h2>Launcher</h2></div></div>
+        <nav class="launcher-nav" aria-label="Launcher">
+          ${[["home", "Home"], ["my-setup", "My Setup"], ["updates", "Updates & repair"], ["backups", "Backup & removal"], ["support", "Support"], ["preferences", "Preferences"]].map(([screen, label]) => `<button type="button" class="button ghost ${state.screen === screen ? "selected" : ""}" data-screen="${screen}" ${state.screen === screen ? 'aria-current="page"' : ""}>${label}</button>`).join("")}
+        </nav>
+        <p class="launcher-close-note">Closing this window leaves FRAME services running. Use Stop FRAME to stop them.</p>
+      </aside>
+      <section class="content launcher-content">
+        <div class="stage-viewport">
+          ${state.previewMode ? previewNotice() : ""}
+          ${state.launcherError ? `<p class="stage-alert" role="alert">${escapeHtml(state.launcherError)}</p>` : ""}
+          ${state.screen === "preferences" ? renderPreferences() : state.screen === "backups" ? renderBackups(install) : state.screen === "support" ? renderSupport() : state.screen === "updates" ? renderUpdates(install) : state.screen === "my-setup" ? renderMySetup(install) : renderLauncherHome(install)}
+        </div>
+      </section>
+    </div>`;
+  bindLauncherEvents();
+}
+
+function renderLauncherHome(install) {
+  const labels = { running: "FRAME is running", stopped: "FRAME is stopped", starting: "FRAME is starting", needs_attention: "FRAME needs attention", docker_unavailable: "Docker is unavailable" };
+  const compatibility = hostCompatibilityIssue();
+  const busy = Boolean(state.launcherAction || state.launcherLoading || state.launcherInitializing || state.launcher?.busy || state.installing);
+  const progress = state.startupProgress?.installRoot === install?.installRoot ? state.startupProgress : null;
+  const warnings = install && state.lastReadiness?.installRoot === install.installRoot ? state.lastReadiness.checks.filter((check) => check.status === "warn") : [];
+  const starting = state.launcherAction === "start_stack" || install?.state === "starting" || state.startupPending && progress && ["starting", "complete"].includes(progress.phase);
+  const observedState = state.launcherError || compatibility || progress?.phase === "failed" ? "needs_attention" : starting ? "starting" : install?.state;
+  const title = state.launcherLoading && !state.launcher ? "Checking this computer…" : compatibility?.title ?? labels[observedState] ?? (state.launcher?.dockerAvailable === false ? "Docker is unavailable" : "Welcome to FRAME");
+  const disabled = busy || state.previewMode || Boolean(state.launcherError);
+  const actionLabel = { start_stack: "Starting FRAME…", stop_stack: "Stopping FRAME…", recover_stack: "Recovering FRAME…", update_stack: "Updating FRAME…", repair_stack: "Repairing FRAME…" }[state.launcherAction];
+  return `
+    <section class="hero launcher-hero">
+      <div><p class="eyebrow">Your streaming toolkit</p><h1>${title}</h1><p aria-live="polite">${escapeHtml(actionLabel || (state.launcherError ? "The current service state could not be confirmed. Recheck before continuing." : compatibility?.detail || install?.detail || state.launcher?.detail) || "Set up FRAME on this computer, then return here to open or manage it.")}</p></div>
+      <span class="pill ${observedState === "running" ? "good" : observedState === "needs_attention" || observedState === "docker_unavailable" ? "bad" : "warn"}">${state.launcherLoading ? "Checking" : observedState ? escapeHtml(observedState.replaceAll("_", " ")) : "Not installed"}</span>
+      <div class="button-row launcher-primary-actions">
+        ${install ? `<button class="button primary" type="button" data-open-dashboard ${!portalUrl(install) || observedState !== "running" || disabled ? "disabled" : ""}>Launch FRAME Portal</button>
+          ${install.canStart ? `<button class="button" type="button" data-stack-action="start_stack" ${disabled ? "disabled" : ""}>Start FRAME</button>` : ""}
+          ${install.canStop ? `<button class="button" type="button" data-stack-action="stop_stack" ${disabled ? "disabled" : ""}>Stop FRAME</button>` : ""}
+          ${install.canReconfigure ? `<button class="button" type="button" data-change-setup ${disabled ? "disabled" : ""}>Edit configuration</button>` : ""}
+          ${install.canRecover ? `<button class="button" type="button" data-stack-action="recover_stack" ${disabled ? "disabled" : ""}>Recover previous deployment</button>` : ""}`
+          : `<button class="button primary" type="button" data-new-setup ${busy || compatibility || state.draftLoading || state.pendingDraft ? "disabled" : ""}>Set up FRAME</button>`}
+        <button class="button ghost" type="button" data-recheck ${busy ? "disabled" : ""}>Recheck</button>
+      </div>
+      <p class="launcher-caption">${state.launcher?.observedAt ? `Last checked ${escapeHtml(formatDetectedDate(state.launcher.observedAt))}. ` : ""}${install ? `FRAME Portal opens on this computer at ${escapeHtml(portalUrl(install) || "its configured localhost address")}.` : dockerGuidance().instructions}</p>
+    </section>
+    ${starting || progress?.phase === "failed" ? `<section class="panel">${renderContainerStartup(progress || { phase: "starting", services: install?.services ?? [] })}</section>` : progress?.phase === "complete" && observedState === "running" ? `<details class="panel startup-completed"><summary><span class="startup-completed-mark" aria-hidden="true">✓</span> FRAME started · View container checks</summary>${renderContainerStartup(progress)}</details>` : ""}
+    ${warnings.length ? `<details class="panel"><summary>Storage warnings from the last setup or start check (${warnings.length})</summary><p>These warnings allow you to continue. Storage is checked again when you apply setup or start FRAME.</p><div class="check-grid">${warnings.map(renderCheckCard).join("")}</div></details>` : ""}
+    ${state.updates?.launcher?.available || state.updates?.frame?.available ? '<section class="panel"><h2>An update is available</h2><p>Review the release notes and choose when to install.</p><button class="button" type="button" data-screen="updates">View updates</button></section>' : ""}
+    ${state.confirmAction ? `<section class="panel confirmation" role="alert"><h2>${state.confirmAction === "stop_stack" ? "Stop FRAME?" : "Recover the previous deployment?"}</h2><p>${state.confirmAction === "stop_stack" ? "This interrupts active streams, audio, uploads, and photo processing. FRAME configuration and data are retained; Docker and unrelated services stay running." : "Recovery restores the saved deployment configuration and services. Active FRAME work may be interrupted. Review My Setup before continuing."}</p><div class="button-row"><button class="button" type="button" data-cancel-action>Cancel</button><button class="button primary" type="button" data-confirm-action>${state.confirmAction === "stop_stack" ? "Stop FRAME" : "Recover deployment"}</button></div></section>` : ""}
+    ${state.pendingDraft ? `<section class="panel"><h2>Continue setup?</h2><p>Your choices were saved. Credentials must be entered again, and readiness checks will run again before installation.</p><div class="button-row"><button class="button" type="button" data-continue-draft ${busy ? "disabled" : ""}>Continue setup</button><button class="button ghost" type="button" data-discard-draft ${busy ? "disabled" : ""}>Discard draft</button></div></section>` : ""}
+    ${state.draftError ? `<p class="stage-alert" role="alert">${escapeHtml(state.draftError)}</p>` : ""}
+    ${install ? `<section class="panel"><div class="panel-heading"><div><h2>My Setup</h2><p>See the installed version, data folder, and service health.</p></div><button class="button" type="button" data-screen="my-setup">View setup</button></div></section>` : `<section class="panel"><h2>One place to return to</h2><p>Setup downloads FRAME and configures your tools. After installation, use this launcher to start, stop, or open your dashboard.</p><button class="button ghost" type="button" data-docker-guide>Docker install guide</button></section>`}
+    ${state.launcherAction || state.launcherError || state.installStatus === "failed" ? `<details class="panel"><summary>Operation log</summary><pre class="log">${escapeHtml(state.log.join("\n"))}</pre></details>` : ""}`;
+}
+
+function renderMySetup(install) {
+  if (!install) return `<section class="panel"><h1>My Setup</h1><p>No FRAME installation is currently available. Recheck Home, locate an existing deployment folder, or begin setup.</p><div class="button-row"><button class="button" type="button" data-locate-installation ${state.previewMode || state.launcher?.busy || state.protectionChoosing ? "disabled" : ""}>Locate existing installation</button><button class="button" type="button" data-screen="home">Back to Home</button></div></section>`;
+  const busy = state.launcherLoading || state.launcherInitializing || state.launcherAction || state.launcher?.busy || state.installing || state.launcherError;
+  return `<section class="panel"><p class="eyebrow">On this computer</p><h1>My Setup</h1><p>${escapeHtml(install.detail || "Installed FRAME configuration")}</p>
+    <dl class="setup-facts"><dt>Version</dt><dd>${escapeHtml(install.version || "Not reported")}</dd><dt>Deployment files</dt><dd>${escapeHtml(install.installRoot)}</dd><dt>FRAME data</dt><dd>${escapeHtml(install.dataRoot || "Not reported")}</dd><dt>Dashboard</dt><dd>${escapeHtml(install.dashboardUrl || "Not available")}</dd></dl>
+    <p>Docker stores container images separately in its own storage. Changing the FRAME data folder does not move Docker images.</p>
+    <div class="button-row"><button class="button" type="button" data-open-data ${state.previewMode || !install.dataRoot || busy ? "disabled" : ""}>Open data folder</button>${install.canReconfigure ? `<button class="button" type="button" data-change-setup ${busy ? "disabled" : ""}>Edit configuration</button>` : ""}<button class="button ghost" type="button" data-recheck ${busy ? "disabled" : ""}>Recheck</button></div>
+    </section><section class="panel"><h2>Service health</h2><ul class="launcher-services">${(install.services ?? []).map((service) => `<li><strong>${escapeHtml(service.name)}</strong><span>${escapeHtml(service.status)}${service.health ? ` · ${escapeHtml(service.health)}` : ""}</span></li>`).join("") || '<li>Service health has not been reported.</li>'}</ul></section>`;
+}
+
+function renderUpdates(install) {
+  const updates = state.updates;
+  const frame = updates?.installRoot === install?.installRoot ? updates?.frame : null;
+  const busy = Boolean(state.updatesChecking || state.launcherAction || state.launcher?.busy || state.launcherLoading || state.launcherInitializing || state.installing);
+  const disabled = busy || state.previewMode;
+  const updating = state.confirmAction === "update_stack";
+  const confirming = updating || state.confirmAction === "repair_stack";
+  const notes = (release, label) => release ? `<p>${release.available ? `Available: <strong>${escapeHtml(release.version)}</strong>` : escapeHtml(release.reason || "No newer stable release is available.")}</p>${release.notes ? `<details><summary>${label} release notes</summary><pre class="release-notes">${escapeHtml(release.notes)}</pre></details>` : ""}${release.url ? `<button class="button ghost" type="button" data-update-link="${escapeHtml(release.url)}" ${disabled ? "disabled" : ""}>View release on GitHub</button>` : ""}` : "<p>Check for updates to see the latest stable release.</p>";
+  return `<section class="panel"><p class="eyebrow">Keep FRAME current</p><h1>Updates & repair</h1><p>Review stable releases and choose when to install them.</p>
+    <div class="button-row"><button class="button primary" type="button" data-check-updates ${disabled ? "disabled" : ""}>${state.updatesChecking ? "Checking for updates…" : "Check for updates"}</button><button class="button ghost" type="button" data-screen="preferences">Update preferences</button></div>
+    <p class="launcher-caption">${updates?.checkedAt ? `Last successful check: ${escapeHtml(formatDetectedDate(updates.checkedAt))}. ` : ""}${state.preferences?.checkUpdatesAutomatically ? "Periodic checks are on: once a day while the launcher is open or in the tray." : "Periodic checks are off. You can enable them in Preferences."}</p>
+    ${state.updatesError ? `<p class="stage-alert" role="alert">${escapeHtml(state.updatesError)}</p>` : ""}
+    </section>
+    ${confirming ? `<section class="panel confirmation" role="alert"><h2>${updating ? `Update FRAME to ${escapeHtml(frame?.version || "the selected release")}?` : "Repair this FRAME installation?"}</h2><p>${updating ? "The update replaces FRAME application files and containers. Active streams, audio, and uploads may be interrupted." : "Repair restores missing containers and images from the installed release. It may interrupt active FRAME work."} Configuration and media are retained. Services that were deliberately stopped stay stopped.</p><p>${updating ? "The previous application files and deployment configuration are retained for recovery. This is not a backup of your media or databases." : "Repair keeps the current release. It cannot recover deleted media or fix account credentials."}</p><div class="button-row"><button class="button" type="button" data-cancel-action ${disabled ? "disabled" : ""}>Cancel</button><button class="button primary" type="button" data-confirm-action ${disabled || state.launcherError || (updating ? !install?.canUpdate || !frame?.available || !frame?.eligible || state.updatesError : !install?.canRepair) ? "disabled" : ""}>${updating ? "Install FRAME update" : "Repair installation"}</button></div></section>` : ""}
+    ${state.launcherAction && ["update_stack", "repair_stack"].includes(state.launcherAction) ? `<section class="panel" role="status" aria-live="polite"><h2>${state.launcherAction === "update_stack" ? "Updating FRAME…" : "Repairing FRAME…"}</h2><p>Keep the launcher open until this operation finishes.</p>${state.startupProgress ? renderContainerStartup(state.startupProgress) : "<p>Checking this installation and preparing the required files.</p>"}</section>` : ""}
+    ${state.maintenance ? `<section class="panel" role="${state.maintenance.success ? "status" : "alert"}"><h2>${state.maintenance.success ? "Operation completed" : state.maintenance.recovered ? "Operation failed; previous deployment recovered" : "FRAME needs attention"}</h2><p>${escapeHtml(state.maintenance.detail)}</p><button class="button" type="button" data-recheck ${disabled ? "disabled" : ""}>Recheck FRAME</button>${install?.canRecover ? `<button class="button" type="button" data-screen="home">View recovery options</button>` : ""}</section>` : ""}
+    <div class="updates-grid"><section class="panel"><h2>FRAME Launcher</h2><p>Installed version: <strong>${escapeHtml(state.launcher?.launcherVersion || updates?.launcher?.currentVersion || "Not reported")}</strong></p>${notes(updates?.launcher, "Launcher")}
+      ${updates?.launcher?.available && updates.launcher.downloadUrl ? `<button class="button" type="button" data-update-link="${escapeHtml(updates.launcher.downloadUrl)}" ${disabled ? "disabled" : ""}>Download launcher installer</button><p class="launcher-caption">Run the downloaded installer to update the launcher. Your FRAME deployment and data are retained.</p>` : ""}</section>
+    <section class="panel"><h2>FRAME services</h2><p>Installed release: <strong>${escapeHtml(install?.version || "Not installed")}</strong></p>${notes(frame, "FRAME")}
+      ${frame?.available ? `<button class="button primary" type="button" data-stack-action="update_stack" ${disabled || state.launcherError || state.updatesError || !frame.eligible || !install?.canUpdate ? "disabled" : ""}>Update FRAME</button>${frame.reason ? `<p>${escapeHtml(frame.reason)}</p>` : ""}` : ""}</section></div>
+    ${install ? `<section class="panel"><h2>Repair installation</h2><p>Restore missing containers or images from the installed FRAME release while keeping configuration and media.</p><button class="button" type="button" data-stack-action="repair_stack" ${disabled || state.launcherError || !install.canRepair ? "disabled" : ""}>Repair installation</button>${!install.canRepair ? `<p class="launcher-caption">${escapeHtml(install.detail || "Repair requires an accessible, installer-managed release with valid configuration.")}</p>` : ""}</section>` : ""}
+    ${state.launcherAction || state.maintenance || state.launcherError ? `<details class="panel" ${state.launcherAction ? "open" : ""}><summary>Operation log</summary><pre class="log">${escapeHtml(state.log.join("\n"))}</pre></details>` : ""}`;
+}
+
+async function checkForUpdates() {
+  if (!isDesktopRuntime() || state.previewMode || state.updatesChecking || state.launcherAction || state.launcher?.busy) return;
+  state.updatesChecking = true; state.updatesError = ""; state.confirmAction = null;
+  render();
+  try { state.updates = await invokeCommand("check_updates", { installRoot: currentInstallation()?.installRoot }); }
+  catch (error) { state.updatesError = `Could not check for updates: ${error.message ?? error}`; }
+  finally { state.updatesChecking = false; render(); }
+}
+
+function renderSupport() {
+  const disabled = state.previewMode || state.supportBusy || state.launcher?.busy || state.launcherAction || state.installing;
+  return `<section class="panel"><p class="eyebrow">Help with FRAME</p><h1>Support report</h1>
+    <p>Collect the launcher and FRAME versions, operating system, Docker readiness, and service health to help troubleshoot a problem.</p>
+    <p>Reports exclude passwords, tokens, folder paths, raw logs, and configuration files. Nothing is uploaded. Review the report before sharing it.</p>
+    <div class="button-row">${[["preview", "Generate report"], ["copy", "Copy diagnostic report"], ["save", "Save support report"]].map(([action, label]) => `<button class="button" type="button" data-support-action="${action}" ${disabled ? "disabled" : ""}>${label}</button>`).join("")}</div>
+    <p role="status">${escapeHtml(state.supportBusy ? "Collecting current status…" : state.supportMessage)}</p>
+    ${state.supportError ? `<p class="stage-alert" role="alert">${escapeHtml(state.supportError)}</p>` : ""}
+    ${state.supportReport ? `<h2>Report preview</h2><pre class="release-notes support-report" tabindex="0" aria-label="Diagnostic report">${escapeHtml(JSON.stringify(state.supportReport, null, 2))}</pre>` : ""}</section>`;
+}
+
+function renderBackups(install) {
+  const busy = Boolean(state.protectionChoosing || state.launcher?.busy || state.launcherAction || state.launcherLoading || state.launcherInitializing || state.installing);
+  const disabled = busy || state.previewMode;
+  const restore = state.restoreBackup;
+  const permitted = protectionAllowed(state.confirmAction);
+  const confirmation = {
+    backup_stack: ["Create full backup?", "FRAME will stop while files are copied. Large libraries can take a while. Previously running services will resume afterwards; deliberately stopped services stay stopped. The backup contains passwords and tokens: keep it private."],
+    remove_stack: ["Remove FRAME containers?", "This stops FRAME and removes its containers. Deployment files, settings, media, and Docker images are kept. Use Repair installation to recreate the containers later."],
+    restore_backup: ["Restore this full backup?", "Restore uses the original deployment and data paths on the same operating system. Both destinations must be empty and FRAME containers must be removed first. Move existing folders aside yourself before restoring. Restored services stay stopped until you choose Repair installation and Start FRAME."],
+  }[state.confirmAction];
+  return `<section class="panel"><p class="eyebrow">Protect your installation</p><h1>Backup & removal</h1>
+    <p>A full backup copies FRAME application files, configuration, databases, and media. Docker images are downloaded again by Repair when needed.</p>
+    ${state.protectionError ? `<p class="stage-alert" role="alert">${escapeHtml(state.protectionError)}</p>` : ""}
+    ${state.protection ? `<p class="${state.protection.success ? "launcher-caption" : "stage-alert"}" role="status">${escapeHtml(state.protection.detail)}</p>` : ""}
+    ${state.launcherAction && ["backup_stack", "restore_backup", "remove_stack"].includes(state.launcherAction) ? '<p role="status">Working… Keep the launcher open and storage connected until this operation finishes.</p>' : ""}
+    <h2>Full backup</h2><p>Choose an empty folder outside your deployment and FRAME data folders. Keep the completed backup on a separate drive when possible. Backups contain credentials and are not encrypted.</p>
+    ${state.backupRoot ? `<p class="launcher-caption">Backup folder: ${escapeHtml(state.backupRoot)}</p>` : ""}
+    <div class="button-row"><button class="button" type="button" data-protection-pick="backup" ${disabled || !install?.canBackup ? "disabled" : ""}>Choose backup folder</button><button class="button primary" type="button" data-protection-action="backup_stack" ${disabled || !install?.canBackup || !state.backupRoot ? "disabled" : ""}>Create full backup</button></div>
+    </section><section class="panel"><h2>Restore a full backup</h2><p>Restore to the original paths on this operating system. Restoring to a different computer or folder needs a separate migration.</p>
+    <button class="button" type="button" data-protection-pick="restore" ${disabled ? "disabled" : ""}>Choose backup to restore</button>
+    ${restore ? `<dl class="setup-facts"><dt>Backup created</dt><dd>${escapeHtml(formatDetectedDate(restore.createdAt))}</dd><dt>Deployment destination</dt><dd>${escapeHtml(restore.workspace)}</dd><dt>Data destination</dt><dd>${escapeHtml(restore.dataRoot)}</dd><dt>Contents</dt><dd>${escapeHtml(restore.fileCount)} files · ${escapeHtml(restore.totalBytes)} bytes</dd></dl><button class="button" type="button" data-protection-action="restore_backup" ${disabled || !state.launcher?.dockerAvailable ? "disabled" : ""}>Restore backup</button>` : ""}
+    </section><section class="panel"><h2>Remove FRAME containers</h2><p>Settings and media are kept. This does not uninstall Docker or remove other applications. Reinstalling the launcher can reconnect to this installation.</p>
+    <button class="button" type="button" data-protection-action="remove_stack" ${disabled || !install?.canRemove ? "disabled" : ""}>Remove FRAME containers…</button>
+    <details><summary>Remove the launcher or permanently delete data</summary><p>Uninstall the launcher through your operating system. FRAME containers keep their current state, and the deployment and data folders remain.</p><p>To permanently erase FRAME, first remove its containers above and make a verified backup. Then use your file manager to delete only the deployment and FRAME data folders shown in My Setup. That separate deletion is permanent. Docker images are managed separately in Docker.</p></details>
+    </section>${confirmation ? `<section id="protection-confirmation" class="panel launcher-confirm" role="region" tabindex="-1" aria-label="${confirmation[0]}"><h2>${confirmation[0]}</h2><p>${confirmation[1]}</p><div class="button-row"><button class="button" type="button" data-cancel-action ${busy ? "disabled" : ""}>Cancel</button><button class="button primary" type="button" data-protection-confirm ${disabled || !permitted ? "disabled" : ""}>${state.confirmAction === "backup_stack" ? "Stop FRAME and back up" : state.confirmAction === "remove_stack" ? "Remove containers and keep data" : "Restore into empty folders"}</button></div></section>` : ""}`;
+}
+
+function protectionAllowed(action) {
+  const install = currentInstallation();
+  if (action === "backup_stack") return Boolean(install?.canBackup && state.backupRoot);
+  if (action === "remove_stack") return Boolean(install?.canRemove);
+  return action === "restore_backup" && Boolean(state.restoreBackup && state.launcher?.dockerAvailable);
+}
+
+async function chooseProtectionFolder(purpose) {
+  if (!["backup", "restore"].includes(purpose) || !isDesktopRuntime() || state.previewMode || state.protectionChoosing || state.launcher?.busy || state.launcherAction) return;
+  state.protectionChoosing = true; state.protectionError = ""; state.confirmAction = null;
+  render();
+  try {
+    const selected = await window.frameDesktop.pickDirectory({ purpose });
+    if (!selected) return;
+    if (purpose === "backup") state.backupRoot = selected;
+    else { state.restoreBackup = null; state.restoreBackup = { ...await invokeCommand("inspect_backup", { backupRoot: selected }), backupRoot: selected }; }
+  } catch (error) { state.protectionError = `Could not use that backup folder: ${error.message ?? error}`; }
+  finally { state.protectionChoosing = false; render(); }
+}
+
+async function locateInstallation() {
+  if (!isDesktopRuntime() || state.previewMode || state.protectionChoosing || state.launcher?.busy || state.launcherAction) return;
+  state.protectionChoosing = true; state.launcherError = "";
+  render();
+  try {
+    const installRoot = await window.frameDesktop.pickDirectory({ purpose: "deployment" });
+    if (!installRoot) return;
+    acceptLauncherStatus(await invokeCommand("locate_installation", { installRoot }));
+    state.activeInstallRoot = installRoot;
+  } catch (error) { state.launcherError = `Could not reconnect to this installation: ${error.message ?? error}`; }
+  finally { state.protectionChoosing = false; render(); }
+}
+
+async function protectionAction(action) {
+  if (!isDesktopRuntime() || state.previewMode || state.confirmAction !== action || !protectionAllowed(action) || state.protectionChoosing || state.launcher?.busy || state.launcherAction || state.installing) return;
+  const install = currentInstallation();
+  const args = { confirmed: true, ...(action === "restore_backup" ? { backupRoot: state.restoreBackup.backupRoot } : { installRoot: install.installRoot }), ...(action === "backup_stack" ? { backupRoot: state.backupRoot } : {}) };
+  state.launcherAction = action; state.confirmAction = null; state.protection = null; state.protectionError = "";
+  render();
+  try {
+    acceptLauncherStatus(await invokeCommand(action, args));
+    if (action === "restore_backup" && state.protection?.success) state.activeInstallRoot = state.restoreBackup.workspace;
+    if (action === "backup_stack" && (state.protection?.success || state.protection?.backupComplete)) state.backupRoot = "";
+  } catch (error) { state.protectionError = `FRAME could not finish the operation: ${error.message ?? error}. Recheck status before retrying.`; }
+  finally { state.launcherAction = ""; render(); }
+}
+
+async function supportAction(action) {
+  if (!["preview", "copy", "save"].includes(action) || !isDesktopRuntime() || state.previewMode || state.supportBusy || state.launcher?.busy || state.launcherAction || state.installing) return;
+  state.supportBusy = true; state.supportError = ""; state.supportMessage = "";
+  render();
+  try {
+    if (action === "preview") { state.supportReport = await invokeCommand("get_diagnostics", {}); state.supportMessage = "Report ready to review."; }
+    else {
+      const result = await window.frameDesktop.exportReport(action);
+      state.supportReport = result.report;
+      state.supportMessage = !result.completed ? "Save canceled." : action === "copy" ? "Diagnostic report copied." : "Support report saved.";
+    }
+  } catch (error) { state.supportError = `Could not prepare the report: ${error.message ?? error}`; }
+  finally { state.supportBusy = false; render(); }
+}
+
+function renderPreferences() {
+  const prefs = state.preferences;
+  return `<section class="panel"><p class="eyebrow">This launcher</p><h1>Preferences</h1><p>These settings control the launcher window, not whether FRAME services start after a reboot.</p>
+    ${state.preferencesError ? `<p class="stage-alert" role="alert">${escapeHtml(state.preferencesError)}</p>` : ""}
+    ${prefs ? [["keepInTray", `Keep the launcher in the ${hostPlatform() === "darwin" ? "menu bar" : "system tray"} when I close the window`, prefs.trayAvailable !== false], ["notifications", "Show notifications for FRAME status and available updates", true], ["startAtLogin", "Open the launcher when I sign in", prefs.startAtLoginSupported], ["checkUpdatesAutomatically", "Check for updates periodically", true]].map(([key, label, supported]) => `<label class="launcher-preference"><input type="checkbox" data-preference="${key}" ${prefs[key] ? "checked" : ""} ${state.previewMode || state.preferencesSaving || !supported ? "disabled" : ""} /><span>${label}${key === "checkUpdatesAutomatically" ? '<small>Checks once a day while the launcher is open or in the tray. Updates are installed only when you choose.</small>' : ""}${!supported ? `<small>${key === "startAtLogin" ? hostPlatform() === "linux" ? "Startup at sign-in is not available on Linux." : "Available in the packaged Windows and macOS launcher." : "Not available on this system."}</small>` : ""}</span></label>`).join("") : "<p>Preferences are not available yet.</p>"}
+    <button class="button" type="button" data-screen="updates">Updates & repair</button>
+    <p class="launcher-caption">Closing or quitting the launcher does not stop FRAME. Use Stop FRAME on Home when you want to interrupt its services.</p></section>`;
+}
+
+function applyDefaults(defaults) {
+  if (!defaults) return;
+  state.defaults = { ...state.defaults, ...defaults };
+  if (!state.existingInstall) {
+    if (!state.installRoot) state.installRoot = state.defaults.installRoot;
+    if (!state.dataRoot) state.dataRoot = state.defaults.dataRoot;
+  }
+}
+
+function acceptLauncherStatus(status) {
+  if (!status || !Array.isArray(status.installations)) throw new Error("FRAME status could not be read. Recheck before changing services.");
+  state.launcher = status;
+  if (Object.hasOwn(status, "updates")) state.updates = status.updates;
+  if (status.maintenance) state.maintenance = status.maintenance;
+  if (status.protection) state.protection = status.protection;
+  if (status.readiness?.installRoot && Array.isArray(status.readiness.checks)) state.lastReadiness = status.readiness;
+  if (!status.busy) state.startupPending = false;
+  state.launcherError = "";
+  applyDefaults(status.defaults);
+}
+
+async function initializeLauncher() {
+  if (isDesktopRuntime()) {
+    for (const eventName of ["launcher-progress", "launcher-status", "launcher-preferences", "launcher-updates"]) {
+      try {
+        await window.frameDesktop.listen(eventName, (event) => {
+          const payload = event?.payload ?? event;
+          if (eventName === "launcher-progress") { acceptLauncherProgress(payload); return; }
+          if (eventName === "launcher-updates") { state.updates = payload; state.updatesError = ""; if (["home", "updates"].includes(state.screen)) render(); return; }
+          if (eventName === "launcher-status") {
+            try { acceptLauncherStatus(payload); } catch (error) { state.launcherError = String(error.message ?? error); }
+          } else state.preferences = payload;
+          if (eventName === "launcher-status" ? ["home", "my-setup", "updates", "backups"].includes(state.screen) : state.screen === "preferences") render();
+        });
+      } catch { /* Older hosts still support explicit status refresh. */ }
+    }
+  }
+  await refreshLauncherStatus();
+  await loadSetupDraft();
+  await refreshHostStatus({ quiet: true });
+  await loadLauncherPreferences();
+  state.launcherInitializing = false;
+  render();
+}
+
+async function refreshLauncherStatus() {
+  const generation = ++state.launcherGeneration;
+  state.launcherLoading = true;
+  render();
+  try {
+    const status = await invokeCommand("get_launcher_status", {});
+    if (generation === state.launcherGeneration) {
+      acceptLauncherStatus(status);
+      if (state.startupProgress?.phase === "failed") state.startupProgress = null;
+    }
+  } catch (error) {
+    if (generation === state.launcherGeneration) state.launcherError = `Could not check FRAME: ${error.message ?? error}`;
+  } finally {
+    if (generation === state.launcherGeneration) state.launcherLoading = false;
+    render();
+  }
+}
+
+async function runLauncherAction(action) {
+  const install = currentInstallation();
+  const permission = { start_stack: "canStart", stop_stack: "canStop", recover_stack: "canRecover", update_stack: "canUpdate", repair_stack: "canRepair" }[action];
+  if (!isDesktopRuntime() || state.previewMode || !permission || !install?.[permission] || state.launcherAction || state.launcher?.busy || state.launcherLoading || state.launcherError) return;
+  const releaseTag = state.updates?.installRoot === install.installRoot && state.updates.frame?.available && state.updates.frame?.eligible ? state.updates.frame.tag : null;
+  if (action === "update_stack" && !releaseTag) return;
+  state.confirmAction = null;
+  state.launcherAction = action;
+  if (["update_stack", "repair_stack"].includes(action)) state.maintenance = null;
+  state.activeInstallRoot = install.installRoot;
+  state.startupProgress = null;
+  state.startupPending = action === "start_stack";
+  const generation = ++state.launcherGeneration;
+  const logStream = await startInstallLogListener();
+  render();
+  try {
+    await draftWrites;
+    acceptLauncherStatus(await invokeCommand(action, { installRoot: install.installRoot, ...(action === "update_stack" ? { releaseTag } : {}) }));
+    if (action === "start_stack") {
+      const observed = currentInstallation();
+      state.startupProgress = { ...state.startupProgress, installRoot: install.installRoot,
+        phase: observed?.state === "running" && state.startupProgress?.phase !== "failed" ? "complete" : "failed",
+        services: observed?.services ?? state.startupProgress?.services ?? [], detail: observed?.detail };
+    }
+  } catch (error) {
+    state.launcherError = `FRAME action failed: ${error.message ?? error}. Recheck its state before retrying.`;
+    addLog(state.launcherError);
+    if (action === "start_stack") state.startupProgress = { ...state.startupProgress, installRoot: install.installRoot, phase: "failed", services: state.startupProgress?.services ?? install.services ?? [], detail: "The startup command failed. Recheck before retrying." };
+    state.launcherGeneration = generation;
+  } finally {
+    state.launcherAction = "";
+    state.startupPending = false;
+    logStream.stop();
+    render();
+  }
+}
+
+function bindLauncherEvents() {
+  document.querySelectorAll("[data-screen]").forEach((button) => button.addEventListener("click", () => {
+    if (state.installing) return;
+    if (state.screen === "setup") { invalidatePreflight(); state.credentials = emptyCredentials(); }
+    state.screen = button.dataset.screen;
+    state.confirmAction = null;
+    render();
+  }));
+  document.querySelector("[data-new-setup]")?.addEventListener("click", beginSetup);
+  document.querySelector("[data-recheck]")?.addEventListener("click", refreshLauncherStatus);
+  document.querySelector("[data-check-updates]")?.addEventListener("click", checkForUpdates);
+  document.querySelectorAll("[data-support-action]").forEach((button) => button.addEventListener("click", () => supportAction(button.dataset.supportAction)));
+  document.querySelector("[data-locate-installation]")?.addEventListener("click", locateInstallation);
+  document.querySelectorAll("[data-protection-pick]").forEach((button) => button.addEventListener("click", () => chooseProtectionFolder(button.dataset.protectionPick)));
+  document.querySelectorAll("[data-protection-action]").forEach((button) => button.addEventListener("click", () => { state.confirmAction = button.dataset.protectionAction; render(); document.querySelector("#protection-confirmation")?.focus(); }));
+  document.querySelector("[data-protection-confirm]")?.addEventListener("click", () => protectionAction(state.confirmAction));
+  document.querySelectorAll("[data-update-link]").forEach((button) => button.addEventListener("click", async () => {
+    try { if (isDesktopRuntime()) await window.frameDesktop.openExternal(button.dataset.updateLink); }
+    catch (error) { state.updatesError = `Could not open the release page: ${error.message ?? error}`; render(); }
+  }));
+  document.querySelector("[data-open-dashboard]")?.addEventListener("click", () => openSetup({ url: portalUrl() }));
+  document.querySelector("[data-docker-guide]")?.addEventListener("click", openDockerGuide);
+  document.querySelector("[data-change-setup]")?.addEventListener("click", () => reconfigureInstall(currentInstallation()?.installRoot));
+  document.querySelector("[data-open-data]")?.addEventListener("click", async () => {
+    try { await invokeCommand("open_data_folder", { installRoot: currentInstallation()?.installRoot }); }
+    catch (error) { state.launcherError = `Could not open the data folder: ${error.message ?? error}`; render(); }
+  });
+  document.querySelectorAll("[data-stack-action]").forEach((button) => button.addEventListener("click", () => {
+    const action = button.dataset.stackAction;
+    if (action === "start_stack") void runLauncherAction(action);
+    else { state.confirmAction = action; render(); }
+  }));
+  document.querySelector("[data-cancel-action]")?.addEventListener("click", dismissConfirmation);
+  document.querySelector("[data-confirm-action]")?.addEventListener("click", () => runLauncherAction(state.confirmAction));
+  document.querySelector("[data-continue-draft]")?.addEventListener("click", continueSetupDraft);
+  document.querySelector("[data-discard-draft]")?.addEventListener("click", discardSetupDraft);
+  document.querySelectorAll("[data-preference]").forEach((input) => input.addEventListener("change", () => saveLauncherPreference(input.dataset.preference, input.checked)));
+}
+
+function dismissConfirmation() {
+  if (!state.confirmAction || state.launcherAction || state.launcher?.busy || state.installing) return;
+  state.confirmAction = null;
+  render();
+  document.querySelector('.launcher-nav [aria-current="page"]')?.focus();
+}
+
+document.addEventListener?.("keydown", (event) => {
+  if (event.key === "Escape" && state.confirmAction) { event.preventDefault(); dismissConfirmation(); }
+});
+
+async function loadLauncherPreferences() {
+  try { state.preferences = await invokeCommand("get_launcher_preferences", {}); }
+  catch (error) { state.preferencesError = `Could not load preferences: ${error.message ?? error}`; }
+  render();
+}
+
+async function saveLauncherPreference(key, value) {
+  if (!isDesktopRuntime() || state.preferencesSaving || !["keepInTray", "notifications", "startAtLogin", "checkUpdatesAutomatically"].includes(key)) return;
+  const preferences = Object.fromEntries(["keepInTray", "notifications", "startAtLogin", "checkUpdatesAutomatically"].map((name) => [name, Boolean(state.preferences?.[name])]));
+  preferences[key] = value;
+  state.preferencesSaving = true;
+  state.preferencesError = "";
+  render();
+  try { state.preferences = await invokeCommand("set_launcher_preferences", { preferences }); }
+  catch (error) { state.preferencesError = `Preferences were not saved: ${error.message ?? error}`; }
+  finally { state.preferencesSaving = false; render(); }
+}
+
+function beginSetup() {
+  if (state.launcherAction || state.launcherInitializing || state.launcher?.busy || hostCompatibilityIssue() || state.installing || state.pendingDraft) return;
+  applyLoadedPlan({ mode: "", installRoot: state.defaults.installRoot, dataRoot: state.defaults.dataRoot });
+  state.existingInstall = false;
+  state.mode = "";
+  state.stage = 0;
+  state.screen = "setup";
+  saveSetupDraft();
+  render();
+}
+
+function setupDraft() {
+  const plan = buildPlan();
+  return { mode: plan.mode, deploymentMode: plan.deploymentMode, publicHostname: plan.publicHostname,
+    installRoot: plan.installRoot, dataRoot: plan.dataRoot, selectedServices: plan.selectedServices,
+    ports: plan.ports, autoPorts: false, subfolders: plan.subfolders,
+    advancedSettings: Object.fromEntries(ADVANCED_VALUE_FIELDS.map((field) => [field.key, plan.advancedSettings[field.key] ?? field.defaultValue])),
+    stage: Math.min(5, state.stage) };
+}
+
+function saveSetupDraft() {
+  if (!isDesktopRuntime() || state.screen !== "setup" || state.installing || state.installStatus === "complete") return draftWrites;
+  const draft = setupDraft();
+  state.pendingDraft = draft;
+  if (state.preflightRunning) return draftWrites;
+  draftWrites = draftWrites.then(() => invokeCommand("save_draft", { draft })).then(() => { state.draftError = ""; syncDraftError(); }, (error) => {
+    state.draftError = `Setup progress was not saved: ${error.message ?? error}`;
+    syncDraftError();
+    if (state.screen !== "setup") render();
+  });
+  return draftWrites;
+}
+
+function syncDraftError() {
+  const notice = document.querySelector("[data-draft-error]");
+  if (notice) notice.textContent = state.draftError;
+}
+
+async function loadSetupDraft() {
+  try { state.pendingDraft = (await invokeCommand("load_draft", {}))?.draft ?? null; }
+  catch (error) { state.draftError = `Saved setup could not be read: ${error.message ?? error}`; }
+  finally { state.draftLoading = false; render(); }
+}
+
+async function discardSetupDraft() {
+  if (!isDesktopRuntime()) return;
+  draftWrites = draftWrites.then(() => invokeCommand("clear_draft", {}));
+  try { await draftWrites; state.pendingDraft = null; state.draftError = ""; }
+  catch (error) { state.draftError = `Saved setup could not be cleared: ${error.message ?? error}`; draftWrites = Promise.resolve(); }
+  render();
+}
+
+async function continueSetupDraft() {
+  const draft = state.pendingDraft;
+  if (!draft || state.installing || state.launcherInitializing || state.launcher?.busy || state.launcherAction) return;
+  try {
+    await draftWrites;
+    const existing = state.launcher?.installations?.find((install) => install.installRoot === draft.installRoot);
+    if (existing) {
+      if (!existing.canReconfigure) throw new Error("This installation cannot be changed yet. Resolve its status on Home first.");
+      const installed = await invokeCommand("load_install_plan", { installRoot: existing.installRoot });
+      applyLoadedPlan({ ...installed, ...draft, installRoot: installed.installRoot, dataRoot: installed.dataRoot });
+    } else {
+      applyLoadedPlan(draft);
+      state.existingInstall = false;
+      state.guidedReviewedServices = Object.fromEntries(SERVICES.map((service) => [service.id, draft.mode === "quick"]));
+      state.guidedServiceIndex = 0;
+      if (!draft.mode) state.mode = "";
+    }
+    state.stage = Math.max(0, Math.min(5, Number.isInteger(draft.stage) ? draft.stage : 0));
+    state.screen = "setup";
+    state.credentials = emptyCredentials();
+    invalidatePreflight();
+  } catch (error) { state.draftError = `Could not continue setup: ${error.message ?? error}`; }
+  render();
 }
 
 function renderStageItem(stage, index) {
@@ -369,6 +939,7 @@ function renderWelcomeStage() {
   const checks = state.hostStatus?.checks ?? [];
   const detected = state.detectedInstallations ?? [];
   const blockingChecks = dockerBlockingChecks();
+  const compatibility = hostCompatibilityIssue();
   return `
     <section class="hero ${stepPageClass()}">
       <div>
@@ -376,7 +947,7 @@ function renderWelcomeStage() {
         <h1>Set up your IRL streamer toolkit.</h1>
         <p>
           This online installer downloads an official FRAME release and its prebuilt container images,
-          then opens the local web setup page. Internet access is required.
+          then returns to the launcher so you can open the FRAME dashboard. Internet access is required.
         </p>
       </div>
       <div class="hero-card">
@@ -389,14 +960,14 @@ function renderWelcomeStage() {
         <div>
           <p class="eyebrow">Host check</p>
           <h2>Before we begin</h2>
-          <p>Install Docker Desktop on Windows or Docker Engine with Compose on Linux first. Docker must run Linux containers on an x64 (linux/amd64) host.</p>
+          <p>${dockerGuidance().instructions} FRAME requires native Linux AMD64 or ARM64 images matching the local engine.</p>
         </div>
         <button class="button" id="refresh-host" type="button">Recheck</button>
       </div>
-      ${blockingChecks.length ? `
+      ${compatibility ? `<div class="hard-stop" role="alert"><strong>${escapeHtml(compatibility.title)}</strong><p>${escapeHtml(compatibility.detail)}</p></div>` : blockingChecks.length ? `
         <div class="hard-stop">
           <strong>Docker setup is required before continuing.</strong>
-          <p>Install Docker Desktop, start Docker, then press Recheck. FRAME will keep the next step locked until this clears.</p>
+          <p>${dockerGuidance().instructions} Then press Recheck. FRAME will keep the next step locked until this clears.</p>
         </div>
       ` : ""}
       <div class="check-grid">
@@ -423,7 +994,7 @@ function renderModePanel() {
       ${renderStageNotice(1)}
       <div class="mode-grid">
         ${SETUP_MODES.map((mode) => `
-          <button class="card choice-card ${state.mode === mode.id ? "selected" : ""}" data-mode="${mode.id}" type="button">
+          <button class="card choice-card ${state.mode === mode.id ? "selected" : ""}" data-mode="${mode.id}" type="button" aria-pressed="${state.mode === mode.id}">
             <span>${mode.eyebrow}</span>
             <h3>${mode.label}</h3>
             <p>${mode.summary}</p>
@@ -435,27 +1006,26 @@ function renderModePanel() {
 }
 
 function renderStoragePanel() {
-  const hasRoot = Boolean(state.installRoot.trim());
+  const hasRoot = Boolean(state.dataRoot.trim());
   return `
     <section class="panel ${stepPageClass()}">
       <div class="panel-heading">
         <div>
           <p class="eyebrow">Storage</p>
-          <h2>Choose one FRAME storage root.</h2>
-          <p>Choose the installation folder. New installs keep persistent data in its data subfolder; existing release installations retain their configured data root.</p>
+          <h2>Choose where FRAME keeps your data.</h2>
+          <p>Photos, galleries, and persistent settings use this folder. Deployment files are managed separately by the launcher; Docker keeps container images in its own storage.</p>
         </div>
         <span class="pill ${hasRoot ? "good" : "warn"}" data-storage-status>${hasRoot ? "Selected" : "Required"}</span>
       </div>
       ${renderStageNotice(2)}
       <div class="folder-picker">
         <div>
-          <span>Installation folder</span>
-          <strong data-storage-path>${escapeHtml(state.installRoot || "No folder selected yet")}</strong>
-          <p>${state.previewMode ? "Browser preview cannot open the native folder picker. Use the desktop app to install FRAME." : "Use the native folder picker to choose where FRAME keeps install state and data."}</p>
+          <span>FRAME data folder</span>
+          <strong data-storage-path>${escapeHtml(state.dataRoot || "Waiting for the default data folder")}</strong>
+          <p>${state.existingInstall ? "This installation keeps its existing data location. Moving data is a separate operation." : state.previewMode ? "This is a simulated path. Use the desktop launcher to choose a real folder." : "Keep the suggested folder or choose a disk with enough room for your photos and media."}</p>
         </div>
         <div class="button-row">
-          <button class="button primary" id="choose-folder" type="button">Browse folder</button>
-          ${state.previewMode ? "<button class=\"button\" id=\"use-preview-folder\" type=\"button\">Use preview path</button>" : ""}
+          ${!state.existingInstall ? `<button class="button primary" id="choose-folder" type="button" ${state.previewMode ? "disabled" : ""}>Choose data folder</button>` : ""}
         </div>
       </div>
       ${state.mode === "advanced" ? `
@@ -482,13 +1052,13 @@ function renderServicesPanel() {
         <div>
           <p class="eyebrow">Services</p>
           <h2>${state.mode === "quick" ? "Quick Start enables the recommended stack." : "Add the tools this install needs."}</h2>
-          <p>FRAME Edge routes the web tools. Review all published web, FTP, and SRT/SRTLA ports in the next step.</p>
+          <p>${state.existingInstall ? "Your installed choices are preserved. Switch setup path if you want to edit the selection." : "FRAME routes your tools through one dashboard. Network details come next."}</p>
         </div>
         <span class="pill ${selectedServiceCount() ? "good" : "warn"}">${selectedServiceCount()} selected</span>
       </div>
       ${renderStageNotice(3)}
       <div class="service-grid">
-        ${SERVICES.map((service) => `
+        ${SERVICES.filter((service) => state.existingInstall || state.mode !== "quick" || !service.hybridOnly).map((service) => `
           <article class="service-card">
             <label>
               <input type="checkbox" data-service="${service.id}" ${state.selectedServices[service.id] ? "checked" : ""} ${state.mode === "quick" ? "disabled" : ""} />
@@ -510,7 +1080,6 @@ function renderGuidedServicePanel() {
   const service = SERVICES[state.guidedServiceIndex] ?? SERVICES[0];
   const reviewedCount = Object.values(state.guidedReviewedServices).filter(Boolean).length;
   const serviceNumber = state.guidedServiceIndex + 1;
-  const finalService = state.guidedServiceIndex === SERVICES.length - 1;
   return `
     <section class="panel ${stepPageClass()}">
       <div class="panel-heading">
@@ -536,12 +1105,6 @@ function renderGuidedServicePanel() {
         </label>
       </article>
       ${renderGuidedServiceSettings(service)}
-      <div class="guided-service-actions">
-        <button class="button ghost" id="previous-service" type="button" ${state.guidedServiceIndex === 0 ? "disabled" : ""}>Previous service</button>
-        <button class="button primary" id="next-service" type="button">
-          ${finalService ? "Finish service review" : "Next service"}
-        </button>
-      </div>
     </section>
   `;
 }
@@ -577,13 +1140,13 @@ function renderGuidedServiceInfo(service) {
     what: service.summary,
     why: "This service adds one part of the FRAME toolkit.",
     ports: "Port requirements depend on the selected service.",
-    setup: "localhost/setup will walk through the remaining configuration.",
+    setup: "the FRAME dashboard will walk through the remaining configuration.",
   };
   return `
     ${renderInfoBlock("What it does", details.what)}
     ${renderInfoBlock("Why you might want it", details.why)}
     ${renderInfoBlock("Ports and exposure", details.ports)}
-    ${renderInfoBlock("What comes next in localhost/setup", details.setup)}
+    ${renderInfoBlock("What comes next in FRAME", details.setup)}
   `;
 }
 
@@ -614,14 +1177,14 @@ function renderPortsPanel() {
       <div class="panel-heading">
         <div>
           <p class="eyebrow">Network</p>
-          <h2>Confirm the ports exposed on the host.</h2>
-          <p>These are the host ports published by the selected services. If a port is occupied, choose another value and rerun readiness checks.</p>
+          <h2>${state.mode === "quick" ? "Connect your tools on the network." : "Confirm the ports exposed on the host."}</h2>
+          <p>${state.mode === "quick" ? "Quick Start uses default ports for new installations and retains installed settings when reconfiguring. If a port conflicts, switch to Guided or Advanced to choose another." : "These are the host ports published by the selected services. If a port is occupied, choose another value and rerun readiness checks."}</p>
         </div>
       </div>
       <div class="network-controls ${hybrid ? "hybrid" : "lan"}">
         <label class="field">
           <span>Deployment mode</span>
-          <select id="deployment-mode">
+          <select id="deployment-mode" ${state.mode === "quick" ? "disabled" : ""}>
             <option value="LAN" ${state.deploymentMode === "LAN" ? "selected" : ""} ${state.selectedServices["frame-belabox-manager"] ? "disabled" : ""}>LAN</option>
             <option value="HYBRID" ${state.deploymentMode === "HYBRID" ? "selected" : ""}>Hybrid with Cloudflare</option>
           </select>
@@ -657,6 +1220,7 @@ function renderPortsPanel() {
         ${showStageNotice ? renderStageNotice(4, "compact") : ""}
         <small class="field-help ${portStatus.status}" data-port-status>${portStatus.message}</small>
       </div>
+      ${state.mode === "quick" ? '<details class="network-port-details"><summary>View published ports</summary>' : ""}
       <div class="port-grid">
         ${visiblePorts.map((port) => `
           <article class="port-card ${portStatus.invalidKeys.includes(port.key) ? "invalid" : ""}">
@@ -674,11 +1238,13 @@ function renderPortsPanel() {
                 step="1"
                 inputmode="numeric"
                 value="${escapeHtml(String(state.ports[port.key]))}"
+                ${state.mode === "quick" ? "readonly" : ""}
               />
             </label>
           </article>
         `).join("")}
       </div>
+      ${state.mode === "quick" ? "</details>" : ""}
     </section>
   `;
 }
@@ -698,10 +1264,11 @@ function renderReviewPanel() {
       ${renderStageNotice(5)}
       <div class="summary-grid">
         ${renderSummaryCard("Mode", setupModeLabel())}
-        ${renderSummaryCard("Storage", state.installRoot || "Not selected")}
+        ${renderSummaryCard("FRAME data", state.dataRoot || "Not selected")}
         ${renderSummaryCard("Services", `${selectedServiceCount()} selected`)}
-        ${renderSummaryCard("Web setup", setupUrl())}
+        ${renderSummaryCard("Dashboard", setupUrl())}
       </div>
+      <p class="deployment-location">Deployment files: ${escapeHtml(state.installRoot || "Waiting for the managed deployment folder")}. Docker image storage is separate.</p>
       ${renderCredentialsPanel()}
       ${state.mode === "advanced" ? renderAdvancedPanel() : ""}
       <h3 style="margin-top: 18px;">Readiness results</h3>
@@ -802,7 +1369,7 @@ function renderAdvancedInput(field) {
 function renderCheckCard(check) {
   return `
     <article class="check-card">
-      <span class="pill ${check.status}">${check.status}</span>
+      <span class="pill ${check.status}">${({ good: "Ready", warn: "Warning", bad: "Needs attention" })[check.status] || "Unknown"}</span>
       <strong>${escapeHtml(check.label)}</strong>
       <p>${escapeHtml(check.detail)}</p>
     </article>
@@ -849,20 +1416,21 @@ function renderLaunchPanel() {
       <div class="panel-heading">
         <div>
           <p class="eyebrow">Ready</p>
-          <h2>Install FRAME, then continue in setup.</h2>
-          <p>Press Install FRAME once. This commits your configuration, downloads the release images, and waits for Docker Compose health checks before offering the web setup page.</p>
+          <h2>${state.existingInstall ? "Apply your setup changes." : "Install FRAME."}</h2>
+          <p>This writes the configuration and waits for service health checks. Installation may download release images. Changes to an existing installation can interrupt active FRAME work.</p>
         </div>
       </div>
       <div class="summary-grid">
         ${renderSummaryCard("Mode", setupModeLabel())}
-        ${renderSummaryCard("Storage", state.installRoot || "Not selected")}
+        ${renderSummaryCard("FRAME data", state.dataRoot || "Not selected")}
         ${renderSummaryCard("Services", `${selectedServiceCount()} selected`)}
-        ${renderSummaryCard("Web setup", setup)}
+        ${renderSummaryCard("Dashboard", setup)}
       </div>
       <div class="install-action-panel">
         <strong>${installStatusTitle()}</strong>
         <p>${installStatusCopy()}</p>
       </div>
+      ${state.installing || state.startupProgress?.installRoot === state.installRoot && state.startupProgress?.phase === "failed" ? renderContainerStartup(state.startupProgress || { phase: "starting", services: [] }) : ""}
       <pre class="log">${escapeHtml(state.log.join("\n"))}</pre>
     </section>
   `;
@@ -870,15 +1438,17 @@ function renderLaunchPanel() {
 
 function renderFooter() {
   const isInstallStage = state.stage === SETUP_STAGES.length - 1;
+  const guided = state.stage === 3 && state.mode === "guided";
   const hardStopNext = state.preflightRunning || (state.stage === 0 && !hostReadyForInstall());
   return `
     <div class="footer-actions">
-      <button class="button ghost" id="previous-stage" type="button" ${state.stage === 0 ? "disabled" : ""}>Previous</button>
+      <button class="button ghost" id="${guided && state.guidedServiceIndex > 0 ? "previous-service" : "previous-stage"}" type="button" ${state.stage === 0 ? "disabled" : ""}>${guided && state.guidedServiceIndex > 0 ? "Previous service" : "Back"}</button>
       <div class="button-row">
+        <small data-draft-error role="alert">${escapeHtml(state.draftError)}</small>
         ${state.stage === 0 ? "<button class=\"button\" id=\"docker-guide\" type=\"button\">Docker install guide</button>" : ""}
         ${isInstallStage ? renderInstallFooterActions() : `
-          <button class="button primary" id="next-stage" type="button" ${hardStopNext ? "disabled" : ""}>
-            ${nextButtonLabel()}
+          <button class="button primary" id="${guided ? "next-service" : "next-stage"}" type="button" ${hardStopNext ? "disabled" : ""}>
+            ${guided ? (state.guidedServiceIndex === SERVICES.length - 1 ? "Continue" : "Next service") : nextButtonLabel()}
           </button>
         `}
       </div>
@@ -889,8 +1459,8 @@ function renderFooter() {
 function renderInstallFooterActions() {
   if (state.installStatus === "complete") {
     return `
-      <button class="button primary install-frame-button" data-open-setup type="button">Open FRAME Setup</button>
-      <button class="button ghost" data-finish-installer type="button">Finish</button>
+      <button class="button primary install-frame-button" data-open-setup type="button">Launch FRAME Portal</button>
+      <button class="button ghost" data-screen="home" type="button">Back to launcher</button>
     `;
   }
 
@@ -904,7 +1474,7 @@ function renderInstallFooterActions() {
 function installButtonLabel() {
   if (state.installing) return "Installing...";
   if (state.installStatus === "failed") return "Retry Install";
-  return "Install FRAME";
+  return state.existingInstall ? "Apply setup changes" : "Install FRAME";
 }
 
 function installStatusTitle() {
@@ -922,39 +1492,41 @@ function installStatusCopy() {
     return "The install did not complete. Review the log, correct the issue, then return to Review and rerun readiness checks.";
   }
   if (state.installStatus === "complete") {
-    return "Docker Compose health checks passed. Open FRAME Setup when you are ready, or Finish to close this installer.";
+    return "Service health checks passed. Open the FRAME dashboard from the launcher when you are ready.";
   }
-  return "The final button writes the selected configuration, starts the FRAME stack, and waits for Compose health checks before showing the setup link.";
+  return "The final button writes the selected configuration, starts FRAME, and waits for service health checks before returning to the launcher.";
+}
+
+function selectSetupMode(mode) {
+  if (!SETUP_MODES.some((option) => option.id === mode)) return;
+  state.mode = mode;
+  if (!state.existingInstall && mode === "quick") {
+    state.deploymentMode = "LAN";
+    state.publicHostname = "";
+    state.credentials.tunnelToken = "";
+    state.advancedSettings.PUBLIC_RELAY_HOST = "";
+    state.autoPorts = false;
+    state.ports = Object.fromEntries(EXPOSED_PORTS.map((port) => [port.key, port.defaultValue]));
+    state.selectedServices = defaultServiceSelection();
+  }
+  state.guidedReviewedServices = Object.fromEntries(SERVICES.map((service) => [service.id, state.existingInstall || mode === "quick"]));
+  state.guidedServiceIndex = 0;
+  clearValidation();
+  invalidatePreflight();
+  addLog(`Selected ${setupModeLabel()}.`);
+  render();
 }
 
 function bindEvents() {
   document.querySelectorAll("[data-mode]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.mode = button.dataset.mode;
-      clearValidation();
-      if (state.mode === "quick") {
-        state.selectedServices = defaultServiceSelection();
-        state.guidedReviewedServices = Object.fromEntries(SERVICES.map((service) => [service.id, true]));
-      } else {
-        state.selectedServices = Object.fromEntries(SERVICES.map((service) => [service.id, false]));
-        state.guidedReviewedServices = Object.fromEntries(SERVICES.map((service) => [service.id, false]));
-      }
-      state.guidedServiceIndex = 0;
-      invalidatePreflight();
-      addLog(`Selected ${setupModeLabel()}.`);
-      render();
-    });
+    button.addEventListener("click", () => selectSetupMode(button.dataset.mode));
   });
 
   document.querySelector("#choose-folder")?.addEventListener("click", chooseFolder);
-  document.querySelector("#use-preview-folder")?.addEventListener("click", usePreviewFolder);
   document.querySelector("#refresh-host")?.addEventListener("click", () => refreshHostStatus({ quiet: false }));
   document.querySelector("#apply-install")?.addEventListener("click", applyInstall);
   document.querySelectorAll("[data-open-setup]").forEach((button) => {
     button.addEventListener("click", () => openSetup({ url: state.lastSetupUrl || setupUrl() }));
-  });
-  document.querySelectorAll("[data-finish-installer]").forEach((button) => {
-    button.addEventListener("click", finishInstaller);
   });
   document.querySelectorAll("[data-reconfigure-root]").forEach((button) => {
     button.addEventListener("click", () => reconfigureInstall(button.dataset.reconfigureRoot));
@@ -963,6 +1535,7 @@ function bindEvents() {
   document.querySelector("#previous-service")?.addEventListener("click", () => {
     clearValidation();
     state.guidedServiceIndex = Math.max(0, state.guidedServiceIndex - 1);
+    saveSetupDraft();
     render();
   });
   document.querySelector("#next-service")?.addEventListener("click", () => {
@@ -978,6 +1551,7 @@ function bindEvents() {
       state.validationMessage = validationMessageForStage(3);
       addLog(state.validationMessage);
     }
+    saveSetupDraft();
     render();
   });
 
@@ -986,6 +1560,7 @@ function bindEvents() {
     clearValidation();
     state.animateStage = true;
     state.stage = Math.max(0, state.stage - 1);
+    saveSetupDraft();
     render();
   });
   document.querySelector("#next-stage")?.addEventListener("click", async () => {
@@ -1005,6 +1580,7 @@ function bindEvents() {
     clearValidation();
     state.animateStage = true;
     state.stage = Math.min(SETUP_STAGES.length - 1, state.stage + 1);
+    saveSetupDraft();
     render();
   });
 
@@ -1085,15 +1661,13 @@ function bindEvents() {
 
 async function chooseFolder() {
   try {
-    if (!isDesktopRuntime()) throw new Error("Open the desktop installer to choose a folder.");
-    const selected = await window.frameDesktop.pickDirectory({ defaultPath: state.installRoot });
+    if (!isDesktopRuntime() || state.existingInstall) return;
+    const selected = await window.frameDesktop.pickDirectory({ defaultPath: state.dataRoot });
     if (typeof selected === "string") {
-      state.installRoot = selected;
-      state.credentials = emptyCredentials();
-      state.existingInstall = state.detectedInstallations.some((install) => install.installRoot === selected);
+      state.dataRoot = selected;
       clearValidation();
       invalidatePreflight();
-      addLog(`Selected storage root: ${selected}`);
+      addLog(`Selected FRAME data folder: ${selected}`);
     }
   } catch (error) {
     addLog(`Could not choose folder: ${error.message ?? error}`);
@@ -1101,27 +1675,22 @@ async function chooseFolder() {
   render();
 }
 
-function usePreviewFolder() {
-  state.installRoot = "D:\\FRAME-preview";
-  state.credentials = emptyCredentials();
-  state.existingInstall = false;
-  clearValidation();
-  invalidatePreflight();
-  addLog(`Selected preview storage root: ${state.installRoot}`);
-  render();
-}
-
 async function reconfigureInstall(installRoot) {
-  if (!installRoot || state.installing) return;
+  if (!installRoot || state.installing || state.launcher?.busy || state.launcherAction) return;
   invalidatePreflight();
   try {
+    await draftWrites;
     const plan = await invokeCommand("load_install_plan", { installRoot });
     applyLoadedPlan(plan);
+    state.activeInstallRoot = installRoot;
     state.stage = 5;
+    state.screen = "setup";
     state.animateStage = true;
     addLog(`Loaded previous FRAME install from ${installRoot}.`);
+    saveSetupDraft();
   } catch (error) {
-    addLog(`Could not load previous install: ${error.message ?? error}`);
+    state.launcherError = `Could not load previous install: ${error.message ?? error}`;
+    addLog(state.launcherError);
   }
   render();
 }
@@ -1129,6 +1698,7 @@ async function reconfigureInstall(installRoot) {
 function applyLoadedPlan(plan) {
   state.mode = normalizeSetupMode(plan.mode);
   state.installRoot = plan.installRoot ?? "";
+  state.dataRoot = plan.dataRoot ?? "";
   state.deploymentMode = plan.deploymentMode ?? "LAN";
   state.publicHostname = plan.publicHostname ?? "";
   state.autoPorts = false;
@@ -1174,6 +1744,7 @@ async function refreshHostStatus({ quiet } = { quiet: false }) {
     state.hostStatus = status;
     state.previewMode = Boolean(status.previewMode);
     state.detectedInstallations = status.detectedInstallations ?? [];
+    applyDefaults(status.defaults);
     if (!quiet) addLog("Host detection completed.");
   } catch (error) {
     addLog(`Host detection failed: ${error.message ?? error}`);
@@ -1196,6 +1767,8 @@ async function runPreflight() {
   state.preflightRunning = true;
   render();
   try {
+    await draftWrites;
+    if (generation !== state.preflightGeneration) return;
     const preflight = await invokeCommand("run_preflight", {
       request: buildPlan(),
     });
@@ -1214,6 +1787,7 @@ async function runPreflight() {
     }
   } finally {
     state.preflightRunning = false;
+    saveSetupDraft();
     render();
   }
 }
@@ -1227,27 +1801,43 @@ async function applyInstall() {
   }
   const plan = buildPlan();
   state.installing = true;
+  state.startupProgress = null;
+  state.startupPending = true;
   state.installStatus = "running";
   addLog("Starting FRAME install/apply.");
   const installLogStream = await startInstallLogListener();
   render();
   try {
+    await draftWrites;
     const result = await invokeCommand("apply_install_plan", { plan });
+    if (Array.isArray(result.readinessChecks)) state.lastReadiness = { installRoot: state.installRoot, checks: result.readinessChecks };
+    if (state.startupProgress?.phase === "failed") throw new Error("FRAME startup did not complete. Review the container states and recheck readiness before retrying.");
     state.savedPlanPath = result.path;
     if (!installLogStream.streamed()) {
       for (const line of result.logs ?? []) addLog(line);
     }
     addLog(`Committed FRAME setup plan: ${result.path}`);
-    state.lastSetupUrl = result.setupUrl || setupUrl();
-    addLog(`FRAME stack apply completed. Setup is ready at ${state.lastSetupUrl}.`);
+    state.lastSetupUrl = result.dashboardUrl || setupUrl();
+    state.activeInstallRoot = state.installRoot;
+    await refreshLauncherStatus();
+    const observed = currentInstallation();
+    if (state.launcherError || observed?.installRoot !== state.installRoot || observed?.state !== "running") {
+      throw new Error(state.launcherError || observed?.detail || "The deployment finished, but FRAME could not be confirmed running. Recheck its status before continuing.");
+    }
+    state.startupProgress = { ...state.startupProgress, installRoot: state.installRoot, phase: "complete", services: observed.services ?? [], detail: observed.detail };
+    addLog(`FRAME stack apply completed. Portal: ${state.lastSetupUrl}.`);
     state.installStatus = "complete";
     state.credentials = emptyCredentials();
+    await discardSetupDraft();
+    state.screen = "home";
   } catch (error) {
     state.installStatus = "failed";
+    if (state.startupProgress) state.startupProgress = { ...state.startupProgress, phase: "failed" };
     invalidatePreflight();
     addLog(`Could not start installation: ${error.message ?? error}`);
   } finally {
     installLogStream.stop();
+    state.startupPending = false;
   }
   state.installing = false;
   render();
@@ -1274,6 +1864,7 @@ async function startInstallLogListener() {
 
 async function openSetup({ renderAfter = true, url = setupUrl() } = {}) {
   try {
+    if (!url) return;
     if (isDesktopRuntime()) await window.frameDesktop.openExternal(url);
     else window.open(url, "_blank", "noopener");
     addLog(`Opened ${url}`);
@@ -1283,15 +1874,32 @@ async function openSetup({ renderAfter = true, url = setupUrl() } = {}) {
   if (renderAfter) render();
 }
 
-async function finishInstaller() {
-  if (state.installing) return;
-  if (isDesktopRuntime()) await window.frameDesktop.closeWindow();
-  else window.close();
+async function openDockerGuide() {
+  await openSetup({ url: dockerGuidance().url });
 }
 
-async function openDockerGuide() {
-  const url = "https://docs.docker.com/get-started/get-docker/";
-  await openSetup({ url });
+function hostPlatform() {
+  return state.launcher?.platform ?? state.hostStatus?.platform;
+}
+
+function dockerGuidance() {
+  const platform = hostPlatform();
+  if (platform === "darwin") return { instructions: "Install and start Docker Desktop for Mac.", url: "https://docs.docker.com/desktop/setup/install/mac-install/" };
+  if (platform === "win32") return { instructions: "Install and start Docker Desktop for Windows with Linux containers enabled.", url: "https://docs.docker.com/desktop/setup/install/windows-install/" };
+  if (platform === "linux") return { instructions: "Install Docker Engine with the Compose plugin and start the Docker service.", url: "https://docs.docker.com/engine/install/" };
+  return { instructions: "Use Docker Desktop on Windows or macOS, or Docker Engine with Compose on Linux.", url: "https://docs.docker.com/get-started/get-docker/" };
+}
+
+function hostCompatibilityIssue() {
+  const host = state.screen === "setup" ? { ...state.launcher, ...state.hostStatus } : { ...state.hostStatus, ...state.launcher };
+  if (host.hostSupported === false || host.dockerIssue === "unsupported_host") return { title: "This computer is not supported", detail: host.hostDetail || host.detail || "This operating system or architecture is not supported by FRAME Launcher." };
+  const titles = { docker_cli_missing: "Docker is not installed", docker_compose_missing: "Docker Compose is unavailable", docker_compose_unavailable: "Docker Compose is unavailable",
+    docker_permission_denied: "Docker access is denied", docker_engine_unavailable: "Docker is not reachable",
+    unsupported_engine_os: "This Docker engine is not supported", unsupported_engine_architecture: "This Docker engine is not supported",
+    unsupported_docker_socket: "This Docker connection is not supported", unsupported_rootless: "This Docker configuration is not supported",
+    remote_engine: "Select a local Docker engine" };
+  if (titles[host.dockerIssue]) return { title: titles[host.dockerIssue], detail: host.detail };
+  return null;
 }
 
 function buildPlan() {
@@ -1300,6 +1908,7 @@ function buildPlan() {
     deploymentMode: state.deploymentMode,
     publicHostname: state.publicHostname,
     installRoot: state.installRoot,
+    dataRoot: state.dataRoot,
     subfolders: { ...state.subfolders },
     selectedServices: Object.entries(state.selectedServices)
       .filter(([, enabled]) => enabled)
@@ -1328,9 +1937,16 @@ function isDesktopRuntime() {
 }
 
 async function mockInvoke(command, args, originalError) {
+  const previewDefaults = { installRoot: "C:\\FRAME-deployment-preview", dataRoot: "D:\\FRAME-data-preview" };
+  if (command === "get_launcher_status") return { platform: "preview", installations: [], dockerAvailable: false, detail: "Simulated first-run view. No host services were checked.", observedAt: new Date().toISOString(), defaults: previewDefaults };
+  if (command === "load_draft") return { draft: null };
+  if (command === "get_launcher_preferences") return { keepInTray: true, notifications: true, startAtLogin: false, startAtLoginSupported: false, trayAvailable: false };
+  if (["start_stack", "stop_stack", "recover_stack", "update_stack", "repair_stack", "check_updates", "get_diagnostics", "backup_stack", "inspect_backup", "restore_backup", "remove_stack", "locate_installation", "open_data_folder", "save_draft", "clear_draft", "set_launcher_preferences"].includes(command)) throw new Error("Host changes are disabled in browser preview.");
   if (command === "detect_host") {
     return {
       previewMode: true,
+      platform: "preview",
+      defaults: previewDefaults,
       checks: [
         { label: "Desktop host bridge", status: "warn", detail: "Browser preview only: host checks are simulated and installation is disabled." },
         { label: "Docker CLI", status: "warn", detail: "Native Docker detection requires the Electron app." },
@@ -1342,7 +1958,7 @@ async function mockInvoke(command, args, originalError) {
         installRoot: "D:\\FRAME-preview",
         setupMode: "quick",
         updatedAt: new Date().toISOString(),
-        setupUrl: "http://localhost/setup",
+        setupUrl: "http://localhost/dashboard",
         canReconfigure: true,
       }],
     };
@@ -1350,7 +1966,7 @@ async function mockInvoke(command, args, originalError) {
   if (command === "run_preflight") {
     return {
       checks: [
-        { label: "Storage root", status: args.request.installRoot ? "good" : "bad", detail: args.request.installRoot || "Choose a storage root before install." },
+        { label: "FRAME data folder", status: args.request.dataRoot ? "warn" : "bad", detail: args.request.dataRoot || "Choose a data folder before installation." },
         { label: "Port plan", status: "bad", detail: "Browser preview cannot inspect host ports. Run the desktop installer for real validation." },
         { label: "Docker readiness", status: "warn", detail: "Install Docker Desktop or Docker Engine, then recheck in the native app." },
       ],
@@ -1363,6 +1979,7 @@ async function mockInvoke(command, args, originalError) {
       deploymentMode: "LAN",
       publicHostname: "",
       installRoot: args.installRoot,
+      dataRoot: previewDefaults.dataRoot,
       subfolders: Object.fromEntries(SUBFOLDERS.map((folder) => [folder, folder])),
       selectedServices: SERVICES.filter((service) => service.defaultEnabled).map((service) => service.id),
       ports: {
@@ -1387,7 +2004,7 @@ async function mockInvoke(command, args, originalError) {
 function canProceedFromStage(stage) {
   if (stage === 0) return hostReadyForInstall();
   if (stage === 1) return Boolean(state.mode);
-  if (stage === 2) return Boolean(state.installRoot.trim());
+  if (stage === 2) return Boolean(state.installRoot.trim() && state.dataRoot.trim());
   if (stage === 3) return servicesStageComplete();
   if (stage === 4) return portValidation().status === "good" && publicHostnameValidation().status === "good" && publicRelayHostValidation().status === "good" && photoFtpHostValidation().status === "good";
   if (stage === 5) return readinessPassed();
@@ -1396,14 +2013,14 @@ function canProceedFromStage(stage) {
 
 function nextButtonLabel() {
   if (state.preflightRunning) return "Checking readiness...";
-  if (state.stage === 0 && !hostReadyForInstall()) return "Install Docker first";
+  if (state.stage === 0 && !hostReadyForInstall()) return hostCompatibilityIssue() ? "Resolve host compatibility" : "Check Docker first";
   if (state.stage === 5 && !readinessPassed()) return "Run readiness checks";
   if (state.stage === 5) return "Continue to install";
   return "Next";
 }
 
 function validationMessageForStage(stage) {
-  if (stage === 0) return "Install Docker Desktop, start Docker, then press Recheck before continuing.";
+  if (stage === 0) return hostCompatibilityIssue()?.detail || `${dockerGuidance().instructions} Then press Recheck before continuing.`;
   if (stage === 1) return "Choose Quick Start, Guided Setup, or Advanced before continuing.";
   if (stage === 2) return "Choose a FRAME storage folder before continuing.";
   if (stage === 3 && state.mode === "guided" && !guidedServiceReviewComplete()) {
@@ -1479,7 +2096,7 @@ function credentialsValidation() {
 }
 
 function hostReadyForInstall() {
-  return Boolean(state.hostStatus?.checks?.length) && dockerBlockingChecks().length === 0;
+  return Boolean(state.hostStatus?.checks?.length) && !hostCompatibilityIssue() && !state.hostStatus.checks.some((check) => check.status === "bad");
 }
 
 function dockerBlockingChecks() {
@@ -1502,7 +2119,7 @@ function normalizeSetupMode(mode) {
 
 function setupUrl() {
   const port = String(state.ports.edge || 80);
-  return port === "80" ? "http://localhost/setup" : `http://localhost:${port}/setup`;
+  return port === "80" ? "http://localhost/dashboard" : `http://localhost:${port}/dashboard`;
 }
 
 function invalidatePreflight() {
@@ -1510,6 +2127,7 @@ function invalidatePreflight() {
   state.preflightGeneration += 1;
   const results = document.querySelector("[data-preflight-results]");
   if (results) results.innerHTML = '<p class="card">Run readiness checks for the current settings.</p>';
+  saveSetupDraft();
 }
 
 function syncProgressControls() {
@@ -1521,7 +2139,7 @@ function syncProgressControls() {
 
   const storagePill = document.querySelector("[data-storage-status]");
   if (storagePill) {
-    const hasRoot = Boolean(state.installRoot.trim());
+    const hasRoot = Boolean(state.dataRoot.trim());
     storagePill.className = `pill ${hasRoot ? "good" : "warn"}`;
     storagePill.textContent = hasRoot ? "Selected" : "Required";
   }
@@ -1546,7 +2164,7 @@ function photoFtpHostValidation() {
   const host = String(state.advancedSettings.PHOTO_FTP_PASSIVE_HOST ?? "").trim();
   if (!host && state.existingInstall) return { status: "good", message: "Leave empty to preserve the existing FTP host address." };
   if (!host) return { status: "warn", message: "Enter this machine's LAN IPv4 address or DNS hostname so cameras can connect to Photo FTP." };
-  if (!isValidRelayHost(host) || /^(?:0|127)\./.test(host)) return { status: "bad", message: "Use a reachable LAN IPv4 address or DNS name such as frame.local, without a scheme or port." };
+  if (!isValidRelayHost(host) || /^(?:0|127)\./.test(host)) return { status: "bad", message: "Use a reachable LAN IPv4 address or a DNS name you have configured, without a scheme or port." };
   return { status: "good", message: "Photo FTP will advertise this address to cameras; reserve it in your router if it is assigned by DHCP." };
 }
 

@@ -134,7 +134,13 @@ test("collects only sanitized generated links and keeps them on the public dashb
   const groupsWithLanOnly = structuredClone(groups);
   groupsWithLanOnly.streams.push({
     label: "Should stay on LAN",
-    links: [{ label: "Management", url: "/slsui/private", openable: true }],
+    links: [
+      { label: "Management", url: "/slsui/private", openable: true },
+      { label: "External host", url: "https://example.com/stats/play_main", openable: true },
+      { label: "Protocol-relative host", url: "//example.com/stats/play_main", openable: true },
+      { label: "Similar route prefix", url: "/stats-private/play_main", openable: true },
+      { label: "Parent route", url: "/stats/../slsui/private", openable: true },
+    ],
   });
   const publicTools = buildPortalTools({ config: stack, source: "file" }, services, "public", groupsWithLanOnly);
   assert.equal(publicTools.find((tool) => tool.id === "streams").route, "");

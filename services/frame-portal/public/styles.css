@@ -396,9 +396,51 @@ h3 {
 
 .tool-card:hover,
 .tool-card:focus-within {
-  border-color: var(--frame-accent-border);
+  border-color: var(--tool-accent, var(--frame-accent-border));
   background: var(--frame-panel-strong);
   transform: translateY(-1px);
+}
+
+/* Tool colors and SVG icons mirror syroniusframe.com/toolkit/. */
+.tool-card[data-tool="streams"] { --tool-accent: #51d3e2; }
+.tool-card[data-tool="overlays"] { --tool-accent: #bca1ff; }
+.tool-card[data-tool="audio"] { --tool-accent: #70e0b2; }
+.tool-card[data-tool="photo-upload"] { --tool-accent: #e6d879; }
+.tool-card[data-tool="gallery"] { --tool-accent: #f39bc1; }
+.tool-card[data-tool="today"] { --tool-accent: #ff9b89; }
+.tool-card[data-tool="status"] { --tool-accent: #adcaf0; }
+.tool-card[data-tool="belabox"] { --tool-accent: #bcd980; }
+
+.tool-card[data-tool] {
+  border-top-color: var(--tool-accent, var(--frame-border));
+}
+
+.tool-card-copy h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tool-icon {
+  width: 21px;
+  height: 21px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.65;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  color: var(--tool-accent, var(--frame-accent-strong));
+}
+
+:root[data-theme="day"] .tool-icon,
+.theme-day .tool-icon {
+  color: color-mix(in srgb, var(--tool-accent, var(--frame-accent-strong)) 55%, #07111b);
+}
+
+@media (forced-colors: active) {
+  .tool-card[data-tool] { border-color: CanvasText; }
+  .tool-icon { color: CanvasText; }
 }
 
 .tool-card.disabled {

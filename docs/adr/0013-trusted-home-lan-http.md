@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-14
+- **Updated:** 2026-09-30 — removed automatic LAN hostname discovery.
 
 ## Context
 
@@ -16,11 +17,12 @@ FRAME-owned certificate authority on every client device.
 the operator's responsibility. FRAME does not generate self-signed certificates, distribute a local
 certificate authority, or automate LAN TLS.
 
-When the host provides a standard mDNS publisher, FRAME advertises its LAN edge as `frame.local`
-and the `_http._tcp` service named `FRAME`. Discovery starts and stops with the stack; on Windows,
-a per-user watchdog restores it after sign-in and follows Edge availability. This is a friendly
-alias rather than a security boundary; the host's LAN address and configured Edge port
-remain valid fallbacks.
+On the FRAME host, Portal access uses `http://localhost/dashboard`, including the configured Edge
+port when it is not 80: `http://localhost:<configured-port>/dashboard`. Other LAN devices use the
+host's LAN IP address or a DNS name the operator configures and maintains, with the same port and
+route. FRAME does not publish LAN hostnames or install a discovery watchdog. Background tracking
+of host environment or network changes is outside the launcher scope; explicit readiness checks
+and observed service health remain required.
 
 Hybrid/public routes continue to use HTTPS at Cloudflare and the capability-aware
 `frame-public-gateway`. The internal `cloudflared` to public-gateway hop remains HTTP on the private
@@ -33,7 +35,7 @@ requirements rather than presenting an untrusted LAN certificate.
 ## Consequences
 
 - A default install has no certificate, DNS, or client trust-enrollment workflow.
-- Supported LAN clients can open `http://frame.local` without finding the host IP first.
+- LAN clients need the host's LAN IP address or operator-managed DNS name and configured Edge port.
 - Direct LAN traffic is not encrypted by FRAME.
 - Operators who require LAN encryption may place FRAME behind infrastructure they manage.
 - Cloudflare Access policy automation remains an optional, separate future enhancement.

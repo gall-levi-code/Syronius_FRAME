@@ -165,6 +165,7 @@ async function update() {
       }),
     ]);
     const stream = status.stream;
+    window.FrameFeedback?.clearIssue("listener-relay", { notify: "Audio relay reconnected." });
     document.querySelector("#source-name").textContent = stream.name;
     document.querySelector("#relay-mode").textContent = modeLabel(stream.mode);
     document.querySelector("#bitrate").textContent = `${stream.activeBitrateKbps} kbps AAC`;
@@ -177,6 +178,8 @@ async function update() {
   } catch (error) {
     document.querySelector("#status-pill").textContent = error.message;
     document.querySelector("#status-pill").className = "status-pill bad";
+    document.querySelector("#source-state").textContent = "Relay unavailable";
+    window.FrameFeedback?.issue("listener-relay", { message: error.message, tone: "error", target: ".listen-status", summary: "Audio relay unavailable." });
   }
 }
 
@@ -236,7 +239,6 @@ async function resumePlayback() {
   wantsPlayback = true;
   userPaused = false;
   startPending = true;
-  clearPlaybackError();
   setPlaybackState(playlistUrl ? "Joining live" : "Waiting for relay");
   updatePlaybackButton();
 
@@ -547,14 +549,14 @@ function setPlaybackState(value) {
 }
 
 function showPlaybackError(message) {
-  playbackError.textContent = message;
-  playbackError.classList.remove("hidden");
+  window.FrameFeedback?.issue("listener-playback", { message, tone: "error", target: ".player-primary", summary: "Audio playback needs attention." });
   updatePlaybackButton();
 }
 
 function clearPlaybackError() {
   playbackError.textContent = "";
   playbackError.classList.add("hidden");
+  window.FrameFeedback?.clearIssue("listener-playback");
 }
 
 function modeLabel(mode) { return mode === "publisher" ? "Live capture" : mode === "silence" ? "Sending silence" : "Offline"; }

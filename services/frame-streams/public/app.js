@@ -3,8 +3,6 @@ const OPEN_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 3h6v
 const COPY_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M15 9V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h3"/></svg>';
 const CHECK_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>';
 const list = document.querySelector("#stream-list");
-const notice = document.querySelector("#notice");
-const receiverStatus = document.querySelector("#receiver-status");
 const streamDialog = document.querySelector("#stream-dialog");
 const linksDialog = document.querySelector("#links-dialog");
 const statsOutputDialog = document.querySelector("#stats-output-dialog");
@@ -63,19 +61,19 @@ function readStoredTheme() {
 }
 
 async function load() {
-  clearNotice();
   try {
     const [config, result] = await Promise.all([api("/slsui/api/config"), api("/slsui/api/streams")]);
     state.config = config;
     state.streams = result.streams;
-    receiverStatus.textContent = "Telemetry ready";
-    receiverStatus.className = "status-pill good";
     render();
+    window.FrameFeedback.clearIssue("connection", { notify: "Stream management reconnected." });
     openDialogForHash();
   } catch (error) {
-    receiverStatus.textContent = "Telemetry unavailable";
-    receiverStatus.className = "status-pill bad";
-    showNotice(error.message);
+    window.FrameFeedback.issue("connection", {
+      message: `Stream management could not refresh. Displayed measurements may be out of date.\n${error.message}`,
+      tone: "error", summary: "Stream data unavailable", target: ".toolbar",
+      action: { label: "Retry", onClick: load },
+    });
   }
 }
 
@@ -177,11 +175,12 @@ async function saveStream(event) {
         description: document.querySelector("#description-input").value,
       }),
     });
+    window.FrameFeedback.clearIssue("stream-save");
     streamDialog.close();
     await load();
     showNotice(custom ? "BELABOX telemetry connected." : "FRAME relay stream created.", "ok");
   } catch (error) {
-    showNotice(error.message);
+    showNotice(error.message, "error", { key: "stream-save", target: "#stream-form .dialog-actions", summary: "Stream could not be saved" });
   }
 }
 
@@ -213,13 +212,21 @@ async function confirmDeleteStream() {
   button.disabled = true;
   try {
     const result = await api(`/slsui/api/streams/${encodeURIComponent(id)}`, { method: "DELETE" });
+    window.FrameFeedback.clearIssue("stream-delete");
     deleteStreamDialog.close();
     await load();
     const count = Array.isArray(result.unbound_overlays) ? result.unbound_overlays.length : 0;
     const cleanup = count ? ` ${count} overlay source${count === 1 ? " was" : "s were"} unbound.` : "";
-    showNotice(`Stream deleted.${cleanup}${result.overlay_cleanup_warning ? ` ${result.overlay_cleanup_warning}` : ""}`, result.overlay_cleanup_warning ? "error" : "ok");
+    showNotice(`Stream deleted.${cleanup}`, "ok");
+    if (result.overlay_cleanup_warning) {
+      window.FrameFeedback.issue("overlay-cleanup", {
+        message: `The stream was deleted, but automatic overlay cleanup needs attention.\n${result.overlay_cleanup_warning}`,
+        tone: "warning", summary: "Check overlay cleanup", target: ".toolbar-actions",
+        action: { label: "Open Overlay Wizard", onClick: openOverlayManager },
+      });
+    }
   } catch (error) {
-    showNotice(error.message);
+    showNotice(error.message, "error", { key: "stream-delete", target: "#delete-stream-dialog .dialog-actions", summary: "Stream could not be deleted" });
   } finally {
     button.disabled = false;
   }
@@ -299,11 +306,18 @@ async function api(url, init) {
   return body;
 }
 
-function showNotice(message, kind = "error") {
-  notice.textContent = message;
-  notice.className = `notice notice-${kind}`;
+function showNotice(message, kind = "error", options = {}) {
+  const key = options.key || "action";
+  if (kind === "ok") {
+    window.FrameFeedback.clearIssue(key);
+    window.FrameFeedback.notify(message, { tone: "success" });
+  } else {
+    window.FrameFeedback.issue(key, {
+      message, tone: "error", summary: options.summary || "Stream action failed",
+      target: options.target || ".toolbar-actions",
+    });
+  }
 }
-function clearNotice() { notice.className = "notice hidden"; }
 async function copyWithConfirmation(button) {
   const label = button.dataset.copyLabel ||= button.getAttribute("aria-label");
   const title = button.dataset.copyTitle ||= button.title;

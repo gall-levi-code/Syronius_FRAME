@@ -4,7 +4,7 @@ import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promi
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { FRAME_IMAGE_SERVICES, RELEASE_IMAGE_PREFIX } from "../installer/frame-release.mjs";
+import { FRAME_IMAGE_SERVICES, RELEASE_IMAGE_PREFIX, SUPPORTED_RELEASE_PLATFORMS } from "../installer/frame-release.mjs";
 
 const commit = "c".repeat(40);
 const service = FRAME_IMAGE_SERVICES[0];
@@ -45,6 +45,7 @@ require("node:module").syncBuiltinESMExports();
         env: {
           ...process.env, SERVICE: service, SOURCE_COMMIT: commit, IMAGE_PREFIX: RELEASE_IMAGE_PREFIX,
           IMAGE: imageRef, VERSION_TAG: "", RELEASE_TAG: "", GITHUB_OUTPUT: path.join(root, "outputs"),
+          PLATFORM: "linux/amd64", IMAGE_SUFFIX: "",
           TEST_HEAD_COMMIT: commit, TEST_TAG_COMMIT: commit, TEST_IMAGE: JSON.stringify([image]), ...env,
         },
       });
@@ -71,7 +72,7 @@ test("release planning uses the actual checked-out tag commit and the canonical 
 test("publishing validates the tested artifact identity and records only its own registry digest", async (t) => {
   const setup = await fixture(t);
   await writeFile(path.join(setup.root, "image-artifact", "metadata.json"), JSON.stringify({
-    commit, service, image: imageRef, image_id: imageId,
+    commit, service, image: imageRef, image_id: imageId, platform: "linux/amd64",
   }));
   const check = await inline("release-images.yml", "const metadata =");
   assert.equal(setup.run(check).status, 0);
@@ -81,34 +82,47 @@ test("publishing validates the tested artifact identity and records only its own
   assert.notEqual(setup.run(check, { SOURCE_COMMIT: "a".repeat(40) }).status, 0);
   const record = await inline("release-images.yml", "const reference =");
   assert.equal(setup.run(record).status, 0);
-  assert.equal(JSON.parse(await readFile(path.join(setup.root, "digests", `${service}.json`))).image, registryRef);
+  assert.equal(JSON.parse(await readFile(path.join(setup.root, "digests", `${service}-amd64.json`))).image, registryRef);
   for (const reference of [`ghcr.io/other/project@sha256:${"e".repeat(64)}`, `${registryRef}0`, `${RELEASE_IMAGE_PREFIX}/${service}@sha256:bad@sha256:${"e".repeat(64)}`]) {
     const invalid = { ...setup.image, RepoDigests: [reference] };
     assert.notEqual(setup.run(record, { TEST_IMAGE: JSON.stringify([invalid]) }).status, 0);
   }
+  const armEnv = { PLATFORM: "linux/arm64", IMAGE_SUFFIX: "-arm64", IMAGE: `${imageRef}-arm64`, TEST_IMAGE: JSON.stringify([{ ...setup.image, Architecture: "arm64" }]) };
+  await writeFile(path.join(setup.root, "image-artifact", "metadata.json"), JSON.stringify({
+    commit, service, image: armEnv.IMAGE, image_id: imageId, platform: armEnv.PLATFORM,
+  }));
+  assert.equal(setup.run(check, armEnv).status, 0);
+  assert.notEqual(setup.run(check, { ...armEnv, TEST_IMAGE: JSON.stringify([setup.image]) }).status, 0);
+  assert.equal(setup.run(record, armEnv).status, 0);
+  assert.equal(JSON.parse(await readFile(path.join(setup.root, "digests", `${service}-arm64.json`))).platform, "linux/arm64");
 });
 
-test("release manifest merging requires all 12 unique image results from one source commit", async (t) => {
+test("release manifests require all 12 unique results per architecture from one source commit", async (t) => {
   const setup = await fixture(t);
   const script = await inline("release-images.yml", "const manifest =");
-  const records = FRAME_IMAGE_SERVICES.map((name) => ({ commit, service: name, image: `${RELEASE_IMAGE_PREFIX}/${name}@sha256:${"e".repeat(64)}` }));
-  const save = (record, index) => writeFile(path.join(setup.root, "digests", `${FRAME_IMAGE_SERVICES[index]}.json`), JSON.stringify(record));
+  const records = SUPPORTED_RELEASE_PLATFORMS.flatMap((platform, index) => FRAME_IMAGE_SERVICES.map((name) => ({
+    commit, platform, service: name, image: `${RELEASE_IMAGE_PREFIX}/${name}@sha256:${(index ? "f" : "e").repeat(64)}`,
+  })));
+  const save = (record, index) => writeFile(path.join(setup.root, "digests", `${index}.json`), JSON.stringify(record));
   await Promise.all(records.map(save));
   const valid = setup.run(script);
   assert.equal(valid.status, 0, valid.stderr);
-  const output = path.join(setup.root, "frame-images.json");
-  const manifest = JSON.parse(await readFile(output));
-  assert.equal(manifest.commit, commit);
-  assert.equal(manifest.platform, "linux/amd64");
-  assert.equal(Object.keys(manifest.images).length, 12);
-  await rm(output);
-  for (const invalid of [{ ...records[0], commit: "a".repeat(40) }, records[1]]) {
+  const outputs = ["frame-images.json", "frame-images-arm64.json"].map((name) => path.join(setup.root, name));
+  for (const [index, output] of outputs.entries()) {
+    const manifest = JSON.parse(await readFile(output));
+    assert.equal(manifest.commit, commit);
+    assert.equal(manifest.platform, SUPPORTED_RELEASE_PLATFORMS[index]);
+    assert.equal(Object.keys(manifest.images).length, 12);
+    assert.equal(manifest.images[service], records[index * FRAME_IMAGE_SERVICES.length].image);
+    await rm(output);
+  }
+  for (const invalid of [{ ...records[0], commit: "a".repeat(40) }, records[1], { ...records[0], platform: "linux/arm64" }, { ...records[0], platform: "linux/arm/v7" }]) {
     await save(invalid, 0);
     assert.notEqual(setup.run(script).status, 0);
-    await assert.rejects(readFile(output), { code: "ENOENT" });
+    for (const output of outputs) await assert.rejects(readFile(output), { code: "ENOENT" });
   }
   await save(records[0], 0);
-  await rm(path.join(setup.root, "digests", `${service}.json`));
+  await rm(path.join(setup.root, "digests", "0.json"));
   assert.notEqual(setup.run(script).status, 0);
-  await assert.rejects(readFile(output), { code: "ENOENT" });
+  for (const output of outputs) await assert.rejects(readFile(output), { code: "ENOENT" });
 });

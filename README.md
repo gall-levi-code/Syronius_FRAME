@@ -26,6 +26,14 @@ required; the single-file download contains the installer runtime, not the Docke
 The installers are unsigned. On Linux, make the AppImage executable before opening it.
 See [FRAME Setup](apps/frame-setup/README.md) for prerequisites and installation details.
 
+The development desktop app now includes **FRAME Launcher**: installed-stack status, everyday
+start/stop controls, tray access, and saved setup progress. It also includes macOS support for Intel
+and Apple Silicon, with separate `.dmg`/`.zip` build targets, a menu-bar icon, and native Docker image
+selection. These changes require a new matching source/image/installer release before distribution;
+the historical download above does not include them. Mac packaging and native smoke checks are
+configured in CI; signed installation and complete media workflows still need testing on real Macs.
+See [launcher behavior and storage](apps/frame-setup/README.md) for the current implementation.
+
 ## Get The Code
 
 From GitHub, open **Code** and choose **Download ZIP**, or use this direct link:
@@ -89,15 +97,18 @@ Open the Portal:
 http://localhost/dashboard
 ```
 
-From another device on the same LAN, open:
+If you configured a different Edge port, include it, for example
+`http://localhost:8088/dashboard`. From another device on the same LAN, use the FRAME host's LAN
+IP address and configured port:
 
 ```text
-http://frame.local
+http://<FRAME-host-LAN-IP>:<configured-port>/dashboard
 ```
 
-FRAME advertises this address when the host provides mDNS/Bonjour. On Windows, the launcher keeps
-the advertisement active after sign-in and restores it when FRAME Edge returns. The host's LAN IP
-remains the fallback on networks that filter multicast discovery.
+Omit `:<configured-port>` when the port is 80. You can also use a DNS name that you configure and
+maintain on your network. FRAME does not publish a LAN hostname or run a discovery watchdog.
+The `localhost` addresses below refer to the computer running FRAME; use the LAN address and
+configured port when opening the same pages from another device.
 
 Useful first pages:
 
@@ -146,7 +157,7 @@ installation folder and ordinary access to Docker. Keep FRAME in a user-writable
 `C:\FRAME\Syronius_FRAME` instead of `Program Files` or another protected system folder.
 
 On Linux/macOS, run `chmod +x stack.sh` once, then run `./stack.sh` without arguments to open the
-same menu. macOS provides the required mDNS publisher; Linux uses `avahi-publish` when available.
+same menu.
 
 ## Optional Setup
 
@@ -203,10 +214,12 @@ Run verification:
 ## Native Setup App
 
 [`FRAME Setup`](apps/frame-setup/README.md) is the Electron online installer. Its runtime ships as
-one Windows `.exe` installer or Linux `.AppImage`; Docker remains a prerequisite. It retains the
+one Windows `.exe` installer or Linux `.AppImage`; the development version also targets macOS
+Intel and Apple Silicon `.dmg`/`.zip` packages. Docker remains a prerequisite. It retains the
 FRAME setup screens, validates the selected TCP/UDP ports on the host, and downloads an official
 release's prebuilt images before starting the stack. Node and Python do not need to be installed.
-See [release publishing](docs/releases.md) for the required `frame-images.json` release asset.
+See [release publishing](docs/releases.md) for the required architecture-specific image manifests
+and the remaining Mac release checks.
 
 For development:
 

@@ -40,29 +40,32 @@
     </script>
     <script src="/assets/frame-theme.js?v=global-theme-v1"></script>
     <link rel="stylesheet" href="/belabox/assets/styles.css?v=video-mixer-tab-v1">
+    <link rel="stylesheet" href="/assets/frame-tools.css?v=tool-identity-v1-feedback-v1">
+    <link rel="stylesheet" href="/assets/frame-feedback.css?v=feedback-v1">
   </head>
-  <body>
+  <body data-frame-tool="belabox">
     <header class="topbar">
       <a class="brand brand-link" href="/dashboard" aria-label="Open FRAME dashboard">
-        <img src="/belabox/assets/frame-logo-square.svg" alt="" aria-hidden="true">
-        <div><strong>Belabox Manager</strong><span>Remote encoder setup and photo transfer</span></div>
+        <svg class="frame-tool-emblem" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="4" y="7" width="16" height="14" rx="2"/><path d="M8 7V3m8 4V3M8 12h8m-8 5h3"/><circle cx="16" cy="17" r=".5"/></svg>
+        <div class="frame-header-copy"><strong class="frame-header-title">Belabox Manager</strong><span class="frame-header-description">Remote encoder setup and photo transfer</span></div>
       </a>
-      <div class="top-actions">
-        <span id="header-status" class="status-pill">Loading</span>
+      <div class="top-actions frame-header-actions">
         <button id="theme-toggle" class="icon-button theme-toggle" type="button" aria-label="Switch to day mode" title="Switch to day mode">
-          <svg class="moon-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8Z"/></svg>
-          <svg class="sun-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.42-1.42M17.66 6.34l1.41-1.41"/></svg>
+          <svg class="moon-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20.4 15.1A8.4 8.4 0 0 1 8.9 3.6 8.5 8.5 0 1 0 20.4 15.1Z"/></svg>
+          <svg class="sun-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
         </button>
       </div>
     </header>
 
     <main class="shell">
-      <div id="notice" class="notice hidden" role="status"></div>
+      <div class="frame-status-compat" hidden aria-hidden="true"><span hidden id="header-status" class="status-pill">Loading</span></div>
+      <div hidden id="notice" class="notice hidden" role="status"></div>
       <section class="manager-layout">
         <div id="device-tabs" class="device-tabs" role="tablist" aria-label="Belabox devices"></div>
         <article id="device-panel" class="device-panel" role="tabpanel" tabindex="-1"></article>
       </section>
     </main>
-    <script src="/belabox/assets/app.js?v=clipboard-confirmed-v1"></script>
+    <script src="/assets/frame-feedback.js?v=feedback-v1"></script>
+    <script src="/belabox/assets/app.js?v=clipboard-confirmed-v1-feedback-v1"></script>
   </body>
 </html>

@@ -110,7 +110,7 @@
     }
   }
 
-  async function save(next) {
+  async function save(next, { onError } = {}) {
     const draft = normalizeState({ ...state, ...next, updated_at: new Date().toISOString() });
     apply(draft);
     try {
@@ -120,7 +120,8 @@
         body: JSON.stringify(draft),
       });
       return apply(payload.theme || payload);
-    } catch {
+    } catch (error) {
+      onError?.(error);
       return draft;
     }
   }

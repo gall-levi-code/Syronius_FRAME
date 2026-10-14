@@ -185,8 +185,8 @@ function accessibleLinkGroups(
     const links = group.links.filter((link) => {
       if (/^srt(?:la)?:\/\//.test(link.url)) return true;
       try {
-        const url = new URL(link.url, "http://frame.local");
-        return url.origin === "http://frame.local" && routeIsPublic(url.pathname, publicPrefixes);
+        const url = new URL(link.url, "http://frame.invalid");
+        return url.origin === "http://frame.invalid" && routeIsPublic(url.pathname, publicPrefixes);
       } catch {
         return false;
       }

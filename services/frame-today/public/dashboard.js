@@ -59,7 +59,8 @@ elements.toolLinks.addEventListener("click", async (event) => {
   const label = button.dataset.copyLabel;
   try {
     await copyText(publicUrl(button.dataset.copyPath), button);
-    elements.message.textContent = "";
+    window.FrameFeedback?.clearIssue("stage-copy");
+    window.FrameFeedback?.notify(`${label} URL copied.`, { tone: "success" });
     button.innerHTML = checkIcon();
     button.setAttribute("aria-label", `${label} URL copied`);
     button.title = `${label} URL copied`;
@@ -69,7 +70,10 @@ elements.toolLinks.addEventListener("click", async (event) => {
       button.title = `Copy ${label} URL`;
     }, 1800);
   } catch {
-    elements.message.textContent = `Automatic copy was blocked. Press and hold the ${label} open-link button to copy its URL.`;
+    window.FrameFeedback?.issue("stage-copy", {
+      message: `Automatic copy was blocked. Select or press and hold this ${label} link to copy it manually:\n${publicUrl(button.dataset.copyPath)}`,
+      tone: "warning", target: ".links-panel .panel-heading", summary: "Copy blocked—open the warning for the link.",
+    });
   }
 });
 
@@ -172,11 +176,11 @@ async function refresh() {
     render(summary);
     elements.status.textContent = "Library connected";
     elements.status.className = "status-pill good";
-    elements.message.textContent = "";
+    window.FrameFeedback?.clearIssue("stage-library", { notify: "Photo library reconnected." });
   } catch (error) {
     elements.status.textContent = "Library unavailable";
     elements.status.className = "status-pill bad";
-    elements.message.textContent = error instanceof Error ? error.message : String(error);
+    window.FrameFeedback?.issue("stage-library", { message: error instanceof Error ? error.message : String(error), tone: "error", target: ".dashboard-heading", summary: "Photo library unavailable. Counts may be out of date." });
   } finally {
     dashboardRefreshing = false;
     if (!document.hidden) dashboardRefreshTimer = window.setTimeout(refresh, 5000);
@@ -193,8 +197,10 @@ async function refreshPipeline() {
     const pipeline = await response.json().catch(() => null);
     if (!response.ok || !pipeline || pipeline.available === false) throw new Error("Photo Pipeline is unavailable.");
     if (renderPipeline(pipeline)) nextRefreshMs = 1000;
+    window.FrameFeedback?.clearIssue("stage-pipeline", { notify: "Photo pipeline reconnected." });
   } catch {
     renderPipelineUnavailable();
+    window.FrameFeedback?.issue("stage-pipeline", { message: "Photo pipeline is unavailable. Processing details cannot be refreshed; check the pipeline service.", tone: "warning", target: ".pipeline-panel .panel-heading", summary: "Photo pipeline unavailable." });
   } finally {
     pipelineRefreshing = false;
     if (!document.hidden) pipelineRefreshTimer = window.setTimeout(refreshPipeline, nextRefreshMs);

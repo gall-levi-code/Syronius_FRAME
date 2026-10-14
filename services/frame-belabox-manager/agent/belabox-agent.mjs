@@ -1278,7 +1278,7 @@ function proxyStreamDestination(message) {
 
 function localProxyUrl(localUrl, requestPath) {
   const target = new URL(localUrl);
-  const incoming = new URL(requestPath || "/", "http://frame.local");
+  const incoming = new URL(requestPath || "/", "http://frame.invalid");
   const base = target.pathname.replace(/\/+$/, "");
   target.pathname = `${base}${incoming.pathname}`.replace(/\/{2,}/g, "/");
   target.search = incoming.search;

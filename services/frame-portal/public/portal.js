@@ -1,6 +1,7 @@
 const elements = {
-  connectionPill: document.getElementById("connection-pill"),
   pageTitle: document.getElementById("page-title"),
+  pageDescription: document.getElementById("page-description"),
+  pageIcon: document.getElementById("page-icon"),
   accessBanner: document.getElementById("access-banner"),
   refreshButton: document.getElementById("refresh-button"),
   themeToggle: document.getElementById("theme-toggle"),
@@ -32,7 +33,6 @@ const elements = {
   toolLinksList: document.getElementById("tool-links-list"),
   toolLinksStatus: document.getElementById("tool-links-status"),
   closeToolLinks: document.getElementById("close-tool-links"),
-  toast: document.getElementById("toast"),
   themeModeSelect: document.getElementById("theme-mode-select"),
   newThemePreset: document.getElementById("new-theme-preset"),
   themePresetTrigger: document.getElementById("theme-preset-trigger"),
@@ -61,7 +61,6 @@ const elements = {
   themeConfirmCopy: document.getElementById("theme-confirm-copy"),
   themeConfirmCancel: document.getElementById("theme-confirm-cancel"),
   themeConfirmAccept: document.getElementById("theme-confirm-accept"),
-  pipelineState: document.getElementById("pipeline-state"),
   pipelineForm: document.getElementById("pipeline-form"),
   pipelineLongEdge: document.getElementById("pipeline-long-edge"),
   pipelineQuality: document.getElementById("pipeline-quality"),
@@ -74,8 +73,6 @@ const elements = {
 let portalConfig = null;
 let refreshTimer = null;
 let logsSource = null;
-let toastTimer = null;
-let toolLinksStatusTimer = null;
 let logLines = [];
 let activeToolLinksId = null;
 let currentView = "dashboard";
@@ -83,6 +80,7 @@ let themeSettings = null;
 let themePresetDraftKind = "color";
 let themeConfirmResolve = null;
 let pipelineSettingsLoaded = false;
+let pipelineSettingsLoading = false;
 const MAX_LOG_LINES = 1000;
 const DEFAULT_THEME_PROFILE_ID = "frame-blue";
 const THEME_MODE_KEY = "frame-theme";
@@ -112,6 +110,24 @@ const themePaletteFields = [
   ["toggleDayBg", "Day button"],
   ["toggleDayText", "Day icon"],
 ];
+const PORTAL_PAGES = {
+  dashboard: {
+    tool: "portal", title: "FRAME Portal", description: "Open your FRAME tools",
+    icon: '<path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/>',
+  },
+  status: {
+    tool: "status", title: "System Status", description: "Check your services and storage",
+    icon: '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
+  },
+  pipeline: {
+    tool: "pipeline", title: "Photo Pipeline", description: "Choose how FRAME prepares your photos",
+    icon: '<rect x="2" y="8" width="5" height="8" rx="1"/><rect x="9.5" y="8" width="5" height="8" rx="1"/><rect x="17" y="8" width="5" height="8" rx="1"/><path d="M7 12h2.5m5 0H17"/>',
+  },
+  theme: {
+    tool: "theme", title: "Theme", description: "Choose how FRAME looks",
+    icon: '<path d="M12 3a9 9 0 1 0 0 18h1a2 2 0 0 0 1.5-3.3 1.5 1.5 0 0 1 1-2.5H18A3 3 0 0 0 21 12a9 9 0 0 0-9-9Z"/><circle cx="7.5" cy="10" r=".7"/><circle cx="10.5" cy="6.5" r=".7"/><circle cx="15" cy="7.5" r=".7"/><circle cx="6.5" cy="14" r=".7"/>',
+  },
+};
 const builtInThemeProfiles = [
   buildThemeProfile("frame-blue", "Frame Blue", "#2cb4fb"),
   buildThemeProfile("signal-green", "Signal Green", "#3bd48a"),
@@ -246,11 +262,16 @@ function bindEvents() {
       } else if (elements.toolLinksDialog.open && activeToolLinksId === toolId) {
         elements.toolLinksDialog.close();
         renderTools(portalConfig.tools);
-        elements.refreshButton.focus();
-        showToast("No links are currently available.");
+        document.querySelector(".topbar .brand")?.focus();
+        showToast("No links are currently available.", "info");
       }
-    } catch {
-      showToolLinksStatus("Showing the last available links.");
+      window.FrameFeedback.clearIssue("tool-links-refresh");
+    } catch (error) {
+      if (!elements.toolLinksDialog.open || activeToolLinksId !== toolId) return;
+      window.FrameFeedback.issue("tool-links-refresh", {
+        message: `Showing the last available links. ${error.message || "The latest links could not be loaded."}`,
+        summary: "The latest links are unavailable.", tone: "warning", target: "#tool-links-list",
+      });
     }
   });
   elements.toolLinksList.addEventListener("click", async (event) => {
@@ -258,9 +279,14 @@ function bindEvents() {
     if (!copyButton) return;
     try {
       await copyText(copyButton.dataset.copyLink, copyButton);
-      showToolLinksStatus("Link copied.");
+      window.FrameFeedback.clearIssue("tool-link-copy");
+      showToast("Link copied.");
     } catch {
-      showToolLinksStatus("Automatic copy was blocked. Press and hold the link to copy it.");
+      window.FrameFeedback.issue("tool-link-copy", {
+        message: "Automatic copy was blocked. Select the full link in this dialog, or press and hold it on mobile, to copy it manually.",
+        summary: "Copy the link manually.", tone: "warning",
+        target: `#tool-links-list [data-copy-link="${CSS.escape(copyButton.dataset.copyLink)}"]`,
+      });
     }
   });
   elements.servicesGrid.addEventListener("click", async (event) => {
@@ -328,6 +354,18 @@ function renderStatus(status) {
   renderActivity(status);
 }
 
+// Match the tool identities at https://syroniusframe.com/toolkit/.
+const TOOL_ICONS = {
+  streams: '<path d="M3 18h18M5 14v-3m5 3V6m5 8v-5m5 5V3"/>',
+  overlays: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 15h18M7 17.5h5M16 8h2"/>',
+  audio: '<path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3" y="12" width="4" height="8" rx="1.5"/><rect x="17" y="12" width="4" height="8" rx="1.5"/>',
+  "photo-upload": '<path d="M12 16V3m-5 5 5-5 5 5M4 14v7h16v-7"/>',
+  gallery: '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+  today: '<rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M12 16v4m-4 0h8"/>',
+  status: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 8h18M9 8v13m4-9h4m-4 4h4"/>',
+  belabox: '<rect x="4" y="7" width="16" height="14" rx="2"/><path d="M8 7V3m8 4V3M8 12h8m-8 5h3"/><circle cx="16" cy="17" r=".5"/>',
+};
+
 function renderTools(tools) {
   elements.toolsGrid.innerHTML = tools
     .map((tool) => {
@@ -341,13 +379,16 @@ function renderTools(tools) {
       const accessLabel = tool.access === "public" ? "Public route" : "LAN only";
       const linkGroups = getToolLinkGroups(tool);
       const isReady = tool.readiness === "ready" && tool.accessible;
+      const icon = Object.hasOwn(TOOL_ICONS, tool.id)
+        ? `<svg class="tool-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${TOOL_ICONS[tool.id]}</svg>`
+        : "";
       const linksButton = linkGroups.length
         ? `<button class="tool-access access-${escapeAttribute(tool.access)} tool-links-button" type="button" data-tool-links="${escapeAttribute(tool.id)}" aria-label="Show links for ${escapeAttribute(tool.name)}" aria-haspopup="dialog" aria-controls="tool-links-dialog">Links</button>`
         : "";
       return `
-        <article class="tool-card${isReady ? "" : ` disabled readiness-${escapeAttribute(tool.readiness)}`}">
+        <article data-tool="${escapeAttribute(tool.id)}" class="tool-card${isReady ? "" : ` disabled readiness-${escapeAttribute(tool.readiness)}`}">
           ${isReady ? `<a class="tool-card-target" href="${escapeAttribute(tool.route)}" aria-label="Open ${escapeAttribute(tool.name)}"></a>` : ""}
-          <div class="tool-card-copy"><h3>${escapeHtml(tool.name)}</h3><p>${escapeHtml(tool.description)}</p></div>
+          <div class="tool-card-copy"><h3>${icon}${escapeHtml(tool.name)}</h3><p>${escapeHtml(tool.description)}</p></div>
           <div class="tool-card-footer">
             <div class="tool-access-actions">
               <span class="tool-access access-${escapeAttribute(tool.access)}">${accessLabel}</span>
@@ -403,23 +444,10 @@ function openToolLinks(tool) {
 
 function clearToolLinksDialog() {
   activeToolLinksId = null;
-  window.clearTimeout(toolLinksStatusTimer);
+  window.FrameFeedback.clearIssue("tool-links-refresh");
+  window.FrameFeedback.clearIssue("tool-link-copy");
   elements.toolLinksStatus.hidden = true;
   elements.toolLinksStatus.textContent = "";
-}
-
-function showToolLinksStatus(message) {
-  if (!elements.toolLinksDialog.open) {
-    showToast(message);
-    return;
-  }
-  window.clearTimeout(toolLinksStatusTimer);
-  elements.toolLinksStatus.textContent = message;
-  elements.toolLinksStatus.hidden = false;
-  toolLinksStatusTimer = window.setTimeout(() => {
-    elements.toolLinksStatus.hidden = true;
-    elements.toolLinksStatus.textContent = "";
-  }, 2400);
 }
 
 function renderToolLink(link) {
@@ -508,23 +536,35 @@ function initializeView() {
     if (active) link.setAttribute("aria-current", "page");
     else link.removeAttribute("aria-current");
   });
-  elements.pageTitle.textContent = currentView === "status"
-    ? "System Status"
-    : currentView === "theme" ? "Theme" : currentView === "pipeline" ? "Pipeline" : "Dashboard";
+  const page = PORTAL_PAGES[currentView];
+  document.body.dataset.frameTool = page.tool;
+  elements.pageTitle.textContent = page.title;
+  elements.pageDescription.textContent = page.description;
+  elements.pageIcon.innerHTML = page.icon;
+  document.title = currentView === "dashboard" ? page.title : `FRAME ${page.title}`;
   if (currentView === "pipeline" && pipelineVisible()) void loadPipelineSettings();
 }
 
 async function loadPipelineSettings() {
-  if (pipelineSettingsLoaded) return;
-  setPipelineState("Loading", "pill-idle");
+  if (pipelineSettingsLoaded || pipelineSettingsLoading) return;
+  pipelineSettingsLoading = true;
+  elements.pipelineSave.disabled = true;
+  elements.pipelineSave.textContent = "Loading…";
   try {
     const payload = await fetchJson("/pipeline/api/settings");
     renderPipelineSettings(payload.settings);
     pipelineSettingsLoaded = true;
-    setPipelineState("Ready", "pill-ok");
+    window.FrameFeedback.clearIssue("pipeline-load", { notify: "Pipeline settings are available again." });
   } catch (error) {
-    setPipelineState("Unavailable", "pill-bad");
-    showToast(error.message || "Pipeline settings unavailable.");
+    window.FrameFeedback.issue("pipeline-load", {
+      message: error.message || "Pipeline settings unavailable.",
+      summary: "Pipeline settings could not be loaded.", tone: "error", target: ".pipeline-actions",
+      action: { label: "Retry", onClick: loadPipelineSettings },
+    });
+  } finally {
+    pipelineSettingsLoading = false;
+    elements.pipelineSave.textContent = "Save";
+    elements.pipelineSave.disabled = !pipelineSettingsLoaded;
   }
 }
 
@@ -538,8 +578,9 @@ function renderPipelineSettings(settings) {
 
 async function savePipelineSettings(event) {
   event.preventDefault();
+  if (!pipelineSettingsLoaded || elements.pipelineSave.disabled) return;
   elements.pipelineSave.disabled = true;
-  setPipelineState("Saving", "pill-warn");
+  elements.pipelineSave.textContent = "Saving…";
   try {
     const payload = await fetchJson("/pipeline/api/settings", {
       method: "PUT",
@@ -552,23 +593,21 @@ async function savePipelineSettings(event) {
       }),
     });
     renderPipelineSettings(payload.settings);
-    setPipelineState("Saved", "pill-ok");
+    window.FrameFeedback.clearIssue("pipeline-save");
     showToast("Pipeline settings saved.");
   } catch (error) {
-    setPipelineState("Error", "pill-bad");
-    showToast(error.message || "Pipeline settings were not saved.");
+    window.FrameFeedback.issue("pipeline-save", {
+      message: error.message || "Pipeline settings were not saved.",
+      summary: "Pipeline settings were not saved.", tone: "error", target: ".pipeline-actions",
+    });
   } finally {
+    elements.pipelineSave.textContent = "Save";
     elements.pipelineSave.disabled = false;
   }
 }
 
 function updatePipelineQualityLabel() {
   elements.pipelineQualityValue.textContent = elements.pipelineQuality.value;
-}
-
-function setPipelineState(label, className) {
-  elements.pipelineState.textContent = label;
-  elements.pipelineState.className = `pill ${className}`;
 }
 
 function renderAlerts(alerts) {
@@ -636,13 +675,19 @@ async function restartService(name, button) {
   }
 
   button.disabled = true;
+  button.textContent = "Restarting…";
   try {
     await fetchJson(`/status/services/${encodeURIComponent(name)}/restart`, { method: "POST" });
+    window.FrameFeedback.clearIssue(`restart-${name}`);
     showToast(`${name} restart requested.`);
     window.setTimeout(refreshStatus, 1200);
   } catch (error) {
-    showToast(error.message || "Restart failed.");
+    window.FrameFeedback.issue(`restart-${name}`, {
+      message: error.message || "Restart failed.", summary: `${name} could not be restarted.`,
+      tone: "error", target: `[data-restart="${CSS.escape(name)}"]`,
+    });
   } finally {
+    button.textContent = "Restart";
     button.disabled = false;
   }
 }
@@ -663,33 +708,45 @@ function openLogs(name) {
       }
       elements.logsOutput.textContent = `${logLines.join("\n")}\n`;
       elements.logsOutput.scrollTop = elements.logsOutput.scrollHeight;
+      window.FrameFeedback.clearIssue("logs-parse");
     } catch {
-      elements.logsOutput.textContent += "\nUnable to parse a log event.\n";
+      window.FrameFeedback.issue("logs-parse", {
+        message: "FRAME could not read a log event. Earlier log lines remain available.",
+        summary: "A log event could not be read.", tone: "warning", target: "#logs-dialog .dialog-header",
+      });
     }
   };
   logsSource.onerror = () => {
-    elements.logsOutput.textContent += "\nLog stream disconnected.\n";
     logsSource?.close();
+    window.FrameFeedback.issue("logs-connection", {
+      message: "The live log stream disconnected. Earlier log lines remain available.",
+      summary: "Live logs disconnected.", tone: "warning", target: "#logs-dialog .dialog-header",
+      action: { label: "Reconnect", onClick: () => openLogs(name) },
+    });
   };
 }
 
 function closeLogs() {
   logsSource?.close();
   logsSource = null;
+  window.FrameFeedback.clearIssue("logs-connection");
+  window.FrameFeedback.clearIssue("logs-parse");
   if (elements.logsDialog.open) {
     elements.logsDialog.close();
   }
 }
 
 function setConnected() {
-  elements.connectionPill.textContent = "Connected";
-  elements.connectionPill.className = "pill pill-ok";
+  window.FrameFeedback.clearIssue("portal-connection", { notify: "FRAME data is available again." });
 }
 
 function setDisconnected(error) {
-  elements.connectionPill.textContent = "Disconnected";
-  elements.connectionPill.className = "pill pill-bad";
   elements.footerState.textContent = error?.message || "Status API unavailable";
+  window.FrameFeedback.issue("portal-connection", {
+    message: `FRAME data could not be refreshed. Any displayed readings may be out of date.\n\n${error?.message || "Status API unavailable"}`,
+    summary: "FRAME data is unavailable.", tone: "warning", target: ".portal-nav",
+    action: { label: "Retry", onClick: refreshDashboard },
+  });
 }
 
 function scheduleRefresh(milliseconds) {
@@ -745,10 +802,9 @@ function applyThemeSettings(shouldPersist = true) {
   document.documentElement.dataset.theme = mode;
   document.body.classList.toggle("theme-day", mode === "day");
   applyThemePalette(profile, mode);
-  if (shouldPersist) {
-    persistThemeSettings(profile);
-  }
+  const saving = shouldPersist ? persistThemeSettings(profile) : Promise.resolve(true);
   updateThemeLabel();
+  return saving;
 }
 
 function applyThemePalette(profile, mode) {
@@ -759,7 +815,8 @@ function applyThemePalette(profile, mode) {
   document.querySelector('meta[name="theme-color"]')?.setAttribute("content", palette.page || "#07111b");
 }
 
-function persistThemeSettings(profile = selectedThemeProfile()) {
+async function persistThemeSettings(profile = selectedThemeProfile()) {
+  const draftSettings = { ...themeSettings, customProfiles: [...themeSettings.customProfiles] };
   try {
     localStorage.setItem(THEME_MODE_KEY, themeSettings.mode);
     localStorage.setItem(THEME_PROFILE_ID_KEY, themeSettings.profileId);
@@ -768,12 +825,33 @@ function persistThemeSettings(profile = selectedThemeProfile()) {
       localStorage.setItem(THEME_PROFILE_KEY, JSON.stringify(profile));
     }
   } catch {}
-  window.FrameTheme?.save?.({
-    mode: themeSettings.mode,
-    profileId: themeSettings.profileId,
-    customProfiles: themeSettings.customProfiles,
-    profile,
-  });
+  let failed = false;
+  const onError = (error) => {
+    failed = true;
+    window.FrameFeedback.issue("theme-save", {
+      message: `Theme changes could not be saved to FRAME.\n\n${error?.message || "Theme service unavailable."}`,
+      summary: "Theme changes were not saved.", tone: "error", target: ".portal-footer",
+      action: { label: "Retry", onClick: () => {
+        themeSettings = draftSettings;
+        const saving = applyThemeSettings();
+        renderThemeControls();
+        return saving;
+      } },
+    });
+  };
+  try {
+    if (!window.FrameTheme?.save) throw new Error("Theme service unavailable.");
+    await window.FrameTheme.save({
+      mode: themeSettings.mode,
+      profileId: themeSettings.profileId,
+      customProfiles: themeSettings.customProfiles,
+      profile,
+    }, { onError });
+  } catch (error) {
+    onError(error);
+  }
+  if (!failed) window.FrameFeedback.clearIssue("theme-save", { notify: "Theme changes saved." });
+  return !failed;
 }
 
 function renderThemeControls() {
@@ -902,7 +980,7 @@ function renderThemePaletteFields(palettes) {
     .join("");
 }
 
-function createThemePreset() {
+async function createThemePreset() {
   const name = cleanText(elements.themePresetNameInput.value, 40);
   if (!name) {
     elements.themePresetNameInput.setCustomValidity("Preset name is required.");
@@ -928,10 +1006,10 @@ function createThemePreset() {
   themeSettings.customProfiles = [profile, ...themeSettings.customProfiles];
   themeSettings.profileId = profile.id;
   themeSettings.mode = defaultMode;
-  applyThemeSettings();
+  const saving = applyThemeSettings();
   renderThemeControls();
   closeThemePresetDialog();
-  showToast(`${profile.name} preset created.`);
+  if (await saving) showToast(`${profile.name} preset created.`);
 }
 
 function collectThemePaletteFields(themeColor) {
@@ -956,9 +1034,9 @@ async function deleteThemePreset(profileId) {
   themeSettings.customProfiles = themeSettings.customProfiles.filter((item) => item.id !== profileId);
   themeSettings.profileId = DEFAULT_THEME_PROFILE_ID;
   closeThemePresetMenu();
-  applyThemeSettings();
+  const saving = applyThemeSettings();
   renderThemeControls();
-  showToast(`${profile.name} preset removed.`);
+  if (await saving) showToast(`${profile.name} preset removed.`);
 }
 
 function showThemeConfirm(title, copy) {
@@ -1297,13 +1375,8 @@ async function fetchJson(url, options) {
   return payload;
 }
 
-function showToast(message) {
-  window.clearTimeout(toastTimer);
-  elements.toast.textContent = message;
-  elements.toast.hidden = false;
-  toastTimer = window.setTimeout(() => {
-    elements.toast.hidden = true;
-  }, 3200);
+function showToast(message, tone = "success") {
+  window.FrameFeedback.notify(message, { tone });
 }
 
 function formatUptime(seconds) {

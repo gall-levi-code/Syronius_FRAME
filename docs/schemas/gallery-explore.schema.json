@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://frame.local/schemas/gallery-explore.schema.json",
+  "$id": "urn:syronius-frame:schema:gallery-explore",
   "title": "Syronius FRAME Gallery Explore",
   "$comment": "The API additionally limits the whole document to 2,000 segments, 50,000 points, and a 5 MiB request body.",
   "type": "object",

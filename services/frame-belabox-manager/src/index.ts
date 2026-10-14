@@ -1075,7 +1075,7 @@ async function handleRemoteBelauiUpgradeViaAgent(
 
 function remoteBelauiRequestSuffix(request: express.Request): string {
   const suffix = typeof request.params[0] === "string" && request.params[0] ? `/${request.params[0]}` : "/";
-  const url = new URL(request.originalUrl, "http://frame.local");
+  const url = new URL(request.originalUrl, "http://frame.invalid");
   url.searchParams.delete("frame_embed");
   url.searchParams.delete("key");
   return `${suffix}${url.search}`;
@@ -1532,7 +1532,7 @@ function frameRelayBridgeScript(deviceId: string): string {
 function parseRemoteBelauiUpgradeUrl(
   value: string,
 ): { deviceId: string; path: string; search: string; target: RemoteProxyTarget } | null {
-  const parsed = new URL(value || "/", "http://frame.local");
+  const parsed = new URL(value || "/", "http://frame.invalid");
   const target = parsed.pathname.startsWith(`${REMOTE_BELAUI_ROUTE_PREFIX}/`)
     ? "belaui"
     : parsed.pathname.startsWith(`${VIDEO_MIXER_ROUTE_PREFIX}/`) ? "video_mixer" : null;
@@ -1555,7 +1555,7 @@ function parseRemoteBelauiUpgradeUrl(
 
 function controlRequest(value: string): boolean {
   try {
-    const parsed = new URL(value || "/", "http://frame.local");
+    const parsed = new URL(value || "/", "http://frame.invalid");
     return parsed.pathname === CONTROL_ROUTE && !parsed.search;
   } catch {
     return false;

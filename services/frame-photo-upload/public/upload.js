@@ -67,10 +67,12 @@ for (const eventName of ["dragover", "drop"]) {
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
   if (!entries.length || uploading) return;
+  window.FrameFeedback?.clearIssue("upload-selection-limit");
   uploading = true;
   button.disabled = true;
   input.disabled = true;
   status.className = "";
+  status.hidden = false;
   status.textContent = `Uploading ${entries.length} photo${entries.length === 1 ? "" : "s"}...`;
 
   let completed = 0;
@@ -98,10 +100,16 @@ form.addEventListener("submit", async (event) => {
 
   uploading = false;
   input.disabled = false;
-  status.className = failed ? "error" : "success";
-  status.textContent = failed
-    ? `${completed} accepted, ${failed} failed. Failed files remain listed for review.`
-    : `${completed} photo${completed === 1 ? "" : "s"} accepted and queued for processing.`;
+  status.textContent = "";
+  status.hidden = true;
+  if (failed) window.FrameFeedback?.issue("upload-failed", {
+    message: `${completed} accepted, ${failed} failed. Failed files remain listed below with their individual errors. Select the files again to retry them.`,
+    tone: "error", target: ".queue-heading", summary: `${completed} accepted, ${failed} failed.`,
+  });
+  else {
+    window.FrameFeedback?.clearIssue("upload-failed");
+    window.FrameFeedback?.notify(`${completed} photo${completed === 1 ? "" : "s"} accepted and queued for processing.`, { tone: "success" });
+  }
   if (!failed) {
     form.reset();
     entries = [];
@@ -112,6 +120,7 @@ form.addEventListener("submit", async (event) => {
 });
 
 function queueFiles(files) {
+  window.FrameFeedback?.clearIssue("upload-failed");
   const selected = files.filter(Boolean);
   const accepted = selected.slice(0, limits.maxFiles);
   entries = accepted.map((file) => ({ file, element: createQueueItem(file), state: "ready" }));
@@ -121,10 +130,13 @@ function queueFiles(files) {
     ? `${entries.length} photo${entries.length === 1 ? "" : "s"} - ${formatBytes(totalBytes)}`
     : "No photos selected";
   button.disabled = entries.length === 0;
-  status.textContent = selected.length > limits.maxFiles
-    ? `Only the first ${limits.maxFiles} photo${limits.maxFiles === 1 ? "" : "s"} were queued.`
-    : "";
-  status.className = selected.length > limits.maxFiles ? "error" : "";
+  status.textContent = "";
+  status.hidden = true;
+  if (selected.length > limits.maxFiles) window.FrameFeedback?.issue("upload-selection-limit", {
+    message: `Only the first ${limits.maxFiles} photo${limits.maxFiles === 1 ? "" : "s"} were queued. Upload the remaining photos in another batch.`,
+    tone: "warning", target: ".queue-heading", summary: "Some selected photos were not queued.",
+  });
+  else window.FrameFeedback?.clearIssue("upload-selection-limit");
 }
 
 function filesFromDrop(dataTransfer) {
@@ -260,4 +272,5 @@ function writeStoredTheme(mode) {
 }
 
 button.disabled = true;
+status.hidden = true;
 void loadLimits();

@@ -192,7 +192,7 @@ test("service URL copy helpers require browser-confirmed clipboard success", asy
     ["Today Dashboard", "services/frame-today/public/dashboard.js", "async function copyText", "refresh();"],
     ["Audio Management", "services/frame-audio/public/admin.js", "async function copyText", "async function api"],
   ];
-  const url = "http://frame.local/example";
+  const url = "http://192.168.1.20/example";
 
   for (const [label, path, startMarker, endMarker] of implementations) {
     const source = await readFile(path, "utf8");
@@ -283,7 +283,7 @@ function clipboardHarness(fireCopyEvent) {
   return { button, document, state, textarea };
 }
 
-test("LAN tool headers return to Dashboard and use the shared sign-out icon", async () => {
+test("LAN tool identities return to Dashboard while headers keep only the shared theme toggle", async () => {
   const [photoUpload, photoStage, audioAdmin, audioFrontend, audioStyles] = await Promise.all([
     readFile("services/frame-photo-upload/public/index.html", "utf8"),
     readFile("services/frame-today/public/dashboard.html", "utf8"),
@@ -291,13 +291,17 @@ test("LAN tool headers return to Dashboard and use the shared sign-out icon", as
     readFile("services/frame-audio/public/admin.js", "utf8"),
     readFile("services/frame-audio/public/styles.css", "utf8"),
   ]);
-  const logoutIcon = "M10 17l5-5-5-5M15 12H3M15 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4";
   assert.ok(photoUpload.includes('class="brand" href="/dashboard"'), "Photo Upload logo should return to FRAME Dashboard");
   assert.ok(photoStage.includes('class="brand" href="/dashboard"'), "Photo Stage logo should return to FRAME Dashboard");
   assert.ok(audioAdmin.includes('class="brand brand-link" href="/dashboard"'), "Audio Monitor logo should return to FRAME Dashboard");
   for (const source of [photoUpload, photoStage, audioAdmin]) {
-    assert.ok(source.includes('href="/auth/logout" aria-label="Sign out of FRAME" title="Sign out"'));
-    assert.ok(source.includes(logoutIcon), "Sign-out controls should match the Portal icon");
+    const header = source.match(/<header\b[\s\S]*?<\/header>/)?.[0];
+    assert.ok(header.includes('class="frame-header-title"'));
+    assert.ok(header.includes('class="frame-header-description"'));
+    assert.equal((header.match(/<button\b/g) || []).length, 1, "Theme toggle is the only header button");
+    assert.ok(header.includes('id="theme-toggle"'));
+    assert.doesNotMatch(header, /auth\/logout|status-pill|Syronius FRAME/);
+    assert.ok(source.indexOf("frame-feedback.js") < source.indexOf(source.includes("upload.js") ? "upload.js" : source.includes("dashboard.js") ? "dashboard.js" : "admin.js"));
   }
   for (const icon of ["microphoneIcon()", "headphonesIcon()", "copyIcon()", "pencilIcon()", "trashIcon()"]) {
     assert.ok(audioFrontend.includes(icon), `Audio Monitor should render ${icon}`);
@@ -373,8 +377,8 @@ test("Overlay Wizard presents OBS sources as the only editable objects", async (
   assert.ok(html.includes("THEME_PROFILE_KEY"), "Overlay Wizard bootstrap should read Portal theme profiles");
   assert.ok(html.includes('id="dashboard-link" class="brand brand-link" href="/dashboard"'), "Overlay Wizard logo should stay on the current LAN origin");
   assert.ok(html.includes("portal-theme-v2"), "Overlay Wizard assets should cache-bust theme chrome updates");
-  assert.ok(html.includes("M21 12.8A9 9 0 1 1 11.2 3"), "Overlay Wizard theme toggle should use the Portal moon icon path");
-  assert.ok(html.includes("M4.93 4.93l1.42 1.42"), "Overlay Wizard theme toggle should use the Portal sun icon path");
+  assert.ok(html.includes("M20.4 15.1A8.4 8.4 0 0 1 8.9 3.6"), "Overlay Wizard theme toggle should use the shared moon icon path");
+  assert.ok(html.includes("M12 2v2M12 20v2M4.9 4.9l1.4 1.4"), "Overlay Wizard theme toggle should use the shared sun icon path");
   assert.ok(frontend.includes("THEME_STORAGE_KEYS"), "Overlay Wizard should listen for Portal theme storage changes");
   assert.ok(frontend.includes("THEME_PROFILE_ID_KEY"), "Overlay Wizard should react when the Portal theme preset changes");
   assert.ok(frontend.includes("function publicBaseUrl()"), "Overlay Wizard should normalize configured public URLs");
@@ -633,12 +637,12 @@ test("Belabox pairing UI hides transport implementation details", async () => {
   assert.ok(html.includes("FrameTheme"), "Belabox Manager should inherit the shared FRAME theme");
   assert.ok(frontend.includes("THEME_PROFILE_ID_KEY"), "Belabox Manager should read Portal theme profile settings");
   assert.ok(frontend.includes("THEME_CUSTOM_PROFILES_KEY"), "Belabox Manager should listen for Portal custom theme changes");
-  assert.ok(html.includes("header-status"), "Belabox Manager should keep action feedback in the header");
-  assert.ok(html.includes("frame-logo-square.svg"), "Belabox Manager should use the FRAME header identity");
+  assert.doesNotMatch(html.match(/<header\b[\s\S]*?<\/header>/)?.[0], /header-status|status-pill/, "Belabox feedback belongs beside the affected feature");
+  assert.ok(html.includes('class="frame-tool-emblem"'), "Belabox Manager should use its FRAME tool icon in the header");
   assert.ok(html.includes('class="brand brand-link" href="/dashboard"'), "FRAME logo should link back to the dashboard");
   assert.ok(!html.includes('href="/dashboard">Dashboard</a>'), "Belabox Manager should not duplicate the dashboard button");
-  assert.ok(html.includes("M21 12.8A9 9 0 1 1 11.2 3"), "Theme toggle should use the Portal moon icon path");
-  assert.ok(html.includes("M4.93 4.93l1.42 1.42"), "Theme toggle should use the Portal sun icon path");
+  assert.ok(html.includes("M20.4 15.1A8.4 8.4 0 0 1 8.9 3.6"), "Theme toggle should use the shared moon icon path");
+  assert.ok(html.includes("M12 2v2M12 20v2M4.9 4.9l1.4 1.4"), "Theme toggle should use the shared sun icon path");
   assert.ok(frontend.includes("THEME_STORAGE_KEYS"));
   assert.ok(frontend.includes("handleThemeStorageChange"));
   assert.ok(styles.includes(".brand-link"));
@@ -1272,15 +1276,10 @@ test("Windows and Unix wrappers preserve direct commands while offering the numb
   assert.ok(shell.includes("read_photo_ftp_passive_host"), "Unix wrapper must prompt with a passive FTP LAN host helper");
   assert.ok(shell.includes("Portal login needs setup."), "Unix setup must require Portal credentials in every mode");
   assert.ok(shell.includes('[ "$current" != "127.0.0.1" ]'), "Unix passive FTP prompt must not preserve loopback as the default");
-  assert.ok(powershell.includes("Start-FrameDiscovery"));
-  assert.ok(powershell.includes("Stop-FrameDiscovery"));
-  assert.ok(powershell.includes("discovery-watch"), "Windows discovery must recover after user sign-in");
-  assert.ok(powershell.includes("frame-mdns-watch.json"), "Windows discovery must track its watchdog safely");
-  assert.ok(powershell.includes("Test-FrameEdgeReachable"), "Windows discovery must follow Edge availability");
-  assert.ok(powershell.includes("Start Menu\\Programs\\Startup"), "Windows discovery must install a per-user startup entry");
-  assert.ok(shell.includes("start_frame_discovery"));
-  assert.ok(shell.includes("stop_frame_discovery"));
-  assert.ok(powershell.includes("frame.local") && shell.includes("frame.local"));
+  for (const wrapper of [powershell, shell]) {
+    assert.doesNotMatch(wrapper, /frame\.local|FrameDiscovery|frame_discovery|frame-mdns|discovery-(?:start|stop|watch)|dns-sd|avahi-publish/,
+      "stack lifecycle must not publish or monitor the retired LAN discovery hostname");
+  }
 });
 
 test("Belabox agent installation is Hybrid/WSS-only across both installers", async () => {
@@ -1331,7 +1330,7 @@ test("Belabox agent installation is Hybrid/WSS-only across both installers", asy
   assert.ok(managerReadme.includes("Belabox agent install and repair are Hybrid-only"));
 });
 
-test("FRAME Setup app captures the approved GUI installer decisions", async () => {
+test("FRAME Launcher retains the guarded installer and dashboard handoff", async () => {
   const [manifest, frontend, styles, cargo, tauriConfig, rust, buildScript, appReadme, adr] = await Promise.all([
     readFile("apps/frame-setup/package.json", "utf8").then(JSON.parse),
     readFile("apps/frame-setup/src/main.js", "utf8"),
@@ -1351,10 +1350,10 @@ test("FRAME Setup app captures the approved GUI installer decisions", async () =
   for (const expected of ["SETUP_STAGES", "stageStatusLabel", "Locked", "canProceedFromStage", "Run readiness checks", "syncProgressControls", "readinessPassed"]) {
     assert.ok(frontend.includes(expected), `${expected} is missing from the staged wizard flow`);
   }
-  for (const expected of ["Browse folder", "usePreviewFolder", "hostReadyForInstall", "dockerBlockingChecks", "Install Docker first"]) {
+  for (const expected of ["Choose data folder", "state.dataRoot", "hostReadyForInstall", "dockerBlockingChecks"]) {
     assert.ok(frontend.includes(expected), `${expected} is missing from the guarded install flow`);
   }
-  for (const expected of ["Installer", "stage-check", "publicHostnameValidation", "isValidPublicHostname", "step-page animate"]) {
+  for (const expected of ["Launcher", "stage-check", "publicHostnameValidation", "isValidPublicHostname", "step-page animate"]) {
     assert.ok(frontend.includes(expected) || styles.includes(expected), `${expected} is missing from the installer UX flow`);
   }
   for (const expected of ["validationMessageForStage", "renderStageNotice", "portValidation", "numericPortInput", "network-controls"]) {
@@ -1363,13 +1362,13 @@ test("FRAME Setup app captures the approved GUI installer decisions", async () =
   for (const expected of ["Advertised SRTLA host", "PUBLIC_RELAY_HOST", "publicRelayHostValidation", "isValidRelayHost"]) {
     assert.ok(frontend.includes(expected), `${expected} is missing from relay host setup`);
   }
-  for (const expected of ["renderGuidedServicePanel", "guidedServiceIndex", "guidedReviewedServices", "Next service", "Finish service review", "markCurrentGuidedServiceReviewed", "service-detail-card"]) {
+  for (const expected of ["renderGuidedServicePanel", "guidedServiceIndex", "guidedReviewedServices", "Next service", "markCurrentGuidedServiceReviewed", "service-detail-card"]) {
     assert.ok(frontend.includes(expected) || styles.includes(expected), `${expected} is missing from guided service review`);
   }
-  for (const expected of ["installStatus", "startInstallLogListener", "install-log", "frameDesktop", "Open FRAME Setup", "finishInstaller", "lastSetupUrl"]) {
+  for (const expected of ["installStatus", "startInstallLogListener", "install-log", "frameDesktop", "Back to launcher", "lastSetupUrl"]) {
     assert.ok(frontend.includes(expected), `${expected} is missing from install progress handling`);
   }
-  for (const expected of ["What it does", "Why you might want it", "Ports and exposure", "What comes next in localhost/setup", "service-info-block"]) {
+  for (const expected of ["What it does", "Why you might want it", "Ports and exposure", "What comes next in FRAME", "service-info-block"]) {
     assert.ok(frontend.includes(expected) || styles.includes(expected), `${expected} is missing from guided service explanations`);
   }
   assert.ok(frontend.includes("stage-viewport"));
@@ -1415,7 +1414,7 @@ test("FRAME Setup app captures the approved GUI installer decisions", async () =
   assert.ok(tauriConfig.bundle.resources["../../../config/"], "setup app must bundle FRAME config");
   assert.ok(tauriConfig.bundle.resources["../../../installer/stack.ps1"], "setup app must bundle the Windows stack launcher");
   assert.ok(tauriConfig.bundle.resources["../../../installer/stack.sh"], "setup app must bundle the Unix stack launcher");
-  assert.ok(rust.includes('"discovery-start"'), "native setup must enable discovery through the shared launcher");
+  assert.doesNotMatch(rust, /start_frame_discovery|discovery-start/, "native setup must not launch a hostname publisher");
   assert.ok(tauriConfig.bundle.icon.includes("icons/icon.ico"));
   assert.ok((await readFile("apps/frame-setup/src-tauri/src/main.rs", "utf8")).includes("windows_subsystem"));
   assert.ok(frontend.includes("apply_install_plan"), "Install FRAME must call the native apply backend");

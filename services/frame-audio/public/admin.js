@@ -64,10 +64,11 @@ async function load() {
     document.querySelector("#service-status").textContent = "Relay ready";
     document.querySelector("#service-status").className = "status-pill good";
     render();
+    window.FrameFeedback?.clearIssue("audio-relay", { notify: "Audio relay reconnected." });
   } catch (error) {
     document.querySelector("#service-status").textContent = "Relay unavailable";
     document.querySelector("#service-status").className = "status-pill bad";
-    showNotice(error.message);
+    window.FrameFeedback?.issue("audio-relay", { message: error.message, tone: "error", target: ".toolbar-actions", summary: "Audio relay unavailable." });
   }
 }
 
@@ -98,9 +99,13 @@ function render() {
     const text = button.dataset.copy || "";
     try {
       await copyText(text, button);
+      window.FrameFeedback?.clearIssue("audio-copy");
       showNotice("Listen URL copied.", "ok");
     } catch {
-      showNotice(`Automatic copy was blocked. Press and hold this URL to copy it: ${text}`);
+      window.FrameFeedback?.issue("audio-copy", {
+        message: `Automatic copy was blocked. Select or press and hold this link to copy it manually:\n${text}`,
+        tone: "warning", target: ".toolbar-actions", summary: "Copy blocked—open the warning for the link.",
+      });
     }
   }));
   list.querySelectorAll("[data-edit]").forEach((button) => button.addEventListener("click", () => openEdit(button.dataset.edit)));
@@ -172,6 +177,7 @@ async function save(event) {
     });
     dialog.close();
     hideDialogNotice();
+    window.FrameFeedback?.clearIssue("audio-action");
     showNotice("Audio source saved.", "ok");
     await load();
   } catch (error) {
@@ -186,6 +192,7 @@ async function remove(streamId) {
   try {
     await api(`/audio/api/streams/${encodeURIComponent(streamId)}`, { method: "DELETE" });
     clearLocalCaptureSettings(streamId);
+    window.FrameFeedback?.clearIssue("audio-action");
     showNotice("Audio source deleted.", "ok");
     await load();
   } catch (error) {
@@ -217,9 +224,15 @@ function validateStreamIdInput() {
 function validationMessage() {
   return streamIdInput.validationMessage || "Check the highlighted fields and try again.";
 }
-function hideDialogNotice() { dialogNotice.textContent = ""; dialogNotice.className = "notice hidden"; }
-function showDialogNotice(message, kind = "error") { dialogNotice.textContent = message; dialogNotice.className = `notice ${kind === "ok" ? "ok" : ""}`; }
-function showNotice(message, kind = "error") { notice.textContent = message; notice.className = `notice ${kind === "ok" ? "ok" : ""}`; }
+function hideDialogNotice() { dialogNotice.textContent = ""; dialogNotice.className = "notice hidden"; window.FrameFeedback?.clearIssue("audio-form"); }
+function showDialogNotice(message, kind = "error") {
+  if (kind === "ok") window.FrameFeedback?.notify(message, { tone: "success" });
+  else window.FrameFeedback?.issue("audio-form", { message, tone: "error", target: ".dialog-actions", summary: "Audio source could not be saved." });
+}
+function showNotice(message, kind = "error") {
+  if (kind === "ok") window.FrameFeedback?.notify(message, { tone: "success" });
+  else window.FrameFeedback?.issue("audio-action", { message, tone: "error", target: ".toolbar-actions", summary: "Audio source action failed." });
+}
 async function copyText(text, button) {
   if (!text) throw new Error("Copy unavailable");
   const previousFocus = document.activeElement;

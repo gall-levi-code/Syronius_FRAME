@@ -6,6 +6,32 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## Unreleased
 
+- Added local support-report preview/copy/save with allowlisted diagnostics and no raw logs or
+  credentials. Added verified full backup/restore, container removal that preserves settings/data,
+  and reconnecting the launcher to an existing managed installation. Restore uses empty original
+  paths on the same OS; backups include plaintext credentials and require private storage.
+- Expanded native launcher candidate checks to Windows, Ubuntu, and both Mac architectures, with
+  artifact identity/checksum reports, keyboard/zoom/no-tray smoke coverage, and a separate downloaded
+  package acceptance checklist. Signing and real native release acceptance remain required before distribution.
+- Corrected Linux update download selection to match the actual x86_64 AppImage artifact name.
+- Added separate launcher/FRAME version display, manual stable-release checks and optional daily
+  checks while the launcher is open. Updates require an explicit choice; preview channels are not
+  offered. Added release-pinned FRAME update and repair actions with stopped-service preservation
+  and application-file recovery alongside existing deployment snapshots.
+- Added explicit storage and Docker readiness guidance: internal/USB data folders, advisory NAS and
+  low-space warnings, blocking checks for unavailable/unwritable/full storage, and separate Docker
+  image-capacity reporting. The 10 GiB warning is a heuristic; unknown VM/containerd capacity and
+  missing measured image requirements remain visible instead of being reported as verified.
+- Added live container startup states and readiness checks to the launcher, followed by Portal,
+  Stop FRAME and Edit configuration actions. Portal access uses localhost and the configured port.
+- Extended the desktop installer into FRAME Launcher with installed-stack status, offline start/stop,
+  separate managed deployment and data locations, resumable nonsecret setup, tray access and optional
+  notifications. Existing installation paths and the packaged application identity are preserved.
+- Protected stopped FRAME deployments from takeover by another installation folder.
+- Added macOS launcher paths, menu-bar and Dock behavior, optional packaged login startup, and
+  separate Intel/Apple Silicon DMG and ZIP targets. Added native Mac CI smoke checks and ARM64
+  image builds with architecture-matched release manifests. Signed Mac installation and end-to-end
+  media acceptance remain to be verified on real Macs before distribution.
 - Extracted Audio Bridge to the independent `Syronius_FRAME_Audio_Bridge` project; removed FRAME installer, Portal, routing, and release integration. Existing installations must follow the [extraction guide](docs/audio-bridge-extraction.md) before upgrading. Earlier bridge entries below describe historical behavior.
 - Added an explicit `stack update` alpha command and command-center action that resolve official
   GitHub `main` to an immutable commit, validate and stage the source archive, preserve local
@@ -20,7 +46,10 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 - Kept Photo Stage Remote controls within one mobile viewport, condensed actions into an icon row,
   added fine low-second duration steps, made the header collapsible, and moved thumbnails into a
   dismissible scrolling drawer.
-- Added host-level mDNS discovery for `http://frame.local`, tied to the FRAME stack lifecycle.
+- Removed `frame.local` mDNS publishing and its discovery watchdog. Portal access uses localhost
+  with the configured port on the host, or an explicit LAN IP/user-managed DNS name on other devices.
+  Background environmental/network-change tracking is intentionally out of scope; explicit readiness
+  checks and service-health reporting remain.
 - Added staged Hybrid installation, a pinned Cloudflare Tunnel connector, and an internal-only
   public gateway that enforces generated capability-aware route allowlists.
 - Added safe public Audio Monitor listener APIs and separate LAN capture/public listener base URLs.

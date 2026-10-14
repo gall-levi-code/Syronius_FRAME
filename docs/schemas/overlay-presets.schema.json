@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://frame.local/schemas/overlay-presets.schema.json",
+  "$id": "urn:syronius-frame:schema:overlay-presets",
   "title": "FRAME Overlay V2 State",
   "type": "object",
   "additionalProperties": false,

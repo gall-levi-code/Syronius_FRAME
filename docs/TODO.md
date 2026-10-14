@@ -4,6 +4,114 @@ This is the durable implementation backlog for work intentionally deferred from 
 milestone. Items stay here until implemented, superseded by an ADR/spec change, or explicitly
 removed.
 
+## Installer usability revision
+
+Agreed direction after the first Electron release; these items are planned, not implemented.
+Signing is deferred while this flow is revised.
+The question flow, Advanced boundary, domain prerequisites, and layout assessment are recorded in
+[Installer guided setup assessment](installer-guided-setup-assessment.md).
+The concrete screen sequence is in [Installer question flow](spec/installer-question-flow.md).
+
+- Confirmed 2026-09-18: FRAME is user-enabled/disabled. If left enabled, it should recover after reboot
+  without OS automatic sign-in; deliberate Disable persists across reboot. Docker setup remains
+  user-managed with installer guidance. Native Linux system-service startup offers this path;
+  standard Windows Docker Desktop sign-in startup does not establish pre-login recovery. Resolve
+  and test that compatibility gap before promising it; show the limitation early and in the report.
+- Support one FRAME deployment per local Docker engine for this revision. Inventory running and
+  stopped containers and reconcile deployment ownership before creating or modifying an installation;
+  a different folder or empty per-user registry must not cause silent takeover of an existing stack.
+- Add returning-user Enable/Disable with actual health/state reporting. Reuse Docker's existing
+  `unless-stopped` policy. Routine resume must use installed images without pulling/rebuilding;
+  routine Disable must retain containers/data and leave Docker/unrelated services alone. Current
+  wrappers use deployment reconciliation for start and `compose down` for stop; separate those
+  behaviors from everyday controls. Verify host-local and explicit LAN-address access separately
+  from container recovery.
+- Confirmed 2026-09-30: automatic LAN hostname publishing and background environmental/network-change
+  tracking are intentionally out of scope. Open the host Portal through localhost and its configured
+  port; other devices use an explicit LAN IP or user-managed DNS name. Keep explicit prerequisite,
+  storage, port, deployment, and service-health checks. Required setup/start checks must verify
+  Docker/Compose availability and engine compatibility, detect port conflicts with other applications
+  or containers, and verify ownership before reusing an existing FRAME deployment. Block on a
+  conflict rather than stopping unrelated services or silently changing the configured ports.
+- Explain Audio Monitor's browser capture, secure-access prerequisites, and listener setup clearly.
+- Quick Start uses the default ports without a port-configuration stage. Retain the current
+  service preset unless the product decision changes; exclude Hybrid-only
+  capabilities from this path and its feature choices. Show a focused fix when a default port
+  conflicts rather than silently changing it. Switching a fresh draft to Quick Start must not retain
+  earlier Hybrid or custom-port settings; preserve installed configuration during reconfiguration
+  unless the user deliberately changes it.
+- Guided setup starts with selected needs, resolves and explains feature dependencies immediately,
+  and asks only the corresponding questions. Move technical throughput/policy/transport overrides
+  to Advanced. Keep storage, original-backup retention, exposure, and account requirements visible
+  in plain language. Advanced permits direct selection while retaining all validation.
+- Keep all ordinary question choices and the single Back/Continue footer visible at supported
+  default/minimum window sizes. Split long sections into named short pages, reclaim sidebar space
+  on smaller screens, and keep optional help/logs separate. Preserve access at high text zoom with
+  a vertical-scroll fallback; do not clip controls or shrink text to force a fit.
+- Run prerequisite checks at launch; check storage after location selection and the actual active
+  bindings once the release/configuration are known. Keep the final check immediately before
+  deployment. An earlier successful check must never authorize a resumed or edited installation.
+- Save non-secret setup progress before installation in the installer's own user-data folder.
+  Reopening offers Continue setup or Discard draft. Credentials must be re-entered when needed;
+  drafts, setup summaries, and exported diagnostics must exclude passwords and tokens.
+- Track interrupted deployment separately from an unfinished form. Reconcile the actual installed
+  files, Docker state, and existing deployment snapshot before offering Continue, Retry, or Recover.
+  Check whether a prior installer-owned operation is still running before starting another operation
+  or recovery; a closed GUI or pending snapshot alone does not mean deployment has stopped.
+  Expose the existing recovery operation through the GUI instead of requiring `stack recover`.
+- Give each check/deployment phase a visible status, useful failure explanation, and next action.
+  Cover missing/stopped/inaccessible Docker, wrong engine, release/download failures, unwritable
+  or full storage, occupied/newly occupied ports, failed service health, interrupted startup,
+  recovery failure, and unexpected errors. Technical details remain expandable and exportable.
+- Allow safe cancellation during checks/downloads; explain and finish or recover operations already
+  applying a deployment before closing. A failed report export must not turn a healthy install
+  into a failed deployment or trigger another installation.
+- Clearly distinguish the FRAME Setup application folder, FRAME deployment/media data, and Docker
+  image storage. Check the relevant space and explain which location each choice affects.
+- Confirmed 2026-09-30 storage policy: internal disks and attached USB storage are valid data-folder
+  choices when accessible. Warn for network/NAS storage and for less than 10 GiB free; these warnings
+  allow continuation. The threshold is advisory, not a measured installation minimum. Block zero
+  available space, unwritable folders, and missing existing data folders/drives. Run these checks
+  during explicit setup/readiness and Start, without background environmental/network tracking.
+- Report Docker image capacity separately. Measure only a known same-host classic Linux image
+  store; warn that capacity is unverified for Docker Desktop, containerd, or unknown storage layouts.
+  Never treat free space on the FRAME data drive as verified Docker VM/image capacity. Standard
+  Docker Desktop Linux engines and standard native Linux Engine are supported; rootless/custom
+  socket layouts remain unsupported with clear guidance. Keep CLI/Compose, engine, permissions,
+  compatibility, and port-conflict failures distinct.
+- Release acceptance: add measured image-size metadata for each architecture and exact image
+  reference, covering selected tools and their shared dependencies. Validate storage estimates
+  against real installations, including extraction and existing/shared images, before presenting a
+  measured requirement. Current manifests contain no such sizes; required image space remains an
+  explicit warning instead of an invented minimum, even when available capacity is known.
+- Give Guided/Advanced Hybrid setup a dedicated, resumable remote-access step. Explain requirements
+  before selecting dependent features. Current integration uses a remotely managed Cloudflare
+  tunnel: creating it, setting its published hostname/origin, and adding its connector token are
+  separate tasks. Establish domain control and active Cloudflare DNS before requesting the tunnel
+  token. Provide a saved waiting state for domain/DNS setup. Validate locally knowable settings
+  before installation and actual tunnel/routing after startup. Free delegated domains may be linked
+  as optional resources after verification; temporary Quick Tunnels are not the Hybrid path.
+  The exact assistance/automation strategy remains to be decided.
+- Replace the obsolete `/setup` handoff and guidance with the FRAME dashboard and a completion
+  summary. Do not mark camera/encoder or internet connectivity verified merely because Docker
+  health checks passed.
+- Add a personalized **My FRAME Setup** screen and optional PDF export, generated from the applied
+  configuration: release/date, selected features, local/LAN/public addresses, installation/data
+  paths, actual ports and protocols, relevant router/firewall instructions, verified versus pending
+  checks, feature-specific next steps, restart/recovery guidance, and space for notes. Exclude secrets.
+  Show all published ports for reference while clearly identifying which, if any, need forwarding
+  for the selected usage. Record the report date so it cannot be mistaken for current live status.
+- Keep that summary available on return visits and allow regeneration after settings change.
+  Start with printable notes space; do not silently overwrite an exported copy that may contain
+  annotations. Reuse Electron's existing PDF support before considering a PDF dependency.
+- Acceptance: close/reopen before installation; fix a default-port conflict; lose connectivity
+  during downloads; interrupt a deployment; recover a failed start; retry failed recovery; and
+  retry a PDF export without losing setup choices or misreporting installation/network readiness.
+- Lifecycle acceptance: reject a second folder even when the original containers are stopped;
+  enabled deployment recovers on a supported host before sign-in; disabled stays stopped after
+  reboot; routine enable works offline; delayed network/storage and partial failures remain visible;
+  host-local and explicit LAN-IP access are checked separately. Preserve data and unrelated workloads.
+
 ## Overlay System
 
 ### Current Relay / Overlay Milestone
@@ -38,6 +146,15 @@ removed.
 
 ## Installer / Platform
 
+- [x] Add allowlisted local support reports with preview, clipboard copy, and save controls.
+- [x] Add verified full backups, original-path empty-folder restore, data-preserving container
+  removal, and reconnecting the launcher to a retained managed installation. Document secret
+  contents, interrupted operations, and the separate manual data-erasure step.
+- [x] Add native candidate smoke, artifact filename/checksum gates, and a downloadable-package
+  acceptance checklist. See [Launcher release acceptance](launcher-release-acceptance.md).
+- Run real downloaded-package acceptance on Windows, Intel/Apple silicon macOS, and named Linux
+  distributions, including real media/database backup and restore, signatures, OS notifications,
+  native scaling, accessibility, and AppImage sandbox startup. Signing remains deferred.
 - Add API integration tests for implemented HTTP services.
 - Split installer environment/state responsibilities out of `frame-installer.mjs`.
 - Add host-port conflict preflight detection.
@@ -51,6 +168,13 @@ removed.
 
 ### Update System
 
+- Confirmed 2026-09-30: expose manual update checks plus an optional periodic-check preference,
+  off by default and daily while the launcher is open/in the tray. Stable releases only; no alpha,
+  beta or preview channels in this revision. Checks notify but never install automatically.
+- Launcher maintenance supports explicit release updates and same-release repair, preserving
+  deliberately stopped services and retaining source/configuration for failure recovery. Native
+  Windows/macOS/Linux acceptance must cover successful and failed updates, interrupted recovery,
+  stopped stacks, missing images/containers, and unavailable release assets before distribution.
 - [x] Add an explicit bootstrap `stack update` command for alpha testers that resolves official
   GitHub `main` to an immutable commit, validates and stages the archive, protects local config and
   data, overlays FRAME-managed source, and reuses the existing stack reconciliation path.

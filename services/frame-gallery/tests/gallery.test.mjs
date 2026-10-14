@@ -1613,18 +1613,18 @@ test("clipboard copying prefers confirmed writes and rejects false legacy succes
   };
 
   const accepted = legacyHarness(true);
-  await accepted.copy("http://frame.local/social");
+  await accepted.copy("http://localhost:8080/social");
   assert.equal(accepted.state.appended, accepted.textarea);
   assert.equal(accepted.state.appendedToBody, undefined);
   assert.equal(accepted.state.selector, "dialog[open]");
-  assert.deepEqual(accepted.state.clipboard, ["text/plain", "http://frame.local/social"]);
-  assert.deepEqual(accepted.state.selection, [0, "http://frame.local/social".length]);
+  assert.deepEqual(accepted.state.clipboard, ["text/plain", "http://localhost:8080/social"]);
+  assert.deepEqual(accepted.state.selection, [0, "http://localhost:8080/social".length]);
   assert.equal(accepted.state.prevented, true);
   assert.deepEqual(accepted.state.restored, { preventScroll: true });
 
   const explicitHost = legacyHarness(true);
   explicitHost.previousFocus.closest = () => { explicitHost.state.usedFocusHost = true; return null; };
-  await explicitHost.copy("http://frame.local/social", {
+  await explicitHost.copy("http://localhost:8080/social", {
     closest: (selector) => { explicitHost.state.triggerSelector = selector; return explicitHost.host; },
   });
   assert.equal(explicitHost.state.usedFocusHost, undefined);
@@ -1632,7 +1632,7 @@ test("clipboard copying prefers confirmed writes and rejects false legacy succes
   assert.equal(explicitHost.state.appended, explicitHost.textarea);
 
   const falsePositive = legacyHarness(false);
-  await assert.rejects(falsePositive.copy("http://frame.local/social"), /Copy unavailable/);
+  await assert.rejects(falsePositive.copy("http://localhost:8080/social"), /Copy unavailable/);
 });
 
 async function closeServer(server) {

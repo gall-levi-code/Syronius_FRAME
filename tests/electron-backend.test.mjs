@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -15,7 +15,7 @@ import { activateRelease, completeDeployment, FRAME_IMAGE_SERVICES, recordSource
 const repository = fileURLToPath(new URL("..", import.meta.url));
 const capabilities = CAPABILITIES.filter((name) => IMPLEMENTED_CAPABILITIES.has(name));
 const assetUrl = "https://github.com/gall-levi-code/Syronius_FRAME/releases/download/v0.1.0/frame-images.json";
-const manifest = () => ({ schema_version: 1, commit: "a".repeat(40), platform: "linux/amd64", images: Object.fromEntries(
+const manifest = (platform = "linux/amd64") => ({ schema_version: 1, commit: "a".repeat(40), platform, images: Object.fromEntries(
   FRAME_IMAGE_SERVICES.map((name) => [name, `${RELEASE_IMAGE_PREFIX}/${name}@sha256:${"b".repeat(64)}`]),
 ) });
 const releaseFetch = async (url) => Response.json(String(url).includes("api.github.com")
@@ -34,7 +34,12 @@ test("Electron command runner preserves argument boundaries and stdin, streams o
   assert.match(result.stderr, /diagnostic output/);
   assert.match(chunks.join(""), /credential with spaces/);
   assert.match(chunks.join(""), /diagnostic output/);
-  await assert.rejects(runCommand(process.execPath, ["-e", "console.error('validation rejected');process.exit(7)"]), /validation rejected/);
+  await assert.rejects(runCommand(process.execPath, ["-e", "console.error('validation rejected');process.exit(7)"]), (error) => {
+    assert.match(error.message, /validation rejected/);
+    assert.equal(error.exitCode, 7);
+    assert.match(error.stderr, /validation rejected/);
+    return true;
+  });
   await assert.rejects(runCommand(process.execPath, ["-e", "process.exit(3)"]), /status 3/);
   await assert.rejects(runCommand(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { timeout: 100 }), /timed out/);
 });
@@ -98,6 +103,28 @@ test("explicit release selection accepts a published prerelease and never falls 
     assets: [{ name: "frame-images.json", browser_download_url: assetUrl }],
   }), releaseTag), /manifest does not belong to release/);
   await assert.rejects(fetchLatestRelease(validateReleaseManifest, async () => new Response(null, { status: 404 }), releaseTag), /release "v1\.0\.0-alpha\.2" is not published/);
+});
+
+test("ARM64 release selection requires the ARM asset, exact release and matching platform without fallback", async () => {
+  const releaseTag = "v-next", armUrl = `https://github.com/gall-levi-code/Syronius_FRAME/releases/download/${releaseTag}/frame-images-arm64.json`;
+  const metadata = { tag_name: releaseTag, draft: false, published_at: "2026-09-30T12:00:00Z", assets: [
+    { name: "frame-images.json", browser_download_url: `https://github.com/gall-levi-code/Syronius_FRAME/releases/download/${releaseTag}/frame-images.json` },
+    { name: "frame-images-arm64.json", browser_download_url: armUrl },
+  ] };
+  const requests = [], fetchArm = async (url) => { requests.push(url); return Response.json(String(url).includes("api.github.com") ? metadata : manifest("linux/arm64")); };
+  assert.deepEqual(await fetchLatestRelease(validateReleaseManifest, fetchArm, releaseTag, "linux/arm64"), manifest("linux/arm64"));
+  assert.deepEqual(requests, [`https://api.github.com/repos/gall-levi-code/Syronius_FRAME/releases/tags/${releaseTag}`, armUrl]);
+  await assert.rejects(fetchLatestRelease(validateReleaseManifest, async (url) => Response.json(String(url).includes("api.github.com") ? metadata : manifest()), releaseTag, "linux/arm64"), /requires linux\/arm64/);
+  let missingRequests = 0;
+  await assert.rejects(fetchLatestRelease(validateReleaseManifest, async () => {
+    missingRequests += 1;
+    return Response.json({ ...metadata, assets: metadata.assets.slice(0, 1) });
+  }, releaseTag, "linux/arm64"), /no frame-images-arm64\.json/);
+  assert.equal(missingRequests, 1, "a missing ARM manifest must not download or use the AMD64 asset");
+  await assert.rejects(fetchLatestRelease(validateReleaseManifest, async () => Response.json({ ...metadata, assets: [
+    { name: "frame-images-arm64.json", browser_download_url: metadata.assets[0].browser_download_url },
+  ] }), releaseTag, "linux/arm64"), /does not name frame-images-arm64\.json/);
+  await assert.rejects(fetchLatestRelease(validateReleaseManifest, fetchArm, releaseTag, "linux/arm/v7"), /support linux\/amd64 and linux\/arm64 only/);
 });
 
 test("real Compose resolves candidate configuration for an absent installation folder and overrides inherited settings", async (t) => {
@@ -203,7 +230,8 @@ test("successful apply records a credential-free plan and a failed wrapper spawn
   const readiness = await backend.invoke("run_preflight", { request: plan });
   assert.ok(readiness.checks.every((check) => check.status !== "bad"), JSON.stringify(readiness.checks));
   const installed = await backend.invoke("apply_install_plan", { request: plan });
-  assert.equal(installed.setupUrl, `http://localhost:${edge}/setup`);
+  assert.equal(installed.setupUrl, `http://localhost:${edge}/dashboard`);
+  assert.equal(installed.dashboardUrl, installed.setupUrl);
   assert.equal(JSON.parse(await readFile(installed.path, "utf8")).credentials, undefined);
   assert.ok(logs.some((line) => line.includes("[redacted]")));
   assert.ok(logs.every((line) => !line.includes(plan.credentials.portalPassword)));
@@ -228,8 +256,65 @@ function assertReadOnlyDocker(calls) {
   assert.ok(calls.filter(({ command }) => command === "docker").every(({ args }) => !args.some((arg) => ["pull", "build", "up", "run", "start"].includes(arg))));
 }
 
+test("first install and reconfiguration report live container progress before the wrapper finishes", async (t) => {
+  const deferred = () => { let resolve; const promise = new Promise((done) => { resolve = done; }); return { promise, resolve }; };
+  const waitFor = async (predicate) => {
+    for (let i = 0; i < 300; i++) { if (predicate()) return; await new Promise((resolve) => setTimeout(resolve, 10)); }
+    assert.fail("Expected startup progress did not arrive");
+  };
+  let gate = deferred(), entered = deferred();
+  t.after(() => gate.resolve());
+  const { backend, plan, engine, progress, clock } = await backendFixture(t, {
+    startup: async () => { entered.resolve(); await gate.promise; },
+    wrapper: async (_command, _args, options) => { await completeDeployment(options.cwd); return { stdout: "", stderr: "" }; },
+  });
+  for (const reconfigure of [false, true]) {
+    const ready = await backend.invoke("run_preflight", { request: plan });
+    assert.ok(ready.checks.every((check) => check.status !== "bad"), JSON.stringify(ready.checks));
+    progress.length = 0;
+    const operation = backend.invoke("apply_install_plan", { request: plan });
+    await Promise.race([entered.promise, operation.then(() => { throw new Error("Apply completed without invoking startup"); })]);
+    assert.equal(backend.isBusy(), true);
+    assert.equal(progress[0].phase, "starting");
+    assert.deepEqual(progress[0].services, [{ name: "frame-edge", status: "waiting", health: "none" }]);
+    if (!reconfigure) await waitFor(() => progress.at(-1).services[0].status === "missing");
+    engine.containers = [{ Id: "c".repeat(64), Image: `sha256:${"b".repeat(64)}`, Config: { Labels: {
+      "com.docker.compose.project": "syronius-frame", "com.docker.compose.project.working_dir": plan.installRoot, "com.docker.compose.service": "frame-edge",
+    } }, State: { Running: true, Status: "running", Health: { Status: "starting" } },
+    NetworkSettings: { Ports: { "80/tcp": [{ HostIp: "127.0.0.1", HostPort: String(plan.ports.edge) }] } } }];
+    await waitFor(() => { clock.tick(); return progress.at(-1).services[0].health === "starting"; });
+    assert.ok(progress.every((event) => event.phase === "starting"));
+    engine.containers[0].State.Health.Status = "healthy";
+    gate.resolve();
+    const installed = await operation;
+    assert.equal(installed.dashboardUrl, `http://localhost:${plan.ports.edge}/dashboard`);
+    assert.equal(progress.at(-1).phase, "complete");
+    assert.equal(progress.at(-1).services[0].health, "healthy");
+    assert.equal(clock.active, false);
+    const count = progress.length;
+    clock.tick();
+    await new Promise(setImmediate);
+    assert.equal(progress.length, count);
+    gate = deferred(); entered = deferred();
+  }
+});
+
+test("an install wrapper exiting successfully cannot complete startup with missing containers", async (t) => {
+  const { backend, plan, progress, clock } = await backendFixture(t, {
+    startup: async () => {}, // Leave the expected container absent even though the wrapper returns zero.
+    wrapper: async (_command, _args, options) => { await completeDeployment(options.cwd); return { stdout: "", stderr: "" }; },
+  });
+  const readiness = await backend.invoke("run_preflight", { request: plan });
+  assert.ok(readiness.checks.every((check) => check.status !== "bad"));
+  await assert.rejects(backend.invoke("apply_install_plan", { request: plan }), /container is missing/);
+  assert.equal(progress.at(-1).phase, "failed");
+  assert.equal(progress.at(-1).services[0].status, "missing");
+  assert.ok(progress.every((event) => event.phase !== "complete"));
+  assert.equal(clock.active, false);
+});
+
 async function temporary(t) {
-  const root = await mkdtemp(path.join(os.tmpdir(), "FRAME Electron test "));
+  const root = await realpath(await mkdtemp(path.join(os.tmpdir(), "FRAME Electron test ")));
   t.after(() => rm(root, { recursive: true, force: true }));
   return root;
 }
@@ -242,20 +327,26 @@ async function copyRuntime(root) {
   }
 }
 
-async function backendFixture(t, { fetchImpl = releaseFetch, edge = 18080, wrapper, realCompose = false, releaseTag, sourceTransform } = {}) {
+async function backendFixture(t, { fetchImpl = releaseFetch, edge = 18080, wrapper, realCompose = false, releaseTag, sourceTransform,
+  engineArch = "amd64", imagePlatform = "linux/amd64", platform, arch, releaseHelpersTransform, startup,
+  storageProbe = async (location, label) => ({ label, status: "good", detail: `${location} is writable; storage ready.` }) } = {}) {
   for (const key of ["DOCKER_HOST", "DOCKER_CONTEXT"]) {
     const previous = process.env[key];
     delete process.env[key];
     t.after(() => { if (previous === undefined) delete process.env[key]; else process.env[key] = previous; });
   }
-  const root = await temporary(t), calls = [], logs = [], resolved = [];
+  const root = await temporary(t), calls = [], logs = [], progress = [], resolved = [], engine = { architecture: engineArch, containers: [] };
+  const clock = { active: false, tick: () => {} };
   const plan = planFor(path.join(root, "FRAME installation"), edge);
   const run = async (command, args, options = {}) => {
     calls.push({ command, args });
     if (command === "docker") {
       if (args[0] === "context") return { stdout: JSON.stringify([{ Endpoints: { docker: { Host: "unix:///var/run/docker.sock" } } }]) };
-      if (args[0] === "info") return { stdout: JSON.stringify({ OSType: "linux", Architecture: "amd64" }) };
-      if (args[0] === "ps" || args[1] === "version") return { stdout: "" };
+      if (args[0] === "info") return { stdout: JSON.stringify({ OSType: "linux", Architecture: engine.architecture }) };
+      if (args[0] === "ps") return { stdout: engine.containers.map((container) => args.includes("--format")
+        ? JSON.stringify([container.Id, container.Config.Labels["com.docker.compose.project.working_dir"], container.Config.Labels["com.docker.compose.service"]]) : container.Id).join("\n") };
+      if (args[0] === "inspect") return { stdout: JSON.stringify(engine.containers.filter((container) => args.includes(container.Id))) };
+      if (args[1] === "version") return { stdout: "" };
       if (args.includes("config") && realCompose) {
         const result = await runCommand(command, args, options);
         resolved.push(JSON.parse(result.stdout));
@@ -266,25 +357,39 @@ async function backendFixture(t, { fetchImpl = releaseFetch, edge = 18080, wrapp
       } }) };
       throw new Error(`Unexpected Docker mutation: ${args.join(" ")}`);
     }
-    if (command !== process.execPath && wrapper) return wrapper(command, args, options);
+    if (command !== process.execPath && wrapper) {
+      await startup?.(engine, options);
+      const result = await wrapper(command, args, options);
+      if (!startup) engine.containers = [{ Id: "c".repeat(64), Image: `sha256:${"b".repeat(64)}`, Config: { Labels: { "com.docker.compose.project": "syronius-frame",
+        "com.docker.compose.project.working_dir": options.cwd, "com.docker.compose.service": "frame-edge" } }, State: { Running: true, Status: "running" },
+        NetworkSettings: { Ports: { "80/tcp": [{ HostIp: "127.0.0.1", HostPort: String(edge) }] } } }];
+      return result;
+    }
     assert.equal(command, process.execPath, "must not launch installation wrapper in a blocked test");
     if (args[1] === "source-update") {
       const source = options.env.FRAME_WORKSPACE;
       await copyRuntime(source);
       for (const wrapperName of ["stack.ps1", "stack.sh"]) await copyFile(path.join(repository, "installer", wrapperName), path.join(source, "installer", `${wrapperName}.next`));
-      await recordSourceCommit(source, manifest().commit);
-      await activateRelease(source, manifest());
+      await recordSourceCommit(source, manifest(imagePlatform).commit);
+      await activateRelease(source, manifest(imagePlatform));
       if (sourceTransform) {
         const runtimePath = path.join(source, "installer/frame-installer.mjs");
         await writeFile(runtimePath, sourceTransform(await readFile(runtimePath, "utf8")));
       }
+      if (releaseHelpersTransform) {
+        const helper = path.join(source, "installer/frame-release.mjs");
+        await writeFile(helper, releaseHelpersTransform(await readFile(helper, "utf8")));
+      }
       return { stdout: "" };
     }
-    return runCommand(command, args, options);
+    return runCommand(command, args, { ...options, platform: process.platform }); // Execute fixture scripts on the actual test host.
   };
-  const backend = createBackend({ resourcesRoot: repository, userData: path.join(root, "installer profile"), run, fetchImpl, releaseTag, emit: (_event, message) => logs.push(message) });
+  const backend = createBackend({ resourcesRoot: repository, userData: path.join(root, "installer profile"), run, fetchImpl, releaseTag, platform, arch, storageProbe,
+    setIntervalImpl: (tick, delay) => { assert.equal(delay, 1_000); clock.tick = tick; clock.active = true; return clock; },
+    clearIntervalImpl: () => { clock.active = false; },
+    emit: (event, message) => { if (event === "install-log") logs.push(message); if (event === "launcher-progress") progress.push(message); } });
   t.after(() => backend.dispose());
-  return { backend, calls, plan, logs, resolved };
+  return { backend, calls, plan, logs, resolved, engine, progress, clock };
 }
 
 test("Electron stages extraction acknowledgement and preserves legacy secrets before applying replacement config", async (t) => {
@@ -356,5 +461,85 @@ test("fresh setup rejects a downloaded historical runtime before creating an ins
   assert.ok(result.checks.some((check) => check.status === "bad" && /release still includes the integrated Audio Bridge/.test(check.detail)), JSON.stringify(result.checks));
   await assert.rejects(backend.invoke("apply_install_plan", { request: plan }), /readiness checks/);
   await assert.rejects(readFile(path.join(plan.installRoot, ".env")), { code: "ENOENT" });
+  assertReadOnlyDocker(calls);
+});
+
+test("storage warnings permit readiness but a newly full drive blocks Apply before deployment changes", async (t) => {
+  let full = false;
+  const probes = [];
+  const { backend, calls, plan } = await backendFixture(t, { storageProbe: async (location, label, options) => {
+    probes.push({ location, label, requiredBytes: options.requiredBytes });
+    return { label, status: full && label === "FRAME data storage" ? "bad" : "warn", detail: full ? "Storage is full." : "Network storage; low space. You can continue." };
+  } });
+  const ready = await backend.invoke("run_preflight", { request: plan });
+  assert.ok(ready.checks.every((check) => check.status !== "bad"));
+  assert.ok(ready.checks.some((check) => check.label === "Docker image storage" && check.status === "warn"));
+  assert.ok(probes.some((probe) => probe.label === "Deployment storage" && probe.requiredBytes > 0), "fresh source space is measured from staged files");
+  full = true;
+  await assert.rejects(backend.invoke("apply_install_plan", { request: plan }), /FRAME data storage: Storage is full/);
+  await assert.rejects(readFile(path.join(plan.installRoot, ".env")), { code: "ENOENT" });
+  await assert.rejects(readFile(path.join(plan.installRoot, ".frame-deployment-backup/snapshot.json")), { code: "ENOENT" });
+  assertReadOnlyDocker(calls);
+});
+
+test("a measured staged-source shortage blocks readiness and cannot authorize Apply", async (t) => {
+  const { backend, calls, plan } = await backendFixture(t, { storageProbe: async (_location, label, { requiredBytes }) => ({
+    label, status: requiredBytes > 0 ? "bad" : "good", detail: requiredBytes > 0 ? "The staged release does not fit." : "Storage ready.",
+  }) });
+  const ready = await backend.invoke("run_preflight", { request: plan });
+  assert.ok(ready.checks.some((check) => check.label === "Deployment storage" && check.status === "bad"));
+  await assert.rejects(backend.invoke("apply_install_plan", { request: plan }), /readiness checks/);
+  await assert.rejects(readFile(path.join(plan.installRoot, ".env")), { code: "ENOENT" });
+  assertReadOnlyDocker(calls);
+});
+
+test("new installs separate deployment and data storage while reconfiguration preserves the installed data path", async (t) => {
+  const { backend, plan } = await backendFixture(t, { wrapper: async (_command, _args, options) => {
+    await completeDeployment(options.cwd);
+    return { stdout: "healthy", stderr: "" };
+  } });
+  plan.dataRoot = path.join(path.dirname(plan.installRoot), "user content");
+  const ready = await backend.invoke("run_preflight", { request: plan });
+  assert.ok(ready.checks.every((check) => check.status !== "bad"), JSON.stringify(ready.checks));
+  assert.ok(ready.checks.some((check) => check.label === "Deployment storage"));
+  assert.ok(ready.checks.some((check) => check.label === "FRAME data storage" && check.detail.includes(plan.dataRoot)));
+  await backend.invoke("get_launcher_status"); // Tray polling must not invalidate a prepared installation.
+  const installed = await backend.invoke("apply_install_plan", { request: plan });
+  assert.equal(installed.path, path.join(plan.dataRoot, "state/frame-install-plan.json"));
+  assert.equal(parseEnv(await readFile(path.join(plan.installRoot, ".env"), "utf8")).FRAME_DATA_ROOT, plan.dataRoot.replaceAll("\\", "/"));
+  assert.equal((await backend.invoke("load_install_plan", { installRoot: plan.installRoot })).dataRoot, plan.dataRoot);
+  const changed = await backend.invoke("run_preflight", { request: { ...plan, dataRoot: path.join(path.dirname(plan.installRoot), "replacement") } });
+  assert.ok(changed.checks.some((check) => check.status === "bad" && /Moving existing FRAME data/.test(check.detail)));
+  const { dataRoot, ...withoutPath } = plan;
+  const preserved = await backend.invoke("run_preflight", { request: withoutPath });
+  assert.ok(preserved.checks.every((check) => check.status !== "bad"), JSON.stringify(preserved.checks));
+  assert.throws(() => validatePlan({ ...plan, dataRoot: plan.installRoot }, capabilities), /cannot contain/);
+  assert.throws(() => validatePlan({ ...plan, dataRoot: "relative" }, capabilities), /absolute/);
+});
+
+test("fresh Apple Silicon setup uses ARM64 images and refuses an engine change after readiness", async (t) => {
+  const armUrl = assetUrl.replace("frame-images.json", "frame-images-arm64.json"), requests = [];
+  const fetchImpl = async (url) => { requests.push(url); return Response.json(String(url).includes("api.github.com")
+    ? { assets: [{ name: "frame-images-arm64.json", browser_download_url: armUrl }] } : manifest("linux/arm64")); };
+  const { backend, calls, plan, engine } = await backendFixture(t, { fetchImpl, platform: "darwin", arch: "arm64", engineArch: "aarch64", imagePlatform: "linux/arm64" });
+  const ready = await backend.invoke("run_preflight", { request: plan });
+  assert.ok(ready.checks.every((check) => check.status !== "bad"), JSON.stringify(ready.checks));
+  assert.equal(requests[1], armUrl);
+  assert.ok(ready.checks.some((check) => check.label === "Release" && /linux\/arm64/.test(check.detail)));
+  engine.architecture = "amd64";
+  await assert.rejects(backend.invoke("apply_install_plan", { request: plan }), /requires linux\/amd64/);
+  await assert.rejects(readFile(path.join(plan.installRoot, ".env")), { code: "ENOENT" });
+  assertReadOnlyDocker(calls);
+});
+
+test("ARM64 setup rejects historical source helpers even when manifest metadata declares ARM64", async (t) => {
+  const armUrl = assetUrl.replace("frame-images.json", "frame-images-arm64.json");
+  const { backend, calls, plan } = await backendFixture(t, { platform: "darwin", arch: "arm64", engineArch: "arm64", imagePlatform: "linux/arm64",
+    fetchImpl: async (url) => Response.json(String(url).includes("api.github.com") ? { assets: [{ name: "frame-images-arm64.json", browser_download_url: armUrl }] } : manifest("linux/arm64")),
+    releaseHelpersTransform: (source) => source.replaceAll("linux/arm64", "historical-unsupported-platform"),
+  });
+  const result = await backend.invoke("run_preflight", { request: plan });
+  assert.ok(result.checks.some((check) => check.status === "bad" && /source helpers predate ARM64/.test(check.detail)), JSON.stringify(result.checks));
+  await assert.rejects(backend.invoke("apply_install_plan", { request: plan }), /readiness checks/);
   assertReadOnlyDocker(calls);
 });

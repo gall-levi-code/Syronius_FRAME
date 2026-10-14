@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   build:
-    if: github.repository == 'gall-levi-code/Syronius_FRAME' && (github.event_name == 'release' || github.ref == 'refs/heads/main') && !(github.event_name == 'release' && contains(github.event.release.assets.*.name, 'frame-images.json'))
+    if: github.repository == 'gall-levi-code/Syronius_FRAME' && (github.event_name == 'release' || github.ref == 'refs/heads/main') && !(github.event_name == 'release' && contains(github.event.release.assets.*.name, 'frame-images.json') && contains(github.event.release.assets.*.name, 'frame-images-arm64.json'))
     uses: ./.github/workflows/build-images.yml
     with:
       save-images: true
@@ -41,11 +41,14 @@ jobs:
       max-parallel: 4
       matrix:
         service: ${{ fromJSON(needs.build.outputs.services) }}
+        arch: [amd64, arm64]
     env:
       SERVICE: ${{ matrix.service }}
       SOURCE_COMMIT: ${{ needs.build.outputs.commit }}
       IMAGE_PREFIX: ${{ needs.build.outputs.prefix }}
-      IMAGE: ${{ needs.build.outputs.prefix }}/${{ matrix.service }}:${{ needs.build.outputs.commit }}
+      PLATFORM: linux/${{ matrix.arch }}
+      IMAGE_SUFFIX: ${{ matrix.arch == 'arm64' && '-arm64' || '' }}
+      IMAGE: ${{ needs.build.outputs.prefix }}/${{ matrix.service }}:${{ needs.build.outputs.commit }}${{ matrix.arch == 'arm64' && '-arm64' || '' }}
       VERSION_TAG: ${{ inputs.release-tag || github.event.release.tag_name || '' }}
     steps:
       - uses: actions/checkout@v4
@@ -57,7 +60,7 @@ jobs:
           node-version: "22"
       - uses: actions/download-artifact@v4
         with:
-          name: frame-image-${{ matrix.service }}
+          name: frame-image-${{ matrix.service }}-${{ matrix.arch }}
           path: image-artifact
       - name: Load and verify the already tested image
         run: |
@@ -70,10 +73,11 @@ jobs:
           assert.equal(metadata.commit, process.env.SOURCE_COMMIT);
           assert.equal(metadata.service, process.env.SERVICE);
           assert.equal(metadata.image, process.env.IMAGE);
+          assert.equal(metadata.platform, process.env.PLATFORM);
           const [image] = JSON.parse(execFileSync("docker", ["image", "inspect", process.env.IMAGE], { encoding: "utf8" }));
           assert.equal(image.Id, metadata.image_id);
-          assert.equal(`${image.Os}/${image.Architecture}`, "linux/amd64");
-          if (process.env.VERSION_TAG && !/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(process.env.VERSION_TAG)) {
+          assert.equal(`${image.Os}/${image.Architecture}`, process.env.PLATFORM);
+          if (process.env.VERSION_TAG && !/^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$/.test(process.env.VERSION_TAG + process.env.IMAGE_SUFFIX)) {
             throw new Error("Release tag is not a valid container tag.");
           }
           NODE
@@ -86,8 +90,8 @@ jobs:
         run: |
           docker push "$IMAGE"
           if [[ -n "$VERSION_TAG" ]]; then
-            docker tag "$IMAGE" "$IMAGE_PREFIX/$SERVICE:$VERSION_TAG"
-            docker push "$IMAGE_PREFIX/$SERVICE:$VERSION_TAG"
+            docker tag "$IMAGE" "$IMAGE_PREFIX/$SERVICE:$VERSION_TAG$IMAGE_SUFFIX"
+            docker push "$IMAGE_PREFIX/$SERVICE:$VERSION_TAG$IMAGE_SUFFIX"
           fi
           mkdir -p digests
           node --input-type=module <<'NODE'
@@ -98,14 +102,14 @@ jobs:
           const digestPrefix = `${repository}@sha256:`;
           const reference = image.RepoDigests.find((value) => value.startsWith(digestPrefix) && /^[a-f0-9]{64}$/.test(value.slice(digestPrefix.length)));
           if (!reference) throw new Error("Pushed image has no registry digest.");
-          writeFileSync(`digests/${process.env.SERVICE}.json`, JSON.stringify({
-            commit: process.env.SOURCE_COMMIT, service: process.env.SERVICE, image: reference,
+          writeFileSync(`digests/${process.env.SERVICE}-${process.env.PLATFORM.split('/')[1]}.json`, JSON.stringify({
+            commit: process.env.SOURCE_COMMIT, service: process.env.SERVICE, platform: process.env.PLATFORM, image: reference,
           }));
           NODE
       - uses: actions/upload-artifact@v4
         with:
-          name: frame-digest-${{ matrix.service }}
-          path: digests/${{ matrix.service }}.json
+          name: frame-digest-${{ matrix.service }}-${{ matrix.arch }}
+          path: digests/${{ matrix.service }}-${{ matrix.arch }}.json
           if-no-files-found: error
           retention-days: 7
           overwrite: true
@@ -133,35 +137,45 @@ jobs:
           pattern: frame-digest-*
           path: digests
           merge-multiple: true
-      - name: Create the complete digest-pinned release manifest
+      - name: Create both complete digest-pinned release manifests
         run: |
           node --input-type=module <<'NODE'
           import assert from "node:assert/strict";
           import { readFileSync, readdirSync, writeFileSync } from "node:fs";
-          import { FRAME_IMAGE_SERVICES, validateReleaseManifest } from "./installer/frame-release.mjs";
+          import { FRAME_IMAGE_SERVICES, SUPPORTED_RELEASE_PLATFORMS, validateReleaseManifest } from "./installer/frame-release.mjs";
           const records = readdirSync("digests").filter((file) => file.endsWith(".json"))
             .map((file) => JSON.parse(readFileSync(`digests/${file}`, "utf8")));
-          assert.equal(records.length, FRAME_IMAGE_SERVICES.length);
-          assert.equal(new Set(records.map((record) => record.service)).size, FRAME_IMAGE_SERVICES.length);
-          for (const record of records) assert.equal(record.commit, process.env.SOURCE_COMMIT);
-          const manifest = validateReleaseManifest({
-            schema_version: 1,
-            commit: process.env.SOURCE_COMMIT,
-            platform: "linux/amd64",
-            images: Object.fromEntries(records.map((record) => [record.service, record.image])),
+          assert.equal(records.length, FRAME_IMAGE_SERVICES.length * SUPPORTED_RELEASE_PLATFORMS.length);
+          for (const record of records) {
+            assert.equal(record.commit, process.env.SOURCE_COMMIT);
+            assert.ok(SUPPORTED_RELEASE_PLATFORMS.includes(record.platform));
+          }
+          const manifests = SUPPORTED_RELEASE_PLATFORMS.map((platform) => {
+            const matching = records.filter((record) => record.platform === platform);
+            assert.equal(matching.length, FRAME_IMAGE_SERVICES.length);
+            assert.equal(new Set(matching.map((record) => record.service)).size, FRAME_IMAGE_SERVICES.length);
+            const manifest = validateReleaseManifest({
+              schema_version: 1,
+              commit: process.env.SOURCE_COMMIT,
+              platform,
+              images: Object.fromEntries(matching.map((record) => [record.service, record.image])),
+            });
+            return [platform === "linux/amd64" ? "frame-images.json" : "frame-images-arm64.json", manifest];
           });
-          writeFileSync("frame-images.json", `${JSON.stringify(manifest, null, 2)}\n`);
+          for (const [file, manifest] of manifests) writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`);
           NODE
       - uses: actions/upload-artifact@v4
         with:
           name: frame-images-${{ needs.build.outputs.commit }}
-          path: frame-images.json
+          path: |
+            frame-images.json
+            frame-images-arm64.json
           if-no-files-found: error
           retention-days: 90
           overwrite: true
-      - name: Attach the manifest to the GitHub release
+      - name: Attach both manifests to the GitHub release
         if: inputs.release-tag || github.event_name == 'release'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ inputs.release-tag || github.event.release.tag_name }}
-        run: gh release upload "$RELEASE_TAG" frame-images.json --repo "$GITHUB_REPOSITORY" --clobber
+        run: gh release upload "$RELEASE_TAG" frame-images.json frame-images-arm64.json --repo "$GITHUB_REPOSITORY" --clobber

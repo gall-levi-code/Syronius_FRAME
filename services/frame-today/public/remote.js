@@ -53,6 +53,7 @@ let wakeLock = null;
 let wakeLockWanted = false;
 let wakeLockRequest = null;
 let wakeLockError = "";
+let commandPending = false;
 const durationSteps = [1, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30, 45, 60, 90, 120];
 
 initializeTheme();
@@ -191,10 +192,15 @@ function connect() {
       state = message;
       stateReceivedAt = performance.now();
       render();
-      elements.message.textContent = "";
+      if (commandPending) {
+        window.FrameFeedback?.clearIssue("stage-command");
+        window.FrameFeedback?.clearIssue("stage-settings-command");
+        commandPending = false;
+      }
     } else if (message.type === "ERROR") {
-      elements.message.textContent = message.error;
-      elements.settingsMessage.textContent = message.error;
+      commandPending = false;
+      window.FrameFeedback?.issue("stage-command", { message: message.error, tone: "error", target: ".remote-context", summary: "Stage command failed." });
+      if (elements.settings.open) window.FrameFeedback?.issue("stage-settings-command", { message: message.error, tone: "error", target: "#viewer-settings .section-heading", summary: "Viewer setting could not be applied." });
     } else if (message.type === "VIEWER_STATUS") {
       viewerStatus = message;
       renderViewerStatus();
@@ -211,11 +217,10 @@ function connect() {
 
 function send(command) {
   if (socket?.readyState !== WebSocket.OPEN) {
-    elements.message.textContent = "Remote is reconnecting. Try again in a moment.";
-    elements.settingsMessage.textContent = elements.message.textContent;
+    window.FrameFeedback?.issue("stage-connection", { message: "Remote is reconnecting. Controls will reconnect automatically; try your action again when the connection returns.", tone: "warning", target: ".remote-context", summary: "Remote connection lost." });
     return;
   }
-  elements.settingsMessage.textContent = "";
+  commandPending = true;
   socket.send(JSON.stringify(command));
 }
 
@@ -370,6 +375,8 @@ function setConnection(text, className) {
   elements.connection.className = `connection-led ${className}`;
   elements.connection.setAttribute("aria-label", text);
   elements.connection.title = text;
+  if (className === "error") window.FrameFeedback?.issue("stage-connection", { message: "Remote connection lost. Controls are reconnecting automatically and the viewer status may be out of date.", tone: "warning", target: ".remote-context", summary: "Remote connection lost." });
+  else if (className === "connected") window.FrameFeedback?.clearIssue("stage-connection", { notify: "Photo Stage remote reconnected." });
 }
 
 function durationLabel(ms) {

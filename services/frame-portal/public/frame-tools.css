@@ -1,0 +1,213 @@
+/* Tool identities from syroniusframe.com/toolkit/. Page palettes stay in frame-theme.js. */
+body[data-frame-tool="streams"] { --tool-color: #51d3e2; }
+body[data-frame-tool="overlays"] { --tool-color: #bca1ff; }
+body[data-frame-tool="audio"] { --tool-color: #70e0b2; }
+body[data-frame-tool="photo-upload"] { --tool-color: #e6d879; }
+body[data-frame-tool="today"] { --tool-color: #ff9b89; }
+body[data-frame-tool="belabox"] { --tool-color: #bcd980; }
+
+body[data-frame-tool] { --tool-ink: var(--tool-color); isolation: isolate; }
+/* Decorative branding stays below content and never catches pointer input. */
+body[data-frame-tool]::before {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  right: clamp(16px, 3vw, 48px);
+  bottom: clamp(16px, 3vw, 48px);
+  width: clamp(110px, 18vw, 240px);
+  aspect-ratio: 1;
+  background: url("/assets/frame-logo-square.svg") center / contain no-repeat;
+  opacity: 0.085;
+  pointer-events: none;
+}
+:root[data-theme="day"] body[data-frame-tool],
+body.theme-day[data-frame-tool] {
+  --tool-ink: color-mix(in srgb, var(--tool-color) 45%, #07111b);
+}
+:root[data-theme="day"] body[data-frame-tool]::before,
+body.theme-day[data-frame-tool]::before { opacity: 0.075; }
+
+body[data-frame-tool] .topbar {
+  box-sizing: border-box;
+  min-height: 76px;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 22px;
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  border-bottom-color: color-mix(in srgb, var(--tool-color) 55%, transparent);
+  box-shadow: inset 0 -2px var(--tool-color);
+  background: linear-gradient(110deg, color-mix(in srgb, var(--tool-color) 10%, transparent), transparent 65%), var(--panel, var(--surface, #0b2231));
+}
+
+body[data-frame-tool] .frame-tool-emblem {
+  display: block;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  padding: 9px;
+  border: 1px solid color-mix(in srgb, var(--tool-color) 38%, transparent);
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--tool-color) 10%, transparent);
+  color: var(--tool-ink);
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.65;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+body[data-frame-tool] .topbar .brand strong { color: var(--tool-ink); }
+body[data-frame-tool] .topbar .brand {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  text-decoration: none;
+  background: transparent;
+}
+body[data-frame-tool] .topbar .frame-header-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+body[data-frame-tool] .topbar .frame-header-title {
+  display: block;
+  margin: 0;
+  font-size: 20px;
+  font-weight: 750;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body[data-frame-tool] .topbar .frame-header-description {
+  display: block;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+body[data-frame-tool] .topbar .frame-header-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0;
+  margin: 0;
+}
+body[data-frame-tool] .topbar .theme-toggle {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 44px;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  box-shadow: none;
+  background: var(--toggle-night-bg, #dff4ff);
+  color: var(--toggle-night-text, #087fc0);
+}
+body[data-frame-tool] .topbar .theme-toggle svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+:root[data-theme="day"] body[data-frame-tool] .topbar .theme-toggle,
+body.theme-day[data-frame-tool] .topbar .theme-toggle {
+  background: var(--toggle-day-bg, #fff6d5);
+  color: var(--toggle-day-text, #8a5e00);
+}
+body[data-frame-tool] .topbar .theme-toggle:focus-visible {
+  outline: 2px solid var(--tool-ink);
+  outline-offset: 3px;
+}
+body[data-frame-tool] [hidden] { display: none !important; }
+body[data-frame-tool] .frame-status-compat { display: none !important; }
+body[data-frame-tool] .frame-content-shortcut { margin: 12px 0 0; }
+body[data-frame-tool] :is(.page-heading, .dashboard-heading) p { color: var(--tool-ink); }
+
+body[data-frame-tool] .link-action:not(.danger, .danger-action, .capture-action, .edit-action) {
+  color: var(--tool-ink);
+  border-color: var(--tool-ink);
+}
+body[data-frame-tool] .link-action:not(.danger, .danger-action, .capture-action, .edit-action):is(:hover, :focus-visible) {
+  background: color-mix(in srgb, var(--tool-color) 12%, transparent);
+  outline-color: var(--tool-ink);
+}
+
+body[data-frame-tool] :is(.primary-action, .primary-button, .install-action, .play-button, #add-button, #upload-button, button[type="submit"]):not(.secondary, .danger, .icon-button) {
+  border-color: var(--tool-color);
+  background: var(--tool-color);
+  color: #07111b;
+}
+
+body[data-frame-tool] :is(.primary-action, .install-action, .play-button):not(.secondary, .danger) {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tool-color) 85%, white), var(--tool-color));
+  box-shadow: 0 10px 26px color-mix(in srgb, var(--tool-color) 20%, transparent);
+}
+
+body[data-frame-tool] :is(.source-tab, .device-tab, .workspace-tab).active {
+  color: var(--tool-ink);
+  border-color: var(--tool-ink);
+  box-shadow: inset 0 -2px var(--tool-color);
+}
+
+body[data-frame-tool] .drop:is(:hover, :focus-within, .drag-over) { border-color: var(--tool-ink); }
+body[data-frame-tool="photo-upload"] progress { accent-color: var(--tool-ink); }
+
+@media (max-width: 640px) {
+  body[data-frame-tool] .topbar { min-height: 72px; gap: 10px; padding: 10px 12px; }
+  body[data-frame-tool] .topbar .brand { gap: 10px; }
+  body[data-frame-tool] .topbar .frame-header-title { font-size: 18px; }
+  body[data-frame-tool] .frame-tool-emblem { width: 40px; height: 40px; padding: 8px; }
+}
+
+@media (max-width: 380px) {
+  body[data-frame-tool] .topbar .frame-header-title { font-size: 16px; }
+}
+
+/* Photo Stage Remote keeps its optional edge control for maximizing the viewer. */
+body[data-frame-tool].header-collapsed .remote-topbar {
+  min-height: 0;
+  padding: 0;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+@media (forced-colors: active) {
+  body[data-frame-tool]::before { display: none; }
+  body[data-frame-tool] .topbar { background: Canvas; border-color: CanvasText; box-shadow: none; }
+  body[data-frame-tool] .frame-tool-emblem { background: Canvas; border-color: CanvasText; color: CanvasText; }
+  body[data-frame-tool] .topbar .brand strong { color: CanvasText; }
+  body[data-frame-tool] :is(.page-heading, .dashboard-heading) p { color: CanvasText; }
+  body[data-frame-tool] .link-action:not(.danger, .danger-action, .capture-action, .edit-action) { color: LinkText; border-color: LinkText; }
+  body[data-frame-tool] :is(.primary-action, .primary-button, .install-action, .play-button, #add-button, #upload-button, button[type="submit"]):not(.secondary, .danger, .icon-button) {
+    color: ButtonText; background: ButtonFace; border-color: ButtonText; box-shadow: none;
+  }
+  body[data-frame-tool] :is(.source-tab, .device-tab, .workspace-tab).active { color: LinkText; border-color: LinkText; box-shadow: none; }
+}
+
+@media print {
+  body[data-frame-tool]::before { display: none; }
+}

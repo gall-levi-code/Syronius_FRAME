@@ -30,7 +30,7 @@ async function workspace(t) {
 test("release manifest requires every approved service pinned to a digest and commit", () => {
   assert.deepEqual(validateReleaseManifest(manifest()), manifest());
   for (const edit of [
-    (m) => { m.commit = "main"; }, (m) => { m.commit = [m.commit]; }, (m) => { m.platform = "linux/arm64"; },
+    (m) => { m.commit = "main"; }, (m) => { m.commit = [m.commit]; }, (m) => { m.platform = "linux/arm/v7"; },
     (m) => { delete m.images["frame-auth"]; }, (m) => { m.images.extra = imageId; },
     (m) => { m.images["frame-auth"] = `${RELEASE_IMAGE_PREFIX}/frame-auth:latest`; },
     (m) => { m.images["frame-auth"] = `ghcr.io/untrusted/frame-auth@${imageId}`; },
@@ -52,6 +52,22 @@ test("release override keeps build source intact, rejects invalid state, and can
   await assert.rejects(writeReleaseOverride(root));
   await clearRelease(root);
   await assert.rejects(readFile(path.join(root, "docker-compose.release.json")), { code: "ENOENT" });
+});
+
+test("ARM64 release activation and recovery retain the native platform", async (t) => {
+  const args = await workspace(t);
+  const release = { ...manifest(), platform: "linux/arm64" };
+  await recordSourceCommit(args.workspace, release.commit);
+  await activateRelease(args.workspace, release);
+  await snapshotDeployment({ ...args, compose: compose(), images: { "frame-auth": imageId } });
+  await activateRelease(args.workspace, manifest());
+  await restoreDeployment(args);
+  assert.deepEqual(await readReleaseManifest(path.join(args.workspace, "frame-release.json")), release);
+  await writeReleaseOverride(args.workspace);
+  const override = JSON.parse(await readFile(path.join(args.workspace, "docker-compose.release.json")));
+  for (const service of FRAME_IMAGE_SERVICES) {
+    assert.deepEqual(override.services[service], { image: release.images[service], platform: "linux/arm64" });
+  }
 });
 
 test("recovery pins only previously running services and preserves literal Compose dollars", () => {

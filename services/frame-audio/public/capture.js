@@ -73,14 +73,18 @@ elements.livebutton.addEventListener("click", () => {
   if (isLocalCaptureActive()) {
     stopCapture();
   } else if (remotePublisherActive) {
-    showNotice("This audio source is already publishing from another capture page.", "warn");
+    showNotice("This audio source is already publishing from another capture page.", "warn", { key: "capture-other-publisher", summary: "Source is live in another capture page." });
   } else {
     void startCapture();
   }
 });
 elements.refreshdevicesbutton.addEventListener("click", () => loadDevices(true, { reason: "manual" }));
 document.querySelector("#popout-button").addEventListener("click", () => window.open(location.href, "frame-audio-capture", "popup,width=620,height=820"));
-elements.deviceselect.addEventListener("change", saveSettings);
+elements.deviceselect.addEventListener("change", () => {
+  saveSettings();
+  lastDeviceSelection.savedDeviceMissing = false;
+  window.FrameFeedback?.clearIssue("capture-saved-device");
+});
 elements.resumeonlaunchinput.addEventListener("change", saveSettings);
 elements.profileselect.addEventListener("change", () => {
   if (elements.profileselect.value !== "custom") applyProfile(elements.profileselect.value);
@@ -105,7 +109,7 @@ async function loadDevices(requestAccess = false, options = {}) {
   if (!navigator.mediaDevices?.enumerateDevices) {
     availableDevices = [];
     renderDeviceOptions([]);
-    showNotice("This browser cannot enumerate audio input devices. Default input will be used if available.", "warn");
+    showNotice("This browser cannot enumerate audio input devices. Default input will be used if available.", "warn", { key: "capture-device-enumeration", target: ".device-control", summary: "Device list unavailable." });
     void logClientEvent("warn", "device-enumeration-unavailable", { reason });
     return lastDeviceSelection;
   }
@@ -126,18 +130,22 @@ async function loadDevices(requestAccess = false, options = {}) {
     availableDevices = sortAudioDevices((await navigator.mediaDevices.enumerateDevices()).filter((device) => device.kind === "audioinput"));
     const selection = renderDeviceOptions(availableDevices, selectedDevice);
     lastDeviceSelection = selection;
+    window.FrameFeedback?.clearIssue("capture-device-enumeration");
+    window.FrameFeedback?.clearIssue("capture-device-refresh");
 
     if (permissionError) {
-      showNotice(`${describeMediaError(permissionError)} Device names may be hidden until permission is allowed.`, "warn");
+      showNotice(`${describeMediaError(permissionError)} Device names may be hidden until permission is allowed.`, "warn", { key: "capture-device-permission", target: ".device-control", summary: "Microphone access needs attention." });
       return selection;
     }
+    if (requestAccess) window.FrameFeedback?.clearIssue("capture-device-permission");
     if (!availableDevices.length) {
-      showNotice("No audio input devices were reported. Default input will be used if the browser can access one.", "warn");
+      showNotice("No audio input devices were reported. Default input will be used if the browser can access one.", "warn", { key: "capture-no-devices", target: ".device-control", summary: "No audio inputs reported." });
       void logClientEvent("warn", "device-refresh-empty", { reason });
       return selection;
     }
+    window.FrameFeedback?.clearIssue("capture-no-devices");
     if (selection.savedDeviceMissing) {
-      showNotice("Previously selected capture device is unavailable. Default input is selected; choose a device before going live if needed.", "warn");
+      showNotice("Previously selected capture device is unavailable. Default input is selected; choose a device before going live if needed.", "warn", { key: "capture-saved-device", target: ".device-control", summary: "Saved audio input unavailable." });
       void logClientEvent("warn", "saved-device-missing", {
         savedDeviceLabel: captureSettings.deviceLabel || "",
         savedDeviceId: captureSettings.deviceId || "",
@@ -146,12 +154,13 @@ async function loadDevices(requestAccess = false, options = {}) {
       });
       return selection;
     }
+    window.FrameFeedback?.clearIssue("capture-saved-device");
     if (requestAccess && !quiet) showNotice("Audio devices refreshed.", "ok");
     return selection;
   } catch (error) {
     availableDevices = [];
     renderDeviceOptions([]);
-    showNotice(`Audio device refresh failed: ${describeMediaError(error)}`, "warn");
+    showNotice(`Audio device refresh failed: ${describeMediaError(error)}`, "warn", { key: "capture-device-refresh", target: ".device-control", summary: "Audio devices could not be refreshed." });
     void logClientEvent("error", "device-refresh-failed", { ...mediaErrorDetail(error), reason });
     return lastDeviceSelection;
   }
@@ -162,7 +171,7 @@ async function startCapture() {
     const current = await loadStatus();
     if (current?.publisherActive && !isLocalCaptureActive()) {
       setRemotePublisherActive(true);
-      showNotice("This audio source is already publishing from another capture page.", "warn");
+      showNotice("This audio source is already publishing from another capture page.", "warn", { key: "capture-other-publisher", summary: "Source is live in another capture page." });
       return;
     }
     if (!navigator.mediaDevices?.getUserMedia) {
@@ -179,6 +188,7 @@ async function startCapture() {
       ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
     };
     mediaStream = await navigator.mediaDevices.getUserMedia({ audio: constraints });
+    for (const key of ["capture-device-permission", "capture-no-devices", "capture-saved-device", "capture-device-enumeration", "capture-device-refresh", "capture-start"]) window.FrameFeedback?.clearIssue(key);
     saveSettings();
     startMeter(mediaStream);
     updateActualCaptureFormat(mediaStream.getAudioTracks()[0]);
@@ -195,25 +205,31 @@ async function startCapture() {
       const options = { ...(mimeType ? { mimeType } : {}), audioBitsPerSecond: requestedBitrate };
       try {
         mediaRecorder = new MediaRecorder(mediaStream, options);
+        window.FrameFeedback?.clearIssue("capture-bitrate");
       } catch {
         mediaRecorder = new MediaRecorder(mediaStream, mimeType ? { mimeType } : undefined);
-        showNotice("This browser ignored the requested Opus bitrate and selected its own encoder settings.");
+        showNotice("This browser ignored the requested Opus bitrate and selected its own encoder settings. The active bitrate is shown under Upload target.", "warn", { key: "capture-bitrate", summary: "Browser selected the capture bitrate." });
       }
       elements.uploadbitrate.textContent = `${Math.round((mediaRecorder.audioBitsPerSecond || requestedBitrate) / 1000)} kbps Opus`;
       mediaRecorder.addEventListener("dataavailable", async (event) => {
         try {
-          if (event.data.size && socket?.readyState === WebSocket.OPEN) socket.send(await event.data.arrayBuffer());
+          if (event.data.size && socket?.readyState === WebSocket.OPEN) {
+            socket.send(await event.data.arrayBuffer());
+            window.FrameFeedback?.clearIssue("capture-chunk");
+          }
         } catch (error) {
-          showNotice(`Unable to send capture chunk: ${describeMediaError(error)}`, "warn");
+          showNotice(`Unable to send capture chunk: ${describeMediaError(error)}`, "warn", { key: "capture-chunk", summary: "Audio chunk could not be sent." });
           void logClientEvent("error", "capture-chunk-send-failed", mediaErrorDetail(error));
         }
       });
       mediaRecorder.addEventListener("error", (event) => {
         const error = event.error || new Error("MediaRecorder failed.");
-        showNotice(`Audio recorder failed: ${describeMediaError(error)}`);
+        showNotice(`Audio recorder failed: ${describeMediaError(error)}`, "error", { key: "capture-recorder", summary: "Audio recorder failed." });
         void logClientEvent("error", "media-recorder-error", mediaErrorDetail(error));
       });
       mediaRecorder.start(250);
+      window.FrameFeedback?.clearIssue("capture-recorder");
+      window.FrameFeedback?.clearIssue("capture-connection", { notify: "Capture connection restored." });
       setCaptureMonitorVisible(true);
       elements.capturestate.textContent = "Recording";
       elements.socketstate.textContent = "Connected";
@@ -227,15 +243,15 @@ async function startCapture() {
       elements.socketstate.textContent = event.reason || "Disconnected";
       if (event.code === 1008 && /active publisher/i.test(event.reason || "")) {
         setRemotePublisherActive(true);
-        showNotice("This audio source is already publishing from another capture page.", "warn");
+        showNotice("This audio source is already publishing from another capture page.", "warn", { key: "capture-other-publisher", summary: "Source is live in another capture page." });
       } else if (wasLocal && event.code !== 1000) {
-        showNotice(`Publisher connection closed: ${event.reason || `code ${event.code}`}`, "warn");
+        showNotice(`Publisher connection closed: ${event.reason || `code ${event.code}`}. Start capture again to reconnect.`, "warn", { key: "capture-connection", summary: "Capture connection lost." });
         void logClientEvent("warn", "publisher-socket-closed", { code: event.code, reason: event.reason || "" });
       }
       void loadStatus();
     });
     socket.addEventListener("error", () => {
-      showNotice("The publisher connection failed.");
+      showNotice("The publisher connection failed. Start capture again to reconnect.", "error", { key: "capture-connection", summary: "Capture connection failed." });
       void logClientEvent("error", "publisher-socket-error");
     });
   } catch (error) {
@@ -243,11 +259,11 @@ async function startCapture() {
     if (isMissingSelectedDeviceError(error) && elements.deviceselect.value) {
       elements.deviceselect.value = "";
       saveSettings();
-      showNotice("Selected capture device is no longer available. Default input is selected; press Go live again when ready.", "warn");
+      showNotice("Selected capture device is no longer available. Default input is selected; press Go live again when ready.", "warn", { key: "capture-saved-device", target: ".device-control", summary: "Selected audio input unavailable." });
       void logClientEvent("warn", "selected-device-unavailable", mediaErrorDetail(error));
       return;
     }
-    showNotice(`Unable to start capture: ${describeMediaError(error)}`);
+    showNotice(`Unable to start capture: ${describeMediaError(error)}`, "error", { key: "capture-start", summary: "Capture could not start." });
     void logClientEvent("error", "capture-start-failed", mediaErrorDetail(error));
   }
 }
@@ -264,6 +280,8 @@ function stopCapture({ updateStatus = true } = {}) {
   audioContext = undefined;
   setCaptureControlsDisabled(false);
   setCaptureMonitorVisible(false);
+  window.FrameFeedback?.clearIssue("capture-bitrate");
+  window.FrameFeedback?.clearIssue("capture-chunk");
   elements.meterfill.style.width = "0%";
   elements.levelreadout.textContent = "-60 dB";
   elements.capturestate.textContent = "Stopped";
@@ -300,6 +318,7 @@ function startMeter(stream) {
 async function loadStatus() {
   try {
     const result = await api(`/audio/api/streams/${encodeURIComponent(streamId)}/status`);
+    window.FrameFeedback?.clearIssue("capture-status", { notify: "Audio relay reconnected." });
     const stream = result.stream;
     initializeSettings(stream.instanceId);
     elements.sourcename.textContent = stream.name;
@@ -316,7 +335,7 @@ async function loadStatus() {
     }
     return stream;
   } catch (error) {
-    showNotice(error.message);
+    showNotice(error.message, "error", { key: "capture-status", summary: "Audio relay status unavailable." });
     void logClientEvent("error", "status-load-failed", mediaErrorDetail(error));
     return undefined;
   }
@@ -507,6 +526,7 @@ function setRemotePublisherActive(active) {
   }
 
   elements.livebutton.disabled = false;
+  window.FrameFeedback?.clearIssue("capture-other-publisher");
   if (!isLocalCaptureActive()) {
     elements.publishstatus.textContent = "Offline";
     elements.publishstatus.className = "status-pill";
@@ -529,7 +549,7 @@ async function maybeResumeCaptureOnLaunch() {
     return;
   }
   if (lastDeviceSelection.savedDeviceMissing) {
-    showNotice("Resume capture skipped because the saved device is unavailable. Default input is selected; confirm the device before going live.", "warn");
+    showNotice("Resume capture skipped because the saved device is unavailable. Default input is selected; confirm the device before going live.", "warn", { key: "capture-saved-device", target: ".device-control", summary: "Saved audio input unavailable." });
     void logClientEvent("warn", "resume-skipped-saved-device-missing", {
       savedDeviceLabel: captureSettings.deviceLabel || "",
       savedDeviceId: captureSettings.deviceId || "",
@@ -613,7 +633,13 @@ async function logClientEvent(level, event, detail = {}) {
   }
 }
 
-function showNotice(message, kind = "") { elements.notice.textContent = message; elements.notice.className = `notice ${kind}`.trim(); }
+function showNotice(message, kind = "error", options = {}) {
+  if (kind === "ok") window.FrameFeedback?.notify(message, { tone: "success" });
+  else window.FrameFeedback?.issue(options.key || "capture-operation", {
+    message, tone: kind === "warn" ? "warning" : "error", target: options.target === ".device-control" && isLocalCaptureActive() ? ".capture-actions" : options.target || ".capture-actions",
+    summary: options.summary || "Capture needs attention.",
+  });
+}
 async function api(url) { const response = await fetch(url); const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body.error || `Request failed (${response.status})`); return body; }
 function escapeHtml(value) { const div = document.createElement("div"); div.textContent = value; return div.innerHTML; }
 function escapeAttr(value) { return escapeHtml(value).replaceAll('"', "&quot;"); }

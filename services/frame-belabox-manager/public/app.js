@@ -31,8 +31,6 @@ const THEME_STORAGE_KEYS = new Set([
 const elements = {
   deviceTabs: document.getElementById("device-tabs"),
   devicePanel: document.getElementById("device-panel"),
-  notice: document.getElementById("notice"),
-  headerStatus: document.getElementById("header-status"),
   themeToggle: document.getElementById("theme-toggle"),
 };
 
@@ -53,8 +51,6 @@ const state = {
   wizardSshCheckResult: null,
   wizardInstalling: false,
   criticalAction: null,
-  noticeMessage: "Loading",
-  noticeTone: "busy",
 };
 
 initialize();
@@ -85,21 +81,32 @@ function initialize() {
   elements.devicePanel.addEventListener("click", handlePanelClick);
   elements.devicePanel.addEventListener("submit", handlePanelSubmit);
   elements.devicePanel.addEventListener("toggle", rememberDetailsState, true);
-  void refresh();
-  setInterval(refresh, REFRESH_INTERVAL_MS);
+  void refresh(true);
+  setInterval(() => refresh(true), REFRESH_INTERVAL_MS);
 }
 
-async function refresh() {
-  const [status, telemetry, logs] = await Promise.all([
-    fetchJson("/belabox/api/status"),
-    fetchJson("/belabox/api/telemetry"),
-    fetchJson("/belabox/api/logs"),
-  ]);
-  state.status = status;
-  state.telemetry = telemetry;
-  state.logs = logs;
-  normalizeSelection();
-  render();
+async function refresh(quiet = false) {
+  try {
+    const [status, telemetry, logs] = await Promise.all([
+      fetchJson("/belabox/api/status"),
+      fetchJson("/belabox/api/telemetry"),
+      fetchJson("/belabox/api/logs"),
+    ]);
+    state.status = status;
+    state.telemetry = telemetry;
+    state.logs = logs;
+    normalizeSelection();
+    render();
+    window.FrameFeedback.clearIssue("connection", { notify: "Belabox Manager reconnected." });
+  } catch (error) {
+    window.FrameFeedback.issue("connection", {
+      message: `Belabox Manager could not refresh. Device measurements may be out of date.\n${error.message}`,
+      tone: "error", summary: "Belabox data unavailable",
+      target: elements.devicePanel.querySelector(".panel-head .panel-actions") ? "#device-panel .panel-head .panel-actions" : "#device-panel",
+      action: { label: "Retry", onClick: () => refresh(true) },
+    });
+    if (!quiet) throw error;
+  }
 }
 
 function normalizeSelection() {
@@ -133,10 +140,14 @@ function render() {
     restoreFormDraft();
     restoreDetailsState();
   }
-  const issues = (state.status.issues || []).join(" ");
-  if (issues) showNotice(issues, "error");
-  else if (state.noticeMessage === "Loading") showNotice("Ready", "ready");
-  else renderNotice();
+  const issues = (state.status.issues || []).join("\n\n");
+  if (issues) {
+    window.FrameFeedback.issue("manager-configuration", {
+      message: issues, tone: "warning", summary: "Belabox needs attention", target: "#device-panel .panel-head .panel-actions",
+    });
+  } else {
+    window.FrameFeedback.clearIssue("manager-configuration", { notify: "Belabox configuration issues resolved." });
+  }
 }
 
 function renderDeviceTabs(devices) {
@@ -758,7 +769,14 @@ async function handlePanelClick(event) {
   const discard = event.target.closest("[data-discard-form]");
   if (discard) return discardFormChanges(discard.closest("form"));
   const refresh = event.target.closest("#refresh-photo-module");
-  if (refresh) return sendPhotoCommand("photo_module_status", {}, undefined, refresh).catch((error) => showNotice(`Photo status refresh failed: ${error.message}`, "error"));
+  if (refresh) {
+    try {
+      await sendPhotoCommand("photo_module_status", {}, undefined, refresh);
+      showNotice("Photo status refreshed.", "success", { target: "#refresh-photo-module" });
+    } catch (error) {
+      showNotice(`Photo status refresh failed: ${error.message}`, "error", { target: "#refresh-photo-module" });
+    }
+  }
 }
 
 function handlePanelInput(event) {
@@ -798,11 +816,11 @@ async function runDeviceNameSubmit(event) {
       ...postJson({ display_name: formValue(form, "device-display-name").trim() }),
       method: "PATCH",
     });
-    showNotice("Device name saved.", "success");
+    showNotice("Device name saved.", "success", { target: "#device-name-form" });
     state.panelHoldKey = "";
     await refresh();
   } catch (error) {
-    showNotice(`Device name failed: ${error.message}`, "error");
+    showNotice(`Device name failed: ${error.message}`, "error", { target: "#device-name-form", summary: "Device name could not be saved" });
   } finally {
     resetButton();
   }
@@ -890,14 +908,14 @@ async function checkWizardSsh(button) {
     state.wizardSshCheckKey = sshCheckKey(form);
     state.wizardSshCheckResult = result;
     state.wizardStep = 1;
-    showNotice("SSH check passed.", "success");
+    showNotice("SSH check passed.", "success", { target: "#device-wizard", key: "ssh-check" });
     state.panelLocked = false;
     state.panelHoldKey = "";
     render();
   } catch (error) {
     failCriticalAction(`SSH check failed: ${error.message}`);
     if (output) output.textContent = `SSH check failed: ${error.message}`;
-    showNotice(`SSH check failed: ${error.message}`, "error");
+    showNotice(`SSH check failed: ${error.message}`, "error", { target: "#device-wizard", key: "ssh-check", summary: "SSH check failed" });
   } finally {
     state.panelLocked = false;
     resetButton();
@@ -906,10 +924,12 @@ async function checkWizardSsh(button) {
 
 function validateWizardStep(step, form) {
   if (!form) return false;
-  if (step === 0) return validateWizardWelcome(form);
-  if (step === 1) return validateWizardFtp(form);
-  if (step === 2) return true;
-  return state.wizardSshCheckKey === sshCheckKey(form) || showWizardError("Run the SSH check again before installing.");
+  let valid;
+  if (step === 0) valid = validateWizardWelcome(form);
+  else if (step === 1) valid = validateWizardFtp(form);
+  else valid = step === 2 || state.wizardSshCheckKey === sshCheckKey(form) || showWizardError("Run the SSH check again before installing.");
+  if (valid) window.FrameFeedback.clearIssue(`action:${state.selectedDeviceId}:wizard-validation`);
+  return valid;
 }
 
 function validateWizardWelcome(form) {
@@ -936,7 +956,7 @@ function validateWizardFtp(form) {
 }
 
 function showWizardError(message) {
-  showNotice(message, "error");
+  showNotice(message, "error", { target: "#device-wizard", key: "wizard-validation", summary: "Check device setup" });
   const output = elements.devicePanel.querySelector("#pair-output");
   if (output) output.textContent = message;
   return false;
@@ -944,11 +964,12 @@ function showWizardError(message) {
 
 async function pairDevice(form, includeModules) {
   const button = form.querySelector("#pair-device");
+  const feedbackDeviceId = state.selectedDeviceId;
   const output = form.querySelector("#pair-output") || elements.devicePanel.querySelector("#pair-output");
   if (!hybridReady()) {
     const message = "Belabox agent install and repair require FRAME Hybrid mode with public WSS access.";
     if (output) output.textContent = message;
-    showNotice(message, "error");
+    showNotice(message, "error", { target: `#${form.id}`, key: "pairing", deviceId: feedbackDeviceId });
     return;
   }
   const resetButton = setButtonBusy(button, includeModules ? "Pairing..." : "Repairing...");
@@ -983,11 +1004,12 @@ async function pairDevice(form, includeModules) {
     state.panelHoldKey = "";
     updateInstallProgress(100);
     finishCriticalAction(result.control_status === "connected" ? "Belabox paired and online." : "Belabox paired. Waiting for its connection.", "success");
-    showNotice(result.control_status === "connected" ? "Belabox paired and online." : "Belabox paired. Waiting for its connection.", "success");
+    window.FrameFeedback.clearIssue(`action:${feedbackDeviceId}:wizard-validation`);
+    showNotice(result.control_status === "connected" ? "Belabox paired and online." : "Belabox paired. Waiting for its connection.", "success", { target: `#${form.id}`, key: "pairing", deviceId: feedbackDeviceId });
     await refresh();
   } catch (error) {
     failCriticalAction(`Pairing failed: ${error.message}`);
-    showNotice(`Pairing failed: ${error.message}`, "error");
+    showNotice(`Pairing failed: ${error.message}`, "error", { target: `#${form.id}`, key: "pairing", deviceId: feedbackDeviceId, summary: "Belabox pairing failed" });
   } finally {
     state.panelLocked = false;
     state.wizardInstalling = false;
@@ -1000,7 +1022,7 @@ async function setupFtpConnector(form, deviceId = state.selectedDeviceId, output
   if (!hybridReady()) {
     const message = "Photo Agent install and repair require FRAME Hybrid mode with public WSS access.";
     if (output) output.textContent = message;
-    showNotice(message, "error");
+    showNotice(message, "error", { target: `#${form.id}`, key: "photo-agent" });
     return;
   }
   const sshScope = form.querySelector("#pair-host") ? form : elements.devicePanel;
@@ -1026,13 +1048,13 @@ async function setupFtpConnector(form, deviceId = state.selectedDeviceId, output
     if (output) output.textContent = lines;
     clearSecrets(form);
     if (ownsCriticalAction) finishCriticalAction("Photo Agent installed and tested.", "success");
-    showNotice("Photo Agent installed and tested. Waiting for telemetry.", "success");
+    showNotice("Photo Agent installed and tested. Waiting for telemetry.", "success", { target: `#${form.id}`, key: "photo-agent" });
     await refresh();
   } catch (error) {
     if (ownsCriticalAction) failCriticalAction(`Photo Agent setup failed: ${error.message}`);
     if (/SSH credentials|SSH Maintenance|Saved SSH/i.test(error.message)) openSshMaintenance(error.message);
     if (output) output.textContent = `Photo Agent setup failed: ${error.message}`;
-    showNotice(`Photo Agent setup failed: ${error.message}`, "error");
+    showNotice(`Photo Agent setup failed: ${error.message}`, "error", { target: `#${form.id}`, key: "photo-agent", summary: "Photo Agent setup failed" });
     if (!ownsCriticalAction) throw error;
   } finally {
     state.panelLocked = false;
@@ -1049,10 +1071,10 @@ async function showFtpCredentials(button) {
     const lines = ftpCredentialLines(result);
     state.ftpOutputs[deviceId] = lines;
     if (output) output.textContent = lines;
-    showNotice("Camera FTP credentials shown.", "success");
+    showNotice("Camera FTP credentials shown.", "success", { target: "#show-ftp-password" });
   } catch (error) {
     if (output) output.textContent = `Could not show FTP credentials: ${error.message}`;
-    showNotice(`Could not show FTP credentials: ${error.message}`, "error");
+    showNotice(`Could not show FTP credentials: ${error.message}`, "error", { target: "#show-ftp-password", summary: "FTP credentials unavailable" });
   } finally {
     resetButton();
   }
@@ -1079,11 +1101,11 @@ async function applyTransferPreset(name, button) {
       chunk_upload_kbps: preset.chunk_upload_kbps,
     }, state.selectedDeviceId);
     await sendPhotoCommand("photo_transfer_mode_set", { mode: "chunked_https" }, state.selectedDeviceId);
-    showNotice(`${preset.label} preset requested.`, "success");
+    showNotice(`${preset.label} preset requested.`, "success", { target: "#chunk-form", key: "photo-transfer" });
     state.panelHoldKey = "";
     await refresh();
   } catch (error) {
-    showNotice(`${preset.label} preset failed: ${error.message}`, "error");
+    showNotice(`${preset.label} preset failed: ${error.message}`, "error", { target: "#chunk-form", key: "photo-transfer", summary: "Transfer preset could not be applied" });
   } finally {
     resetButton();
   }
@@ -1104,10 +1126,11 @@ async function applyPhotoTransport(mode, deviceId = state.selectedDeviceId, sour
       }, deviceId);
     }
     await sendPhotoCommand("photo_transfer_mode_set", { mode }, deviceId);
-    if (!quiet) showNotice(`Photo transfer mode requested: ${mode}.`, "success");
+    if (!quiet) showNotice(`Photo transfer mode requested: ${mode === "chunked_https" ? "Chunk Relay" : "Direct FTP"}.`, "success", { target: "#chunk-form", key: "photo-transfer" });
+    else window.FrameFeedback.clearIssue(`action:${state.selectedDeviceId}:photo-transfer`);
     return true;
   } catch (error) {
-    showNotice(`${mode === "chunked_https" ? "Chunk Relay" : "Direct FTP"} update failed: ${error.message}`, "error");
+    showNotice(`${mode === "chunked_https" ? "Chunk Relay" : "Direct FTP"} update failed: ${error.message}`, "error", { target: "#chunk-form", key: "photo-transfer", summary: "Transfer settings could not be applied" });
     return false;
   } finally {
     resetButton();
@@ -1123,10 +1146,10 @@ async function applyPhotoProcessing(form, deviceId = state.selectedDeviceId) {
   };
   try {
     await sendPhotoCommand("photo_processing_config_set", payload, deviceId, form.querySelector("[data-form-apply]"));
-    showNotice("Pre-transfer processing update requested.", "success");
+    showNotice("Pre-transfer processing update requested.", "success", { target: "#processing-form" });
     return true;
   } catch (error) {
-    showNotice(`Processing update failed: ${error.message}`, "error");
+    showNotice(`Processing update failed: ${error.message}`, "error", { target: "#processing-form", summary: "Photo processing settings could not be applied" });
     return false;
   }
 }
@@ -1144,14 +1167,12 @@ async function sendPhotoCommand(command, args, deviceId = state.selectedDeviceId
     }));
     const commandId = queued.command?.command_id;
     if (!commandId) {
-      showNotice(`${command} sent to ${deviceId}.`, "success");
       return queued.command;
     }
     const result = await pollCommandResult(commandId, null, COMMAND_POLL_INTERVAL_MS);
     if (result.status === "rejected" || result.error_message) {
       throw new Error(result.error_message || result.result_summary || `${command} failed.`);
     }
-    showNotice(result.result_summary || `${command} applied.`, "success");
     await refresh();
     return result;
   } finally {
@@ -1185,10 +1206,10 @@ async function runSpeedTest(form) {
     }
     const completed = await waitForDiagnosticCompletion(requestedAt, output);
     output.textContent = completed ? diagnosticSummary(completed) : result.result_summary || "Speed test finished.";
-    showNotice("Belabox interface speed test finished.", "success");
+    showNotice("Belabox interface speed test finished.", "success", { target: "#speed-test-form" });
   } catch (error) {
     output.textContent = `Speed test failed: ${error.message}`;
-    showNotice(`Speed test failed: ${error.message}`, "error");
+    showNotice(`Speed test failed: ${error.message}`, "error", { target: "#speed-test-form", summary: "Speed test failed" });
   } finally {
     state.workspaceTab = "diagnostics";
     try { localStorage.setItem(LAST_WORKSPACE_TAB_KEY, state.workspaceTab); } catch {}
@@ -1254,7 +1275,6 @@ function renderJob(job, output) {
   const pct = job.status === "success" ? 60 : job.status === "error" ? 100 : Math.min(55, 10 + (job.steps || []).length * 10);
   updateCriticalActionFromJob(job, pct);
   updateInstallProgress(pct);
-  showNotice(job.step || "");
 }
 
 async function removeProvisionedDevice(button) {
@@ -1268,10 +1288,10 @@ async function removeProvisionedDevice(button) {
   try {
     await fetchJson(`/belabox/api/devices/${encodeURIComponent(deviceId)}`, { method: "DELETE" });
     state.selectedDeviceId = ADD_DEVICE_ID;
-    showNotice(`${deviceId} removed from FRAME.`, "success");
+    showNotice("Device removed from FRAME.", "success", { key: "remove-device", deviceId });
     await refresh();
   } catch (error) {
-    showNotice(`Remove failed: ${error.message}`, "error");
+    showNotice(`Remove failed: ${error.message}`, "error", { key: "remove-device", summary: "Device could not be removed" });
   } finally {
     resetButton();
   }
@@ -1293,11 +1313,11 @@ async function uninstallAgent(button) {
     criticalActionStep("Stopping FRAME services on the Belabox");
     const result = await fetchJson("/belabox/api/agent/remove", postJson({ ...sshPayload, purge: false }));
     finishCriticalAction(`${deviceId} agent uninstalled. ${result.summary || ""}`.trim(), "success");
-    showNotice(`${deviceId} agent uninstalled. ${result.summary || ""}`, "success");
+    showNotice("Belabox agent uninstalled.", "success", { key: "uninstall-agent" });
     await refresh();
   } catch (error) {
     failCriticalAction(`Agent uninstall failed: ${error.message}`);
-    showNotice(`Agent uninstall failed: ${error.message}`, "error");
+    showNotice(`Agent uninstall failed: ${error.message}`, "error", { key: "uninstall-agent", summary: "Agent uninstall failed" });
   } finally {
     state.panelLocked = false;
     resetButton();
@@ -1306,11 +1326,28 @@ async function uninstallAgent(button) {
 
 async function copyToClipboard(button) {
   const text = button.dataset.copyText || "";
+  const copyKey = `copy:${state.selectedDeviceId}:${text}`;
   try {
     await writeClipboardText(text, button);
-    showNotice("URL copied.", "success");
+    window.FrameFeedback.clearIssue(copyKey);
+    button.parentElement.querySelector(".copy-fallback")?.remove();
+    window.FrameFeedback.notify("URL copied.", { tone: "success" });
   } catch {
-    showNotice(`Automatic copy was blocked. Press and hold this URL to copy it: ${text}`, "error");
+    let fallback = button.parentElement.querySelector(".copy-fallback");
+    if (!fallback) {
+      fallback = document.createElement("input");
+      fallback.className = "copy-fallback";
+      fallback.readOnly = true;
+      fallback.setAttribute("aria-label", "Select link to copy manually");
+      button.parentElement.append(fallback);
+    }
+    fallback.value = text;
+    fallback.focus({ preventScroll: true });
+    fallback.select();
+    window.FrameFeedback.issue(copyKey, {
+      message: "Automatic copy was blocked. Select or press and hold the link beside its Copy button to copy it manually.",
+      tone: "warning", summary: "Copy blocked", target: `#device-panel[data-panel-key="${CSS.escape(state.selectedDeviceId)}"] [data-copy-text="${CSS.escape(text)}"]`,
+    });
   }
 }
 
@@ -1368,10 +1405,10 @@ async function forgetSavedSsh(button) {
   const resetButton = setButtonBusy(button, "Forgetting...");
   try {
     await fetchJson(`/belabox/api/devices/${encodeURIComponent(deviceId)}/ssh-credential`, { method: "DELETE" });
-    showNotice("Saved SSH credential removed.", "success");
+    showNotice("Saved SSH credential removed.", "success", { target: "#forget-ssh" });
     await refresh();
   } catch (error) {
-    showNotice(`Forget SSH failed: ${error.message}`, "error");
+    showNotice(`Forget SSH failed: ${error.message}`, "error", { target: "#forget-ssh", summary: "Saved SSH login could not be removed" });
   } finally {
     resetButton();
   }
@@ -1417,8 +1454,10 @@ async function resetPhotoQueue(button) {
     criticalActionStep("Archiving pending Belabox spool files");
     const result = await sendPhotoCommand("photo_queue_reset", {}, deviceId, button);
     finishCriticalAction(result.result_summary || "Photo queue reset completed.", "success");
+    window.FrameFeedback.clearIssue(`action:${deviceId}:photo-queue`);
   } catch (error) {
     failCriticalAction(`Photo queue reset failed: ${error.message}`);
+    showNotice(`Photo queue reset failed: ${error.message}`, "error", { target: "#chunk-form", key: "photo-queue", summary: "Photo queue could not be reset" });
   } finally {
     state.panelLocked = false;
   }
@@ -1545,7 +1584,7 @@ function discardFormChanges(form) {
   if (form.id === "chunk-form") updateUploadCapControl(form.querySelector("#photo-upload-uncapped"));
   clearTrackedFormDraft(form);
   updateFormPendingState(form);
-  showNotice("Unapplied changes discarded.", "ready");
+  showNotice("Unapplied changes discarded.", "ready", { target: `#${form.id}` });
 }
 
 function rememberFormInput(event) {
@@ -1865,7 +1904,7 @@ function applyWizardPreset(name) {
   uncapped.checked = preset.chunk_upload_kbps <= 0;
   state.formDraft[draftKey(uncapped)] = uncapped.checked;
   updateUploadCapControl(uncapped);
-  showNotice(`${preset.label} preset selected.`, "success");
+  showNotice(`${preset.label} preset selected.`, "success", { target: "#device-wizard", key: "wizard-preset" });
 }
 
 function updateUploadCapControl(control) {
@@ -2462,20 +2501,20 @@ function percent(value) {
   return Number.isFinite(Number(value)) ? `${value}%` : "Unknown";
 }
 
-function showNotice(message, tone = "ready") {
-  state.noticeMessage = message || "Ready";
-  state.noticeTone = tone;
-  renderNotice();
-}
-
-function renderNotice() {
-  const message = state.noticeMessage || "Ready";
-  const tone = state.noticeTone || "ready";
-  elements.headerStatus.textContent = message;
-  elements.headerStatus.className = `status-pill ${tone}`;
-  elements.notice.textContent = message;
-  elements.notice.className = `notice ${tone === "error" ? "error" : ""}`;
-  elements.notice.hidden = !message || message === "Ready" || message === "Loading";
+function showNotice(message, tone = "ready", options = {}) {
+  if (!message || message === "Ready" || message === "Loading" || tone === "busy") return;
+  const deviceId = options.deviceId || state.selectedDeviceId;
+  const scope = `#device-panel[data-panel-key="${CSS.escape(deviceId)}"]`;
+  const target = options.target && options.target !== "#device-panel" ? `${scope} ${options.target}` : scope;
+  const key = `action:${deviceId}:${options.key || options.target || "device"}`;
+  if (tone === "error" || tone === "warning") {
+    window.FrameFeedback.issue(key, {
+      message, tone, summary: options.summary || "Belabox action needs attention", target,
+    });
+  } else {
+    window.FrameFeedback.clearIssue(key);
+    window.FrameFeedback.notify(message, { tone: tone === "success" ? "success" : "info" });
+  }
 }
 
 function readLastDeviceId() {

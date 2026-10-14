@@ -395,19 +395,6 @@ fn apply_install_plan(app: AppHandle, plan: InstallPlan) -> Result<ApplyResult, 
             });
         }
     };
-    match start_frame_discovery(&app, &stack_workspace, &mut logs) {
-        Ok(()) => push_install_log(
-            &app,
-            &mut logs,
-            "FRAME LAN discovery is enabled at http://frame.local.",
-        ),
-        Err(error) => push_install_log(
-            &app,
-            &mut logs,
-            format!("FRAME started, but frame.local discovery is unavailable: {error}"),
-        ),
-    }
-
     Ok(ApplyResult {
         path: saved.path,
         setup_url: setup_url(&plan),
@@ -590,43 +577,6 @@ fn wait_for_web_setup(app: &AppHandle, logs: &mut Vec<String>, port: u16) -> Res
         }
         thread::sleep(Duration::from_millis(750));
     }
-}
-
-#[cfg(windows)]
-fn start_frame_discovery(
-    app: &AppHandle,
-    workspace: &Path,
-    logs: &mut Vec<String>,
-) -> Result<(), String> {
-    run_logged_command(
-        app,
-        workspace,
-        logs,
-        "powershell.exe",
-        &[
-            "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
-            "-File",
-            "installer\\stack.ps1",
-            "discovery-start",
-        ],
-    )
-}
-
-#[cfg(not(windows))]
-fn start_frame_discovery(
-    app: &AppHandle,
-    workspace: &Path,
-    logs: &mut Vec<String>,
-) -> Result<(), String> {
-    run_logged_command(
-        app,
-        workspace,
-        logs,
-        "sh",
-        &["installer/stack.sh", "discovery-start"],
-    )
 }
 
 fn save_install_plan_inner(plan: &InstallPlan) -> Result<SaveResult, String> {

@@ -113,10 +113,9 @@ if (previous.filter((args) => args[0] === "host-preflight").length + 1 === scena
         await chmod(path.join(root, "bin", "docker"), 0o755);
         await writeFile(path.join(root, "bin", "docker.cmd"), `@echo off\r\n"${process.execPath}" -- "${path.join(root, "fake-docker.mjs")}" %*\r\n`);
         for (const file of ["stack.ps1", "stack.sh"]) {
-          let source = (await readFile(new URL(`../installer/${file}`, import.meta.url), "utf8")).replaceAll("\r\n", "\n");
-          source = file.endsWith("ps1")
-            ? source.replace('if ($Command -notin @(', 'function Start-FrameDiscovery {}\n\nif ($Command -notin @(')
-            : source.replace('\nassert_docker\n', '\nstart_frame_discovery() { :; }\nassert_docker\n');
+          const source = (await readFile(new URL(`../installer/${file}`, import.meta.url), "utf8")).replaceAll("\r\n", "\n");
+          // Run the real wrapper without discovery stubs; fail before executing any regressed host publisher.
+          assert.doesNotMatch(source, /frame\.local|FrameDiscovery|frame_discovery|dns-sd|avahi-publish/);
           await writeFile(path.join(root, "installer", file), source);
         }
         for (const file of ["stack.cmd", "stack.sh"]) {
@@ -152,6 +151,7 @@ if (previous.filter((args) => args[0] === "host-preflight").length + 1 === scena
         const recoveryUps = ups.filter((args) => args.some((arg) => arg.includes(".frame-deployment-backup")));
         const failed = scenario.pullFailure || scenario.healthFailure || scenario.preflightFailAt;
         assert.equal(result.code === 0, !failed, result.stderr || result.stdout);
+        assert.ok(!`${result.stdout || ""}${result.stderr || ""}`.includes("frame.local"));
         assert.ok(!commands.some((args) => args.includes("down")), "recovery must not remove volumes or the complete project");
         if (scenario.pullFailure) {
           assert.equal(ups.length, 0, "pull failure must not recreate the running stack");

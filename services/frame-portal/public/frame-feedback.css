@@ -1,0 +1,115 @@
+/* Compact local issues; brief notifications float without adding a page row. */
+.frame-feedback-toast,
+.frame-issue-details,
+body[data-frame-tool] .frame-issue-hint {
+  box-sizing: border-box;
+  font: 14px/1.5 Inter, ui-sans-serif, system-ui, sans-serif;
+  color: var(--text, #e6f0f5);
+  background: var(--panel-strong, var(--panel, #142b35));
+  border: 1px solid var(--border, #49606c);
+  border-radius: 10px;
+  box-shadow: 0 12px 36px #0005;
+  overflow-wrap: anywhere;
+}
+.frame-feedback-toast {
+  position: fixed;
+  z-index: 10000;
+  inset: auto 18px max(18px, env(safe-area-inset-bottom)) auto;
+  max-width: min(420px, calc(100vw - 36px));
+  padding: 12px 16px;
+  pointer-events: none;
+  border-inline-start: 4px solid var(--good, #70e0b2);
+}
+.frame-feedback-toast[data-tone="warning"] { border-inline-start-color: var(--warning, var(--warn, #edbd58)); }
+.frame-feedback-toast[data-tone="error"] { border-inline-start-color: var(--danger, var(--bad, #ff7085)); }
+.frame-feedback-toast[data-tone="info"] { border-inline-start-color: var(--tool-ink, #adcaf0); }
+.remote-page .frame-feedback-toast,
+body:has(.listen-shell) .frame-feedback-toast { bottom: max(96px, env(safe-area-inset-bottom)); }
+body[data-frame-tool] .frame-issue {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+  align-self: center;
+  flex: 0 0 44px;
+  width: 44px;
+  height: 44px;
+  margin: 0 2px;
+  --issue-color: var(--warning, var(--warn, #edbd58));
+}
+body[data-frame-tool] .frame-issue[data-tone="error"] { --issue-color: var(--danger, var(--bad, #ff7085)); }
+body[data-frame-tool] .frame-issue-button,
+body[data-frame-tool] .frame-issue-close {
+  box-sizing: border-box;
+  display: inline-grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  margin: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--issue-color);
+  box-shadow: none;
+  cursor: pointer;
+}
+.frame-issue-button svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+body[data-frame-tool] .frame-issue-button:hover { background: color-mix(in srgb, var(--issue-color) 12%, transparent); }
+body[data-frame-tool] .frame-issue-button:focus-visible,
+body[data-frame-tool] .frame-issue-close:focus-visible,
+body[data-frame-tool] .frame-issue-action:focus-visible { outline: 2px solid var(--issue-color); outline-offset: 2px; }
+.frame-issue-hint {
+  position: fixed;
+  z-index: 10001;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 28px));
+  padding: 8px 10px;
+  font-size: 14px;
+  text-align: left;
+  color: var(--text, #e6f0f5);
+  visibility: hidden;
+}
+.frame-issue:not(.frame-issue-open, .frame-issue-hint-dismissed):has(.frame-issue-button:focus-visible) .frame-issue-hint { visibility: visible; }
+@media (hover: hover) {
+  .frame-issue:not(.frame-issue-open, .frame-issue-hint-dismissed):hover .frame-issue-hint { visibility: visible; }
+}
+.frame-issue-details {
+  position: fixed;
+  z-index: 10002;
+  inset: auto;
+  margin: 0;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px);
+  overflow-y: auto;
+  padding: 16px;
+  border-inline-start: 4px solid var(--warning, var(--warn, #edbd58));
+}
+.frame-issue-details[data-tone="error"] { border-inline-start-color: var(--danger, var(--bad, #ff7085)); }
+.frame-issue-details > strong { display: block; padding-right: 34px; font-size: 16px; color: var(--text, #e6f0f5); }
+.frame-issue-details > p { margin: 12px 0 0; color: var(--text, #e6f0f5); white-space: pre-wrap; }
+body[data-frame-tool] .frame-issue-close { position: absolute; top: 3px; right: 3px; color: var(--muted, #adc1ce); font-size: 25px; }
+body[data-frame-tool] .frame-issue-action { margin: 14px 0 0; padding: 8px 12px; min-height: 44px; border-radius: 7px; background: var(--panel, #142b35); color: var(--text, #e6f0f5); border: 1px solid var(--border, #49606c); box-shadow: none; }
+.frame-feedback-toast[hidden], .frame-issue-details[hidden], .frame-issue-action[hidden] { display: none !important; }
+/* Keep warnings in the existing control row, including the stacked phone layouts. */
+body[data-frame-tool] .device-control:has(> .frame-issue) { grid-template-columns: minmax(0, 1fr) auto 44px; }
+body[data-frame-tool] .device-control > .frame-issue { grid-column: 3; grid-row: 1; align-self: end; }
+body[data-frame-tool] .capture-actions:has(> .frame-issue) > .capture-live-button { flex: 1 1 calc(100% - 56px); width: auto; }
+body[data-frame-tool] .player-primary:has(> .frame-issue) { grid-template-columns: minmax(0, 1fr) 106px 44px; }
+body[data-frame-tool] .player-primary > .frame-issue { grid-column: 3; grid-row: 2; }
+body[data-frame-tool] :is(.queue-heading, .dashboard-heading, .listen-status):has(> .frame-issue) { position: relative; padding-right: 48px; }
+body[data-frame-tool] :is(.queue-heading, .dashboard-heading, .listen-status) > .frame-issue { position: absolute; right: 0; top: 0; }
+@media (max-width: 640px) {
+  body[data-frame-tool] .player-primary:has(> .frame-issue) { grid-template-columns: minmax(0, 1fr) auto 44px; }
+  body[data-frame-tool] .player-primary > .frame-issue { grid-column: 3; grid-row: 2; }
+  body[data-frame-tool] .device-control:has(> .frame-issue) { grid-template-columns: minmax(0, 1fr) 44px; }
+  body[data-frame-tool] .device-control:has(> .frame-issue) > label { grid-column: 1 / -1; }
+  body[data-frame-tool] .device-control:has(> .frame-issue) > button { grid-row: 2; }
+  body[data-frame-tool] .device-control:has(> .frame-issue) > small { grid-row: 3; }
+  body[data-frame-tool] .device-control > .frame-issue { grid-column: 2; grid-row: 2; }
+}
+@media (forced-colors: active) {
+  .frame-feedback-toast, .frame-issue-details, .frame-issue-hint { background: Canvas; color: CanvasText; border-color: CanvasText; }
+  body[data-frame-tool] .frame-issue-button { color: CanvasText; }
+}

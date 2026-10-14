@@ -35,10 +35,10 @@ remain unavailable through the tunnel.
 
 Direct LAN access intentionally remains HTTP for operator-controlled networks. FRAME does not manage
 LAN certificates or client trust; public HYBRID routes receive browser-facing HTTPS from Cloudflare.
-When the host provides `dns-sd` or `avahi-publish`, starting FRAME also advertises the Edge as
-`http://frame.local`; stopping or resetting FRAME removes that advertisement. On Windows, a hidden
-per-user watchdog resumes it after sign-in and follows FRAME Edge availability. A custom Edge port
-is advertised as `http://frame.local:<port>`.
+On the FRAME host, open `http://localhost/dashboard`, or
+`http://localhost:<configured-port>/dashboard` when the Edge port is not 80. Other LAN devices use
+the host's LAN IP address or a DNS name configured and maintained by the user, with the same port
+and route. FRAME does not publish a LAN hostname or run a discovery watchdog.
 
 FRAME Edge also denies known LAN-only management routes when requests arrive through the configured
 public hostname or Cloudflare headers. This defense-in-depth protects the stack if a remotely
@@ -64,6 +64,18 @@ Without that override it keeps the Docker wrappers' `/workspace` behavior. GUI r
 configuration in a temporary folder and permits read-only Docker inspection/Compose resolution;
 no application image is pulled or container created until readiness passes. Socket checks are
 observations, so startup still handles binding races and restores the previous deployment on failure.
+
+## Retiring legacy LAN discovery
+
+Before replacing an older FRAME version that published a LAN hostname, run its
+`stack.cmd discovery-stop` on Windows or `./stack.sh discovery-stop` on macOS/Linux. These are
+legacy commands: run them from the old version before updating; the new wrappers do not provide
+them. After upgrading, restart the computer to clear any leftover publisher processes.
+
+On Windows, confirm that the old per-user Startup item named `Syronius FRAME Discovery.cmd` is
+gone. If FRAME has already been upgraded, remove only that exact FRAME item from the current
+user's Startup folder, then restart the computer. Keep shared Bonjour/Avahi tools installed; other
+applications may use them. Current FRAME access uses the explicit addresses described above.
 
 ## Interactive command center
 

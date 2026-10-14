@@ -11,9 +11,13 @@
     "dev": "node scripts/dev-electron.mjs",
     "build": "vite build",
     "start": "electron .",
+    "smoke:native": "node scripts/native-smoke.mjs",
     "dist": "npm run build && electron-builder --publish never",
     "dist:win": "npm run build && electron-builder --win nsis --x64 --publish never",
     "dist:linux": "npm run build && electron-builder --linux AppImage --x64 --publish never",
+    "dist:mac": "npm run build && electron-builder --mac dmg zip --x64 --arm64 --publish never",
+    "dist:mac:x64": "npm run build && electron-builder --mac dmg zip --x64 --publish never",
+    "dist:mac:arm64": "npm run build && electron-builder --mac dmg zip --arm64 --publish never",
     "preview": "vite preview --host 127.0.0.1 --port 4174",
     "tauri": "tauri"
   },
@@ -42,6 +46,12 @@
       "icon": "src-tauri/icons/icon.ico"
     },
     "nsis": { "oneClick": false, "perMachine": false, "allowToChangeInstallationDirectory": true },
+    "mac": {
+      "target": [{ "target": "dmg", "arch": ["x64", "arm64"] }, { "target": "zip", "arch": ["x64", "arm64"] }],
+      "category": "public.app-category.utilities",
+      "icon": "public/frame-logo-square.png",
+      "hardenedRuntime": true
+    },
     "linux": {
       "target": [{ "target": "AppImage", "arch": ["x64"] }],
       "executableName": "frame-setup",
