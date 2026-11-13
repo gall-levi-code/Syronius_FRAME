@@ -10,6 +10,7 @@ test("collects only sanitized generated links and keeps them on the public dashb
     ["streams.test/internal/streams", { streams: [
       { id: "play_main", player: "play_main", publisher: "live_main", description: "Main feed", source_type: "sls" },
       { id: "custom_safe", player: "custom_safe", description: "External telemetry", source_type: "custom", statsUrl: "https://not-exposed.test/secret" },
+      { id: "../unsafe", description: "Unsafe stats alias", source_type: "sls" },
     ] }],
     ["overlays.test/overlays/api/catalog", {
       presets: [
@@ -87,8 +88,15 @@ test("collects only sanitized generated links and keeps them on the public dashb
     { label: "SRTLA publisher", url: "srtla://relay.example.com:5000?streamid=live_main", openable: false },
     { label: "Direct SRT publisher", url: "srt://relay.example.com:4001?streamid=live_main", openable: false },
     { label: "SRT player", url: "srt://localhost:4000?streamid=play_main", openable: false },
-    { label: "FRAME statistics", url: "/stats/play_main", openable: true },
-    { label: "BBox Receiver statistics", url: "/stats/play_main?output=bbox_receiver", openable: true },
+    { label: "SLS-compatible statistics", url: "/stats/play_main", openable: true },
+    { label: "Stats publisher ID", url: "live/stream/play_main", openable: false },
+    { label: "FRAME statistics", url: "/stats/play_main?output=frame", openable: true },
+  ]);
+  assert.equal(groups.streams.length, 2);
+  assert.deepEqual(groups.streams[1].links, [
+    { label: "SLS-compatible statistics", url: "/stats/custom_safe", openable: true },
+    { label: "Stats publisher ID", url: "live/stream/custom_safe", openable: false },
+    { label: "FRAME statistics", url: "/stats/custom_safe?output=frame", openable: true },
   ]);
   assert.equal(groups.overlays.length, 1);
   assert.equal(groups.audio[0].links[0].url, "/audio/listen/stage-audio");
@@ -115,8 +123,9 @@ test("collects only sanitized generated links and keeps them on the public dashb
   const localPlayerGroups = await collectToolLinkGroups(config, stack, request);
   assert.deepEqual(localPlayerGroups.streams[0].links, [
     { label: "SRT player", url: "srt://localhost:4100?streamid=play_main", openable: false },
-    { label: "FRAME statistics", url: "/stats/play_main", openable: true },
-    { label: "BBox Receiver statistics", url: "/stats/play_main?output=bbox_receiver", openable: true },
+    { label: "SLS-compatible statistics", url: "/stats/play_main", openable: true },
+    { label: "Stats publisher ID", url: "live/stream/play_main", openable: false },
+    { label: "FRAME statistics", url: "/stats/play_main?output=frame", openable: true },
   ]);
   payloads.set("streams.test/slsui/api/config", streamSettings);
 
@@ -140,11 +149,23 @@ test("collects only sanitized generated links and keeps them on the public dashb
       { label: "Protocol-relative host", url: "//example.com/stats/play_main", openable: true },
       { label: "Similar route prefix", url: "/stats-private/play_main", openable: true },
       { label: "Parent route", url: "/stats/../slsui/private", openable: true },
+      { label: "Openable stats alias", url: "live/stream/play_main", openable: true },
+      { label: "Unsafe stats alias", url: "live/stream/../private", openable: false },
+      { label: "Query in stats alias", url: "live/stream/play_main?secret=value", openable: false },
+      { label: "Short stats alias", url: "live/stream/x", openable: false },
     ],
   });
   const publicTools = buildPortalTools({ config: stack, source: "file" }, services, "public", groupsWithLanOnly);
   assert.equal(publicTools.find((tool) => tool.id === "streams").route, "");
   assert.deepEqual(publicTools.find((tool) => tool.id === "streams").link_groups, groups.streams);
+  const withoutPublicStats = buildPortalTools({
+    config: { ...stack, public_route_prefixes: stack.public_route_prefixes.filter((prefix) => prefix !== "/stats") },
+    source: "file",
+  }, services, "public", groups);
+  assert.deepEqual(withoutPublicStats.find((tool) => tool.id === "streams").link_groups, [{
+    label: "Main feed",
+    links: groups.streams[0].links.slice(0, 3),
+  }]);
   assert.deepEqual(publicTools.find((tool) => tool.id === "belabox").link_groups, groups.belabox);
   assert.equal(publicTools.find((tool) => tool.id === "audio-bridge"), undefined);
   const lanTools = buildPortalTools({ config: stack, source: "file" }, services, "lan", groupsWithLanOnly);
@@ -159,8 +180,9 @@ test("collects only sanitized generated links and keeps them on the public dashb
       return request(input, init);
     });
     assert.deepEqual(partial.streams[0].links, [
-      { label: "FRAME statistics", url: "/stats/play_main", openable: true },
-      { label: "BBox Receiver statistics", url: "/stats/play_main?output=bbox_receiver", openable: true },
+      { label: "SLS-compatible statistics", url: "/stats/play_main", openable: true },
+      { label: "Stats publisher ID", url: "live/stream/play_main", openable: false },
+      { label: "FRAME statistics", url: "/stats/play_main?output=frame", openable: true },
     ]);
 
     const unavailable = await collectToolLinkGroups(config, stack, async () => { throw new Error("offline"); });

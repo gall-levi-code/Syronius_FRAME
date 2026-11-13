@@ -61,8 +61,9 @@ async function streamLinks(
     }
     const statsUrl = `${statsRoot}/${encodeURIComponent(id)}`;
     links.push(
-      { label: "FRAME statistics", url: statsUrl, openable: true },
-      { label: "BBox Receiver statistics", url: `${statsUrl}?output=bbox_receiver`, openable: true },
+      { label: "SLS-compatible statistics", url: statsUrl, openable: true },
+      copyLink("Stats publisher ID", `live/stream/${id}`),
+      { label: "FRAME statistics", url: `${statsUrl}?output=frame`, openable: true },
     );
     return [{ label: cleanLabel(stream.description, id), links }];
   });

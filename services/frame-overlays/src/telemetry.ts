@@ -5,7 +5,7 @@ export interface StreamPublisherStats {
   latency: number | null;
   buffer: number | null;
   dropped_pkts: number;
-  uptime: number;
+  uptime: number | null;
   recovery_rate: number | null;
 }
 
@@ -169,7 +169,7 @@ export function normalizePublisher(raw: unknown): StreamPublisherStats | null {
     latency: finiteNumber(publisher.latency, null),
     buffer: finiteNumber(publisher.buffer, null),
     dropped_pkts: finiteNumber(publisher.dropped_pkts, 0)!,
-    uptime: finiteNumber(publisher.uptime, 0)!,
+    uptime: finiteNumber(publisher.uptime, null),
     recovery_rate: finiteNumber(publisher.recovery_rate, null),
   };
 }

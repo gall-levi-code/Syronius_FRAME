@@ -198,3 +198,16 @@ test("normalization preserves unavailable BELABOX metrics as null", () => {
     recovery_rate: null,
   });
 });
+
+test("connected feeds without valid uptime preserve it as unavailable", () => {
+  assert.equal(normalizePublisher({ publisher: { connected: true, bitrate: 6400 } }).uptime, null);
+  for (const uptime of [null, undefined, "", "unknown", Number.NaN, Infinity]) {
+    assert.equal(normalizePublisher({ publisher: { connected: true, bitrate: 6400, uptime } }).uptime, null);
+  }
+});
+
+test("normalization preserves reported uptime seconds, including a new connection at zero", () => {
+  for (const uptime of [0, 55, "120"]) {
+    assert.equal(normalizePublisher({ publisher: { connected: true, uptime } }).uptime, Number(uptime));
+  }
+});

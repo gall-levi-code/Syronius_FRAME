@@ -63,7 +63,7 @@ interface PublisherStats extends NormalizedStats {
   dropped_pkts: number;
   latency: number | null;
   rtt: number | null;
-  uptime: number;
+  uptime: number | null;
   connected: boolean;
   source_type: SourceType;
   recovery_rate?: number | null;
@@ -194,10 +194,16 @@ app.get("/stats/:id", async (request, response, next) => {
     const id = validateId(request.params.id, "stream profile ID");
     const [profile, stats] = await Promise.all([readProfile(id), readStats(id)]);
     const format = safeStatsOutputFormat(request.query.output);
+    const publicProfile = profile ?? fallbackProfile(id, stats);
     const output = renderStatsOutput(
       format,
-      profile ?? fallbackProfile(id, stats),
-      stats,
+      publicProfile,
+      format === "frame" ? {
+        bitrate: 0, buffer: null, dropped_pkts: 0, latency: null, rtt: null, uptime: null,
+        connected: false, source_type: publicProfile.source_type,
+        recovery_rate: null, recovered_pkts: 0, missing_pkts: 0,
+        ...stats,
+      } : stats,
     );
     response.setHeader("Cache-Control", "no-store");
     response.status(output.statusCode).json(output.body);
@@ -426,7 +432,7 @@ async function readSlsStats(player: string): Promise<PublisherStats | null> {
     dropped_pkts: finiteNumber(result.publisher.dropped_pkts),
     latency: nullableNumber(result.publisher.latency),
     rtt: nullableNumber(result.publisher.rtt),
-    uptime: finiteNumber(result.publisher.uptime),
+    uptime: nullableNumber(result.publisher.uptime),
     connected: true,
     source_type: "sls",
   };
@@ -449,7 +455,7 @@ async function readBelaboxStats(stream: CustomStream): Promise<PublisherStats | 
       dropped_pkts: finiteNumber(publisher.dropped_pkts),
       latency: nullableNumber(publisher.latency),
       rtt: nullableNumber(publisher.rtt),
-      uptime: finiteNumber(publisher.uptime),
+      uptime: nullableNumber(publisher.uptime),
       connected: publisher.connected === true,
       source_type: "custom",
     };
@@ -461,7 +467,7 @@ async function readBelaboxStats(stream: CustomStream): Promise<PublisherStats | 
     dropped_pkts: finiteNumber(result.unrecoveredPackets),
     latency: null,
     rtt: null,
-    uptime: finiteNumber(result.uptimeSeconds),
+    uptime: nullableNumber(result.uptimeSeconds),
     connected,
     source_type: "custom",
     recovery_rate: parseRecoveryRate(result.recoveryRate),

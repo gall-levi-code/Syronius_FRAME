@@ -14,8 +14,10 @@ test("stream routes reuse the registry, share stats and invalidate them on profi
   let profiles = [
     { player: "main_feed", publisher: "main_publish", description: "Main" },
     { player: "other_feed", publisher: "other_publish", description: "Other" },
+    { player: "offline_feed", publisher: "offline_publish", description: "Offline" },
   ];
   const statsCalls = new Map();
+  let customUptime;
   const upstream = createServer(async (request, response) => {
     response.setHeader("Content-Type", "application/json");
     if (request.url === "/api/stream-ids" && request.method === "POST") {
@@ -26,6 +28,18 @@ test("stream routes reuse the registry, share stats and invalidate them on profi
       profiles = profiles.filter((profile) => profile.player !== request.url.split("/").pop());
     } else if (request.url.startsWith("/stats/")) {
       statsCalls.set(request.url, (statsCalls.get(request.url) ?? 0) + 1);
+      if (request.url === "/stats/custom") {
+        response.end(JSON.stringify({ publishers: { relay: {
+          connected: true, bitrate: 6400, rtt: 42, dropped_pkts: 0,
+          ...(customUptime === undefined ? {} : { uptime: customUptime }),
+        } } }));
+        return;
+      }
+      if (request.url === "/stats/offline_feed") {
+        response.statusCode = 404;
+        response.end(JSON.stringify({ error: "Publisher is not streaming" }));
+        return;
+      }
       if (request.url === "/stats/stalled_feed" && statsCalls.get(request.url) === 1) {
         response.write('{"publisher":');
         return;
@@ -93,9 +107,50 @@ test("stream routes reuse the registry, share stats and invalidate them on profi
 
   registryReads = 0;
   const listing = await fetch(`${base}/slsui/api/streams`).then((response) => response.json());
-  assert.equal(listing.streams.length, 3);
+  assert.equal(listing.streams.length, 4);
   assert.equal(registryReads, 1, "the entire listing loads its custom registry once");
 
+  const publicStatsResponse = await fetch(`${base}/stats/main_feed`);
+  assert.equal(publicStatsResponse.status, 200);
+  assert.equal(publicStatsResponse.headers.get("cache-control"), "no-store");
+  const publicStats = await publicStatsResponse.json();
+  assert.deepEqual(Object.keys(publicStats.publishers), ["live/stream/main_feed"]);
+  assert.equal(publicStats.publishers["live/stream/main_feed"].bitrate, 6400);
+  assert.ok(!JSON.stringify(publicStats).includes("main_publish"), "Public stats never expose the encoder publisher key");
+  for (const format of ["frame", "native", "json"]) {
+    const nativeStats = await fetch(`${base}/stats/main_feed?output=${format}`).then((response) => response.json());
+    assert.equal(nativeStats.stats.bitrate, 6400);
+    assert.equal(nativeStats.stats.recovery_rate, null);
+    assert.equal(nativeStats.stats.missing_pkts, 0);
+    assert.equal(nativeStats.publishers, undefined);
+  }
+  for (const format of ["bbox_receiver", "bbox", "bbox-receiver"]) {
+    const compatible = await fetch(`${base}/stats/main_feed?output=${format}`).then((response) => response.json());
+    assert.deepEqual(compatible, publicStats, "Existing compatibility links remain valid");
+  }
+  const idleStats = await fetch(`${base}/stats/offline_feed`);
+  assert.equal(idleStats.status, 200);
+  assert.deepEqual(await idleStats.json(), { publishers: {}, status: "ok" });
+  const belabox = await fetch(`${base}/stats/main_feed?output=belabox`).then((response) => response.json());
+  assert.equal(belabox.publishers.live.bitrate, 6400);
+  assert.equal(belabox.publishers.live.connected, true);
+  const idleBelabox = await fetch(`${base}/stats/offline_feed?output=belabox`).then((response) => response.json());
+  assert.equal(idleBelabox.publishers.live.connected, false);
+  assert.equal(idleBelabox.publishers.live.bitrate, 0);
+  const idleNative = await fetch(`${base}/stats/offline_feed?output=frame`);
+  assert.equal(idleNative.status, 200);
+  assert.deepEqual(await idleNative.json(), { stats: {
+    bitrate: 0, buffer: null, dropped_pkts: 0, latency: null, rtt: null, uptime: null,
+    connected: false, source_type: "sls", recovery_rate: null, recovered_pkts: 0, missing_pkts: 0,
+  } });
+  assert.equal((await fetch(`${base}/stats/main_feed?output=unsupported`)).status, 400);
+
+  const unknownUptime = await getStats("custom_feed");
+  assert.equal(unknownUptime.stats.connected, true);
+  assert.equal(unknownUptime.stats.uptime, null, "Missing Belabox uptime stays unavailable instead of becoming zero");
+  const compatibleUnknown = await fetch(`${base}/stats/custom_feed`).then((response) => response.json());
+  assert.equal(compatibleUnknown.publishers["live/stream/custom_feed"].uptime, 0, "The SLS-compatible schema keeps its numeric uptime field");
+  customUptime = 125;
   const custom = await createStream({ source_type: "custom", description: "New custom", stats_url: "testrelay123" });
   const beforeConcurrent = statsCalls.get("/stats/main_feed");
   await Promise.all(Array.from({ length: 5 }, () => getStats("main_feed")));
@@ -112,9 +167,11 @@ test("stream routes reuse the registry, share stats and invalidate them on profi
   await getStats("main_feed");
   assert.equal(statsCalls.get("/stats/main_feed"), beforeDeleted + 1, "SLS deletion invalidates stats");
 
-  await getStats("custom_feed");
+  assert.equal((await getStats("custom_feed")).stats.uptime, 125, "Reported Belabox uptime seconds survive normalization");
+  const beforeCustomDeleted = statsCalls.get("/stats/custom");
   assert.equal((await fetch(`${base}/slsui/api/streams/custom_feed`, { method: "DELETE" })).status, 200);
   await getStats("custom_feed");
+  assert.equal(statsCalls.get("/stats/custom"), beforeCustomDeleted, "Deleted custom sources are not fetched again");
   assert.equal(statsCalls.get("/stats/custom_feed"), 1, "custom deletion discards cached BELABOX stats and resolves the source again");
   assert.equal((await fetch(`${base}/slsui/api/streams/${custom.stream.id}`, { method: "DELETE" })).status, 200);
 

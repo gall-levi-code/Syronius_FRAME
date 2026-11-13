@@ -98,10 +98,64 @@ To use BELABOX or another existing relay:
 3. Confirm that stats appear in Stream Management.
 4. Use the connected stats with overlays if needed.
 
+Uptime is displayed only when the relay reports it. Some BELABOX stats responses do not include
+uptime; Stream Management shows `--` and stream overlays omit that metric instead of displaying a
+timer stuck at zero. FRAME-native stats preserve missing uptime as `null`. The SLS-compatible
+output keeps its required numeric uptime field as `0` when the source does not provide it.
+
+### Public Stats For NOALBS And Other SLS-Compatible Tools
+
+The public `/stats/<stream_id>` endpoint returns SLS-compatible JSON by default. Use the
+**SLS-compatible statistics** link and **Stats publisher ID** from Stream Management or the Portal's
+stream links. For a FRAME profile named `play_main`, configure NOALBS's **SLS** option with:
+
+| Field | Value |
+| --- | --- |
+| Stats URL | `https://YOUR_FRAME_HOST/stats/play_main` |
+| Publisher (stream ID) | `live/stream/play_main` |
+| API key | Leave blank for FRAME's public read-only stats endpoint. |
+
+Use the final HTTPS address for public integrations. The browser-facing Cloudflare address can
+redirect an HTTP request to HTTPS, and tools that reject redirects will report the HTTP `308`
+response instead of reading the stats. Local HTTP URLs remain usable on the trusted LAN.
+
+The endpoint uses the selected FRAME profile ID in the URL and the publisher alias
+`live/stream/<stream_id>` as the key inside its `publishers` object. These names have different jobs:
+
+| Name | Example | Used By |
+| --- | --- | --- |
+| FRAME profile ID | `play_main` | FRAME settings, telemetry, and the public stats URL. For a local SLS relay, this is the player ID. |
+| Stats publisher ID | `live/stream/play_main` | NOALBS and other SLS-compatible readers looking up the publisher in the stats JSON. |
+| Encoder's publisher stream ID | `live_main` | The actual SRT/SRTLA connection's `streamid` parameter, taken from the publisher link. |
+| Player stream ID | `play_main` | The receiving player's SRT connection, taken from the player link. |
+
+The stats publisher ID is a public telemetry alias, not an encoder credential. Keep using the
+publisher and player links supplied by FRAME for transport connections. Custom telemetry profiles
+use their own FRAME profile IDs in the stats URL and alias; they do not create SRT/SRTLA credentials.
+
+When an existing profile has no active feed, the default endpoint returns HTTP `200` with
+`{"publishers":{},"status":"ok"}`. A reachable stats endpoint can therefore still show **No feed**
+until its sender connects.
+
+FRAME's normalized telemetry remains available at `/stats/<stream_id>?output=frame`, with the
+`{"stats": ...}` response shape. Existing integrations that read FRAME JSON from the plain URL must
+add `?output=frame`. The older `?output=bbox_receiver` link remains valid and returns the same
+SLS-compatible format as the default; IRL+ Chat integrations using that adapter can retain it.
+
+`/stats/<stream_id>?output=belabox` provides BELABOX-style JSON for relay telemetry. Its publisher
+is named `live` (use that name if the consumer asks for a publisher). Offline feeds retain that
+publisher with zero bitrate and `connected: false`. FRAME has no BELABOX consumer information or
+network measurement, so `consumers` is empty and `network` is zero.
+
+The FRAME output returns a complete stats object with `connected: false` when no feed is active.
+Unavailable measurements such as RTT and uptime are `null`; packet and bitrate counters start at
+zero. An upstream connection error remains an error rather than being reported as an offline feed.
+
 ### Test Local Stats With NOALBS
 
 When NOALBS runs on the same computer as FRAME, configure it to read the receiver's native OpenIRL
-stats endpoint. Add an enabled stream-server entry like this to the NOALBS `config.json`:
+stats endpoint as an alternative to the public SLS-compatible endpoint above. Add an enabled
+stream-server entry like this to the NOALBS `config.json`:
 
 ```json
 {

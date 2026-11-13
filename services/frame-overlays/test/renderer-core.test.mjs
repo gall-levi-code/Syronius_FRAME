@@ -154,6 +154,12 @@ test("telemetry uptime shows minutes and seconds before hours", () => {
   assert.equal(formatTelemetryDuration(3661), "1h 1m 1s");
 });
 
+test("missing uptime is hidden while a reported zero remains available", () => {
+  assert.equal(telemetryAvailability({}).uptime, false);
+  assert.equal(telemetryAvailability({ uptime: null }).uptime, false);
+  assert.equal(telemetryAvailability({ uptime: 0 }).uptime, true);
+});
+
 test("unavailable feed telemetry is omitted while supported values remain visible", () => {
   assert.deepEqual(telemetryAvailability({
     bitrate: 7200,

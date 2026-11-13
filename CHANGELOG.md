@@ -6,6 +6,18 @@ The format is based on Keep a Changelog and this project adheres to Semantic Ver
 
 ## Unreleased
 
+- Added BELABOX-compatible stats output and restored an explicit BBox receiver link. Offline
+  FRAME-format stats now return a complete telemetry object rather than a 404.
+- Preserved unavailable relay uptime as `null` in FRAME telemetry. Stream Management now shows
+  `--` and stream overlays omit uptime when BELABOX or another relay does not report it, while
+  retaining real uptime values, including zero. SLS-compatible stats retain a numeric uptime field.
+- Made public `/stats/<stream_id>` return SLS-compatible telemetry by default, with
+  `live/stream/<stream_id>` as the stats publisher ID and HTTP `200` with an empty publisher list for
+  an inactive existing profile. FRAME-native telemetry remains available with `?output=frame`;
+  integrations previously reading FRAME JSON from the plain URL must add that query. Existing
+  `?output=bbox_receiver` links and SRT/SRTLA publisher/player connection IDs remain unchanged.
+  Stream Management and Portal links now identify the compatible stats URL, stats publisher ID,
+  and explicit FRAME diagnostics URL separately.
 - Added local support-report preview/copy/save with allowlisted diagnostics and no raw logs or
   credentials. Added verified full backup/restore, container removal that preserves settings/data,
   and reconnecting the launcher to an existing managed installation. Restore uses empty original

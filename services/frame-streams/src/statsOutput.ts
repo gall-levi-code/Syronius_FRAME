@@ -1,4 +1,4 @@
-export type StatsOutputFormat = "frame" | "bbox_receiver";
+export type StatsOutputFormat = "frame" | "bbox_receiver" | "belabox";
 
 export interface StatsOutputDescriptor {
   id: StatsOutputFormat;
@@ -19,7 +19,7 @@ export interface NormalizedStats {
   dropped_pkts: number;
   latency: number | null;
   rtt: number | null;
-  uptime: number;
+  uptime: number | null;
   connected: boolean;
   source_type: string;
   recovery_rate?: number | null;
@@ -29,21 +29,33 @@ export interface NormalizedStats {
 
 export const STATS_OUTPUTS: StatsOutputDescriptor[] = [
   {
-    id: "frame",
-    label: "FRAME native",
-    description: "Normalized FRAME telemetry JSON for overlays and diagnostics.",
+    id: "bbox_receiver",
+    label: "SLS-compatible statistics",
+    description: "Default public stats for NOALBS, IRL+ Chat and SLS integrations.",
     query: "",
   },
   {
     id: "bbox_receiver",
-    label: "Datagutt BBox Receiver",
-    description: "Compatibility JSON for IRL+ Chat and BBox-receiver style stats lookups.",
+    label: "BBox receiver statistics",
+    description: "Explicit SLS-compatible output for existing BBox receiver integrations.",
     query: "output=bbox_receiver",
+  },
+  {
+    id: "belabox",
+    label: "BELABOX-compatible statistics",
+    description: "BELABOX-style publisher telemetry. Use publisher ID live if required.",
+    query: "output=belabox",
+  },
+  {
+    id: "frame",
+    label: "FRAME statistics",
+    description: "Normalized FRAME telemetry JSON for overlays and diagnostics.",
+    query: "output=frame",
   },
 ];
 
 export function parseStatsOutputFormat(value: unknown): StatsOutputFormat {
-  if (typeof value !== "string" || !value.trim()) return "frame";
+  if (typeof value !== "string" || !value.trim()) return "bbox_receiver";
   const normalized = value.trim().toLocaleLowerCase().replace(/[-\s]+/g, "_");
   if (["bbox", "bbox_receiver", "datagutt", "datagutt_bbox_receiver"].includes(normalized)) {
     return "bbox_receiver";
@@ -51,6 +63,7 @@ export function parseStatsOutputFormat(value: unknown): StatsOutputFormat {
   if (normalized === "frame" || normalized === "native" || normalized === "json") {
     return "frame";
   }
+  if (normalized === "belabox") return "belabox";
   throw new Error(`Unsupported stats output adapter "${value}".`);
 }
 
@@ -61,6 +74,17 @@ export function renderStatsOutput(
 ): { statusCode: number; body: Record<string, unknown> } {
   if (format === "bbox_receiver") {
     return { statusCode: 200, body: renderBboxReceiverOutput(profile, stats) };
+  }
+  if (format === "belabox") {
+    const connected = stats?.connected === true;
+    return { statusCode: 200, body: { publishers: { live: {
+      connected,
+      latency: connected ? finite(stats.latency) : 0,
+      network: 0,
+      bitrate: connected ? Math.round(finite(stats.bitrate)) : 0,
+      rtt: connected ? finite(stats.rtt) : 0,
+      dropped_pkts: connected ? Math.round(finite(stats.dropped_pkts)) : 0,
+    } }, consumers: [] } };
   }
   return { statusCode: stats ? 200 : 404, body: { stats } };
 }
@@ -78,8 +102,8 @@ function renderBboxReceiverOutput(profile: StatsOutputProfile, stats: Normalized
         bytesRcvDrop: 0,
         bytesRcvLoss: 0,
         mbpsRecvRate: mbps(stats.bitrate),
-        rtt: nullable(stats.rtt),
-        msRcvBuf: nullable(stats.buffer),
+        rtt: finite(stats.rtt),
+        msRcvBuf: Math.round(finite(stats.buffer)),
         mbpsBandwidth: mbps(stats.bitrate),
         latency: nullable(stats.latency),
         uptime: Math.round(finite(stats.uptime)),

@@ -240,11 +240,12 @@ function openLinks(id) {
     ["SRTLA publisher", `srtla://${host}:${ports.srtla}?streamid=${stream.publisher}`],
     ["Direct SRT publisher", `srt://${host}:${ports.sender}?streamid=${stream.publisher}`],
     ["SRT player", `srt://localhost:${ports.player}?streamid=${stream.player}`],
-    ["FRAME statistics", statsUrl(stream.id)],
-    ["BBox Receiver statistics", statsUrl(stream.id, "bbox_receiver")],
+    ["SLS-compatible statistics", statsUrl(stream.id)],
+    ["Stats publisher ID", `live/stream/${stream.id}`, "For stats integrations such as NOALBS. This is not your encoder's publisher key."],
+    ["FRAME statistics", statsUrl(stream.id, "frame")],
   ];
-  document.querySelector("#links-list").innerHTML = links.map(([label, url]) => `
-    <div class="link-row"><label>${escapeHtml(label)}<input readonly value="${escapeAttr(url)}"></label>
+  document.querySelector("#links-list").innerHTML = links.map(([label, url, description]) => `
+    <div class="link-row"><label>${escapeHtml(label)}${description ? `<small>${escapeHtml(description)}</small>` : ""}<input readonly value="${escapeAttr(url)}"></label>
     <button class="icon-button link-action" type="button" data-copy="${escapeAttr(url)}" aria-label="Copy ${escapeAttr(label)}" aria-live="polite" title="Copy ${escapeAttr(label)}">${COPY_ICON}</button></div>`).join("");
   document.querySelectorAll("[data-copy]").forEach((button) => button.addEventListener("click", () => copyWithConfirmation(button)));
   linksDialog.showModal();
@@ -276,9 +277,14 @@ function openStatsOutputs(id) {
   document.querySelector("#stats-output-title").textContent = `Stats outputs · ${stream?.description || id}`;
   const outputs = Array.isArray(state.config.stats_outputs) && state.config.stats_outputs.length
     ? state.config.stats_outputs
-    : [{ id: "frame", label: "FRAME native", description: "Normalized FRAME telemetry JSON.", query: "" }];
-  document.querySelector("#stats-output-list").innerHTML = outputs.map((output) => {
-    const url = statsUrl(id, output.id === "frame" ? "" : output.id);
+    : [
+      { id: "bbox_receiver", label: "SLS-compatible statistics", description: "Stats for SLS-compatible integrations such as NOALBS and IRL+ Chat.", query: "" },
+      { id: "bbox_receiver", label: "BBox receiver statistics", description: "Explicit SLS-compatible output.", query: "output=bbox_receiver" },
+      { id: "belabox", label: "BELABOX-compatible statistics", description: "BELABOX-style publisher telemetry. Use publisher ID live if required.", query: "output=belabox" },
+      { id: "frame", label: "FRAME statistics", description: "Normalized FRAME telemetry JSON.", query: "output=frame" },
+    ];
+  document.querySelector("#stats-output-list").innerHTML = outputs.filter((output) => output.id !== "belabox" || stream?.source_type !== "custom").map((output) => {
+    const url = statsUrl(id, output.query ? output.id : "");
     return `<div class="link-row output-row">
       <label>${escapeHtml(output.label)}
         <small>${escapeHtml(output.description || "Public read-only stats output.")}</small>
@@ -289,7 +295,15 @@ function openStatsOutputs(id) {
         <button class="icon-button link-action" type="button" data-copy="${escapeAttr(url)}" aria-label="Copy ${escapeAttr(output.label)}" aria-live="polite" title="Copy ${escapeAttr(output.label)}">${COPY_ICON}</button>
       </div>
     </div>`;
-  }).join("");
+  }).join("") + `<div class="link-row output-row">
+    <label>Stats publisher ID
+      <small>For stats integrations such as NOALBS. This is not your encoder's publisher key.</small>
+      <input readonly value="${escapeAttr(`live/stream/${id}`)}">
+    </label>
+    <div class="output-actions">
+      <button class="icon-button link-action" type="button" data-copy="${escapeAttr(`live/stream/${id}`)}" aria-label="Copy Stats publisher ID" aria-live="polite" title="Copy Stats publisher ID">${COPY_ICON}</button>
+    </div>
+  </div>`;
   document.querySelectorAll("[data-copy]").forEach((button) => button.addEventListener("click", () => copyWithConfirmation(button)));
   statsOutputDialog.showModal();
 }
@@ -334,7 +348,7 @@ async function copyWithConfirmation(button) {
     message.className = "copy-failure";
     message.setAttribute("role", "status");
     message.style.gridColumn = "1 / -1";
-    message.textContent = "Automatic copy was blocked. Press and hold the selected URL to copy it manually.";
+    message.textContent = "Automatic copy was blocked. Press and hold the selected value to copy it manually.";
     row?.append(message);
     return;
   }
@@ -390,7 +404,7 @@ async function copyText(value, button) {
 }
 function formatBitrate(value) { return value >= 1000 ? `${(value / 1000).toFixed(2)} Mbps` : `${value} kbps`; }
 function formatMilliseconds(value) { return Number.isFinite(value) ? `${Number(value).toFixed(1)} ms` : "--"; }
-function formatDuration(value) { const h = Math.floor(value / 3600); const m = Math.floor((value % 3600) / 60); return `${h}h ${m}m`; }
+function formatDuration(value) { if (value === null || value === undefined || !Number.isFinite(Number(value))) return "--"; const h = Math.floor(value / 3600); const m = Math.floor((value % 3600) / 60); return `${h}h ${m}m`; }
 function escapeHtml(value) { const div = document.createElement("div"); div.textContent = value; return div.innerHTML; }
 function escapeAttr(value) { return escapeHtml(value).replaceAll('"', "&quot;"); }
 

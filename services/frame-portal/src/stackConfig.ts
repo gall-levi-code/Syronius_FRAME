@@ -159,7 +159,10 @@ export function buildPortalTools(
       access,
       accessible,
       readiness: getToolReadiness(loadedStackConfig, definition.id, enabled, service),
-      link_groups: accessibleLinkGroups(linkGroups[definition.id] ?? [], config.public_route_prefixes, accessContext),
+      link_groups: accessibleLinkGroups(
+        linkGroups[definition.id] ?? [], config.public_route_prefixes, accessContext,
+        definition.id === "streams" ? config.routes.video_relay_stats || FALLBACK_ROUTES.video_relay_stats : undefined,
+      ),
     };
   });
 }
@@ -179,10 +182,17 @@ function accessibleLinkGroups(
   groups: PortalLinkGroup[],
   publicPrefixes: string[],
   accessContext: "lan" | "public",
+  statsRoot?: string,
 ): PortalLinkGroup[] {
   if (accessContext === "lan") return groups;
   return groups.flatMap((group) => {
     const links = group.links.filter((link) => {
+      const statsPublisher = /^live\/stream\/([A-Za-z0-9_-]{3,128})$/.exec(link.url);
+      if (statsPublisher && link.openable === false && statsRoot) {
+        const statsPath = `${statsRoot}/${statsPublisher[1]}`;
+        return routeIsPublic(statsPath, publicPrefixes)
+          && group.links.some((candidate) => candidate.openable && candidate.url.split("?", 1)[0] === statsPath);
+      }
       if (/^srt(?:la)?:\/\//.test(link.url)) return true;
       try {
         const url = new URL(link.url, "http://frame.invalid");
